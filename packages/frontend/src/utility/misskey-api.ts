@@ -102,3 +102,15 @@ export function misskeyApiGet<
 
 	return promise;
 }
+
+/**
+ * Temporary typed boundary for the first-party Zalip endpoints while the fork's generated
+ * misskey-js API contract is being introduced. It still uses Misskey's current account token
+ * and request path; it is not a second HTTP client or authentication layer.
+ */
+export function misskeyApiZalip<ResT>(
+	endpoint: `zalip/${string}`,
+	data: Record<string, unknown> = {},
+): Promise<ResT> {
+	return misskeyApi<ResT>(endpoint as never, data as never) as Promise<ResT>;
+}

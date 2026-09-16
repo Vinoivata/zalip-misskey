@@ -448,3 +448,8 @@ export * as 'chat/rooms/invitations/outbox' from './endpoints/chat/rooms/invitat
 export * as 'chat/history' from './endpoints/chat/history.js';
 export * as 'chat/read-all' from './endpoints/chat/read-all.js';
 export * as 'v2/admin/emoji/list' from './endpoints/v2/admin/emoji/list.js';
+export * as 'zalip/works/list' from './endpoints/zalip/works/list.js';
+export * as 'zalip/works/show' from './endpoints/zalip/works/show.js';
+export * as 'zalip/library/list' from './endpoints/zalip/library/list.js';
+export * as 'zalip/library/update' from './endpoints/zalip/library/update.js';
+export * as 'zalip/admin/works/create' from './endpoints/zalip/admin/works/create.js';

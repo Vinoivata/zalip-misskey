@@ -26,6 +26,22 @@ export const navbarItemDef = reactive<{
 		action?: (ev: PointerEvent) => void;
 	};
 }>({
+	zalip: {
+		title: 'Кино',
+		icon: 'ti ti-movie',
+		to: '/',
+	},
+	feed: {
+		title: 'Лента',
+		icon: 'ti ti-news',
+		to: '/timeline',
+	},
+	library: {
+		title: 'Библиотека',
+		icon: 'ti ti-bookmark',
+		show: computed(() => $i != null),
+		to: '/library',
+	},
 	notifications: {
 		title: i18n.ts.notifications,
 		icon: 'ti ti-bell',
