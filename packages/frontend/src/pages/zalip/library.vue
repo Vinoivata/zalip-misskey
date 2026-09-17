@@ -23,6 +23,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<MkA to="/" :class="$style.start">Перейти к каталогу</MkA>
 				</div>
 				<template v-else>
+					<section :class="$style.summary" aria-label="Статистика библиотеки">
+						<div :class="$style.stat"><i class="ti ti-books"></i><strong>{{ entries.length }}</strong><span>В библиотеке</span></div>
+						<div :class="$style.stat"><i class="ti ti-player-play"></i><strong>{{ statusCounts.watching }}</strong><span>Смотрю</span></div>
+						<div :class="$style.stat"><i class="ti ti-star-filled"></i><strong>{{ favoriteCount }}</strong><span>В избранном</span></div>
+						<div :class="$style.stat"><i class="ti ti-chart-bar"></i><strong>{{ averageRating == null ? '—' : averageRating.toFixed(1) }}</strong><span>Средняя оценка</span></div>
+					</section>
 					<div :class="$style.filters" role="tablist" aria-label="Статус библиотеки">
 						<button v-for="filter in filters" :key="filter" type="button" class="_button" :class="[$style.filter, { [$style.activeFilter]: activeFilter === filter }]" role="tab" :aria-selected="activeFilter === filter" @click="activeFilter = filter">{{ filter === 'all' ? `Все · ${entries.length}` : `${statusLabel(filter)} · ${statusCounts[filter]}` }}</button>
 					</div>
@@ -76,6 +82,9 @@ const pending = ref(true);
 const activeFilter = ref<LibraryFilter>('all');
 const filters: LibraryFilter[] = ['all', 'watching', 'planned', 'completed', 'on_hold', 'dropped'];
 const filteredEntries = computed(() => activeFilter.value === 'all' ? entries.value : entries.value.filter(entry => entry.status === activeFilter.value));
+const favoriteCount = computed(() => entries.value.filter(entry => entry.isFavorite).length);
+const ratedEntries = computed(() => entries.value.filter((entry): entry is LibraryEntry & { personalRating: number } => entry.personalRating != null));
+const averageRating = computed(() => ratedEntries.value.length === 0 ? null : ratedEntries.value.reduce((sum, entry) => sum + entry.personalRating, 0) / ratedEntries.value.length);
 const statusCounts = computed(() => ({
 	watching: entries.value.filter(entry => entry.status === 'watching').length,
 	planned: entries.value.filter(entry => entry.status === 'planned').length,
@@ -189,6 +198,40 @@ definePage(() => ({
 	gap: 14px;
 }
 
+.summary {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 10px;
+	margin-bottom: 18px;
+}
+
+.stat {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	align-items: center;
+	column-gap: 8px;
+	padding: 12px;
+	border-radius: 14px;
+	background: var(--MI_THEME-panel);
+}
+
+.stat i {
+	grid-row: span 2;
+	color: var(--MI_THEME-accent);
+	font-size: 1.2rem;
+}
+
+.stat strong {
+	font-size: 1.1rem;
+	line-height: 1.1;
+}
+
+.stat span {
+	margin-top: 2px;
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.7rem;
+}
+
 .filters {
 	display: flex;
 	gap: 8px;
@@ -283,6 +326,7 @@ definePage(() => ({
 	.page { padding-top: 12px; }
 	.heading { align-items: start; }
 	.browse { font-size: 0.8rem; }
+	.summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 	.grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 </style>
