@@ -10945,6 +10945,14 @@ export interface Locale extends ILocale {
          */
         "achievementEarned": string;
         /**
+         * 新しいエピソード
+         */
+        "zalipEpisodeReleased": string;
+        /**
+         * {title}・シーズン{season} 第{episode}話「{episodeTitle}」
+         */
+        "zalipEpisodeReleasedDescription": ParameterizedString<"title" | "season" | "episode" | "episodeTitle">;
+        /**
          * 通知テスト
          */
         "testNotification": string;
@@ -11061,6 +11069,10 @@ export interface Locale extends ILocale {
              * 実績の獲得
              */
             "achievementEarned": string;
+            /**
+             * ZALIPの新着エピソード
+             */
+            "zalipEpisodeReleased": string;
             /**
              * エクスポートが完了した
              */

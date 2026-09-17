@@ -133,4 +133,116 @@ describe('ZalipCatalogService', () => {
 			notificationDeliveredAt: expect.any(Date),
 		});
 	});
+
+	it('creates the same release event and native notification for a later manually curated episode', async () => {
+		const work = {
+			id: 'work-1',
+			slug: 'manual-series',
+			title: 'Manual Series',
+			publicationState: 'published',
+		};
+		const season = {
+			id: 'season-1',
+			workId: work.id,
+			seasonNumber: 1,
+			episodeCount: 1,
+		};
+		const episode = {
+			id: 'episode-2',
+			seasonId: season.id,
+			episodeNumber: 2,
+			title: 'Manual episode 2',
+		};
+		const releaseEvent = {
+			id: 'release-2',
+			work,
+			season,
+			episode,
+		};
+
+		const worksRepository = {
+			findOneBy: vi.fn().mockResolvedValue(work),
+			save: vi.fn().mockResolvedValue(work),
+		};
+		const seasonsRepository = {
+			findOneBy: vi.fn().mockResolvedValue(season),
+			save: vi.fn().mockResolvedValue(season),
+		};
+		const episodesRepository = {
+			existsBy: vi.fn().mockResolvedValue(false),
+			create: vi.fn((input) => ({ ...input, id: episode.id })),
+			save: vi.fn().mockResolvedValue(episode),
+		};
+		const transactionEventsRepository = {
+			create: vi.fn((input) => input),
+			save: vi.fn().mockResolvedValue(releaseEvent),
+		};
+		const eventQuery = {
+			innerJoinAndSelect: vi.fn().mockReturnThis(),
+			where: vi.fn().mockReturnThis(),
+			andWhere: vi.fn().mockReturnThis(),
+			orderBy: vi.fn().mockReturnThis(),
+			take: vi.fn().mockReturnThis(),
+			getMany: vi.fn().mockResolvedValue([releaseEvent]),
+		};
+		const releaseEventsRepository = {
+			createQueryBuilder: vi.fn().mockReturnValue(eventQuery),
+			update: vi.fn().mockResolvedValue({ affected: 1 }),
+		};
+		const libraryRepository = {
+			find: vi.fn().mockResolvedValue([{ userId: 'viewer-1' }]),
+		};
+		const manager = {
+			getRepository: (model: unknown) => {
+				if (model === MiZalipWork) return worksRepository;
+				if (model === MiZalipSeason) return seasonsRepository;
+				if (model === MiZalipEpisode) return episodesRepository;
+				if (model === MiZalipReleaseEvent) return transactionEventsRepository;
+				throw new Error('Unexpected transaction repository');
+			},
+		};
+		const dataSource = {
+			transaction: async (callback: (transactionManager: typeof manager) => Promise<unknown>) => await callback(manager),
+			getRepository: (model: unknown) => {
+				if (model === MiZalipReleaseEvent) return releaseEventsRepository;
+				if (model === MiZalipLibraryEntry) return libraryRepository;
+				throw new Error('Unexpected data source repository');
+			},
+		};
+		const notificationService = {
+			createNotificationAndWait: vi.fn().mockResolvedValue(null),
+		};
+		const service = new ZalipCatalogService(
+			dataSource as never,
+			{ gen: vi.fn().mockReturnValue('generated-id') } as never,
+			{} as never,
+			notificationService as never,
+		);
+
+		await expect(service.createManualEpisode(work.id, season.seasonNumber, {
+			episodeNumber: 2,
+			title: episode.title,
+			originalTitle: null,
+			description: null,
+			airDate: null,
+			runtimeMinutes: null,
+		})).resolves.toEqual(episode);
+
+		expect(transactionEventsRepository.save).toHaveBeenCalledWith(expect.objectContaining({
+			workId: work.id,
+			seasonId: season.id,
+			episodeId: episode.id,
+		}));
+		expect(notificationService.createNotificationAndWait).toHaveBeenCalledWith('viewer-1', 'zalipEpisodeReleased', {
+			workId: work.id,
+			workSlug: work.slug,
+			workTitle: work.title,
+			seasonNumber: 1,
+			episodeNumber: 2,
+			episodeTitle: episode.title,
+		});
+		expect(releaseEventsRepository.update).toHaveBeenCalledWith(releaseEvent.id, {
+			notificationDeliveredAt: expect.any(Date),
+		});
+	});
 });

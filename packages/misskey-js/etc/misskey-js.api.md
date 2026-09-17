@@ -2201,8 +2201,12 @@ declare namespace entities {
         VerifyEmailRequest,
         ZalipAdminDiscussionsCreateRequest,
         ZalipAdminDiscussionsCreateResponse,
+        ZalipAdminEpisodesCreateRequest,
+        ZalipAdminEpisodesCreateResponse,
         ZalipAdminEpisodesDiscussionsCreateRequest,
         ZalipAdminEpisodesDiscussionsCreateResponse,
+        ZalipAdminSeasonsCreateRequest,
+        ZalipAdminSeasonsCreateResponse,
         ZalipAdminSeasonsImportTmdbRequest,
         ZalipAdminSeasonsImportTmdbResponse,
         ZalipAdminWorksCreateRequest,
@@ -3808,10 +3812,22 @@ type ZalipAdminDiscussionsCreateRequest = operations['zalip___admin___discussion
 type ZalipAdminDiscussionsCreateResponse = operations['zalip___admin___discussions___create']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
+type ZalipAdminEpisodesCreateRequest = operations['zalip___admin___episodes___create']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminEpisodesCreateResponse = operations['zalip___admin___episodes___create']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
 type ZalipAdminEpisodesDiscussionsCreateRequest = operations['zalip___admin___episodes___discussions___create']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
 type ZalipAdminEpisodesDiscussionsCreateResponse = operations['zalip___admin___episodes___discussions___create']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminSeasonsCreateRequest = operations['zalip___admin___seasons___create']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminSeasonsCreateResponse = operations['zalip___admin___seasons___create']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
 type ZalipAdminSeasonsImportTmdbRequest = operations['zalip___admin___seasons___import-tmdb']['requestBody']['content']['application/json'];

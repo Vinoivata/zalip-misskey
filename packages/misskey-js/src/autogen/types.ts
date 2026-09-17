@@ -4005,6 +4005,15 @@ export type paths = {
          */
         post: operations['zalip___admin___discussions___create'];
     };
+    '/zalip/admin/episodes/create': {
+        /**
+         * zalip/admin/episodes/create
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:account*
+         */
+        post: operations['zalip___admin___episodes___create'];
+    };
     '/zalip/admin/episodes/discussions/create': {
         /**
          * zalip/admin/episodes/discussions/create
@@ -4013,6 +4022,15 @@ export type paths = {
          *     **Credential required**: *Yes* / **Permission**: *write:notes*
          */
         post: operations['zalip___admin___episodes___discussions___create'];
+    };
+    '/zalip/admin/seasons/create': {
+        /**
+         * zalip/admin/seasons/create
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:account*
+         */
+        post: operations['zalip___admin___seasons___create'];
     };
     '/zalip/admin/seasons/import-tmdb': {
         /**
@@ -37527,6 +37545,84 @@ export interface operations {
             };
         };
     };
+    zalip___admin___episodes___create: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    /** Format: misskey:id */
+                    workId: string;
+                    seasonNumber: number;
+                    episodeNumber: number;
+                    title: string;
+                    originalTitle: string | null;
+                    description: string | null;
+                    airDate: string | null;
+                    runtimeMinutes: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        /** Format: misskey:id */
+                        id: string;
+                        episodeNumber: number;
+                        title: string;
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
     zalip___admin___episodes___discussions___create: {
         requestBody: {
             content: {
@@ -37548,6 +37644,82 @@ export interface operations {
                         /** Format: misskey:id */
                         noteId: string;
                         created: boolean;
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    zalip___admin___seasons___create: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    /** Format: misskey:id */
+                    workId: string;
+                    seasonNumber: number;
+                    title: string;
+                    originalTitle: string | null;
+                    description: string | null;
+                    airDate: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        /** Format: misskey:id */
+                        id: string;
+                        seasonNumber: number;
+                        title: string;
                     };
                 };
             };

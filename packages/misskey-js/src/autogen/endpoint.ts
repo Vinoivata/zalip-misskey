@@ -667,8 +667,12 @@ import type {
 	VerifyEmailRequest,
 	ZalipAdminDiscussionsCreateRequest,
 	ZalipAdminDiscussionsCreateResponse,
+	ZalipAdminEpisodesCreateRequest,
+	ZalipAdminEpisodesCreateResponse,
 	ZalipAdminEpisodesDiscussionsCreateRequest,
 	ZalipAdminEpisodesDiscussionsCreateResponse,
+	ZalipAdminSeasonsCreateRequest,
+	ZalipAdminSeasonsCreateResponse,
 	ZalipAdminSeasonsImportTmdbRequest,
 	ZalipAdminSeasonsImportTmdbResponse,
 	ZalipAdminWorksCreateRequest,
@@ -1140,7 +1144,9 @@ export type Endpoints = {
 	'v2/admin/emoji/list': { req: V2AdminEmojiListRequest; res: V2AdminEmojiListResponse };
 	'verify-email': { req: VerifyEmailRequest; res: EmptyResponse };
 	'zalip/admin/discussions/create': { req: ZalipAdminDiscussionsCreateRequest; res: ZalipAdminDiscussionsCreateResponse };
+	'zalip/admin/episodes/create': { req: ZalipAdminEpisodesCreateRequest; res: ZalipAdminEpisodesCreateResponse };
 	'zalip/admin/episodes/discussions/create': { req: ZalipAdminEpisodesDiscussionsCreateRequest; res: ZalipAdminEpisodesDiscussionsCreateResponse };
+	'zalip/admin/seasons/create': { req: ZalipAdminSeasonsCreateRequest; res: ZalipAdminSeasonsCreateResponse };
 	'zalip/admin/seasons/import-tmdb': { req: ZalipAdminSeasonsImportTmdbRequest; res: ZalipAdminSeasonsImportTmdbResponse };
 	'zalip/admin/works/create': { req: ZalipAdminWorksCreateRequest; res: ZalipAdminWorksCreateResponse };
 	'zalip/admin/works/import-tmdb': { req: ZalipAdminWorksImportTmdbRequest; res: ZalipAdminWorksImportTmdbResponse };

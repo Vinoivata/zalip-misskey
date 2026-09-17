@@ -675,6 +675,114 @@ export class ZalipCatalogService {
 		return this.packAdminWork(work);
 	}
 
+	/** Adds a local-only season to a draft or published catalogue work. */
+	public async createManualSeason(
+		workId: MiZalipWork['id'],
+		input: {
+			seasonNumber: number;
+			title: string;
+			originalTitle: string | null;
+			description: string | null;
+			airDate: string | null;
+		},
+	): Promise<MiZalipSeason | 'no-such-work' | 'duplicate'> {
+		return await this.db.transaction(async manager => {
+			const works = manager.getRepository(MiZalipWork);
+			const work = await works.findOneBy({ id: workId });
+			if (work == null) return 'no-such-work';
+
+			const seasons = manager.getRepository(MiZalipSeason);
+			if (await seasons.existsBy({ workId, seasonNumber: input.seasonNumber })) return 'duplicate';
+
+			const now = new Date();
+			const season = await seasons.save(seasons.create({
+				id: this.idService.gen(),
+				workId,
+				seasonNumber: input.seasonNumber,
+				title: input.title,
+				originalTitle: input.originalTitle,
+				description: input.description,
+				posterPath: null,
+				airDate: input.airDate,
+				episodeCount: null,
+				createdAt: now,
+				updatedAt: now,
+			}));
+			work.updatedAt = now;
+			await works.save(work);
+			return season;
+		});
+	}
+
+	/**
+	 * Adds one locally curated episode. The first episode establishes a season baseline; a later
+	 * episode on a published work creates the same durable release event used by TMDB syncs.
+	 */
+	public async createManualEpisode(
+		workId: MiZalipWork['id'],
+		seasonNumber: number,
+		input: {
+			episodeNumber: number;
+			title: string;
+			originalTitle: string | null;
+			description: string | null;
+			airDate: string | null;
+			runtimeMinutes: number | null;
+		},
+	): Promise<MiZalipEpisode | 'no-such-season' | 'duplicate'> {
+		const result = await this.db.transaction(async manager => {
+			const works = manager.getRepository(MiZalipWork);
+			const work = await works.findOneBy({ id: workId });
+			if (work == null) return 'no-such-season' as const;
+
+			const seasons = manager.getRepository(MiZalipSeason);
+			const season = await seasons.findOneBy({ workId, seasonNumber });
+			if (season == null) return 'no-such-season' as const;
+
+			const episodes = manager.getRepository(MiZalipEpisode);
+			if (await episodes.existsBy({ seasonId: season.id, episodeNumber: input.episodeNumber })) return 'duplicate' as const;
+
+			const now = new Date();
+			const previousEpisodeCount = season.episodeCount;
+			const episode = await episodes.save(episodes.create({
+				id: this.idService.gen(),
+				tmdbEpisodeId: null,
+				seasonId: season.id,
+				episodeNumber: input.episodeNumber,
+				title: input.title,
+				originalTitle: input.originalTitle,
+				description: input.description,
+				airDate: input.airDate,
+				stillPath: null,
+				runtimeMinutes: input.runtimeMinutes,
+				createdAt: now,
+				updatedAt: now,
+			}));
+
+			season.episodeCount = Math.max(previousEpisodeCount ?? 0, episode.episodeNumber);
+			season.updatedAt = now;
+			await seasons.save(season);
+			work.updatedAt = now;
+			await works.save(work);
+
+			if (work.publicationState === 'published' && previousEpisodeCount != null && episode.episodeNumber > previousEpisodeCount) {
+				const events = manager.getRepository(MiZalipReleaseEvent);
+				await events.save(events.create({
+					id: this.idService.gen(),
+					workId: work.id,
+					seasonId: season.id,
+					episodeId: episode.id,
+					createdAt: now,
+				}));
+			}
+
+			return episode;
+		});
+
+		await this.dispatchPendingReleaseNotifications();
+		return result;
+	}
+
 	public async showDiscussion(workId: MiZalipWork['id']): Promise<string | null> {
 		const work = await this.db.getRepository(MiZalipWork).findOneBy({
 			id: workId,

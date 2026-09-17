@@ -51,6 +51,11 @@ Administrators can also correct the title, original title, description and relea
 the native Zalip editor. It is an explicit role-gated API operation; it does not change the TMDB
 mapping, a provider mapping or publication state.
 
+For a title without TMDB metadata, the same editor can create its seasons and episodes manually.
+The first episode of a season establishes its baseline; a later episode added to an already
+published title enters the same release-event outbox and subscriber-notification path as a TMDB
+sync. Manual catalogue metadata still contains no player or provider URLs.
+
 ## TMDB attribution
 
 Before any TMDB-derived title is publicly visible, retain the native `/zalip/credits` page and

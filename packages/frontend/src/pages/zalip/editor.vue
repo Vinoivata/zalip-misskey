@@ -48,7 +48,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<div v-else-if="works.length === 0" :class="$style.empty"><i class="ti ti-movie-off"></i> Черновиков пока нет.</div>
 						<div v-else :class="$style.workList">
 							<article v-for="work in works" :key="work.id" :class="$style.work">
-								<div><p :class="$style.state" :data-state="work.publicationState">{{ stateLabel(work.publicationState) }}</p><h3>{{ work.title }}</h3><p :class="$style.meta">{{ kindLabel(work.kind) }}<span v-if="work.releaseYear"> · {{ work.releaseYear }}</span><span> · /zalip/{{ work.slug }}</span></p><p v-if="work.tmdbMediaType === 'tv' && work.seasons.length" :class="$style.syncHint">Сезоны из TMDB: перед публикацией загрузите метаданные серий.</p><details :class="$style.edit"><summary><i class="ti ti-pencil"></i> Править метаданные</summary><form @submit.prevent="updateWork(work)"><label><span>Название</span><input v-model.trim="editFor(work).title" class="_input" required maxlength="256"></label><label><span>Оригинальное название</span><input v-model.trim="editFor(work).originalTitle" class="_input" maxlength="256"></label><label><span>Год</span><input v-model.trim="editFor(work).releaseYear" class="_input" inputmode="numeric" maxlength="4"></label><label :class="$style.editWide"><span>Описание</span><textarea v-model.trim="editFor(work).description" class="_input" rows="3" maxlength="8192"></textarea></label><button class="_button" :class="$style.smallButton" :disabled="savingId === work.id"><i class="ti ti-device-floppy"></i> {{ savingId === work.id ? 'Сохраняем…' : 'Сохранить' }}</button></form></details></div>
+								<div><p :class="$style.state" :data-state="work.publicationState">{{ stateLabel(work.publicationState) }}</p><h3>{{ work.title }}</h3><p :class="$style.meta">{{ kindLabel(work.kind) }}<span v-if="work.releaseYear"> · {{ work.releaseYear }}</span><span> · /zalip/{{ work.slug }}</span></p><p v-if="work.tmdbMediaType === 'tv' && work.seasons.length" :class="$style.syncHint">Сезоны из TMDB: перед публикацией загрузите метаданные серий.</p><details :class="$style.edit"><summary><i class="ti ti-pencil"></i> Править метаданные</summary><form @submit.prevent="updateWork(work)"><label><span>Название</span><input v-model.trim="editFor(work).title" class="_input" required maxlength="256"></label><label><span>Оригинальное название</span><input v-model.trim="editFor(work).originalTitle" class="_input" maxlength="256"></label><label><span>Год</span><input v-model.trim="editFor(work).releaseYear" class="_input" inputmode="numeric" maxlength="4"></label><label :class="$style.editWide"><span>Описание</span><textarea v-model.trim="editFor(work).description" class="_input" rows="3" maxlength="8192"></textarea></label><button class="_button" :class="$style.smallButton" :disabled="savingId === work.id"><i class="ti ti-device-floppy"></i> {{ savingId === work.id ? 'Сохраняем…' : 'Сохранить' }}</button></form></details><details v-if="work.kind !== 'movie'" :class="$style.edit"><summary><i class="ti ti-stack-2"></i> Добавить сезон вручную</summary><form @submit.prevent="createManualSeason(work)"><label><span>Номер сезона</span><input v-model.trim="manualSeasonFor(work).seasonNumber" class="_input" required inputmode="numeric" maxlength="5" placeholder="1"></label><label><span>Название сезона</span><input v-model.trim="manualSeasonFor(work).title" class="_input" required maxlength="256" placeholder="Сезон 1"></label><label><span>Дата выхода</span><input v-model="manualSeasonFor(work).airDate" class="_input" type="date"></label><label :class="$style.editWide"><span>Описание</span><textarea v-model.trim="manualSeasonFor(work).description" class="_input" rows="2" maxlength="8192"></textarea></label><button class="_button" :class="$style.smallButton" :disabled="savingId === work.id"><i class="ti ti-plus"></i> Добавить сезон</button></form></details><details v-for="season in work.seasons" :key="season.id" :class="$style.edit"><summary><i class="ti ti-list-details"></i> Добавить серию: {{ seasonLabel(season) }}</summary><form @submit.prevent="createManualEpisode(work, season)"><label><span>Номер серии</span><input v-model.trim="manualEpisodeFor(work, season).episodeNumber" class="_input" required inputmode="numeric" maxlength="6" placeholder="1"></label><label><span>Название серии</span><input v-model.trim="manualEpisodeFor(work, season).title" class="_input" required maxlength="256" placeholder="Серия 1"></label><label><span>Дата выхода</span><input v-model="manualEpisodeFor(work, season).airDate" class="_input" type="date"></label><label><span>Длительность, мин.</span><input v-model.trim="manualEpisodeFor(work, season).runtimeMinutes" class="_input" inputmode="numeric" maxlength="5" placeholder="Необязательно"></label><label :class="$style.editWide"><span>Описание</span><textarea v-model.trim="manualEpisodeFor(work, season).description" class="_input" rows="2" maxlength="8192"></textarea></label><button class="_button" :class="$style.smallButton" :disabled="savingId === work.id"><i class="ti ti-plus"></i> Добавить серию</button></form></details></div>
 								<div :class="$style.workActions">
 									<MkA v-if="work.publicationState === 'published'" :to="`/zalip/${work.slug}`" :class="$style.smallButton"><i class="ti ti-external-link"></i> Открыть</MkA>
 									<button v-if="work.publicationState !== 'published'" class="_button" :class="$style.smallButton" :disabled="savingId === work.id" @click="setState(work, 'published')"><i class="ti ti-world"></i> Опубликовать</button>
@@ -87,7 +87,7 @@ type AdminWork = {
 	publishedAt: string | null;
 	tmdbMediaType: 'movie' | 'tv' | null;
 	tmdbId: number | null;
-	seasons: Array<{ id: string; seasonNumber: number }>;
+	seasons: Array<{ id: string; seasonNumber: number; title: string }>;
 };
 
 const router = useRouter();
@@ -103,6 +103,8 @@ const tmdbMessage = ref('');
 const syncingSeasonKey = ref<string | null>(null);
 const seasonMessage = reactive({ workId: '', text: '' });
 const edits = reactive<Record<string, { title: string; originalTitle: string; description: string; releaseYear: string; }>>({});
+const manualSeasons = reactive<Record<string, { seasonNumber: string; title: string; description: string; airDate: string; }>>({});
+const manualEpisodes = reactive<Record<string, { episodeNumber: string; title: string; description: string; airDate: string; runtimeMinutes: string; }>>({});
 
 function kindLabel(kind: WorkKind): string {
 	return ({ movie: 'Фильм', series: 'Сериал', anime: 'Аниме', animation: 'Анимация' })[kind];
@@ -129,6 +131,19 @@ function editFor(work: AdminWork) {
 	return edits[work.id] ?? (edits[work.id] = { title: work.title, originalTitle: work.originalTitle ?? '', description: work.description ?? '', releaseYear: work.releaseYear?.toString() ?? '' });
 }
 
+function manualSeasonFor(work: AdminWork) {
+	return manualSeasons[work.id] ?? (manualSeasons[work.id] = { seasonNumber: '', title: '', description: '', airDate: '' });
+}
+
+function manualEpisodeFor(work: AdminWork, season: AdminWork['seasons'][number]) {
+	const key = seasonKey(work, season.seasonNumber);
+	return manualEpisodes[key] ?? (manualEpisodes[key] = { episodeNumber: '', title: '', description: '', airDate: '', runtimeMinutes: '' });
+}
+
+function seasonLabel(season: AdminWork['seasons'][number]): string {
+	return season.seasonNumber === 0 ? 'Спецэпизоды' : `Сезон ${season.seasonNumber}`;
+}
+
 async function updateWork(work: AdminWork): Promise<void> {
 	const edit = editFor(work);
 	const releaseYear = edit.releaseYear === '' ? null : Number(edit.releaseYear);
@@ -145,6 +160,57 @@ async function updateWork(work: AdminWork): Promise<void> {
 		await load();
 	} catch {
 		message.value = 'Не удалось сохранить метаданные. Проверьте поля и права.';
+	} finally {
+		savingId.value = null;
+	}
+}
+
+async function createManualSeason(work: AdminWork): Promise<void> {
+	const form = manualSeasonFor(work);
+	const seasonNumber = Number(form.seasonNumber);
+	if (!Number.isSafeInteger(seasonNumber) || seasonNumber < 0 || seasonNumber > 10000) {
+		seasonMessage.workId = work.id;
+		seasonMessage.text = 'Номер сезона должен быть целым числом от 0 до 10 000.';
+		return;
+	}
+
+	savingId.value = work.id;
+	seasonMessage.workId = '';
+	try {
+		await misskeyApiZalip('zalip/admin/seasons/create', { workId: work.id, seasonNumber, title: form.title, originalTitle: null, description: form.description || null, airDate: form.airDate || null });
+		manualSeasons[work.id] = { seasonNumber: '', title: '', description: '', airDate: '' };
+		seasonMessage.workId = work.id;
+		seasonMessage.text = `Сезон ${seasonNumber === 0 ? 'со спецэпизодами' : seasonNumber} добавлен.`;
+		await load();
+	} catch {
+		seasonMessage.workId = work.id;
+		seasonMessage.text = 'Не удалось добавить сезон. Проверьте номер, поля и отсутствие дубликата.';
+	} finally {
+		savingId.value = null;
+	}
+}
+
+async function createManualEpisode(work: AdminWork, season: AdminWork['seasons'][number]): Promise<void> {
+	const form = manualEpisodeFor(work, season);
+	const episodeNumber = Number(form.episodeNumber);
+	const runtimeMinutes = form.runtimeMinutes === '' ? null : Number(form.runtimeMinutes);
+	if (!Number.isSafeInteger(episodeNumber) || episodeNumber < 0 || episodeNumber > 100000 || (runtimeMinutes != null && (!Number.isSafeInteger(runtimeMinutes) || runtimeMinutes < 0 || runtimeMinutes > 10000))) {
+		seasonMessage.workId = work.id;
+		seasonMessage.text = 'Проверьте номер серии и длительность: нужны неотрицательные целые числа.';
+		return;
+	}
+
+	savingId.value = work.id;
+	seasonMessage.workId = '';
+	try {
+		await misskeyApiZalip('zalip/admin/episodes/create', { workId: work.id, seasonNumber: season.seasonNumber, episodeNumber, title: form.title, originalTitle: null, description: form.description || null, airDate: form.airDate || null, runtimeMinutes });
+		manualEpisodes[seasonKey(work, season.seasonNumber)] = { episodeNumber: '', title: '', description: '', airDate: '', runtimeMinutes: '' };
+		seasonMessage.workId = work.id;
+		seasonMessage.text = `Серия ${episodeNumber} добавлена в ${seasonLabel(season).toLowerCase()}.`;
+		await load();
+	} catch {
+		seasonMessage.workId = work.id;
+		seasonMessage.text = 'Не удалось добавить серию. Проверьте номер, поля и отсутствие дубликата.';
 	} finally {
 		savingId.value = null;
 	}
