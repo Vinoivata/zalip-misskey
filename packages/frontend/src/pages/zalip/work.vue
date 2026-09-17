@@ -48,7 +48,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 						</div>
 					</section>
 					<div :class="$style.actions">
-						<button v-if="$i" :class="$style.library" class="_button" :disabled="saving" @click="addToLibrary"><i class="ti ti-bookmark"></i> {{ saved ? 'В библиотеке' : 'Добавить в библиотеку' }}</button>
+						<div v-if="$i" :class="$style.libraryControl">
+							<select v-model="libraryStatus" class="_input" :disabled="saving" aria-label="Статус в библиотеке">
+								<option v-for="status in libraryStatuses" :key="status" :value="status">{{ libraryStatusLabel(status) }}</option>
+							</select>
+							<button :class="$style.library" class="_button" :disabled="saving" @click="addToLibrary"><i class="ti ti-bookmark"></i> {{ saving ? 'Сохраняем…' : saved ? 'Обновить статус' : 'Добавить в библиотеку' }}</button>
+						</div>
 						<MkA to="/timeline" :class="$style.feed"><i class="ti ti-news"></i> Лента</MkA>
 						<MkA v-if="discussionNoteId" :to="`/notes/${discussionNoteId}/replies`" :class="$style.feed"><i class="ti ti-messages"></i> Обсуждение</MkA>
 					</div>
@@ -104,12 +109,19 @@ type ZalipEpisode = {
 	discussionNoteId: string | null;
 };
 
+type LibraryStatus = 'watching' | 'planned' | 'completed' | 'on_hold' | 'dropped';
+
+type LibraryEntry = { status: LibraryStatus; work: { id: string }; };
+
+const libraryStatuses: LibraryStatus[] = ['watching', 'planned', 'completed', 'on_hold', 'dropped'];
+
 const props = defineProps<{ slug: string }>();
 const router = useRouter();
 const work = ref<ZalipWork | null>(null);
 const pending = ref(true);
 const saving = ref(false);
 const saved = ref(false);
+const libraryStatus = ref<LibraryStatus>('planned');
 const discussionNoteId = ref<string | null>(null);
 const selectedSeasonNumber = ref<number | null>(null);
 const episodes = ref<ZalipEpisode[]>([]);
@@ -138,16 +150,28 @@ function episodeMeta(episode: ZalipEpisode): string {
 	return [episode.airDate?.slice(0, 4), episode.runtimeMinutes != null ? `${episode.runtimeMinutes} мин.` : null].filter((value): value is string => value != null).join(' · ');
 }
 
+function libraryStatusLabel(status: LibraryStatus): string {
+	return ({ watching: 'Смотрю', planned: 'В планах', completed: 'Просмотрено', on_hold: 'Отложено', dropped: 'Брошено' })[status];
+}
+
 async function load(): Promise<void> {
 	pending.value = true;
 	work.value = null;
+	saved.value = false;
+	libraryStatus.value = 'planned';
 	selectedSeasonNumber.value = null;
 	episodes.value = [];
 	episodeRequestId.value++;
 	try {
 		work.value = await misskeyApiZalip<ZalipWork>('zalip/works/show', { slug: props.slug });
-		const discussion = await misskeyApiZalip<{ noteId: string | null }>('zalip/discussions/show', { workId: work.value.id });
+		const [discussion, entries] = await Promise.all([
+			misskeyApiZalip<{ noteId: string | null }>('zalip/discussions/show', { workId: work.value.id }),
+			$i ? misskeyApiZalip<LibraryEntry[]>('zalip/library/list') : Promise.resolve([]),
+		]);
 		discussionNoteId.value = discussion.noteId;
+		const entry = entries.find(candidate => candidate.work?.id === work.value?.id);
+		saved.value = entry != null;
+		libraryStatus.value = entry?.status ?? 'planned';
 	} catch {
 		work.value = null;
 		discussionNoteId.value = null;
@@ -206,7 +230,7 @@ async function addToLibrary(): Promise<void> {
 	if (work.value == null || !$i) return;
 	saving.value = true;
 	try {
-		await misskeyApiZalip('zalip/library/update', { workId: work.value.id, status: 'planned' });
+		await misskeyApiZalip('zalip/library/update', { workId: work.value.id, status: libraryStatus.value });
 		saved.value = true;
 	} finally {
 		saving.value = false;
@@ -408,6 +432,16 @@ definePage(() => ({
 	text-decoration: none;
 }
 
+.libraryControl {
+	display: flex;
+	gap: 8px;
+}
+
+.libraryControl select {
+	max-width: 148px;
+	border-radius: 999px;
+}
+
 .library {
 	background: var(--MI_THEME-accent);
 	color: var(--MI_THEME-fgOnAccent);
@@ -440,6 +474,14 @@ definePage(() => ({
 
 	.info {
 		grid-column: 1 / -1;
+	}
+
+	.libraryControl {
+		width: 100%;
+	}
+
+	.libraryControl select, .library {
+		flex: 1;
 	}
 }
 </style>

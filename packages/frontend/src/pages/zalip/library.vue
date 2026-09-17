@@ -22,8 +22,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<span>Добавляйте фильмы, сериалы и аниме — это сохранится в вашем обычном аккаунте Misskey.</span>
 					<MkA to="/" :class="$style.start">Перейти к каталогу</MkA>
 				</div>
-				<div v-else :class="$style.grid">
-					<MkA v-for="entry in entries" :key="entry.work.id" :to="`/zalip/${entry.work.slug}`" :class="$style.card">
+				<template v-else>
+					<div :class="$style.filters" role="tablist" aria-label="Статус библиотеки">
+						<button v-for="filter in filters" :key="filter" type="button" class="_button" :class="[$style.filter, { [$style.activeFilter]: activeFilter === filter }]" role="tab" :aria-selected="activeFilter === filter" @click="activeFilter = filter">{{ filter === 'all' ? `Все · ${entries.length}` : `${statusLabel(filter)} · ${statusCounts[filter]}` }}</button>
+					</div>
+					<div v-if="filteredEntries.length === 0" :class="$style.empty"><i class="ti ti-filter-off"></i> В этой категории пока нет тайтлов.</div>
+					<div v-else :class="$style.grid">
+						<MkA v-for="entry in filteredEntries" :key="entry.work.id" :to="`/zalip/${entry.work.slug}`" :class="$style.card">
 						<div :class="$style.poster">
 							<img v-if="entry.work.posterPath" :src="tmdbImage(entry.work.posterPath)" :alt="entry.work.title" loading="lazy">
 							<i v-else class="ti ti-movie"></i>
@@ -31,22 +36,24 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<div :class="$style.body">
 							<div :class="$style.meta"><span>{{ statusLabel(entry.status) }}</span><i v-if="entry.isFavorite" class="ti ti-star-filled"></i></div>
 							<h2>{{ entry.work.title }}</h2>
-							<p>{{ kindLabel(entry.work.kind) }}<span v-if="entry.work.releaseYear"> · {{ entry.work.releaseYear }}</span></p>
+							<p>{{ kindLabel(entry.work.kind) }}<span v-if="entry.work.releaseYear"> · {{ entry.work.releaseYear }}</span><span v-if="entry.episodesWatched"> · {{ entry.episodesWatched }} эп.</span></p>
 						</div>
-					</MkA>
-				</div>
+						</MkA>
+					</div>
+				</template>
 			</div>
 		</div>
 	</PageWithHeader>
 </template>
 
 <script lang="ts" setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { definePage } from '@/page.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 
 type WorkKind = 'movie' | 'series' | 'anime' | 'animation';
 type LibraryStatus = 'watching' | 'planned' | 'completed' | 'on_hold' | 'dropped';
+type LibraryFilter = LibraryStatus | 'all';
 
 type LibraryEntry = {
 	status: LibraryStatus;
@@ -65,6 +72,16 @@ type LibraryEntry = {
 
 const entries = ref<LibraryEntry[]>([]);
 const pending = ref(true);
+const activeFilter = ref<LibraryFilter>('all');
+const filters: LibraryFilter[] = ['all', 'watching', 'planned', 'completed', 'on_hold', 'dropped'];
+const filteredEntries = computed(() => activeFilter.value === 'all' ? entries.value : entries.value.filter(entry => entry.status === activeFilter.value));
+const statusCounts = computed(() => ({
+	watching: entries.value.filter(entry => entry.status === 'watching').length,
+	planned: entries.value.filter(entry => entry.status === 'planned').length,
+	completed: entries.value.filter(entry => entry.status === 'completed').length,
+	on_hold: entries.value.filter(entry => entry.status === 'on_hold').length,
+	dropped: entries.value.filter(entry => entry.status === 'dropped').length,
+}));
 
 function tmdbImage(path: string): string {
 	return `https://image.tmdb.org/t/p/w500${path}`;
@@ -169,6 +186,29 @@ definePage(() => ({
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
 	gap: 14px;
+}
+
+.filters {
+	display: flex;
+	gap: 8px;
+	margin-bottom: 18px;
+	overflow-x: auto;
+	padding-bottom: 2px;
+}
+
+.filter {
+	flex: 0 0 auto;
+	padding: 8px 11px;
+	border-radius: 999px;
+	background: var(--MI_THEME-panelHighlight);
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.78rem;
+	font-weight: 700;
+}
+
+.activeFilter {
+	background: var(--MI_THEME-accent);
+	color: var(--MI_THEME-fgOnAccent);
 }
 
 .card {
