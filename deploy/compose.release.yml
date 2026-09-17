@@ -1,0 +1,16 @@
+# Compose override for an immutable Zalip/Misskey release checkout.
+#
+# Keep the deployment's existing compose file first in the command. It owns the
+# secrets, bind mounts, database, Redis, port mapping and Compose project name.
+# This override changes only the web-image build context.
+#
+# Example:
+# ZALIP_RELEASE_DIR=/opt/zalip/releases/misskey-<commit> \
+#   docker compose -p misskey \
+#     -f /opt/zalip/misskey/compose.yml \
+#     -f "$ZALIP_RELEASE_DIR/deploy/compose.release.yml" build web
+
+services:
+  web:
+    build:
+      context: ${ZALIP_RELEASE_DIR:?Set ZALIP_RELEASE_DIR to the immutable release checkout}
