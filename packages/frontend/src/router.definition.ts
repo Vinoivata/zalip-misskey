@@ -11,13 +11,13 @@ import MkLoading from '@/pages/_loading_.vue';
 import MkError from '@/pages/_error_.vue';
 import PageTimeline from '@/pages/timeline.vue';
 
-const PageZalipHome = page(() => import('@/pages/zalip/index.vue'));
-
 export const page = (loader: AsyncComponentLoader) => defineAsyncComponent({
 	loader: loader,
 	loadingComponent: MkLoading,
 	errorComponent: MkError,
 });
+
+const PageZalipHome = page(() => import('@/pages/zalip/index.vue'));
 
 function chatPage(...args: Parameters<typeof page>) {
 	return $i?.policies.chatAvailability !== 'unavailable' ? page(...args) : page(() => import('@/pages/not-found.vue'));
@@ -34,6 +34,13 @@ export const ROUTE_DEF = [{
 	path: '/library',
 	component: page(() => import('@/pages/zalip/library.vue')),
 	loginRequired: true,
+}, {
+	path: '/zalip/editor',
+	component: page(() => import('@/pages/zalip/editor.vue')),
+	loginRequired: true,
+}, {
+	path: '/zalip/credits',
+	component: page(() => import('@/pages/zalip/credits.vue')),
 }, {
 	path: '/zalip/:slug',
 	component: page(() => import('@/pages/zalip/work.vue')),

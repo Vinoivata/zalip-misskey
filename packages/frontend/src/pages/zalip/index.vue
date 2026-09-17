@@ -15,6 +15,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<div :class="$style.actions">
 						<MkA to="/timeline" :class="$style.primaryAction"><i class="ti ti-news"></i> Открыть ленту</MkA>
 						<MkA to="/library" :class="$style.secondaryAction"><i class="ti ti-bookmark"></i> Моя библиотека</MkA>
+						<MkA v-if="iAmAdmin" to="/zalip/editor" :class="$style.secondaryAction"><i class="ti ti-pencil"></i> Редактор</MkA>
 					</div>
 				</div>
 				<div :class="$style.orb" aria-hidden="true"><i class="ti ti-player-play-filled"></i></div>
@@ -46,6 +47,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						</div>
 					</MkA>
 				</div>
+				<p :class="$style.credits">Метаданные каталога: <MkA to="/zalip/credits">TMDB и другие указанные источники</MkA>.</p>
 			</section>
 		</div>
 	</div>
@@ -56,6 +58,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { onMounted, ref } from 'vue';
 import { definePage } from '@/page.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
+import { iAmAdmin } from '@/i.js';
 
 type ZalipWork = {
 	id: string;
@@ -233,6 +236,16 @@ definePage(() => ({
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
 	gap: 14px;
+}
+
+.credits {
+	margin: 22px 0 0;
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.78rem;
+}
+
+.credits a {
+	color: var(--MI_THEME-accent);
 }
 
 .card {

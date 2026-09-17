@@ -7,6 +7,8 @@ import { Inject, Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { DI } from '@/di-symbols.js';
 import { IdService } from '@/core/IdService.js';
+import { NoteCreateService } from '@/core/NoteCreateService.js';
+import { MiNote } from '@/models/Note.js';
 import type { MiLocalUser } from '@/models/User.js';
 import {
 	MiZalipLibraryEntry,
@@ -14,8 +16,10 @@ import {
 } from '@/models/ZalipLibraryEntry.js';
 import {
 	MiZalipWork,
+	type ZalipPublicationState,
 	type ZalipWorkKind,
 } from '@/models/ZalipWork.js';
+import { MiZalipNoteContext } from '@/models/ZalipNoteContext.js';
 
 export type PackedZalipWork = {
 	id: string;
@@ -38,6 +42,16 @@ export type PackedZalipLibraryEntry = {
 	work: PackedZalipWork;
 };
 
+export type PackedZalipAdminWork = PackedZalipWork & {
+	publicationState: ZalipPublicationState;
+	publishedAt: string | null;
+};
+
+export type PackedZalipDiscussion = {
+	noteId: string;
+	created: boolean;
+};
+
 @Injectable()
 export class ZalipCatalogService {
 	constructor(
@@ -45,6 +59,7 @@ export class ZalipCatalogService {
 		private db: DataSource,
 
 		private idService: IdService,
+		private noteCreateService: NoteCreateService,
 	) {
 	}
 
@@ -171,5 +186,131 @@ export class ZalipCatalogService {
 			backdropPath: null,
 			trailerYoutubeKey: null,
 		}));
+	}
+
+	public async createTmdbDraft(input: {
+		tmdbMediaType: 'movie' | 'tv';
+		tmdbId: number;
+		title: string;
+		originalTitle: string | null;
+		description: string | null;
+		releaseYear: number | null;
+		posterPath: string | null;
+		backdropPath: string | null;
+		trailerYoutubeKey: string | null;
+	}): Promise<MiZalipWork | 'duplicate'> {
+		const repository = this.db.getRepository(MiZalipWork);
+		const conflict = await repository.existsBy({
+			tmdbMediaType: input.tmdbMediaType,
+			tmdbId: input.tmdbId,
+		});
+		if (conflict) return 'duplicate';
+
+		const now = new Date();
+		return await repository.save(repository.create({
+			id: this.idService.gen(),
+			createdAt: now,
+			updatedAt: now,
+			publishedAt: null,
+			slug: `tmdb-${input.tmdbMediaType}-${input.tmdbId}`,
+			kind: input.tmdbMediaType === 'movie' ? 'movie' : 'series',
+			publicationState: 'draft',
+			title: input.title,
+			originalTitle: input.originalTitle,
+			description: input.description,
+			releaseYear: input.releaseYear,
+			tmdbMediaType: input.tmdbMediaType,
+			tmdbId: input.tmdbId,
+			posterPath: input.posterPath,
+			backdropPath: input.backdropPath,
+			trailerYoutubeKey: input.trailerYoutubeKey,
+		}));
+	}
+
+	public packAdminWork(work: MiZalipWork): PackedZalipAdminWork {
+		return {
+			...this.packWork(work),
+			publicationState: work.publicationState,
+			publishedAt: work.publishedAt?.toISOString() ?? null,
+		};
+	}
+
+	public async listAdminWorks(limit: number): Promise<PackedZalipAdminWork[]> {
+		const works = await this.db.getRepository(MiZalipWork).find({
+			order: { updatedAt: 'DESC' },
+			take: limit,
+		});
+
+		return works.map(work => this.packAdminWork(work));
+	}
+
+	public async setPublicationState(
+		workId: MiZalipWork['id'],
+		publicationState: ZalipPublicationState,
+	): Promise<PackedZalipAdminWork | null> {
+		const repository = this.db.getRepository(MiZalipWork);
+		const work = await repository.findOneBy({ id: workId });
+		if (work == null) return null;
+
+		const now = new Date();
+		work.publicationState = publicationState;
+		work.updatedAt = now;
+		if (publicationState === 'published' && work.publishedAt == null) {
+			work.publishedAt = now;
+		}
+		await repository.save(work);
+
+		return this.packAdminWork(work);
+	}
+
+	public async showDiscussion(workId: MiZalipWork['id']): Promise<string | null> {
+		const work = await this.db.getRepository(MiZalipWork).findOneBy({
+			id: workId,
+			publicationState: 'published',
+		});
+		if (work == null) return null;
+
+		const context = await this.db.getRepository(MiZalipNoteContext).findOneBy({ workId: work.id });
+		return context?.noteId ?? null;
+	}
+
+	public async createDiscussion(
+		me: MiLocalUser,
+		workId: MiZalipWork['id'],
+		text: string | null,
+	): Promise<PackedZalipDiscussion | null> {
+		const work = await this.db.getRepository(MiZalipWork).findOneBy({
+			id: workId,
+			publicationState: 'published',
+		});
+		if (work == null) return null;
+
+		const contexts = this.db.getRepository(MiZalipNoteContext);
+		const existing = await contexts.findOneBy({ workId: work.id });
+		if (existing != null) return { noteId: existing.noteId, created: false };
+
+		const note = await this.noteCreateService.fetchAndCreate(me, {
+			createdAt: new Date(),
+			replyId: null,
+			renoteId: null,
+			fileIds: [],
+			text: text ?? `Обсуждение: ${work.title}`,
+			cw: null,
+			visibility: 'public',
+			visibleUserIds: [],
+			channelId: null,
+			localOnly: true,
+			reactionAcceptance: null,
+			poll: null,
+		});
+
+		await contexts.save(contexts.create({
+			workId: work.id,
+			noteId: note.id,
+			createdById: me.id,
+			createdAt: new Date(),
+		}));
+
+		return { noteId: note.id, created: true };
 	}
 }

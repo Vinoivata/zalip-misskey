@@ -23,8 +23,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<div :class="$style.actions">
 						<button v-if="$i" :class="$style.library" class="_button" :disabled="saving" @click="addToLibrary"><i class="ti ti-bookmark"></i> {{ saved ? 'В библиотеке' : 'Добавить в библиотеку' }}</button>
 						<MkA to="/timeline" :class="$style.feed"><i class="ti ti-news"></i> Лента</MkA>
+						<MkA v-if="discussionNoteId" :to="`/notes/${discussionNoteId}/replies`" :class="$style.feed"><i class="ti ti-messages"></i> Обсуждение</MkA>
 					</div>
-					<p :class="$style.note">Обсуждение, реакции и уведомления будут показаны здесь как обычная ветка Misskey.</p>
+					<p :class="$style.note"><template v-if="discussionNoteId">Комментарии, реакции и ответы открываются как обычная ветка Misskey.</template><template v-else>Обсуждение для этого тайтла появится здесь как обычная ветка Misskey — без второго аккаунта и отдельной системы комментариев.</template></p>
 				</div>
 			</article>
 		</div>
@@ -56,6 +57,7 @@ const work = ref<ZalipWork | null>(null);
 const pending = ref(true);
 const saving = ref(false);
 const saved = ref(false);
+const discussionNoteId = ref<string | null>(null);
 
 function tmdbImage(path: string): string {
 	return `https://image.tmdb.org/t/p/w500${path}`;
@@ -70,8 +72,11 @@ async function load(): Promise<void> {
 	work.value = null;
 	try {
 		work.value = await misskeyApiZalip<ZalipWork>('zalip/works/show', { slug: props.slug });
+		const discussion = await misskeyApiZalip<{ noteId: string | null }>('zalip/discussions/show', { workId: work.value.id });
+		discussionNoteId.value = discussion.noteId;
 	} catch {
 		work.value = null;
+		discussionNoteId.value = null;
 	} finally {
 		pending.value = false;
 	}

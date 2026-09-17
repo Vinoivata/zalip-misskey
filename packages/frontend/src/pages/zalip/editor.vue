@@ -1,0 +1,215 @@
+<!--
+SPDX-FileCopyrightText: Zalip contributors
+SPDX-License-Identifier: AGPL-3.0-only
+-->
+
+<template>
+	<PageWithHeader>
+		<div class="_spacer" style="--MI_SPACER-w: 1000px;">
+			<div :class="$style.page">
+				<div v-if="!iAmAdmin" :class="$style.denied">
+					<i class="ti ti-lock"></i>
+					<strong>Редактор доступен только администраторам Misskey</strong>
+					<span>Проверка прав выполняется ещё раз на сервере для каждого действия.</span>
+				</div>
+
+				<template v-else>
+					<header :class="$style.header">
+						<div><p :class="$style.eyebrow"><i class="ti ti-pencil"></i> ZALIP EDITOR</p><h1>Каталог</h1></div>
+						<MkA to="/" :class="$style.back"><i class="ti ti-arrow-left"></i> К кино</MkA>
+					</header>
+
+					<section :class="$style.create">
+						<div><h2>Импорт из TMDB</h2><p>Сервер сам получает метаданные по ID. Ключ TMDB остаётся только в конфигурации сервера и никогда не попадает в браузер.</p></div>
+						<form :class="$style.importForm" @submit.prevent="importTmdb">
+							<select v-model="tmdb.mediaType" class="_input" aria-label="Тип в TMDB"><option value="movie">Фильм</option><option value="tv">Сериал</option></select>
+							<input v-model.trim="tmdb.id" class="_input" inputmode="numeric" required placeholder="TMDB ID, например 11">
+							<button class="_button" :class="$style.createButton" :disabled="tmdbSubmitting"><i class="ti ti-download"></i> {{ tmdbSubmitting ? 'Импортируем…' : 'Импортировать черновик' }}</button>
+							<span v-if="tmdbMessage" :class="$style.importMessage">{{ tmdbMessage }}</span>
+						</form>
+					</section>
+
+					<section :class="$style.create">
+						<div><h2>Новый черновик</h2><p>Черновик не видят пользователи. Сначала проверьте данные, затем публикуйте его отдельно.</p></div>
+						<form :class="$style.form" @submit.prevent="createDraft">
+							<label><span>Название</span><input v-model.trim="form.title" class="_input" required maxlength="256" placeholder="Например, Путешествие к центру Земли"></label>
+							<label><span>URL-идентификатор</span><input v-model.trim="form.slug" class="_input" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" maxlength="160" placeholder="journey-to-the-center-of-the-earth"></label>
+							<label><span>Тип</span><select v-model="form.kind" class="_input"><option value="movie">Фильм</option><option value="series">Сериал</option><option value="anime">Аниме</option><option value="animation">Анимация</option></select></label>
+							<label><span>Год</span><input v-model.trim="form.releaseYear" class="_input" inputmode="numeric" maxlength="4" placeholder="2026"></label>
+							<label :class="$style.wide"><span>Оригинальное название</span><input v-model.trim="form.originalTitle" class="_input" maxlength="256" placeholder="Необязательно"></label>
+							<label :class="$style.wide"><span>Описание</span><textarea v-model.trim="form.description" class="_input" rows="4" maxlength="8192" placeholder="Необязательно; позже это заполнит импорт TMDB или редактор."></textarea></label>
+							<div :class="$style.formFooter"><span v-if="message">{{ message }}</span><button class="_button" :class="$style.createButton" :disabled="submitting"><i class="ti ti-plus"></i> {{ submitting ? 'Создаём…' : 'Создать черновик' }}</button></div>
+						</form>
+					</section>
+
+					<section :class="$style.works">
+						<div :class="$style.sectionHeader"><div><p :class="$style.eyebrow">ПОСЛЕДНИЕ</p><h2>Тайтлы</h2></div><button class="_button" :class="$style.reload" :disabled="loading" @click="load"><i class="ti ti-refresh"></i></button></div>
+						<div v-if="loading" :class="$style.empty"><i class="ti ti-loader-2 ti-spin"></i> Загружаем…</div>
+						<div v-else-if="works.length === 0" :class="$style.empty"><i class="ti ti-movie-off"></i> Черновиков пока нет.</div>
+						<div v-else :class="$style.workList">
+							<article v-for="work in works" :key="work.id" :class="$style.work">
+								<div><p :class="$style.state" :data-state="work.publicationState">{{ stateLabel(work.publicationState) }}</p><h3>{{ work.title }}</h3><p :class="$style.meta">{{ kindLabel(work.kind) }}<span v-if="work.releaseYear"> · {{ work.releaseYear }}</span><span> · /zalip/{{ work.slug }}</span></p></div>
+								<div :class="$style.workActions">
+									<MkA v-if="work.publicationState === 'published'" :to="`/zalip/${work.slug}`" :class="$style.smallButton"><i class="ti ti-external-link"></i> Открыть</MkA>
+									<button v-if="work.publicationState !== 'published'" class="_button" :class="$style.smallButton" :disabled="savingId === work.id" @click="setState(work, 'published')"><i class="ti ti-world"></i> Опубликовать</button>
+									<button v-else class="_button" :class="$style.smallButton" :disabled="savingId === work.id" @click="setState(work, 'archived')"><i class="ti ti-eye-off"></i> Снять</button>
+									<button v-if="work.publicationState === 'published'" class="_button" :class="$style.smallButton" :disabled="savingId === work.id" @click="openDiscussion(work)"><i class="ti ti-messages"></i> Обсуждение</button>
+								</div>
+							</article>
+						</div>
+					</section>
+				</template>
+			</div>
+		</div>
+	</PageWithHeader>
+</template>
+
+<script lang="ts" setup>
+import { onMounted, reactive, ref } from 'vue';
+import { definePage } from '@/page.js';
+import { iAmAdmin } from '@/i.js';
+import { useRouter } from '@/router.js';
+import { misskeyApiZalip } from '@/utility/misskey-api.js';
+
+type WorkKind = 'movie' | 'series' | 'anime' | 'animation';
+type PublicationState = 'draft' | 'published' | 'archived';
+type AdminWork = { id: string; slug: string; kind: WorkKind; title: string; releaseYear: number | null; publicationState: PublicationState; publishedAt: string | null; };
+
+const router = useRouter();
+const works = ref<AdminWork[]>([]);
+const loading = ref(false);
+const submitting = ref(false);
+const savingId = ref<string | null>(null);
+const message = ref('');
+const form = reactive({ title: '', slug: '', kind: 'movie' as WorkKind, releaseYear: '', originalTitle: '', description: '' });
+const tmdb = reactive({ mediaType: 'movie' as 'movie' | 'tv', id: '' });
+const tmdbSubmitting = ref(false);
+const tmdbMessage = ref('');
+
+function kindLabel(kind: WorkKind): string {
+	return ({ movie: 'Фильм', series: 'Сериал', anime: 'Аниме', animation: 'Анимация' })[kind];
+}
+
+function stateLabel(state: PublicationState): string {
+	return ({ draft: 'Черновик', published: 'Опубликован', archived: 'Снят с публикации' })[state];
+}
+
+async function load(): Promise<void> {
+	if (!iAmAdmin) return;
+	loading.value = true;
+	try {
+		works.value = await misskeyApiZalip<AdminWork[]>('zalip/admin/works/list', { limit: 50 });
+	} finally {
+		loading.value = false;
+	}
+}
+
+async function createDraft(): Promise<void> {
+	const year = form.releaseYear === '' ? null : Number(form.releaseYear);
+	if (!Number.isSafeInteger(year ?? 0) && year !== null) {
+		message.value = 'Год должен быть целым числом.';
+		return;
+	}
+
+	submitting.value = true;
+	message.value = '';
+	try {
+		await misskeyApiZalip('zalip/admin/works/create', {
+			slug: form.slug,
+			kind: form.kind,
+			title: form.title,
+			originalTitle: form.originalTitle || null,
+			description: form.description || null,
+			releaseYear: year,
+		});
+		Object.assign(form, { title: '', slug: '', kind: 'movie', releaseYear: '', originalTitle: '', description: '' });
+		message.value = 'Черновик создан.';
+		await load();
+	} catch {
+		message.value = 'Не удалось создать черновик. Проверьте URL-идентификатор и права.';
+	} finally {
+		submitting.value = false;
+	}
+}
+
+async function importTmdb(): Promise<void> {
+	const tmdbId = Number(tmdb.id);
+	if (!Number.isSafeInteger(tmdbId) || tmdbId < 1) {
+		tmdbMessage.value = 'Укажите корректный числовой TMDB ID.';
+		return;
+	}
+
+	tmdbSubmitting.value = true;
+	tmdbMessage.value = '';
+	try {
+		const work = await misskeyApiZalip<{ title: string }>('zalip/admin/works/import-tmdb', { tmdbMediaType: tmdb.mediaType, tmdbId });
+		tmdb.id = '';
+		tmdbMessage.value = `Создан черновик: ${work.title}.`;
+		await load();
+	} catch {
+		tmdbMessage.value = 'Импорт не выполнен: проверьте ID, конфигурацию TMDB и отсутствие дубликата.';
+	} finally {
+		tmdbSubmitting.value = false;
+	}
+}
+
+async function setState(work: AdminWork, publicationState: PublicationState): Promise<void> {
+	savingId.value = work.id;
+	try {
+		await misskeyApiZalip('zalip/admin/works/update-state', { workId: work.id, publicationState });
+		await load();
+	} finally {
+		savingId.value = null;
+	}
+}
+
+async function openDiscussion(work: AdminWork): Promise<void> {
+	savingId.value = work.id;
+	try {
+		const discussion = await misskeyApiZalip<{ noteId: string }>('zalip/admin/discussions/create', { workId: work.id });
+		router.push('/notes/:noteId/:initialTab?', { params: { noteId: discussion.noteId, initialTab: 'replies' } });
+	} finally {
+		savingId.value = null;
+	}
+}
+
+onMounted(() => void load());
+
+definePage(() => ({ title: 'Редактор Zalip', icon: 'ti ti-pencil' }));
+</script>
+
+<style lang="scss" module>
+.page { padding: 24px var(--MI-margin) 52px; }
+.header, .sectionHeader { display: flex; align-items: end; justify-content: space-between; gap: 16px; }
+.header { margin-bottom: 24px; }
+.eyebrow { display: flex; align-items: center; gap: 7px; margin: 0 0 8px; color: var(--MI_THEME-accent); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; }
+.header h1, .sectionHeader h2 { margin: 0; }
+.back, .smallButton, .reload { display: inline-flex; align-items: center; gap: 7px; padding: 9px 12px; border-radius: 999px; background: var(--MI_THEME-panelHighlight); color: var(--MI_THEME-fg); font-weight: 700; text-decoration: none; }
+.create { padding: 22px; border: 1px solid var(--MI_THEME-divider); border-radius: 20px; background: var(--MI_THEME-panel); }
+.create + .create { margin-top: 16px; }
+.create h2 { margin: 0; font-size: 1.2rem; }
+.create > div > p { margin: 7px 0 0; color: var(--MI_THEME-fgTransparentWeak); font-size: 0.88rem; }
+.importForm { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; align-items: center; gap: 10px; margin-top: 18px; }
+.importMessage { grid-column: 1 / -1; color: var(--MI_THEME-fgTransparentWeak); font-size: 0.85rem; }
+.form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 20px; }
+.form label { display: grid; gap: 6px; }
+.form label span { font-size: 0.8rem; font-weight: 700; color: var(--MI_THEME-fgTransparentWeak); }
+.form textarea { resize: vertical; }
+.wide { grid-column: 1 / -1; }
+.formFooter { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 38px; color: var(--MI_THEME-fgTransparentWeak); font-size: 0.85rem; }
+.createButton { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 999px; background: var(--MI_THEME-accent); color: var(--MI_THEME-fgOnAccent); font-weight: 700; }
+.works { margin-top: 36px; }
+.reload { padding: 9px; }
+.empty, .denied { display: grid; justify-items: center; gap: 10px; padding: 48px 20px; border: 1px dashed var(--MI_THEME-divider); border-radius: 20px; color: var(--MI_THEME-fgTransparentWeak); text-align: center; }
+.denied i, .empty i { color: var(--MI_THEME-accent); font-size: 2rem; }
+.denied strong { color: var(--MI_THEME-fg); }
+.workList { display: grid; gap: 10px; margin-top: 16px; }
+.work { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; border-radius: 16px; background: var(--MI_THEME-panel); }
+.state { display: inline-flex; margin: 0 0 6px; padding: 3px 7px; border-radius: 999px; background: var(--MI_THEME-panelHighlight); color: var(--MI_THEME-fgTransparentWeak); font-size: 0.72rem; font-weight: 700; }
+.state[data-state='published'] { color: var(--MI_THEME-accent); }
+.state[data-state='archived'] { opacity: 0.65; }
+.work h3 { margin: 0; font-size: 1rem; }
+.meta { margin: 5px 0 0; color: var(--MI_THEME-fgTransparentWeak); font-size: 0.8rem; }
+.workActions { display: flex; flex-wrap: wrap; justify-content: end; gap: 7px; }
+@media (max-width: 600px) { .page { padding-top: 12px; } .form, .importForm { grid-template-columns: 1fr; } .wide { grid-column: auto; } .work { align-items: start; flex-direction: column; } .workActions { justify-content: start; } .header { align-items: start; } }
+</style>
