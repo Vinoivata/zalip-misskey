@@ -43,6 +43,10 @@ validated episode metadata without deleting existing entries. The public title p
 opened season asynchronously, so switching seasons does not reload the page. Neither import makes
 the title public automatically or creates a player.
 
+Administrators can also correct the title, original title, description and release year through
+the native Zalip editor. It is an explicit role-gated API operation; it does not change the TMDB
+mapping, a provider mapping or publication state.
+
 ## TMDB attribution
 
 Before any TMDB-derived title is publicly visible, retain the native `/zalip/credits` page and
