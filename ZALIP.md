@@ -58,5 +58,11 @@ the credit link from the cinema home. It contains the required notice:
 
 This fork is licensed AGPL-3.0-only as inherited from Misskey. Before this modified build is
 deployed for network users, publish the corresponding source at a stable public URL and set the
-in-product Source link to the exact deployed revision. Do not deploy the code merely because the
-local build passes.
+in-product Source link to the exact deployed revision. The public source repository is
+[Vinoivata/zalip-misskey](https://github.com/Vinoivata/zalip-misskey). Do not deploy the code
+merely because the local build passes.
+
+The source repository contains application code and build instructions only. Deployment secrets,
+database contents, user uploads, logs and server configuration remain outside Git. For each
+deployment, record the deployed commit SHA in the release notes and set Misskey's
+`repositoryUrl` instance setting to the repository URL above.
