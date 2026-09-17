@@ -34,7 +34,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<i v-else class="ti ti-movie"></i>
 						</div>
 						<div :class="$style.body">
-							<div :class="$style.meta"><span>{{ statusLabel(entry.status) }}</span><span :class="$style.icons"><i v-if="entry.isReleaseSubscribed" class="ti ti-bell-filled" title="Отслеживаются новые серии"></i><i v-if="entry.isFavorite" class="ti ti-star-filled"></i></span></div>
+							<div :class="$style.meta"><span>{{ statusLabel(entry.status) }}</span><span :class="$style.icons"><span v-if="entry.personalRating != null" :class="$style.rating" title="Личная оценка"><i class="ti ti-star-filled"></i>{{ entry.personalRating }}</span><i v-if="entry.isReleaseSubscribed" class="ti ti-bell-filled" title="Отслеживаются новые серии"></i><i v-if="entry.isFavorite" class="ti ti-star-filled" title="В избранном"></i></span></div>
 							<h2>{{ entry.work.title }}</h2>
 							<p>{{ kindLabel(entry.work.kind) }}<span v-if="entry.work.releaseYear"> · {{ entry.work.releaseYear }}</span><span v-if="entry.episodesWatched"> · {{ entry.episodesWatched }} эп.</span></p>
 						</div>
@@ -256,7 +256,15 @@ definePage(() => ({
 
 .icons {
 	display: inline-flex;
+	align-items: center;
 	gap: 6px;
+}
+
+.rating {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	color: #d99c22;
 }
 
 .body h2 {

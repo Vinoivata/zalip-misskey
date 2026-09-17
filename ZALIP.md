@@ -24,6 +24,9 @@ catalogue; it does not add another account system, session mechanism or social d
   for users who enabled browser notifications. Failed deliveries retain their marker and are retried
   during the next catalogue sync; migration marks pre-existing events as delivered so importing this
   feature never creates a historical notification flood.
+- The title page writes a personal library entry through the signed-in Misskey user: status,
+  favourite flag, 1–10 rating, watched-episode count and release subscription are all saved in the
+  same entry. The library route shows those signals without a second profile or account.
 - The client has native cinema home, title, library and administrator editor routes.
 
 ## TMDB import secret

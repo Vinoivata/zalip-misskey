@@ -54,6 +54,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 							</select>
 							<button :class="$style.library" class="_button" :disabled="saving" @click="addToLibrary"><i class="ti ti-bookmark"></i> {{ saving ? 'Сохраняем…' : saved ? 'Обновить статус' : 'Добавить в библиотеку' }}</button>
 						</div>
+						<div v-if="$i" :class="$style.personalActions">
+							<button type="button" class="_button" :class="[$style.favorite, { [$style.favorited]: isFavorite }]" :aria-pressed="isFavorite" :disabled="saving" @click="toggleFavorite"><i :class="isFavorite ? 'ti ti-star-filled' : 'ti ti-star'"></i> {{ isFavorite ? 'В избранном' : 'В избранное' }}</button>
+							<label :class="$style.rating"><i class="ti ti-star"></i><span class="_visuallyHidden">Личная оценка</span><select v-model="personalRating" class="_input" :disabled="saving" aria-label="Личная оценка" @change="savePersonalRating"><option :value="null">Без оценки</option><option v-for="rating in 10" :key="rating" :value="rating">{{ rating }}/10</option></select></label>
+							<label v-if="work.seasons.length" :class="$style.progress"><i class="ti ti-player-track-next"></i><span class="_visuallyHidden">Просмотрено эпизодов</span><input v-model.number="episodesWatched" class="_input" type="number" min="0" inputmode="numeric" :disabled="saving" aria-label="Просмотрено эпизодов" @change="saveEpisodesWatched"><span>эп.</span></label>
+						</div>
 						<button v-if="$i" type="button" class="_button" :class="[$style.subscription, { [$style.subscribed]: releaseSubscribed }]" :aria-pressed="releaseSubscribed" :disabled="saving" @click="toggleReleaseSubscription"><i :class="releaseSubscribed ? 'ti ti-bell-filled' : 'ti ti-bell'"></i> {{ releaseSubscribed ? 'Слежу за сериями' : 'Следить за сериями' }}</button>
 						<MkA to="/timeline" :class="$style.feed"><i class="ti ti-news"></i> Лента</MkA>
 						<MkA v-if="discussionNoteId" :to="`/notes/${discussionNoteId}/replies`" :class="$style.feed"><i class="ti ti-messages"></i> Обсуждение</MkA>
@@ -112,7 +117,16 @@ type ZalipEpisode = {
 
 type LibraryStatus = 'watching' | 'planned' | 'completed' | 'on_hold' | 'dropped';
 
-type LibraryEntry = { status: LibraryStatus; isReleaseSubscribed: boolean; work: { id: string }; };
+type LibraryEntry = {
+	status: LibraryStatus;
+	episodesWatched: number;
+	personalRating: number | null;
+	isFavorite: boolean;
+	isReleaseSubscribed: boolean;
+	work: { id: string };
+};
+
+type LibraryUpdate = Pick<LibraryEntry, 'status' | 'episodesWatched' | 'personalRating' | 'isFavorite' | 'isReleaseSubscribed'>;
 
 const libraryStatuses: LibraryStatus[] = ['watching', 'planned', 'completed', 'on_hold', 'dropped'];
 
@@ -123,6 +137,9 @@ const pending = ref(true);
 const saving = ref(false);
 const saved = ref(false);
 const libraryStatus = ref<LibraryStatus>('planned');
+const episodesWatched = ref(0);
+const personalRating = ref<number | null>(null);
+const isFavorite = ref(false);
 const releaseSubscribed = ref(false);
 const discussionNoteId = ref<string | null>(null);
 const selectedSeasonNumber = ref<number | null>(null);
@@ -161,6 +178,9 @@ async function load(): Promise<void> {
 	work.value = null;
 	saved.value = false;
 	libraryStatus.value = 'planned';
+	episodesWatched.value = 0;
+	personalRating.value = null;
+	isFavorite.value = false;
 	releaseSubscribed.value = false;
 	selectedSeasonNumber.value = null;
 	episodes.value = [];
@@ -175,6 +195,9 @@ async function load(): Promise<void> {
 		const entry = entries.find(candidate => candidate.work?.id === work.value?.id);
 		saved.value = entry != null;
 		libraryStatus.value = entry?.status ?? 'planned';
+		episodesWatched.value = entry?.episodesWatched ?? 0;
+		personalRating.value = entry?.personalRating ?? null;
+		isFavorite.value = entry?.isFavorite ?? false;
 		releaseSubscribed.value = entry?.isReleaseSubscribed ?? false;
 	} catch {
 		work.value = null;
@@ -230,28 +253,56 @@ async function openEpisodeDiscussion(episode: ZalipEpisode): Promise<void> {
 	}
 }
 
-async function addToLibrary(): Promise<void> {
+function normalizedEpisodesWatched(): number {
+	return Number.isFinite(episodesWatched.value) ? Math.max(0, Math.trunc(episodesWatched.value)) : 0;
+}
+
+function applyLibraryEntry(entry: LibraryEntry): void {
+	saved.value = true;
+	libraryStatus.value = entry.status;
+	episodesWatched.value = entry.episodesWatched;
+	personalRating.value = entry.personalRating;
+	isFavorite.value = entry.isFavorite;
+	releaseSubscribed.value = entry.isReleaseSubscribed;
+}
+
+async function updateLibrary(patch: Partial<LibraryUpdate> = {}): Promise<void> {
 	if (work.value == null || !$i) return;
 	saving.value = true;
 	try {
-		await misskeyApiZalip('zalip/library/update', { workId: work.value.id, status: libraryStatus.value, isReleaseSubscribed: releaseSubscribed.value });
-		saved.value = true;
+		const entry = await misskeyApiZalip<LibraryEntry>('zalip/library/update', {
+			workId: work.value.id,
+			status: libraryStatus.value,
+			episodesWatched: normalizedEpisodesWatched(),
+			personalRating: personalRating.value,
+			isFavorite: isFavorite.value,
+			isReleaseSubscribed: releaseSubscribed.value,
+			...patch,
+		});
+		applyLibraryEntry(entry);
 	} finally {
 		saving.value = false;
 	}
 }
 
+async function addToLibrary(): Promise<void> {
+	await updateLibrary();
+}
+
+async function toggleFavorite(): Promise<void> {
+	await updateLibrary({ isFavorite: !isFavorite.value });
+}
+
+async function savePersonalRating(): Promise<void> {
+	await updateLibrary({ personalRating: personalRating.value });
+}
+
+async function saveEpisodesWatched(): Promise<void> {
+	await updateLibrary({ episodesWatched: normalizedEpisodesWatched() });
+}
+
 async function toggleReleaseSubscription(): Promise<void> {
-	if (work.value == null || !$i) return;
-	saving.value = true;
-	const nextValue = !releaseSubscribed.value;
-	try {
-		await misskeyApiZalip('zalip/library/update', { workId: work.value.id, status: libraryStatus.value, isReleaseSubscribed: nextValue });
-		releaseSubscribed.value = nextValue;
-		saved.value = true;
-	} finally {
-		saving.value = false;
-	}
+	await updateLibrary({ isReleaseSubscribed: !releaseSubscribed.value });
 }
 
 watch(() => props.slug, () => void load(), { immediate: true });
@@ -464,6 +515,66 @@ definePage(() => ({
 	color: var(--MI_THEME-fgOnAccent);
 }
 
+.personalActions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.favorite, .rating, .progress {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	min-height: 40px;
+	padding: 0 11px;
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: 999px;
+	color: var(--MI_THEME-fg);
+	font-weight: 700;
+}
+
+.favorite {
+	background: var(--MI_THEME-panel);
+}
+
+.favorited {
+	border-color: color-mix(in srgb, #f6be4f 55%, var(--MI_THEME-divider));
+	background: color-mix(in srgb, #f6be4f 13%, var(--MI_THEME-panel));
+	color: #d99c22;
+}
+
+.rating, .progress {
+	background: var(--MI_THEME-panel);
+	font-size: 0.84rem;
+}
+
+.rating i {
+	color: #d99c22;
+}
+
+.rating select, .progress input {
+	min-height: 30px;
+	padding: 0 2px;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+}
+
+.rating select {
+	max-width: 106px;
+}
+
+.progress input {
+	width: 42px;
+	text-align: center;
+}
+
+.progress span {
+	color: var(--MI_THEME-fgTransparentWeak);
+}
+
 .subscription {
 	display: inline-flex;
 	align-items: center;
@@ -516,6 +627,10 @@ definePage(() => ({
 
 	.libraryControl select, .library {
 		flex: 1;
+	}
+
+	.personalActions {
+		width: 100%;
 	}
 }
 </style>
