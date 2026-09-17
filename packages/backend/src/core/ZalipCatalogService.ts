@@ -24,6 +24,16 @@ import { MiZalipSeason } from '@/models/ZalipSeason.js';
 import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
 import { MiZalipEpisodeNoteContext } from '@/models/ZalipEpisodeNoteContext.js';
 import { MiZalipReleaseEvent } from '@/models/ZalipReleaseEvent.js';
+import { NotificationService } from '@/core/NotificationService.js';
+
+type ZalipEpisodeReleaseNotificationPayload = {
+	workId: MiZalipWork['id'];
+	workSlug: string;
+	workTitle: string;
+	seasonNumber: number;
+	episodeNumber: number;
+	episodeTitle: string;
+};
 
 export type PackedZalipWork = {
 	id: string;
@@ -109,6 +119,7 @@ export class ZalipCatalogService {
 
 		private idService: IdService,
 		private noteCreateService: NoteCreateService,
+		private notificationService: NotificationService,
 	) {
 	}
 
@@ -472,7 +483,7 @@ export class ZalipCatalogService {
 			runtimeMinutes: number | null;
 		}>,
 	): Promise<{ added: number; updated: number; total: number }> {
-		return await this.db.transaction(async manager => {
+		const result = await this.db.transaction(async manager => {
 			const seasons = manager.getRepository(MiZalipSeason);
 			const season = await seasons.findOneBy({ id: seasonId });
 			if (season == null) return { added: 0, updated: 0, total: 0 };
@@ -522,9 +533,9 @@ export class ZalipCatalogService {
 			// work become public "new episode" events, preventing a historical season from flooding
 			// the release feed when it is first imported.
 			if (work?.publicationState === 'published' && previousEpisodeCount != null && addedEpisodes.length > 0) {
+				const releasedEpisodes = addedEpisodes.filter(episode => episode.episodeNumber > previousEpisodeCount);
 				const events = manager.getRepository(MiZalipReleaseEvent);
-				await events.save(addedEpisodes
-					.filter(episode => episode.episodeNumber > previousEpisodeCount)
+				await events.save(releasedEpisodes
 					.map(episode => events.create({
 						id: this.idService.gen(),
 						workId: season.workId,
@@ -534,6 +545,61 @@ export class ZalipCatalogService {
 					})));
 			}
 			return { added, updated, total: episodes.length };
+		});
+
+		await this.dispatchPendingReleaseNotifications();
+		return result;
+	}
+
+	/**
+	 * A durable release-event outbox. A failed Redis/Web Push operation leaves its marker empty,
+	 * allowing the next catalogue sync to retry without duplicating a database release event.
+	 */
+	private async dispatchPendingReleaseNotifications(): Promise<void> {
+		const events = await this.db.getRepository(MiZalipReleaseEvent).createQueryBuilder('event')
+			.innerJoinAndSelect('event.work', 'work')
+			.innerJoinAndSelect('event.season', 'season')
+			.innerJoinAndSelect('event.episode', 'episode')
+			.where('event.notificationDeliveredAt IS NULL')
+			.andWhere('work.publicationState = :publicationState', { publicationState: 'published' })
+			.orderBy('event.createdAt', 'ASC')
+			.take(100)
+			.getMany();
+
+		for (const event of events) {
+			if (event.work == null || event.season == null || event.episode == null) continue;
+			await this.notifyEpisodeReleaseSubscribers(event, {
+				workId: event.work.id,
+				workSlug: event.work.slug,
+				workTitle: event.work.title,
+				seasonNumber: event.season.seasonNumber,
+				episodeNumber: event.episode.episodeNumber,
+				episodeTitle: event.episode.title,
+			});
+		}
+	}
+
+	/** Delivers one committed catalogue arrival before marking its release event as complete. */
+	private async notifyEpisodeReleaseSubscribers(
+		event: MiZalipReleaseEvent,
+		notification: ZalipEpisodeReleaseNotificationPayload,
+	): Promise<void> {
+		const entries = await this.db.getRepository(MiZalipLibraryEntry).find({
+			select: { userId: true },
+			where: {
+				workId: notification.workId,
+				isReleaseSubscribed: true,
+			},
+		});
+
+		await Promise.all(entries.map(entry => this.notificationService.createNotificationAndWait(
+			entry.userId,
+			'zalipEpisodeReleased',
+			notification,
+		)));
+
+		await this.db.getRepository(MiZalipReleaseEvent).update(event.id, {
+			notificationDeliveredAt: new Date(),
 		});
 	}
 

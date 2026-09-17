@@ -665,6 +665,39 @@ import type {
 	V2AdminEmojiListRequest,
 	V2AdminEmojiListResponse,
 	VerifyEmailRequest,
+	ZalipAdminDiscussionsCreateRequest,
+	ZalipAdminDiscussionsCreateResponse,
+	ZalipAdminEpisodesDiscussionsCreateRequest,
+	ZalipAdminEpisodesDiscussionsCreateResponse,
+	ZalipAdminSeasonsImportTmdbRequest,
+	ZalipAdminSeasonsImportTmdbResponse,
+	ZalipAdminWorksCreateRequest,
+	ZalipAdminWorksCreateResponse,
+	ZalipAdminWorksImportTmdbRequest,
+	ZalipAdminWorksImportTmdbResponse,
+	ZalipAdminWorksListRequest,
+	ZalipAdminWorksListResponse,
+	ZalipAdminWorksUpdateRequest,
+	ZalipAdminWorksUpdateResponse,
+	ZalipAdminWorksUpdateStateRequest,
+	ZalipAdminWorksUpdateStateResponse,
+	ZalipDiscussionsShowRequest,
+	ZalipDiscussionsShowResponse,
+	ZalipLibraryListResponse,
+	ZalipLibraryUpdateRequest,
+	ZalipLibraryUpdateResponse,
+	ZalipReleasesListRequest,
+	ZalipReleasesListResponse,
+	ZalipReleasesSubscribedRequest,
+	ZalipReleasesSubscribedResponse,
+	ZalipSeasonsEpisodesRequest,
+	ZalipSeasonsEpisodesResponse,
+	ZalipWorksListRequest,
+	ZalipWorksListResponse,
+	ZalipWorksSearchRequest,
+	ZalipWorksSearchResponse,
+	ZalipWorksShowRequest,
+	ZalipWorksShowResponse,
 } from './entities.js';
 
 export type Endpoints = {
@@ -1106,6 +1139,23 @@ export type Endpoints = {
 	'users/update-memo': { req: UsersUpdateMemoRequest; res: EmptyResponse };
 	'v2/admin/emoji/list': { req: V2AdminEmojiListRequest; res: V2AdminEmojiListResponse };
 	'verify-email': { req: VerifyEmailRequest; res: EmptyResponse };
+	'zalip/admin/discussions/create': { req: ZalipAdminDiscussionsCreateRequest; res: ZalipAdminDiscussionsCreateResponse };
+	'zalip/admin/episodes/discussions/create': { req: ZalipAdminEpisodesDiscussionsCreateRequest; res: ZalipAdminEpisodesDiscussionsCreateResponse };
+	'zalip/admin/seasons/import-tmdb': { req: ZalipAdminSeasonsImportTmdbRequest; res: ZalipAdminSeasonsImportTmdbResponse };
+	'zalip/admin/works/create': { req: ZalipAdminWorksCreateRequest; res: ZalipAdminWorksCreateResponse };
+	'zalip/admin/works/import-tmdb': { req: ZalipAdminWorksImportTmdbRequest; res: ZalipAdminWorksImportTmdbResponse };
+	'zalip/admin/works/list': { req: ZalipAdminWorksListRequest; res: ZalipAdminWorksListResponse };
+	'zalip/admin/works/update': { req: ZalipAdminWorksUpdateRequest; res: ZalipAdminWorksUpdateResponse };
+	'zalip/admin/works/update-state': { req: ZalipAdminWorksUpdateStateRequest; res: ZalipAdminWorksUpdateStateResponse };
+	'zalip/discussions/show': { req: ZalipDiscussionsShowRequest; res: ZalipDiscussionsShowResponse };
+	'zalip/library/list': { req: EmptyRequest; res: ZalipLibraryListResponse };
+	'zalip/library/update': { req: ZalipLibraryUpdateRequest; res: ZalipLibraryUpdateResponse };
+	'zalip/releases/list': { req: ZalipReleasesListRequest; res: ZalipReleasesListResponse };
+	'zalip/releases/subscribed': { req: ZalipReleasesSubscribedRequest; res: ZalipReleasesSubscribedResponse };
+	'zalip/seasons/episodes': { req: ZalipSeasonsEpisodesRequest; res: ZalipSeasonsEpisodesResponse };
+	'zalip/works/list': { req: ZalipWorksListRequest; res: ZalipWorksListResponse };
+	'zalip/works/search': { req: ZalipWorksSearchRequest; res: ZalipWorksSearchResponse };
+	'zalip/works/show': { req: ZalipWorksShowRequest; res: ZalipWorksShowResponse };
 };
 
 /**

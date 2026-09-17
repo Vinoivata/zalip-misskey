@@ -10,6 +10,7 @@ import { MiAccessToken } from './AccessToken.js';
 import { MiRole } from './Role.js';
 import { MiDriveFile } from './DriveFile.js';
 import { MiNoteDraft } from './NoteDraft.js';
+import { MiZalipWork } from './ZalipWork.js';
 
 // misskey-js の notificationTypes と同期すべし
 export type MiNotification = {
@@ -104,6 +105,16 @@ export type MiNotification = {
 	createdAt: string;
 	exportedEntity: typeof userExportableEntities[number];
 	fileId: MiDriveFile['id'];
+} | {
+	type: 'zalipEpisodeReleased';
+	id: string;
+	createdAt: string;
+	workId: MiZalipWork['id'];
+	workSlug: string;
+	workTitle: string;
+	seasonNumber: number;
+	episodeNumber: number;
+	episodeTitle: string;
 } | {
 	type: 'login';
 	id: string;

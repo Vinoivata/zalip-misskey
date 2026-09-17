@@ -40,4 +40,12 @@ export class MiZalipReleaseEvent {
 
 	@Column('timestamp with time zone')
 	public createdAt: Date;
+
+	/**
+	 * Set after every current subscriber has received the native Misskey notification.
+	 * This durable outbox marker keeps a transient Redis/Web Push failure from being
+	 * mistaken for a successfully delivered release alert.
+	 */
+	@Column('timestamp with time zone', { nullable: true })
+	public notificationDeliveredAt: Date | null;
 }

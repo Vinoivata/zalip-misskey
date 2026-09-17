@@ -189,6 +189,14 @@ export class NotificationEntityService implements OnModuleInit {
 				exportedEntity: notification.exportedEntity,
 				fileId: notification.fileId,
 			} : {}),
+			...(notification.type === 'zalipEpisodeReleased' ? {
+				workId: notification.workId,
+				workSlug: notification.workSlug,
+				workTitle: notification.workTitle,
+				seasonNumber: notification.seasonNumber,
+				episodeNumber: notification.episodeNumber,
+				episodeTitle: notification.episodeTitle,
+			} : {}),
 			...(notification.type === 'app' ? {
 				body: notification.customBody,
 				header: notification.customHeader,

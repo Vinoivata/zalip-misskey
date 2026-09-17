@@ -34,6 +34,7 @@ export const notificationTypes = [
 	'chatRoomInvitationReceived',
 	'achievementEarned',
 	'exportCompleted',
+	'zalipEpisodeReleased',
 	'test',
 	'login',
 	'createToken',

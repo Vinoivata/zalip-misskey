@@ -87,6 +87,21 @@ export class NotificationService implements OnApplicationShutdown {
 		);
 	}
 
+	/**
+	 * Creates a notification synchronously for durable outbox-style callers.
+	 * Most social interactions can stay fire-and-forget through createNotification,
+	 * but catalogue release events need confirmation before they are marked delivered.
+	 */
+	@bindThis
+	public async createNotificationAndWait<T extends MiNotification['type']>(
+		notifieeId: MiUser['id'],
+		type: T,
+		data: Omit<FilterUnionByProperty<MiNotification, 'type', T>, 'type' | 'id' | 'createdAt' | 'notifierId'>,
+		notifierId?: MiUser['id'] | null,
+	): Promise<MiNotification | null> {
+		return await this.#createNotificationInternal(notifieeId, type, data, notifierId);
+	}
+
 	async #createNotificationInternal<T extends MiNotification['type']>(
 		notifieeId: MiUser['id'],
 		type: T,

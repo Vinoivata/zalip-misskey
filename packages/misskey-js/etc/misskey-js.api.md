@@ -2199,6 +2199,39 @@ declare namespace entities {
         V2AdminEmojiListRequest,
         V2AdminEmojiListResponse,
         VerifyEmailRequest,
+        ZalipAdminDiscussionsCreateRequest,
+        ZalipAdminDiscussionsCreateResponse,
+        ZalipAdminEpisodesDiscussionsCreateRequest,
+        ZalipAdminEpisodesDiscussionsCreateResponse,
+        ZalipAdminSeasonsImportTmdbRequest,
+        ZalipAdminSeasonsImportTmdbResponse,
+        ZalipAdminWorksCreateRequest,
+        ZalipAdminWorksCreateResponse,
+        ZalipAdminWorksImportTmdbRequest,
+        ZalipAdminWorksImportTmdbResponse,
+        ZalipAdminWorksListRequest,
+        ZalipAdminWorksListResponse,
+        ZalipAdminWorksUpdateRequest,
+        ZalipAdminWorksUpdateResponse,
+        ZalipAdminWorksUpdateStateRequest,
+        ZalipAdminWorksUpdateStateResponse,
+        ZalipDiscussionsShowRequest,
+        ZalipDiscussionsShowResponse,
+        ZalipLibraryListResponse,
+        ZalipLibraryUpdateRequest,
+        ZalipLibraryUpdateResponse,
+        ZalipReleasesListRequest,
+        ZalipReleasesListResponse,
+        ZalipReleasesSubscribedRequest,
+        ZalipReleasesSubscribedResponse,
+        ZalipSeasonsEpisodesRequest,
+        ZalipSeasonsEpisodesResponse,
+        ZalipWorksListRequest,
+        ZalipWorksListResponse,
+        ZalipWorksSearchRequest,
+        ZalipWorksSearchResponse,
+        ZalipWorksShowRequest,
+        ZalipWorksShowResponse,
         Error_2 as Error,
         UserLite,
         UserDetailedNotMeOnly,
@@ -3141,7 +3174,7 @@ type Notification_2 = components['schemas']['Notification'];
 type NotificationsCreateRequest = operations['notifications___create']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
-export const notificationTypes: readonly ["note", "follow", "mention", "reply", "renote", "quote", "reaction", "pollEnded", "scheduledNotePosted", "scheduledNotePostFailed", "receiveFollowRequest", "followRequestAccepted", "app", "roleAssigned", "chatRoomInvitationReceived", "achievementEarned", "exportCompleted", "test", "login", "createToken"];
+export const notificationTypes: readonly ["note", "follow", "mention", "reply", "renote", "quote", "reaction", "pollEnded", "scheduledNotePosted", "scheduledNotePostFailed", "receiveFollowRequest", "followRequestAccepted", "app", "roleAssigned", "chatRoomInvitationReceived", "achievementEarned", "exportCompleted", "zalipEpisodeReleased", "test", "login", "createToken"];
 
 // @public (undocumented)
 export function nyaize(text: string): string;
@@ -3767,6 +3800,105 @@ type V2AdminEmojiListResponse = operations['v2___admin___emoji___list']['respons
 
 // @public (undocumented)
 type VerifyEmailRequest = operations['verify-email']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminDiscussionsCreateRequest = operations['zalip___admin___discussions___create']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminDiscussionsCreateResponse = operations['zalip___admin___discussions___create']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminEpisodesDiscussionsCreateRequest = operations['zalip___admin___episodes___discussions___create']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminEpisodesDiscussionsCreateResponse = operations['zalip___admin___episodes___discussions___create']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminSeasonsImportTmdbRequest = operations['zalip___admin___seasons___import-tmdb']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminSeasonsImportTmdbResponse = operations['zalip___admin___seasons___import-tmdb']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminWorksCreateRequest = operations['zalip___admin___works___create']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminWorksCreateResponse = operations['zalip___admin___works___create']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminWorksImportTmdbRequest = operations['zalip___admin___works___import-tmdb']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminWorksImportTmdbResponse = operations['zalip___admin___works___import-tmdb']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminWorksListRequest = operations['zalip___admin___works___list']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminWorksListResponse = operations['zalip___admin___works___list']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminWorksUpdateRequest = operations['zalip___admin___works___update']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminWorksUpdateResponse = operations['zalip___admin___works___update']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminWorksUpdateStateRequest = operations['zalip___admin___works___update-state']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminWorksUpdateStateResponse = operations['zalip___admin___works___update-state']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipDiscussionsShowRequest = operations['zalip___discussions___show']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipDiscussionsShowResponse = operations['zalip___discussions___show']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipLibraryListResponse = operations['zalip___library___list']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipLibraryUpdateRequest = operations['zalip___library___update']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipLibraryUpdateResponse = operations['zalip___library___update']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipReleasesListRequest = operations['zalip___releases___list']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipReleasesListResponse = operations['zalip___releases___list']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipReleasesSubscribedRequest = operations['zalip___releases___subscribed']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipReleasesSubscribedResponse = operations['zalip___releases___subscribed']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipSeasonsEpisodesRequest = operations['zalip___seasons___episodes']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipSeasonsEpisodesResponse = operations['zalip___seasons___episodes']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipWorksListRequest = operations['zalip___works___list']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipWorksListResponse = operations['zalip___works___list']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipWorksSearchRequest = operations['zalip___works___search']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipWorksSearchResponse = operations['zalip___works___search']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipWorksShowRequest = operations['zalip___works___show']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipWorksShowResponse = operations['zalip___works___show']['responses']['200']['content']['application/json'];
 
 // Warnings were encountered during analysis:
 //

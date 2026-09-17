@@ -371,6 +371,41 @@ export const packedNotificationSchema = {
 			type: {
 				type: 'string',
 				optional: false, nullable: false,
+				enum: ['zalipEpisodeReleased'],
+			},
+			workId: {
+				type: 'string',
+				optional: false, nullable: false,
+				format: 'id',
+			},
+			workSlug: {
+				type: 'string',
+				optional: false, nullable: false,
+			},
+			workTitle: {
+				type: 'string',
+				optional: false, nullable: false,
+			},
+			seasonNumber: {
+				type: 'number',
+				optional: false, nullable: false,
+			},
+			episodeNumber: {
+				type: 'number',
+				optional: false, nullable: false,
+			},
+			episodeTitle: {
+				type: 'string',
+				optional: false, nullable: false,
+			},
+		},
+	}, {
+		type: 'object',
+		properties: {
+			...baseSchema.properties,
+			type: {
+				type: 'string',
+				optional: false, nullable: false,
 				enum: ['login'],
 			},
 		},

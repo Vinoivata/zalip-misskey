@@ -20,6 +20,7 @@
  * chatRoomInvitationReceived - チャットルームに招待された
  * achievementEarned - 実績を獲得
  * exportCompleted - エクスポートが完了
+ * zalipEpisodeReleased - ZALIPの購読中作品に新しいエピソードが追加された
  * login - ログイン
  * createToken - トークン作成
  * app - アプリ通知
@@ -42,6 +43,7 @@ export const notificationTypes = [
 	'chatRoomInvitationReceived',
 	'achievementEarned',
 	'exportCompleted',
+	'zalipEpisodeReleased',
 	'login',
 	'createToken',
 	'app',

@@ -1,3 +1,14 @@
+## Unreleased
+
+### General
+-
+
+### Client
+- Feat: ZALIPの新着エピソードをMisskeyの通知画面とWeb Pushから開けるように
+
+### Server
+- Feat: 購読中のZALIP作品に新エピソードが追加された時の耐障害性を持つ通知配信を追加
+
 ## 2026.7.0
 
 ### Note

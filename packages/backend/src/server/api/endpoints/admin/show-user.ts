@@ -110,6 +110,7 @@ export const meta = {
 					roleAssigned: { optional: true, ...notificationRecieveConfig },
 					chatRoomInvitationReceived: { optional: true, ...notificationRecieveConfig },
 					achievementEarned: { optional: true, ...notificationRecieveConfig },
+					zalipEpisodeReleased: { optional: true, ...notificationRecieveConfig },
 					app: { optional: true, ...notificationRecieveConfig },
 					test: { optional: true, ...notificationRecieveConfig },
 				},

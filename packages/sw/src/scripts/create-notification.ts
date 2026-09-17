@@ -210,6 +210,19 @@ async function composeNotification(data: PushNotificationDataMap[keyof PushNotif
 						tag: `achievement:${data.body.achievement}`,
 					}];
 
+				case 'zalipEpisodeReleased':
+					return [i18n.ts._notification.zalipEpisodeReleased, {
+						body: i18n.tsx._notification.zalipEpisodeReleasedDescription({
+							title: data.body.workTitle,
+							season: data.body.seasonNumber,
+							episode: data.body.episodeNumber,
+							episodeTitle: data.body.episodeTitle,
+						}),
+						badge: iconUrl('bell'),
+						tag: `zalip-release:${data.body.workId}:${data.body.seasonNumber}:${data.body.episodeNumber}`,
+						data,
+					}];
+
 				case 'login':
 					return [i18n.ts._notification.login, {
 						badge: iconUrl('login-2'),

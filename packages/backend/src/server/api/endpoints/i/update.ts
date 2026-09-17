@@ -216,6 +216,7 @@ export const paramDef = {
 				roleAssigned: notificationRecieveConfig,
 				chatRoomInvitationReceived: notificationRecieveConfig,
 				achievementEarned: notificationRecieveConfig,
+				zalipEpisodeReleased: notificationRecieveConfig,
 				app: notificationRecieveConfig,
 				test: notificationRecieveConfig,
 			},
