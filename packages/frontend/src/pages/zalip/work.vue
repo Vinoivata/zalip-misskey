@@ -15,6 +15,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<i v-else class="ti ti-movie"></i>
 				</div>
 				<div :class="$style.info">
+					<div v-if="work.backdropPath" :class="$style.backdrop">
+						<img :src="tmdbBackdrop(work.backdropPath)" alt="" loading="lazy">
+					</div>
 					<p :class="$style.kind">{{ kindLabel(work.kind) }}<span v-if="work.releaseYear"> · {{ work.releaseYear }}</span></p>
 					<h1>{{ work.title }}</h1>
 					<p v-if="work.originalTitle" :class="$style.original">{{ work.originalTitle }}</p>
@@ -46,6 +49,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 								</div>
 							</div>
 						</div>
+					</section>
+					<section v-if="work.trailerYoutubeKey" :class="$style.trailer">
+						<h2><i class="ti ti-player-play"></i> Официальный трейлер</h2>
+						<p v-if="!trailerOpen">Трейлер открывается по вашему действию через YouTube без cookies.</p>
+						<button v-if="!trailerOpen" type="button" class="_button" :class="$style.trailerButton" @click="trailerOpen = true"><i class="ti ti-player-play-filled"></i> Показать трейлер</button>
+						<div v-else :class="$style.trailerFrame"><iframe :src="youtubeEmbed(work.trailerYoutubeKey)" :title="`Официальный трейлер: ${work.title}`" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>
 					</section>
 					<div :class="$style.actions">
 						<div v-if="$i" :class="$style.libraryControl">
@@ -141,6 +150,7 @@ const episodesWatched = ref(0);
 const personalRating = ref<number | null>(null);
 const isFavorite = ref(false);
 const releaseSubscribed = ref(false);
+const trailerOpen = ref(false);
 const discussionNoteId = ref<string | null>(null);
 const selectedSeasonNumber = ref<number | null>(null);
 const episodes = ref<ZalipEpisode[]>([]);
@@ -151,6 +161,14 @@ const episodeDiscussionError = ref<string | null>(null);
 
 function tmdbImage(path: string): string {
 	return `https://image.tmdb.org/t/p/w500${path}`;
+}
+
+function tmdbBackdrop(path: string): string {
+	return `https://image.tmdb.org/t/p/w1280${path}`;
+}
+
+function youtubeEmbed(key: string): string {
+	return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(key)}?rel=0&modestbranding=1`;
 }
 
 function kindLabel(kind: ZalipWork['kind']): string {
@@ -182,6 +200,7 @@ async function load(): Promise<void> {
 	personalRating.value = null;
 	isFavorite.value = false;
 	releaseSubscribed.value = false;
+	trailerOpen.value = false;
 	selectedSeasonNumber.value = null;
 	episodes.value = [];
 	episodeRequestId.value++;
@@ -371,6 +390,28 @@ definePage(() => ({
 	letter-spacing: -0.035em;
 }
 
+.backdrop {
+	position: relative;
+	margin-bottom: 18px;
+	overflow: hidden;
+	aspect-ratio: 16 / 7;
+	border-radius: 16px;
+	background: var(--MI_THEME-panelHighlight);
+}
+
+.backdrop::after {
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(90deg, rgb(0 0 0 / 18%), transparent 58%), linear-gradient(0deg, var(--MI_THEME-bg) 0%, transparent 34%);
+	content: '';
+}
+
+.backdrop img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
 .original {
 	margin: 8px 0 0;
 	color: var(--MI_THEME-fgTransparentWeak);
@@ -390,6 +431,58 @@ definePage(() => ({
 .seasons h2 {
 	margin: 0 0 10px;
 	font-size: 1rem;
+}
+
+.trailer {
+	margin-top: 24px;
+	padding: 15px;
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: 16px;
+	background: var(--MI_THEME-panel);
+}
+
+.trailer h2 {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	font-size: 1rem;
+}
+
+.trailer h2 i {
+	color: var(--MI_THEME-accent);
+}
+
+.trailer p {
+	margin: 8px 0 12px;
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.84rem;
+}
+
+.trailerButton {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 9px 12px;
+	border-radius: 10px;
+	background: var(--MI_THEME-accent);
+	color: var(--MI_THEME-fgOnAccent);
+	font-weight: 700;
+}
+
+.trailerFrame {
+	overflow: hidden;
+	margin-top: 13px;
+	aspect-ratio: 16 / 9;
+	border-radius: 10px;
+	background: #000;
+}
+
+.trailerFrame iframe {
+	display: block;
+	width: 100%;
+	height: 100%;
+	border: 0;
 }
 
 .seasonList {
@@ -619,6 +712,11 @@ definePage(() => ({
 
 	.info {
 		grid-column: 1 / -1;
+	}
+
+	.backdrop {
+		margin-inline: calc(var(--MI-margin) * -1);
+		border-radius: 0;
 	}
 
 	.libraryControl {

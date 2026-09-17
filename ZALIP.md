@@ -27,6 +27,9 @@ catalogue; it does not add another account system, session mechanism or social d
 - The title page writes a personal library entry through the signed-in Misskey user: status,
   favourite flag, 1–10 rating, watched-episode count and release subscription are all saved in the
   same entry. The library route shows those signals without a second profile or account.
+- When TMDB supplies a backdrop or an official YouTube trailer key, the public title page shows the
+  backdrop and offers an explicit, privacy-conscious trailer launch through `youtube-nocookie.com`.
+  The player is not requested until the visitor selects it.
 - The client has native cinema home, title, library and administrator editor routes.
 
 ## TMDB import secret
