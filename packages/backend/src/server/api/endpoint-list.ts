@@ -460,3 +460,4 @@ export * as 'zalip/admin/works/list' from './endpoints/zalip/admin/works/list.js
 export * as 'zalip/admin/works/update-state' from './endpoints/zalip/admin/works/update-state.js';
 export * as 'zalip/admin/seasons/import-tmdb' from './endpoints/zalip/admin/seasons/import-tmdb.js';
 export * as 'zalip/admin/discussions/create' from './endpoints/zalip/admin/discussions/create.js';
+export * as 'zalip/admin/episodes/discussions/create' from './endpoints/zalip/admin/episodes/discussions/create.js';

@@ -9,6 +9,8 @@ catalogue; it does not add another account system, session mechanism or social d
 - `zalip_library_entry` is keyed directly by Misskey `user.id`.
 - `zalip_note_context` connects a title to an ordinary local Misskey root note, so replies,
   emoji reactions, moderation and notifications are native Misskey features.
+- `zalip_episode_note_context` does the same for an individual episode. An administrator opens a
+  root thread once; thereafter users use standard Misskey replies and reactions in that thread.
 - `zalip_season` and `zalip_episode` hold canonical season and episode metadata. They have no
   playback URL columns: availability is a separately authorised future integration.
 - The client has native cinema home, title, library and administrator editor routes.

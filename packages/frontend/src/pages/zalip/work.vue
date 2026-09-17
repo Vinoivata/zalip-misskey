@@ -36,7 +36,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 										<strong>{{ episodeLabel(episode) }}</strong>
 										<span v-if="episode.runtimeMinutes || episode.airDate">{{ episodeMeta(episode) }}</span>
 										<p v-if="episode.description">{{ episode.description }}</p>
+										<div :class="$style.episodeActions">
+											<MkA v-if="episode.discussionNoteId" :to="`/notes/${episode.discussionNoteId}/replies`"><i class="ti ti-messages"></i> Обсуждение серии</MkA>
+											<button v-else-if="iAmAdmin" type="button" class="_button" :disabled="discussionCreatingEpisodeId === episode.id" @click="openEpisodeDiscussion(episode)"><i class="ti ti-message-plus"></i> {{ discussionCreatingEpisodeId === episode.id ? 'Открываем…' : 'Открыть обсуждение' }}</button>
+											<span v-else>Обсуждение серии ещё не открыто.</span>
+										</div>
 									</article>
+									<p v-if="episodeDiscussionError" :class="$style.episodeState">{{ episodeDiscussionError }}</p>
 								</div>
 							</div>
 						</div>
@@ -56,8 +62,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script lang="ts" setup>
 import { ref, watch } from 'vue';
-import { $i } from '@/i.js';
+import { $i, iAmAdmin } from '@/i.js';
 import { definePage } from '@/page.js';
+import { useRouter } from '@/router.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 
 type ZalipWork = {
@@ -94,9 +101,11 @@ type ZalipEpisode = {
 	airDate: string | null;
 	stillPath: string | null;
 	runtimeMinutes: number | null;
+	discussionNoteId: string | null;
 };
 
 const props = defineProps<{ slug: string }>();
+const router = useRouter();
 const work = ref<ZalipWork | null>(null);
 const pending = ref(true);
 const saving = ref(false);
@@ -106,6 +115,8 @@ const selectedSeasonNumber = ref<number | null>(null);
 const episodes = ref<ZalipEpisode[]>([]);
 const episodesPending = ref(false);
 const episodeRequestId = ref(0);
+const discussionCreatingEpisodeId = ref<string | null>(null);
+const episodeDiscussionError = ref<string | null>(null);
 
 function tmdbImage(path: string): string {
 	return `https://image.tmdb.org/t/p/w500${path}`;
@@ -158,6 +169,7 @@ async function toggleSeason(season: ZalipSeason): Promise<void> {
 	selectedSeasonNumber.value = season.seasonNumber;
 	episodes.value = [];
 	episodesPending.value = true;
+	episodeDiscussionError.value = null;
 	try {
 		const loadedEpisodes = await misskeyApiZalip<ZalipEpisode[]>('zalip/seasons/episodes', {
 			slug: work.value.slug,
@@ -172,6 +184,21 @@ async function toggleSeason(season: ZalipSeason): Promise<void> {
 		}
 	} finally {
 		if (episodeRequestId.value === requestId) episodesPending.value = false;
+	}
+}
+
+async function openEpisodeDiscussion(episode: ZalipEpisode): Promise<void> {
+	if (!iAmAdmin) return;
+	discussionCreatingEpisodeId.value = episode.id;
+	episodeDiscussionError.value = null;
+	try {
+		const discussion = await misskeyApiZalip<{ noteId: string }>('zalip/admin/episodes/discussions/create', { episodeId: episode.id });
+		episode.discussionNoteId = discussion.noteId;
+		router.push('/notes/:noteId/:initialTab?', { params: { noteId: discussion.noteId, initialTab: 'replies' } });
+	} catch {
+		episodeDiscussionError.value = 'Не удалось открыть обсуждение серии.';
+	} finally {
+		discussionCreatingEpisodeId.value = null;
 	}
 }
 
@@ -341,6 +368,27 @@ definePage(() => ({
 .episode p {
 	margin: 4px 0 0;
 	line-height: 1.45;
+}
+
+.episodeActions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 4px;
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.78rem;
+}
+
+.episodeActions a, .episodeActions button {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 5px 7px;
+	border-radius: 7px;
+	background: var(--MI_THEME-panel);
+	color: var(--MI_THEME-accent);
+	font-weight: 700;
+	text-decoration: none;
 }
 
 .actions {

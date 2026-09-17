@@ -22,6 +22,7 @@ import {
 import { MiZalipNoteContext } from '@/models/ZalipNoteContext.js';
 import { MiZalipSeason } from '@/models/ZalipSeason.js';
 import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
+import { MiZalipEpisodeNoteContext } from '@/models/ZalipEpisodeNoteContext.js';
 
 export type PackedZalipWork = {
 	id: string;
@@ -68,6 +69,7 @@ export type PackedZalipEpisode = {
 	airDate: string | null;
 	stillPath: string | null;
 	runtimeMinutes: number | null;
+	discussionNoteId: string | null;
 };
 
 export type ZalipTmdbSeasonSyncTarget = {
@@ -164,7 +166,11 @@ export class ZalipCatalogService {
 			where: { seasonId: season.id },
 			order: { episodeNumber: 'ASC' },
 		});
-		return episodes.map(episode => this.packEpisode(episode));
+		const contexts = episodes.length === 0 ? [] : await this.db.getRepository(MiZalipEpisodeNoteContext).find({
+			where: { episodeId: In(episodes.map(episode => episode.id)) },
+		});
+		const discussionByEpisodeId = new Map(contexts.map(context => [context.episodeId, context.noteId]));
+		return episodes.map(episode => this.packEpisode(episode, discussionByEpisodeId.get(episode.id) ?? null));
 	}
 
 	public async listLibrary(me: MiLocalUser): Promise<PackedZalipLibraryEntry[]> {
@@ -342,7 +348,7 @@ export class ZalipCatalogService {
 		};
 	}
 
-	public packEpisode(episode: MiZalipEpisode): PackedZalipEpisode {
+	public packEpisode(episode: MiZalipEpisode, discussionNoteId: string | null = null): PackedZalipEpisode {
 		return {
 			id: episode.id,
 			episodeNumber: episode.episodeNumber,
@@ -352,6 +358,7 @@ export class ZalipCatalogService {
 			airDate: episode.airDate,
 			stillPath: episode.stillPath,
 			runtimeMinutes: episode.runtimeMinutes,
+			discussionNoteId,
 		};
 	}
 
@@ -529,6 +536,48 @@ export class ZalipCatalogService {
 
 		await contexts.save(contexts.create({
 			workId: work.id,
+			noteId: note.id,
+			createdById: me.id,
+			createdAt: new Date(),
+		}));
+
+		return { noteId: note.id, created: true };
+	}
+
+	public async createEpisodeDiscussion(
+		me: MiLocalUser,
+		episodeId: MiZalipEpisode['id'],
+		text: string | null,
+	): Promise<PackedZalipDiscussion | null> {
+		const episode = await this.db.getRepository(MiZalipEpisode).createQueryBuilder('episode')
+			.innerJoinAndSelect('episode.season', 'season')
+			.innerJoinAndSelect('season.work', 'work')
+			.where('episode.id = :episodeId', { episodeId })
+			.andWhere('work.publicationState = :publicationState', { publicationState: 'published' })
+			.getOne();
+		if (episode?.season?.work == null) return null;
+
+		const contexts = this.db.getRepository(MiZalipEpisodeNoteContext);
+		const existing = await contexts.findOneBy({ episodeId: episode.id });
+		if (existing != null) return { noteId: existing.noteId, created: false };
+
+		const note = await this.noteCreateService.fetchAndCreate(me, {
+			createdAt: new Date(),
+			replyId: null,
+			renoteId: null,
+			fileIds: [],
+			text: text ?? `Обсуждение: ${episode.season.work.title} — серия ${episode.episodeNumber}`,
+			cw: null,
+			visibility: 'public',
+			visibleUserIds: [],
+			channelId: null,
+			localOnly: true,
+			reactionAcceptance: null,
+			poll: null,
+		});
+
+		await contexts.save(contexts.create({
+			episodeId: episode.id,
 			noteId: note.id,
 			createdById: me.id,
 			createdAt: new Date(),

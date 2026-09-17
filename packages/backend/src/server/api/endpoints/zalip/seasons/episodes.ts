@@ -25,8 +25,9 @@ export const meta = {
 				airDate: { type: 'string', nullable: true },
 				stillPath: { type: 'string', nullable: true },
 				runtimeMinutes: { type: 'integer', nullable: true },
+				discussionNoteId: { type: 'string', format: 'misskey:id', nullable: true },
 			},
-			required: ['id', 'episodeNumber', 'title', 'originalTitle', 'description', 'airDate', 'stillPath', 'runtimeMinutes'],
+			required: ['id', 'episodeNumber', 'title', 'originalTitle', 'description', 'airDate', 'stillPath', 'runtimeMinutes', 'discussionNoteId'],
 		},
 	},
 	errors: {
