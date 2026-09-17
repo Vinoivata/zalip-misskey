@@ -13,6 +13,9 @@ catalogue; it does not add another account system, session mechanism or social d
   root thread once; thereafter users use standard Misskey replies and reactions in that thread.
 - `zalip_season` and `zalip_episode` hold canonical season and episode metadata. They have no
   playback URL columns: availability is a separately authorised future integration.
+- `zalip_release_event` records a newly discovered episode only after a published season has an
+  existing episode-count baseline. The cinema home can therefore show genuine later arrivals
+  without treating a first historical import as a release notification.
 - The client has native cinema home, title, library and administrator editor routes.
 
 ## TMDB import secret

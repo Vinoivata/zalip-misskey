@@ -23,6 +23,7 @@ import { MiZalipNoteContext } from '@/models/ZalipNoteContext.js';
 import { MiZalipSeason } from '@/models/ZalipSeason.js';
 import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
 import { MiZalipEpisodeNoteContext } from '@/models/ZalipEpisodeNoteContext.js';
+import { MiZalipReleaseEvent } from '@/models/ZalipReleaseEvent.js';
 
 export type PackedZalipWork = {
 	id: string;
@@ -76,6 +77,14 @@ export type ZalipTmdbSeasonSyncTarget = {
 	tmdbId: number;
 	seasonId: string;
 	seasonNumber: number;
+};
+
+export type PackedZalipReleaseEvent = {
+	id: string;
+	createdAt: string;
+	work: PackedZalipWork;
+	season: Pick<PackedZalipSeason, 'seasonNumber' | 'title'>;
+	episode: Pick<PackedZalipEpisode, 'episodeNumber' | 'title'>;
 };
 
 export type PackedZalipAdminWork = PackedZalipWork & {
@@ -171,6 +180,29 @@ export class ZalipCatalogService {
 		});
 		const discussionByEpisodeId = new Map(contexts.map(context => [context.episodeId, context.noteId]));
 		return episodes.map(episode => this.packEpisode(episode, discussionByEpisodeId.get(episode.id) ?? null));
+	}
+
+	/** Recent episode arrivals, limited to works that are publicly available in the catalogue. */
+	public async listPublishedReleaseEvents(limit: number): Promise<PackedZalipReleaseEvent[]> {
+		const events = await this.db.getRepository(MiZalipReleaseEvent).createQueryBuilder('event')
+			.innerJoinAndSelect('event.work', 'work')
+			.innerJoinAndSelect('event.season', 'season')
+			.innerJoinAndSelect('event.episode', 'episode')
+			.where('work.publicationState = :publicationState', { publicationState: 'published' })
+			.orderBy('event.createdAt', 'DESC')
+			.take(limit)
+			.getMany();
+
+		return events.flatMap(event => {
+			if (event.work == null || event.season == null || event.episode == null) return [];
+			return [{
+				id: event.id,
+				createdAt: event.createdAt.toISOString(),
+				work: this.packWork(event.work),
+				season: { seasonNumber: event.season.seasonNumber, title: event.season.title },
+				episode: { episodeNumber: event.episode.episodeNumber, title: event.episode.title },
+			}];
+		});
 	}
 
 	public async listLibrary(me: MiLocalUser): Promise<PackedZalipLibraryEntry[]> {
@@ -404,6 +436,8 @@ export class ZalipCatalogService {
 			const seasons = manager.getRepository(MiZalipSeason);
 			const season = await seasons.findOneBy({ id: seasonId });
 			if (season == null) return { added: 0, updated: 0, total: 0 };
+			const work = await manager.getRepository(MiZalipWork).findOneBy({ id: season.workId });
+			const previousEpisodeCount = season.episodeCount;
 
 			const repository = manager.getRepository(MiZalipEpisode);
 			const existing = await repository.findBy({ seasonId });
@@ -411,17 +445,20 @@ export class ZalipCatalogService {
 			const now = new Date();
 			let added = 0;
 			let updated = 0;
+			const addedEpisodes: MiZalipEpisode[] = [];
 			const saved = episodes.map(input => {
 				const episode = byEpisodeNumber.get(input.episodeNumber);
 				if (episode == null) {
 					added++;
-					return repository.create({
+					const created = repository.create({
 						id: this.idService.gen(),
 						seasonId,
 						...input,
 						createdAt: now,
 						updatedAt: now,
 					});
+					addedEpisodes.push(created);
+					return created;
 				}
 
 				updated++;
@@ -440,6 +477,22 @@ export class ZalipCatalogService {
 			season.episodeCount = episodes.length;
 			season.updatedAt = now;
 			await seasons.save(season);
+
+			// The initial sync establishes a baseline. Only later additions to an already published
+			// work become public "new episode" events, preventing a historical season from flooding
+			// the release feed when it is first imported.
+			if (work?.publicationState === 'published' && previousEpisodeCount != null && addedEpisodes.length > 0) {
+				const events = manager.getRepository(MiZalipReleaseEvent);
+				await events.save(addedEpisodes
+					.filter(episode => episode.episodeNumber > previousEpisodeCount)
+					.map(episode => events.create({
+						id: this.idService.gen(),
+						workId: season.workId,
+						seasonId: season.id,
+						episodeId: episode.id,
+						createdAt: now,
+					})));
+			}
 			return { added, updated, total: episodes.length };
 		});
 	}

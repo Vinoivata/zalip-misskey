@@ -21,6 +21,19 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<div :class="$style.orb" aria-hidden="true"><i class="ti ti-player-play-filled"></i></div>
 			</section>
 
+			<section v-if="releaseEvents.length" :class="$style.releases">
+				<div :class="$style.sectionHeader">
+					<div><p :class="$style.eyebrow">СВЕЖИЕ СЕРИИ</p><h2>Продолжения вышли</h2></div>
+					<span :class="$style.count">{{ releaseEvents.length }} обновлений</span>
+				</div>
+				<div :class="$style.releaseGrid">
+					<MkA v-for="release in releaseEvents" :key="release.id" :to="`/zalip/${release.work.slug}`" :class="$style.releaseCard">
+						<img v-if="release.work.posterPath" :src="tmdbImage(release.work.posterPath)" :alt="release.work.title" loading="lazy">
+						<div :class="$style.releaseBody"><strong>{{ release.work.title }}</strong><span>{{ releaseLabel(release) }}</span></div>
+					</MkA>
+				</div>
+			</section>
+
 			<section :class="$style.catalogue">
 				<div :class="$style.sectionHeader">
 					<div><p :class="$style.eyebrow">КАТАЛОГ</p><h2>Новое и важное</h2></div>
@@ -73,7 +86,16 @@ type ZalipWork = {
 	trailerYoutubeKey: string | null;
 };
 
+type ZalipReleaseEvent = {
+	id: string;
+	createdAt: string;
+	work: ZalipWork;
+	season: { seasonNumber: number; title: string };
+	episode: { episodeNumber: number; title: string };
+};
+
 const works = ref<ZalipWork[]>([]);
+const releaseEvents = ref<ZalipReleaseEvent[]>([]);
 const pending = ref(true);
 const loadError = ref(false);
 
@@ -85,9 +107,15 @@ function kindLabel(kind: ZalipWork['kind']): string {
 	return ({ movie: 'Фильм', series: 'Сериал', anime: 'Аниме', animation: 'Анимация' })[kind];
 }
 
+function releaseLabel(release: ZalipReleaseEvent): string {
+	const season = release.season.seasonNumber === 0 ? 'Спецэпизод' : `Сезон ${release.season.seasonNumber}`;
+	return `${season} · серия ${release.episode.episodeNumber}`;
+}
+
 onMounted(async () => {
 	try {
 		works.value = await misskeyApiZalip<ZalipWork[]>('zalip/works/list', { limit: 20 });
+		releaseEvents.value = await misskeyApiZalip<ZalipReleaseEvent[]>('zalip/releases/list', { limit: 12 }).catch(() => []);
 	} catch {
 		loadError.value = true;
 	} finally {
@@ -194,6 +222,10 @@ definePage(() => ({
 	margin-top: 36px;
 }
 
+.releases {
+	margin-top: 32px;
+}
+
 .sectionHeader {
 	display: flex;
 	align-items: end;
@@ -236,6 +268,49 @@ definePage(() => ({
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
 	gap: 14px;
+}
+
+.releaseGrid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	gap: 10px;
+}
+
+.releaseCard {
+	display: grid;
+	grid-template-columns: 54px minmax(0, 1fr);
+	overflow: hidden;
+	min-height: 72px;
+	border-radius: 14px;
+	background: var(--MI_THEME-panel);
+	color: var(--MI_THEME-fg);
+	text-decoration: none;
+}
+
+.releaseCard > img {
+	width: 54px;
+	height: 72px;
+	object-fit: cover;
+	background: var(--MI_THEME-panelHighlight);
+}
+
+.releaseBody {
+	display: grid;
+	align-content: center;
+	gap: 5px;
+	padding: 10px;
+}
+
+.releaseBody strong {
+	overflow: hidden;
+	font-size: 0.86rem;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.releaseBody span {
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.76rem;
 }
 
 .credits {
