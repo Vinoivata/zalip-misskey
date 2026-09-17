@@ -48,7 +48,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<div v-else-if="works.length === 0" :class="$style.empty"><i class="ti ti-movie-off"></i> Черновиков пока нет.</div>
 						<div v-else :class="$style.workList">
 							<article v-for="work in works" :key="work.id" :class="$style.work">
-								<div><p :class="$style.state" :data-state="work.publicationState">{{ stateLabel(work.publicationState) }}</p><h3>{{ work.title }}</h3><p :class="$style.meta">{{ kindLabel(work.kind) }}<span v-if="work.releaseYear"> · {{ work.releaseYear }}</span><span> · /zalip/{{ work.slug }}</span></p><p v-if="work.tmdbMediaType === 'tv' && work.seasons.length" :class="$style.syncHint">Сезоны из TMDB: перед публикацией загрузите метаданные серий.</p></div>
+								<div><p :class="$style.state" :data-state="work.publicationState">{{ stateLabel(work.publicationState) }}</p><h3>{{ work.title }}</h3><p :class="$style.meta">{{ kindLabel(work.kind) }}<span v-if="work.releaseYear"> · {{ work.releaseYear }}</span><span> · /zalip/{{ work.slug }}</span></p><p v-if="work.tmdbMediaType === 'tv' && work.seasons.length" :class="$style.syncHint">Сезоны из TMDB: перед публикацией загрузите метаданные серий.</p><details :class="$style.edit"><summary><i class="ti ti-pencil"></i> Править метаданные</summary><form @submit.prevent="updateWork(work)"><label><span>Название</span><input v-model.trim="editFor(work).title" class="_input" required maxlength="256"></label><label><span>Оригинальное название</span><input v-model.trim="editFor(work).originalTitle" class="_input" maxlength="256"></label><label><span>Год</span><input v-model.trim="editFor(work).releaseYear" class="_input" inputmode="numeric" maxlength="4"></label><label :class="$style.editWide"><span>Описание</span><textarea v-model.trim="editFor(work).description" class="_input" rows="3" maxlength="8192"></textarea></label><button class="_button" :class="$style.smallButton" :disabled="savingId === work.id"><i class="ti ti-device-floppy"></i> {{ savingId === work.id ? 'Сохраняем…' : 'Сохранить' }}</button></form></details></div>
 								<div :class="$style.workActions">
 									<MkA v-if="work.publicationState === 'published'" :to="`/zalip/${work.slug}`" :class="$style.smallButton"><i class="ti ti-external-link"></i> Открыть</MkA>
 									<button v-if="work.publicationState !== 'published'" class="_button" :class="$style.smallButton" :disabled="savingId === work.id" @click="setState(work, 'published')"><i class="ti ti-world"></i> Опубликовать</button>
@@ -80,6 +80,8 @@ type AdminWork = {
 	slug: string;
 	kind: WorkKind;
 	title: string;
+	originalTitle: string | null;
+	description: string | null;
 	releaseYear: number | null;
 	publicationState: PublicationState;
 	publishedAt: string | null;
@@ -100,6 +102,7 @@ const tmdbSubmitting = ref(false);
 const tmdbMessage = ref('');
 const syncingSeasonKey = ref<string | null>(null);
 const seasonMessage = reactive({ workId: '', text: '' });
+const edits = reactive<Record<string, { title: string; originalTitle: string; description: string; releaseYear: string; }>>({});
 
 function kindLabel(kind: WorkKind): string {
 	return ({ movie: 'Фильм', series: 'Сериал', anime: 'Аниме', animation: 'Анимация' })[kind];
@@ -114,8 +117,36 @@ async function load(): Promise<void> {
 	loading.value = true;
 	try {
 		works.value = await misskeyApiZalip<AdminWork[]>('zalip/admin/works/list', { limit: 50 });
+		for (const work of works.value) {
+			edits[work.id] = { title: work.title, originalTitle: work.originalTitle ?? '', description: work.description ?? '', releaseYear: work.releaseYear?.toString() ?? '' };
+		}
 	} finally {
 		loading.value = false;
+	}
+}
+
+function editFor(work: AdminWork) {
+	return edits[work.id] ?? (edits[work.id] = { title: work.title, originalTitle: work.originalTitle ?? '', description: work.description ?? '', releaseYear: work.releaseYear?.toString() ?? '' });
+}
+
+async function updateWork(work: AdminWork): Promise<void> {
+	const edit = editFor(work);
+	const releaseYear = edit.releaseYear === '' ? null : Number(edit.releaseYear);
+	if (releaseYear !== null && (!Number.isSafeInteger(releaseYear) || releaseYear < 1888 || releaseYear > 3000)) {
+		message.value = 'Год должен быть целым числом от 1888 до 3000.';
+		return;
+	}
+
+	savingId.value = work.id;
+	message.value = '';
+	try {
+		await misskeyApiZalip('zalip/admin/works/update', { workId: work.id, title: edit.title, originalTitle: edit.originalTitle || null, description: edit.description || null, releaseYear });
+		message.value = `Метаданные «${edit.title}» сохранены.`;
+		await load();
+	} catch {
+		message.value = 'Не удалось сохранить метаданные. Проверьте поля и права.';
+	} finally {
+		savingId.value = null;
 	}
 }
 
@@ -248,6 +279,13 @@ definePage(() => ({ title: 'Редактор Zalip', icon: 'ti ti-pencil' }));
 .meta { margin: 5px 0 0; color: var(--MI_THEME-fgTransparentWeak); font-size: 0.8rem; }
 .syncHint, .syncMessage { margin: 8px 0 0; color: var(--MI_THEME-fgTransparentWeak); font-size: 0.78rem; }
 .syncMessage { grid-column: 1 / -1; color: var(--MI_THEME-accent); }
+.edit { margin-top: 12px; color: var(--MI_THEME-fgTransparentWeak); font-size: 0.8rem; }
+.edit summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--MI_THEME-accent); font-weight: 700; }
+.edit form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.edit label { display: grid; gap: 4px; }
+.edit label span { font-size: 0.7rem; font-weight: 700; }
+.edit textarea { resize: vertical; }
+.editWide { grid-column: 1 / -1; }
 .workActions { display: flex; flex-wrap: wrap; justify-content: end; gap: 7px; }
-@media (max-width: 600px) { .page { padding-top: 12px; } .form, .importForm { grid-template-columns: 1fr; } .wide { grid-column: auto; } .work { align-items: start; flex-direction: column; } .workActions { justify-content: start; } .header { align-items: start; } }
+@media (max-width: 600px) { .page { padding-top: 12px; } .form, .importForm, .edit form { grid-template-columns: 1fr; } .wide, .editWide { grid-column: auto; } .work { align-items: start; flex-direction: column; } .workActions { justify-content: start; } .header { align-items: start; } }
 </style>

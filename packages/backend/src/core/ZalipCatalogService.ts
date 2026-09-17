@@ -586,6 +586,29 @@ export class ZalipCatalogService {
 		return this.packAdminWork(work);
 	}
 
+	/** Updates editor-owned descriptive metadata only; source mappings and publication state stay separate. */
+	public async updateAdminWork(
+		workId: MiZalipWork['id'],
+		input: {
+			title: string;
+			originalTitle: string | null;
+			description: string | null;
+			releaseYear: number | null;
+		},
+	): Promise<PackedZalipAdminWork | null> {
+		const repository = this.db.getRepository(MiZalipWork);
+		const work = await repository.findOneBy({ id: workId });
+		if (work == null) return null;
+
+		work.title = input.title;
+		work.originalTitle = input.originalTitle;
+		work.description = input.description;
+		work.releaseYear = input.releaseYear;
+		work.updatedAt = new Date();
+		await repository.save(work);
+		return this.packAdminWork(work);
+	}
+
 	public async showDiscussion(workId: MiZalipWork['id']): Promise<string | null> {
 		const work = await this.db.getRepository(MiZalipWork).findOneBy({
 			id: workId,
