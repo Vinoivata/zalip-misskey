@@ -16,6 +16,10 @@ catalogue; it does not add another account system, session mechanism or social d
 - `zalip_release_event` records a newly discovered episode only after a published season has an
   existing episode-count baseline. The cinema home can therefore show genuine later arrivals
   without treating a first historical import as a release notification.
+- `zalip_library_entry.isReleaseSubscribed` is the signed-in user's per-title follow preference.
+  `/updates` uses it to display a personal release feed. It does not impersonate a system Bell
+  notification; adding that delivery path requires an explicit full Misskey notification-type
+  integration.
 - The client has native cinema home, title, library and administrator editor routes.
 
 ## TMDB import secret

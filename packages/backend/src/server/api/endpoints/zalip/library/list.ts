@@ -16,6 +16,7 @@ const libraryEntrySchema = {
 		episodesWatched: { type: 'integer' },
 		personalRating: { type: 'integer', nullable: true },
 		isFavorite: { type: 'boolean' },
+		isReleaseSubscribed: { type: 'boolean' },
 		work: {
 			type: 'object',
 			properties: {
@@ -33,7 +34,7 @@ const libraryEntrySchema = {
 			required: ['id', 'slug', 'kind', 'title', 'originalTitle', 'description', 'releaseYear', 'posterPath', 'backdropPath', 'trailerYoutubeKey'],
 		},
 	},
-	required: ['status', 'episodesWatched', 'personalRating', 'isFavorite', 'work'],
+	required: ['status', 'episodesWatched', 'personalRating', 'isFavorite', 'isReleaseSubscribed', 'work'],
 } as const;
 
 export const meta = {

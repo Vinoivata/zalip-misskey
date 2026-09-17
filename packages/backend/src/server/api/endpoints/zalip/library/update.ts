@@ -24,9 +24,10 @@ export const meta = {
 			episodesWatched: { type: 'integer' },
 			personalRating: { type: 'integer', nullable: true },
 			isFavorite: { type: 'boolean' },
+			isReleaseSubscribed: { type: 'boolean' },
 			work: { type: 'object', additionalProperties: true },
 		},
-		required: ['status', 'episodesWatched', 'personalRating', 'isFavorite', 'work'],
+		required: ['status', 'episodesWatched', 'personalRating', 'isFavorite', 'isReleaseSubscribed', 'work'],
 	},
 
 	errors: {
@@ -47,6 +48,7 @@ export const paramDef = {
 		episodesWatched: { type: 'integer', minimum: 0 },
 		personalRating: { type: 'integer', nullable: true, minimum: 1, maximum: 10 },
 		isFavorite: { type: 'boolean' },
+		isReleaseSubscribed: { type: 'boolean' },
 	},
 	required: ['workId', 'status'],
 } as const;
@@ -62,6 +64,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				episodesWatched: ps.episodesWatched,
 				personalRating: ps.personalRating,
 				isFavorite: ps.isFavorite,
+				isReleaseSubscribed: ps.isReleaseSubscribed,
 			});
 			if (entry == null) throw new ApiError(meta.errors.noSuchWork);
 			return entry;

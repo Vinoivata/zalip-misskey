@@ -41,6 +41,10 @@ export class MiZalipLibraryEntry {
 	@Column('boolean', { default: false })
 	public isFavorite: boolean;
 
+	/** Whether the owner wants this work included in their native Zalip updates feed. */
+	@Column('boolean', { default: false })
+	public isReleaseSubscribed: boolean;
+
 	@Column('timestamp with time zone')
 	public createdAt: Date;
 

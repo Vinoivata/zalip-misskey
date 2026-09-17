@@ -34,7 +34,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<i v-else class="ti ti-movie"></i>
 						</div>
 						<div :class="$style.body">
-							<div :class="$style.meta"><span>{{ statusLabel(entry.status) }}</span><i v-if="entry.isFavorite" class="ti ti-star-filled"></i></div>
+							<div :class="$style.meta"><span>{{ statusLabel(entry.status) }}</span><span :class="$style.icons"><i v-if="entry.isReleaseSubscribed" class="ti ti-bell-filled" title="Отслеживаются новые серии"></i><i v-if="entry.isFavorite" class="ti ti-star-filled"></i></span></div>
 							<h2>{{ entry.work.title }}</h2>
 							<p>{{ kindLabel(entry.work.kind) }}<span v-if="entry.work.releaseYear"> · {{ entry.work.releaseYear }}</span><span v-if="entry.episodesWatched"> · {{ entry.episodesWatched }} эп.</span></p>
 						</div>
@@ -60,6 +60,7 @@ type LibraryEntry = {
 	episodesWatched: number;
 	personalRating: number | null;
 	isFavorite: boolean;
+	isReleaseSubscribed: boolean;
 	work: {
 		id: string;
 		slug: string;
@@ -251,6 +252,11 @@ definePage(() => ({
 	color: var(--MI_THEME-accent);
 	font-size: 0.75rem;
 	font-weight: 700;
+}
+
+.icons {
+	display: inline-flex;
+	gap: 6px;
 }
 
 .body h2 {

@@ -190,6 +190,7 @@ export const PREF_DEF = definePreferences({
 			'zalip',
 			'feed',
 			'library',
+			'updates',
 			'notifications',
 			'clips',
 			'drive',

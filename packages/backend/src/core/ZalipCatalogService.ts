@@ -43,6 +43,7 @@ export type PackedZalipLibraryEntry = {
 	episodesWatched: number;
 	personalRating: number | null;
 	isFavorite: boolean;
+	isReleaseSubscribed: boolean;
 	work: PackedZalipWork;
 };
 
@@ -193,6 +194,26 @@ export class ZalipCatalogService {
 			.take(limit)
 			.getMany();
 
+		return this.packReleaseEvents(events);
+	}
+
+	/** Signed-in updates page: only events from titles the current Misskey user follows. */
+	public async listSubscribedReleaseEvents(me: MiLocalUser, limit: number): Promise<PackedZalipReleaseEvent[]> {
+		const events = await this.db.getRepository(MiZalipReleaseEvent).createQueryBuilder('event')
+			.innerJoinAndSelect('event.work', 'work')
+			.innerJoinAndSelect('event.season', 'season')
+			.innerJoinAndSelect('event.episode', 'episode')
+			.innerJoin(MiZalipLibraryEntry, 'library', 'library.workId = work.id')
+			.where('library.userId = :userId', { userId: me.id })
+			.andWhere('library.isReleaseSubscribed = true')
+			.andWhere('work.publicationState = :publicationState', { publicationState: 'published' })
+			.orderBy('event.createdAt', 'DESC')
+			.take(limit)
+			.getMany();
+		return this.packReleaseEvents(events);
+	}
+
+	private packReleaseEvents(events: MiZalipReleaseEvent[]): PackedZalipReleaseEvent[] {
 		return events.flatMap(event => {
 			if (event.work == null || event.season == null || event.episode == null) return [];
 			return [{
@@ -218,6 +239,7 @@ export class ZalipCatalogService {
 			episodesWatched: entry.episodesWatched,
 			personalRating: entry.personalRating,
 			isFavorite: entry.isFavorite,
+			isReleaseSubscribed: entry.isReleaseSubscribed,
 			work: this.packWork(entry.work!),
 		}));
 	}
@@ -230,6 +252,7 @@ export class ZalipCatalogService {
 			episodesWatched?: number;
 			personalRating?: number | null;
 			isFavorite?: boolean;
+			isReleaseSubscribed?: boolean;
 		},
 	): Promise<PackedZalipLibraryEntry | null> {
 		const work = await this.db.getRepository(MiZalipWork).findOneBy({
@@ -251,6 +274,7 @@ export class ZalipCatalogService {
 		entry.episodesWatched = input.episodesWatched ?? existing?.episodesWatched ?? 0;
 		entry.personalRating = input.personalRating === undefined ? (existing?.personalRating ?? null) : input.personalRating;
 		entry.isFavorite = input.isFavorite ?? existing?.isFavorite ?? false;
+		entry.isReleaseSubscribed = input.isReleaseSubscribed ?? existing?.isReleaseSubscribed ?? false;
 		entry.updatedAt = now;
 		await repository.save(entry);
 
@@ -259,6 +283,7 @@ export class ZalipCatalogService {
 			episodesWatched: entry.episodesWatched,
 			personalRating: entry.personalRating,
 			isFavorite: entry.isFavorite,
+			isReleaseSubscribed: entry.isReleaseSubscribed,
 			work: this.packWork(work),
 		};
 	}

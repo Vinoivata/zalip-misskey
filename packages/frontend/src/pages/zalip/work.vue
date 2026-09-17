@@ -54,6 +54,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							</select>
 							<button :class="$style.library" class="_button" :disabled="saving" @click="addToLibrary"><i class="ti ti-bookmark"></i> {{ saving ? 'Сохраняем…' : saved ? 'Обновить статус' : 'Добавить в библиотеку' }}</button>
 						</div>
+						<button v-if="$i" type="button" class="_button" :class="[$style.subscription, { [$style.subscribed]: releaseSubscribed }]" :aria-pressed="releaseSubscribed" :disabled="saving" @click="toggleReleaseSubscription"><i :class="releaseSubscribed ? 'ti ti-bell-filled' : 'ti ti-bell'"></i> {{ releaseSubscribed ? 'Слежу за сериями' : 'Следить за сериями' }}</button>
 						<MkA to="/timeline" :class="$style.feed"><i class="ti ti-news"></i> Лента</MkA>
 						<MkA v-if="discussionNoteId" :to="`/notes/${discussionNoteId}/replies`" :class="$style.feed"><i class="ti ti-messages"></i> Обсуждение</MkA>
 					</div>
@@ -111,7 +112,7 @@ type ZalipEpisode = {
 
 type LibraryStatus = 'watching' | 'planned' | 'completed' | 'on_hold' | 'dropped';
 
-type LibraryEntry = { status: LibraryStatus; work: { id: string }; };
+type LibraryEntry = { status: LibraryStatus; isReleaseSubscribed: boolean; work: { id: string }; };
 
 const libraryStatuses: LibraryStatus[] = ['watching', 'planned', 'completed', 'on_hold', 'dropped'];
 
@@ -122,6 +123,7 @@ const pending = ref(true);
 const saving = ref(false);
 const saved = ref(false);
 const libraryStatus = ref<LibraryStatus>('planned');
+const releaseSubscribed = ref(false);
 const discussionNoteId = ref<string | null>(null);
 const selectedSeasonNumber = ref<number | null>(null);
 const episodes = ref<ZalipEpisode[]>([]);
@@ -159,6 +161,7 @@ async function load(): Promise<void> {
 	work.value = null;
 	saved.value = false;
 	libraryStatus.value = 'planned';
+	releaseSubscribed.value = false;
 	selectedSeasonNumber.value = null;
 	episodes.value = [];
 	episodeRequestId.value++;
@@ -172,6 +175,7 @@ async function load(): Promise<void> {
 		const entry = entries.find(candidate => candidate.work?.id === work.value?.id);
 		saved.value = entry != null;
 		libraryStatus.value = entry?.status ?? 'planned';
+		releaseSubscribed.value = entry?.isReleaseSubscribed ?? false;
 	} catch {
 		work.value = null;
 		discussionNoteId.value = null;
@@ -230,7 +234,20 @@ async function addToLibrary(): Promise<void> {
 	if (work.value == null || !$i) return;
 	saving.value = true;
 	try {
-		await misskeyApiZalip('zalip/library/update', { workId: work.value.id, status: libraryStatus.value });
+		await misskeyApiZalip('zalip/library/update', { workId: work.value.id, status: libraryStatus.value, isReleaseSubscribed: releaseSubscribed.value });
+		saved.value = true;
+	} finally {
+		saving.value = false;
+	}
+}
+
+async function toggleReleaseSubscription(): Promise<void> {
+	if (work.value == null || !$i) return;
+	saving.value = true;
+	const nextValue = !releaseSubscribed.value;
+	try {
+		await misskeyApiZalip('zalip/library/update', { workId: work.value.id, status: libraryStatus.value, isReleaseSubscribed: nextValue });
+		releaseSubscribed.value = nextValue;
 		saved.value = true;
 	} finally {
 		saving.value = false;
@@ -445,6 +462,23 @@ definePage(() => ({
 .library {
 	background: var(--MI_THEME-accent);
 	color: var(--MI_THEME-fgOnAccent);
+}
+
+.subscription {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 14px;
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: 999px;
+	color: var(--MI_THEME-fg);
+	font-weight: 700;
+}
+
+.subscribed {
+	border-color: color-mix(in srgb, var(--MI_THEME-accent) 55%, var(--MI_THEME-divider));
+	background: color-mix(in srgb, var(--MI_THEME-accent) 16%, var(--MI_THEME-panel));
+	color: var(--MI_THEME-accent);
 }
 
 .feed {

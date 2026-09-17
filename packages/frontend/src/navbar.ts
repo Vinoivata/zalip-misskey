@@ -42,6 +42,12 @@ export const navbarItemDef = reactive<{
 		show: computed(() => $i != null),
 		to: '/library',
 	},
+	updates: {
+		title: 'Подписки',
+		icon: 'ti ti-bell-ringing',
+		show: computed(() => $i != null),
+		to: '/updates',
+	},
 	notifications: {
 		title: i18n.ts.notifications,
 		icon: 'ti ti-bell',
