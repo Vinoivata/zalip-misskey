@@ -15,11 +15,15 @@ catalogue; it does not add another account system, session mechanism or social d
   playback URL columns: availability is a separately authorised future integration.
 - `zalip_release_event` records a newly discovered episode only after a published season has an
   existing episode-count baseline. The cinema home can therefore show genuine later arrivals
-  without treating a first historical import as a release notification.
+  without treating a first historical import as a release notification. A durable delivery marker
+  prevents the same event from being sent twice after a successful notification pass.
 - `zalip_library_entry.isReleaseSubscribed` is the signed-in user's per-title follow preference.
-  `/updates` uses it to display a personal release feed. It does not impersonate a system Bell
-  notification; adding that delivery path requires an explicit full Misskey notification-type
-  integration.
+  `/updates` uses it to display a personal release feed. When a later catalogue sync discovers a
+  new episode, the same preference also sends Misskey's native `zalipEpisodeReleased` notification:
+  it appears in the Bell, can be disabled in notification settings, and produces a Web Push card
+  for users who enabled browser notifications. Failed deliveries retain their marker and are retried
+  during the next catalogue sync; migration marks pre-existing events as delivered so importing this
+  feature never creates a historical notification flood.
 - The client has native cinema home, title, library and administrator editor routes.
 
 ## TMDB import secret
