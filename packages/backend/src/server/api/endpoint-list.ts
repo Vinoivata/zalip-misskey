@@ -450,6 +450,7 @@ export * as 'chat/read-all' from './endpoints/chat/read-all.js';
 export * as 'v2/admin/emoji/list' from './endpoints/v2/admin/emoji/list.js';
 export * as 'zalip/works/list' from './endpoints/zalip/works/list.js';
 export * as 'zalip/works/show' from './endpoints/zalip/works/show.js';
+export * as 'zalip/works/search' from './endpoints/zalip/works/search.js';
 export * as 'zalip/seasons/episodes' from './endpoints/zalip/seasons/episodes.js';
 export * as 'zalip/releases/list' from './endpoints/zalip/releases/list.js';
 export * as 'zalip/releases/subscribed' from './endpoints/zalip/releases/subscribed.js';

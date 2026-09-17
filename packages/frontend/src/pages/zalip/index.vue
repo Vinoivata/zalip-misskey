@@ -17,6 +17,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<MkA to="/library" :class="$style.secondaryAction"><i class="ti ti-bookmark"></i> Моя библиотека</MkA>
 						<MkA v-if="iAmAdmin" to="/zalip/editor" :class="$style.secondaryAction"><i class="ti ti-pencil"></i> Редактор</MkA>
 					</div>
+					<form :class="$style.search" @submit.prevent="search">
+						<i class="ti ti-search"></i>
+						<input v-model.trim="searchQuery" class="_input" type="search" minlength="2" maxlength="100" placeholder="Поиск фильмов, сериалов и аниме" aria-label="Поиск по каталогу">
+						<button v-if="searchQuery" type="button" class="_button" aria-label="Сбросить поиск" @click="resetSearch"><i class="ti ti-x"></i></button>
+						<button type="submit" class="_button" :disabled="pending || searchQuery.length === 1"><span>{{ pending && searchQuery ? 'Ищем…' : 'Найти' }}</span></button>
+					</form>
 				</div>
 				<div :class="$style.orb" aria-hidden="true"><i class="ti ti-player-play-filled"></i></div>
 			</section>
@@ -36,7 +42,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 			<section :class="$style.catalogue">
 				<div :class="$style.sectionHeader">
-					<div><p :class="$style.eyebrow">КАТАЛОГ</p><h2>Новое и важное</h2></div>
+					<div><p :class="$style.eyebrow">КАТАЛОГ</p><h2>{{ activeSearch ? `Результаты: ${activeSearch}` : 'Новое и важное' }}</h2></div>
 					<span v-if="works.length" :class="$style.count">{{ works.length }} тайтлов</span>
 				</div>
 
@@ -44,8 +50,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<div v-else-if="loadError" :class="$style.empty"><i class="ti ti-alert-circle"></i> Каталог временно недоступен.</div>
 				<div v-else-if="works.length === 0" :class="$style.empty">
 					<i class="ti ti-sparkles"></i>
-					<strong>Каталог готов к первому тайтлу</strong>
-					<span>Администратор добавит его как черновик, проверит и только затем опубликует.</span>
+					<strong>{{ activeSearch ? 'Ничего не найдено' : 'Каталог готов к первому тайтлу' }}</strong>
+					<span>{{ activeSearch ? 'Попробуйте другое название или оригинальное название.' : 'Администратор добавит его как черновик, проверит и только затем опубликует.' }}</span>
 				</div>
 				<div v-else :class="$style.grid">
 					<MkA v-for="work in works" :key="work.id" :to="`/zalip/${work.slug}`" :class="$style.card">
@@ -98,6 +104,8 @@ const works = ref<ZalipWork[]>([]);
 const releaseEvents = ref<ZalipReleaseEvent[]>([]);
 const pending = ref(true);
 const loadError = ref(false);
+const searchQuery = ref('');
+const activeSearch = ref('');
 
 function tmdbImage(path: string): string {
 	return `https://image.tmdb.org/t/p/w500${path}`;
@@ -112,7 +120,9 @@ function releaseLabel(release: ZalipReleaseEvent): string {
 	return `${season} · серия ${release.episode.episodeNumber}`;
 }
 
-onMounted(async () => {
+async function loadCatalogue(): Promise<void> {
+	pending.value = true;
+	loadError.value = false;
 	try {
 		works.value = await misskeyApiZalip<ZalipWork[]>('zalip/works/list', { limit: 20 });
 		releaseEvents.value = await misskeyApiZalip<ZalipReleaseEvent[]>('zalip/releases/list', { limit: 12 }).catch(() => []);
@@ -121,7 +131,36 @@ onMounted(async () => {
 	} finally {
 		pending.value = false;
 	}
-});
+}
+
+async function search(): Promise<void> {
+	const query = searchQuery.value.trim();
+	if (query.length === 0) {
+		activeSearch.value = '';
+		await loadCatalogue();
+		return;
+	}
+	if (query.length < 2) return;
+
+	pending.value = true;
+	loadError.value = false;
+	activeSearch.value = query;
+	try {
+		works.value = await misskeyApiZalip<ZalipWork[]>('zalip/works/search', { query, limit: 20 });
+	} catch {
+		loadError.value = true;
+	} finally {
+		pending.value = false;
+	}
+}
+
+async function resetSearch(): Promise<void> {
+	searchQuery.value = '';
+	activeSearch.value = '';
+	await loadCatalogue();
+}
+
+onMounted(() => void loadCatalogue());
 
 definePage(() => ({
 	title: 'Zalip',
@@ -183,6 +222,44 @@ definePage(() => ({
 	flex-wrap: wrap;
 	gap: 10px;
 	margin-top: 24px;
+}
+
+.search {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	max-width: 640px;
+	margin-top: 24px;
+	padding: 6px 7px 6px 14px;
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--MI_THEME-bg) 35%, var(--MI_THEME-panel));
+	color: var(--MI_THEME-fgTransparentWeak);
+}
+
+.search input {
+	min-width: 0;
+	flex: 1;
+	padding: 7px 0;
+	border: 0;
+	background: transparent;
+}
+
+.search button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 34px;
+	padding: 0 11px;
+	border-radius: 999px;
+	background: var(--MI_THEME-panelHighlight);
+	color: var(--MI_THEME-fg);
+	font-weight: 700;
+}
+
+.search button:last-child {
+	background: var(--MI_THEME-accent);
+	color: var(--MI_THEME-fgOnAccent);
 }
 
 .primaryAction, .secondaryAction {
@@ -376,6 +453,10 @@ definePage(() => ({
 	.hero {
 		grid-template-columns: 1fr;
 		padding: 28px 22px;
+	}
+
+	.search {
+		margin-top: 20px;
 	}
 
 	.orb {

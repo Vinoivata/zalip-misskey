@@ -137,6 +137,21 @@ export class ZalipCatalogService {
 		return works.map(work => this.packWork(work));
 	}
 
+	/** Bounded literal title search over published works. Wildcards are escaped rather than exposed. */
+	public async searchPublished(query: string, limit: number): Promise<PackedZalipWork[]> {
+		const normalized = query.trim();
+		if (normalized.length < 2) return [];
+		const pattern = `%${normalized.replace(/[\\%_]/g, '\\$&')}%`;
+		const works = await this.db.getRepository(MiZalipWork).createQueryBuilder('work')
+			.where('work.publicationState = :publicationState', { publicationState: 'published' })
+			.andWhere("(work.title ILIKE :pattern ESCAPE '\\' OR work.originalTitle ILIKE :pattern ESCAPE '\\')", { pattern })
+			.orderBy('work.publishedAt', 'DESC')
+			.addOrderBy('work.createdAt', 'DESC')
+			.take(limit)
+			.getMany();
+		return works.map(work => this.packWork(work));
+	}
+
 	public async showPublished(slug: string): Promise<PackedZalipWorkDetail | null> {
 		const work = await this.db.getRepository(MiZalipWork).findOneBy({
 			slug,
