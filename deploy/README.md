@@ -10,6 +10,12 @@ run Docker Compose with the existing deployment configuration **first** and
 PostgreSQL, Redis, `/misskey/files`, `/misskey/.config` and the loopback port binding therefore
 remain owned by the current deployment configuration.
 
+For a TMDB-enabled deployment, keep `ZALIP_TMDB_API_KEY` in a root-only file outside Git, for
+example `/opt/zalip/secrets/zalip.env`, and pass it to Compose with
+`--env-file /opt/zalip/secrets/zalip.env`. The release override passes that variable only to the
+server-side `web` container; it is not a client build variable and must never be copied to a
+repository, browser bundle, URL, log or database record.
+
 Before `up -d`, make and verify a PostgreSQL dump. Build the `web` image first; only then recreate
 the `web` service. After it is healthy, verify `/api/meta`, the cinema home, a public title route,
 the signed-in library route, and the Source link. Record the exact commit deployed and preserve

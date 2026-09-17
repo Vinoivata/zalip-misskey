@@ -14,3 +14,5 @@ services:
   web:
     build:
       context: ${ZALIP_RELEASE_DIR:?Set ZALIP_RELEASE_DIR to the immutable release checkout}
+    environment:
+      ZALIP_TMDB_API_KEY: ${ZALIP_TMDB_API_KEY:-}
