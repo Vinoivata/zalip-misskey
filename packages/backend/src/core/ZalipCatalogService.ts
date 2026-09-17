@@ -20,6 +20,7 @@ import {
 	type ZalipWorkKind,
 } from '@/models/ZalipWork.js';
 import { MiZalipNoteContext } from '@/models/ZalipNoteContext.js';
+import { MiZalipSeason } from '@/models/ZalipSeason.js';
 
 export type PackedZalipWork = {
 	id: string;
@@ -40,6 +41,21 @@ export type PackedZalipLibraryEntry = {
 	personalRating: number | null;
 	isFavorite: boolean;
 	work: PackedZalipWork;
+};
+
+export type PackedZalipSeason = {
+	id: string;
+	seasonNumber: number;
+	title: string;
+	originalTitle: string | null;
+	description: string | null;
+	posterPath: string | null;
+	airDate: string | null;
+	episodeCount: number | null;
+};
+
+export type PackedZalipWorkDetail = PackedZalipWork & {
+	seasons: PackedZalipSeason[];
 };
 
 export type PackedZalipAdminWork = PackedZalipWork & {
@@ -88,13 +104,22 @@ export class ZalipCatalogService {
 		return works.map(work => this.packWork(work));
 	}
 
-	public async showPublished(slug: string): Promise<PackedZalipWork | null> {
+	public async showPublished(slug: string): Promise<PackedZalipWorkDetail | null> {
 		const work = await this.db.getRepository(MiZalipWork).findOneBy({
 			slug,
 			publicationState: 'published',
 		});
 
-		return work == null ? null : this.packWork(work);
+		if (work == null) return null;
+
+		const seasons = await this.db.getRepository(MiZalipSeason).find({
+			where: { workId: work.id },
+			order: { seasonNumber: 'ASC' },
+		});
+		return {
+			...this.packWork(work),
+			seasons: seasons.map(season => this.packSeason(season)),
+		};
 	}
 
 	public async listLibrary(me: MiLocalUser): Promise<PackedZalipLibraryEntry[]> {
@@ -198,33 +223,78 @@ export class ZalipCatalogService {
 		posterPath: string | null;
 		backdropPath: string | null;
 		trailerYoutubeKey: string | null;
+		seasons: Array<{
+			seasonNumber: number;
+			title: string;
+			originalTitle: string | null;
+			description: string | null;
+			posterPath: string | null;
+			airDate: string | null;
+			episodeCount: number | null;
+		}>;
 	}): Promise<MiZalipWork | 'duplicate'> {
-		const repository = this.db.getRepository(MiZalipWork);
-		const conflict = await repository.existsBy({
-			tmdbMediaType: input.tmdbMediaType,
-			tmdbId: input.tmdbId,
-		});
-		if (conflict) return 'duplicate';
+		return await this.db.transaction(async manager => {
+			const works = manager.getRepository(MiZalipWork);
+			const slug = `tmdb-${input.tmdbMediaType}-${input.tmdbId}`;
+			const hasTmdbMapping = await works.existsBy({
+				tmdbMediaType: input.tmdbMediaType,
+				tmdbId: input.tmdbId,
+			});
+			const hasSlug = await works.existsBy({ slug });
+			if (hasTmdbMapping || hasSlug) return 'duplicate';
 
-		const now = new Date();
-		return await repository.save(repository.create({
-			id: this.idService.gen(),
-			createdAt: now,
-			updatedAt: now,
-			publishedAt: null,
-			slug: `tmdb-${input.tmdbMediaType}-${input.tmdbId}`,
-			kind: input.tmdbMediaType === 'movie' ? 'movie' : 'series',
-			publicationState: 'draft',
-			title: input.title,
-			originalTitle: input.originalTitle,
-			description: input.description,
-			releaseYear: input.releaseYear,
-			tmdbMediaType: input.tmdbMediaType,
-			tmdbId: input.tmdbId,
-			posterPath: input.posterPath,
-			backdropPath: input.backdropPath,
-			trailerYoutubeKey: input.trailerYoutubeKey,
-		}));
+			const now = new Date();
+			const work = await works.save(works.create({
+				id: this.idService.gen(),
+				createdAt: now,
+				updatedAt: now,
+				publishedAt: null,
+				slug,
+				kind: input.tmdbMediaType === 'movie' ? 'movie' : 'series',
+				publicationState: 'draft',
+				title: input.title,
+				originalTitle: input.originalTitle,
+				description: input.description,
+				releaseYear: input.releaseYear,
+				tmdbMediaType: input.tmdbMediaType,
+				tmdbId: input.tmdbId,
+				posterPath: input.posterPath,
+				backdropPath: input.backdropPath,
+				trailerYoutubeKey: input.trailerYoutubeKey,
+			}));
+
+			if (input.seasons.length > 0) {
+				const seasons = manager.getRepository(MiZalipSeason);
+				await seasons.save(input.seasons.map(season => seasons.create({
+					id: this.idService.gen(),
+					workId: work.id,
+					seasonNumber: season.seasonNumber,
+					title: season.title,
+					originalTitle: season.originalTitle,
+					description: season.description,
+					posterPath: season.posterPath,
+					airDate: season.airDate,
+					episodeCount: season.episodeCount,
+					createdAt: now,
+					updatedAt: now,
+				})));
+			}
+
+			return work;
+		});
+	}
+
+	public packSeason(season: MiZalipSeason): PackedZalipSeason {
+		return {
+			id: season.id,
+			seasonNumber: season.seasonNumber,
+			title: season.title,
+			originalTitle: season.originalTitle,
+			description: season.description,
+			posterPath: season.posterPath,
+			airDate: season.airDate,
+			episodeCount: season.episodeCount,
+		};
 	}
 
 	public packAdminWork(work: MiZalipWork): PackedZalipAdminWork {

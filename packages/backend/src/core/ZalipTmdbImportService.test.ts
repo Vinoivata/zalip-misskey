@@ -39,6 +39,14 @@ describe('ZalipTmdbImportService', () => {
 				release_date: '2025-04-12',
 				poster_path: '/poster.jpg',
 				backdrop_path: '/backdrop.jpg',
+				seasons: [{
+					season_number: 1,
+					name: 'Первый сезон',
+					overview: 'Описание сезона.',
+					poster_path: '/season.jpg',
+					air_date: '2025-04-12',
+					episode_count: 12,
+				}],
 				videos: {
 					results: [
 						{ site: 'YouTube', type: 'Trailer', iso_639_1: 'en', key: 'english001' },
@@ -62,6 +70,7 @@ describe('ZalipTmdbImportService', () => {
 			posterPath: '/poster.jpg',
 			backdropPath: '/backdrop.jpg',
 			trailerYoutubeKey: 'russian001',
+			seasons: [],
 		});
 
 		const requestUrl = new URL(httpRequestService.getJson.mock.calls[0][0]);
@@ -78,5 +87,39 @@ describe('ZalipTmdbImportService', () => {
 
 		await expect(service.importDraft('tv', 999)).resolves.toEqual({ kind: 'not-found' });
 		expect(zalipCatalogService.createTmdbDraft).not.toHaveBeenCalled();
+	});
+
+	it('adds normalized season metadata only for TV imports', async () => {
+		process.env.ZALIP_TMDB_API_KEY = 'test-only-key';
+		const httpRequestService = {
+			getJson: vi.fn().mockResolvedValue({
+				id: 77,
+				name: 'Тестовый сериал',
+				seasons: [{
+					season_number: 0,
+					name: '',
+					overview: 'Спецэпизоды.',
+					air_date: '2026-01-01',
+					episode_count: 2,
+				}],
+			}),
+		};
+		const work = { id: 'test-tv-work' };
+		const zalipCatalogService = { createTmdbDraft: vi.fn().mockResolvedValue(work) };
+		const service = new ZalipTmdbImportService(httpRequestService as never, zalipCatalogService as never);
+
+		await expect(service.importDraft('tv', 77)).resolves.toEqual({ kind: 'created', work });
+		expect(zalipCatalogService.createTmdbDraft).toHaveBeenCalledWith(expect.objectContaining({
+			tmdbMediaType: 'tv',
+			seasons: [{
+				seasonNumber: 0,
+				title: 'Спецэпизоды',
+				originalTitle: null,
+				description: 'Спецэпизоды.',
+				posterPath: null,
+				airDate: '2026-01-01',
+				episodeCount: 2,
+			}],
+		}));
 	});
 });

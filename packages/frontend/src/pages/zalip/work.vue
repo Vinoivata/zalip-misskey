@@ -20,6 +20,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<p v-if="work.originalTitle" :class="$style.original">{{ work.originalTitle }}</p>
 					<p v-if="work.description" :class="$style.description">{{ work.description }}</p>
 					<p v-else :class="$style.description">Описание появится после редакторской проверки.</p>
+					<section v-if="work.seasons.length" :class="$style.seasons">
+						<h2>Сезоны</h2>
+						<div :class="$style.seasonList">
+							<article v-for="season in work.seasons" :key="season.id" :class="$style.season">
+								<div><strong>{{ seasonLabel(season.seasonNumber, season.title) }}</strong><p v-if="season.airDate">{{ season.airDate.slice(0, 4) }}</p></div>
+								<span v-if="season.episodeCount != null">{{ season.episodeCount }} эп.</span>
+							</article>
+						</div>
+					</section>
 					<div :class="$style.actions">
 						<button v-if="$i" :class="$style.library" class="_button" :disabled="saving" @click="addToLibrary"><i class="ti ti-bookmark"></i> {{ saved ? 'В библиотеке' : 'Добавить в библиотеку' }}</button>
 						<MkA to="/timeline" :class="$style.feed"><i class="ti ti-news"></i> Лента</MkA>
@@ -50,6 +59,16 @@ type ZalipWork = {
 	posterPath: string | null;
 	backdropPath: string | null;
 	trailerYoutubeKey: string | null;
+	seasons: Array<{
+		id: string;
+		seasonNumber: number;
+		title: string;
+		originalTitle: string | null;
+		description: string | null;
+		posterPath: string | null;
+		airDate: string | null;
+		episodeCount: number | null;
+	}>;
 };
 
 const props = defineProps<{ slug: string }>();
@@ -65,6 +84,10 @@ function tmdbImage(path: string): string {
 
 function kindLabel(kind: ZalipWork['kind']): string {
 	return ({ movie: 'Фильм', series: 'Сериал', anime: 'Аниме', animation: 'Анимация' })[kind];
+}
+
+function seasonLabel(seasonNumber: number, title: string): string {
+	return seasonNumber === 0 ? title : `Сезон ${seasonNumber}: ${title}`;
 }
 
 async function load(): Promise<void> {
@@ -169,6 +192,40 @@ definePage(() => ({
 	white-space: pre-line;
 	line-height: 1.65;
 	color: var(--MI_THEME-fgTransparentWeak);
+}
+
+.seasons {
+	margin-top: 24px;
+}
+
+.seasons h2 {
+	margin: 0 0 10px;
+	font-size: 1rem;
+}
+
+.seasonList {
+	display: grid;
+	gap: 8px;
+}
+
+.season {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 11px 13px;
+	border-radius: 12px;
+	background: var(--MI_THEME-panel);
+}
+
+.season strong {
+	font-size: 0.9rem;
+}
+
+.season p, .season > span {
+	margin: 3px 0 0;
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.78rem;
 }
 
 .actions {

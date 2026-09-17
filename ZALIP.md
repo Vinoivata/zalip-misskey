@@ -26,7 +26,8 @@ the variable, the import endpoint returns a controlled configuration error and m
 request.
 
 The current importer accepts a TMDB `movie` or `tv` ID, requests Russian details plus videos, and
-creates only an unpublished draft. It does not create seasons/episodes or make the title visible.
+creates only an unpublished draft. For TV, it also stores the supplied season metadata; episodes
+remain a separate synchronization step and the title is never made public automatically.
 
 ## TMDB attribution
 

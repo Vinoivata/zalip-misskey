@@ -30,6 +30,16 @@ type TmdbDetails = {
 	poster_path?: unknown;
 	backdrop_path?: unknown;
 	videos?: { results?: unknown };
+	seasons?: unknown;
+};
+
+type TmdbSeason = {
+	season_number?: unknown;
+	name?: unknown;
+	overview?: unknown;
+	poster_path?: unknown;
+	air_date?: unknown;
+	episode_count?: unknown;
 };
 
 export type TmdbImportResult =
@@ -65,6 +75,33 @@ function youtubeTrailer(details: TmdbDetails): string | null {
 		});
 
 	return candidates[0] != null && typeof candidates[0].key === 'string' ? candidates[0].key : null;
+}
+
+function tmdbSeasons(details: TmdbDetails, tmdbMediaType: TmdbMediaType) {
+	if (tmdbMediaType !== 'tv' || !Array.isArray(details.seasons)) return [];
+
+	return details.seasons
+		.filter((season): season is TmdbSeason => typeof season === 'object' && season != null)
+		.map(season => {
+			const seasonNumber = typeof season.season_number === 'number' && Number.isInteger(season.season_number) && season.season_number >= 0
+				? season.season_number
+				: null;
+			if (seasonNumber == null) return null;
+			const episodeCount = typeof season.episode_count === 'number' && Number.isInteger(season.episode_count) && season.episode_count >= 0
+				? season.episode_count
+				: null;
+			return {
+				seasonNumber,
+				title: nullableString(season.name, 256) ?? (seasonNumber === 0 ? 'Спецэпизоды' : `Сезон ${seasonNumber}`),
+				originalTitle: null,
+				description: nullableString(season.overview, 8192),
+				posterPath: nullableString(season.poster_path, 512),
+				airDate: typeof season.air_date === 'string' && releaseYear(season.air_date) != null ? season.air_date : null,
+				episodeCount,
+			};
+		})
+		.filter((season): season is NonNullable<typeof season> => season != null)
+		.sort((a, b) => a.seasonNumber - b.seasonNumber);
 }
 
 /**
@@ -110,6 +147,7 @@ export class ZalipTmdbImportService {
 			posterPath: nullableString(details.poster_path, 512),
 			backdropPath: nullableString(details.backdrop_path, 512),
 			trailerYoutubeKey: youtubeTrailer(details),
+			seasons: tmdbSeasons(details, tmdbMediaType),
 		});
 
 		return work === 'duplicate' ? { kind: 'duplicate' } : { kind: 'created', work };
