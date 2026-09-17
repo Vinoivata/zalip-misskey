@@ -12,6 +12,13 @@
 
 services:
   web:
+    # The host resolver on some VDS networks rewrites api.themoviedb.org to a
+    # loopback address. Keep this scoped to Misskey so TMDB import has a real,
+    # independent resolver without changing DNS for the server or database.
+    # Cloudflare's two resolvers provide a fallback during catalogue imports.
+    dns:
+      - 1.1.1.1
+      - 1.0.0.1
     build:
       context: ${ZALIP_RELEASE_DIR:?Set ZALIP_RELEASE_DIR to the immutable release checkout}
     environment:

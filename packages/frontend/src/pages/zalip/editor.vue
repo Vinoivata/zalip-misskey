@@ -114,6 +114,20 @@ function stateLabel(state: PublicationState): string {
 	return ({ draft: 'Черновик', published: 'Опубликован', archived: 'Снят с публикации' })[state];
 }
 
+function tmdbImportErrorMessage(error: unknown): string {
+	const code = typeof error === 'object' && error != null && 'code' in error && typeof error.code === 'string'
+		? error.code
+		: null;
+
+	switch (code) {
+		case 'ZALIP_TMDB_NOT_CONFIGURED': return 'TMDB не настроен на сервере.';
+		case 'ZALIP_TMDB_NOT_FOUND': return 'TMDB не нашёл тайтл с этим ID и выбранным типом.';
+		case 'ZALIP_TMDB_DUPLICATE': return 'Этот тайтл уже есть в каталоге.';
+		case 'ZALIP_TMDB_UNAVAILABLE': return 'TMDB временно недоступен с сервера. Повторите попытку позже.';
+		default: return 'Импорт не выполнен. Проверьте ID, выбранный тип и права администратора.';
+	}
+}
+
 async function load(): Promise<void> {
 	if (!iAmAdmin) return;
 	loading.value = true;
@@ -258,8 +272,8 @@ async function importTmdb(): Promise<void> {
 		tmdb.id = '';
 		tmdbMessage.value = `Создан черновик: ${work.title}.`;
 		await load();
-	} catch {
-		tmdbMessage.value = 'Импорт не выполнен: проверьте ID, конфигурацию TMDB и отсутствие дубликата.';
+	} catch (error) {
+		tmdbMessage.value = tmdbImportErrorMessage(error);
 	} finally {
 		tmdbSubmitting.value = false;
 	}

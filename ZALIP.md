@@ -47,6 +47,10 @@ to a browser bundle, return it through an API response, or place it in a client-
 the variable, the import endpoint returns a controlled configuration error and makes no external
 request.
 
+The release Compose override also pins DNS only for the web container. This avoids a VDS resolver
+that can map `api.themoviedb.org` to a loopback address; it does not alter the host, database or
+other containers' DNS settings.
+
 The current importer accepts a TMDB `movie` or `tv` ID, requests Russian details plus videos, and
 creates only an unpublished draft. For TV, it also stores the supplied season metadata. An
 administrator can then run `zalip/admin/seasons/import-tmdb` for each chosen season; this upserts
