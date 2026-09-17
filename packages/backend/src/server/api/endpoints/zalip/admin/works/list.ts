@@ -26,8 +26,27 @@ const workSchema = {
 		trailerYoutubeKey: { type: 'string', nullable: true },
 		publicationState: { type: 'string', enum: ['draft', 'published', 'archived'] },
 		publishedAt: { type: 'string', nullable: true },
+		tmdbMediaType: { type: 'string', nullable: true, enum: ['movie', 'tv'] },
+		tmdbId: { type: 'integer', nullable: true },
+		seasons: {
+			type: 'array',
+			items: {
+				type: 'object',
+				properties: {
+					id: { type: 'string', format: 'misskey:id' },
+					seasonNumber: { type: 'integer' },
+					title: { type: 'string' },
+					originalTitle: { type: 'string', nullable: true },
+					description: { type: 'string', nullable: true },
+					posterPath: { type: 'string', nullable: true },
+					airDate: { type: 'string', nullable: true },
+					episodeCount: { type: 'integer', nullable: true },
+				},
+				required: ['id', 'seasonNumber', 'title', 'originalTitle', 'description', 'posterPath', 'airDate', 'episodeCount'],
+			},
+		},
 	},
-	required: ['id', 'slug', 'kind', 'title', 'originalTitle', 'description', 'releaseYear', 'posterPath', 'backdropPath', 'trailerYoutubeKey', 'publicationState', 'publishedAt'],
+	required: ['id', 'slug', 'kind', 'title', 'originalTitle', 'description', 'releaseYear', 'posterPath', 'backdropPath', 'trailerYoutubeKey', 'publicationState', 'publishedAt', 'tmdbMediaType', 'tmdbId', 'seasons'],
 } as const;
 
 export const meta = {

@@ -9,6 +9,8 @@ catalogue; it does not add another account system, session mechanism or social d
 - `zalip_library_entry` is keyed directly by Misskey `user.id`.
 - `zalip_note_context` connects a title to an ordinary local Misskey root note, so replies,
   emoji reactions, moderation and notifications are native Misskey features.
+- `zalip_season` and `zalip_episode` hold canonical season and episode metadata. They have no
+  playback URL columns: availability is a separately authorised future integration.
 - The client has native cinema home, title, library and administrator editor routes.
 
 ## TMDB import secret
@@ -26,8 +28,11 @@ the variable, the import endpoint returns a controlled configuration error and m
 request.
 
 The current importer accepts a TMDB `movie` or `tv` ID, requests Russian details plus videos, and
-creates only an unpublished draft. For TV, it also stores the supplied season metadata; episodes
-remain a separate synchronization step and the title is never made public automatically.
+creates only an unpublished draft. For TV, it also stores the supplied season metadata. An
+administrator can then run `zalip/admin/seasons/import-tmdb` for each chosen season; this upserts
+validated episode metadata without deleting existing entries. The public title page requests an
+opened season asynchronously, so switching seasons does not reload the page. Neither import makes
+the title public automatically or creates a player.
 
 ## TMDB attribution
 

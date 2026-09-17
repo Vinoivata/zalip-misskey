@@ -48,13 +48,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<div v-else-if="works.length === 0" :class="$style.empty"><i class="ti ti-movie-off"></i> Черновиков пока нет.</div>
 						<div v-else :class="$style.workList">
 							<article v-for="work in works" :key="work.id" :class="$style.work">
-								<div><p :class="$style.state" :data-state="work.publicationState">{{ stateLabel(work.publicationState) }}</p><h3>{{ work.title }}</h3><p :class="$style.meta">{{ kindLabel(work.kind) }}<span v-if="work.releaseYear"> · {{ work.releaseYear }}</span><span> · /zalip/{{ work.slug }}</span></p></div>
+								<div><p :class="$style.state" :data-state="work.publicationState">{{ stateLabel(work.publicationState) }}</p><h3>{{ work.title }}</h3><p :class="$style.meta">{{ kindLabel(work.kind) }}<span v-if="work.releaseYear"> · {{ work.releaseYear }}</span><span> · /zalip/{{ work.slug }}</span></p><p v-if="work.tmdbMediaType === 'tv' && work.seasons.length" :class="$style.syncHint">Сезоны из TMDB: перед публикацией загрузите метаданные серий.</p></div>
 								<div :class="$style.workActions">
 									<MkA v-if="work.publicationState === 'published'" :to="`/zalip/${work.slug}`" :class="$style.smallButton"><i class="ti ti-external-link"></i> Открыть</MkA>
 									<button v-if="work.publicationState !== 'published'" class="_button" :class="$style.smallButton" :disabled="savingId === work.id" @click="setState(work, 'published')"><i class="ti ti-world"></i> Опубликовать</button>
 									<button v-else class="_button" :class="$style.smallButton" :disabled="savingId === work.id" @click="setState(work, 'archived')"><i class="ti ti-eye-off"></i> Снять</button>
 									<button v-if="work.publicationState === 'published'" class="_button" :class="$style.smallButton" :disabled="savingId === work.id" @click="openDiscussion(work)"><i class="ti ti-messages"></i> Обсуждение</button>
+									<button v-for="season in work.tmdbMediaType === 'tv' ? work.seasons : []" :key="season.id" class="_button" :class="$style.smallButton" :disabled="syncingSeasonKey === seasonKey(work, season.seasonNumber)" @click="syncSeason(work, season.seasonNumber)"><i class="ti ti-list-details"></i> {{ syncingSeasonKey === seasonKey(work, season.seasonNumber) ? 'Загружаем…' : `Серии: ${season.seasonNumber === 0 ? 'спец.' : season.seasonNumber}` }}</button>
 								</div>
+								<p v-if="seasonMessage.workId === work.id" :class="$style.syncMessage">{{ seasonMessage.text }}</p>
 							</article>
 						</div>
 					</section>
@@ -73,7 +75,18 @@ import { misskeyApiZalip } from '@/utility/misskey-api.js';
 
 type WorkKind = 'movie' | 'series' | 'anime' | 'animation';
 type PublicationState = 'draft' | 'published' | 'archived';
-type AdminWork = { id: string; slug: string; kind: WorkKind; title: string; releaseYear: number | null; publicationState: PublicationState; publishedAt: string | null; };
+type AdminWork = {
+	id: string;
+	slug: string;
+	kind: WorkKind;
+	title: string;
+	releaseYear: number | null;
+	publicationState: PublicationState;
+	publishedAt: string | null;
+	tmdbMediaType: 'movie' | 'tv' | null;
+	tmdbId: number | null;
+	seasons: Array<{ id: string; seasonNumber: number }>;
+};
 
 const router = useRouter();
 const works = ref<AdminWork[]>([]);
@@ -85,6 +98,8 @@ const form = reactive({ title: '', slug: '', kind: 'movie' as WorkKind, releaseY
 const tmdb = reactive({ mediaType: 'movie' as 'movie' | 'tv', id: '' });
 const tmdbSubmitting = ref(false);
 const tmdbMessage = ref('');
+const syncingSeasonKey = ref<string | null>(null);
+const seasonMessage = reactive({ workId: '', text: '' });
 
 function kindLabel(kind: WorkKind): string {
 	return ({ movie: 'Фильм', series: 'Сериал', anime: 'Аниме', animation: 'Анимация' })[kind];
@@ -173,6 +188,27 @@ async function openDiscussion(work: AdminWork): Promise<void> {
 	}
 }
 
+function seasonKey(work: AdminWork, seasonNumber: number): string {
+	return `${work.id}:${seasonNumber}`;
+}
+
+async function syncSeason(work: AdminWork, seasonNumber: number): Promise<void> {
+	const key = seasonKey(work, seasonNumber);
+	syncingSeasonKey.value = key;
+	seasonMessage.workId = '';
+	seasonMessage.text = '';
+	try {
+		const result = await misskeyApiZalip<{ added: number; updated: number; total: number }>('zalip/admin/seasons/import-tmdb', { workId: work.id, seasonNumber });
+		seasonMessage.workId = work.id;
+		seasonMessage.text = `Сезон ${seasonNumber === 0 ? 'со спецэпизодами' : seasonNumber}: сохранено ${result.total}, добавлено ${result.added}, обновлено ${result.updated}.`;
+	} catch {
+		seasonMessage.workId = work.id;
+		seasonMessage.text = 'Серии не загрузились: проверьте настройки TMDB и данные тайтла.';
+	} finally {
+		syncingSeasonKey.value = null;
+	}
+}
+
 onMounted(() => void load());
 
 definePage(() => ({ title: 'Редактор Zalip', icon: 'ti ti-pencil' }));
@@ -210,6 +246,8 @@ definePage(() => ({ title: 'Редактор Zalip', icon: 'ti ti-pencil' }));
 .state[data-state='archived'] { opacity: 0.65; }
 .work h3 { margin: 0; font-size: 1rem; }
 .meta { margin: 5px 0 0; color: var(--MI_THEME-fgTransparentWeak); font-size: 0.8rem; }
+.syncHint, .syncMessage { margin: 8px 0 0; color: var(--MI_THEME-fgTransparentWeak); font-size: 0.78rem; }
+.syncMessage { grid-column: 1 / -1; color: var(--MI_THEME-accent); }
 .workActions { display: flex; flex-wrap: wrap; justify-content: end; gap: 7px; }
 @media (max-width: 600px) { .page { padding-top: 12px; } .form, .importForm { grid-template-columns: 1fr; } .wide { grid-column: auto; } .work { align-items: start; flex-direction: column; } .workActions { justify-content: start; } .header { align-items: start; } }
 </style>

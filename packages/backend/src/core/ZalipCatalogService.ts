@@ -4,7 +4,7 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import { DI } from '@/di-symbols.js';
 import { IdService } from '@/core/IdService.js';
 import { NoteCreateService } from '@/core/NoteCreateService.js';
@@ -21,6 +21,7 @@ import {
 } from '@/models/ZalipWork.js';
 import { MiZalipNoteContext } from '@/models/ZalipNoteContext.js';
 import { MiZalipSeason } from '@/models/ZalipSeason.js';
+import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
 
 export type PackedZalipWork = {
 	id: string;
@@ -58,9 +59,29 @@ export type PackedZalipWorkDetail = PackedZalipWork & {
 	seasons: PackedZalipSeason[];
 };
 
+export type PackedZalipEpisode = {
+	id: string;
+	episodeNumber: number;
+	title: string;
+	originalTitle: string | null;
+	description: string | null;
+	airDate: string | null;
+	stillPath: string | null;
+	runtimeMinutes: number | null;
+};
+
+export type ZalipTmdbSeasonSyncTarget = {
+	tmdbId: number;
+	seasonId: string;
+	seasonNumber: number;
+};
+
 export type PackedZalipAdminWork = PackedZalipWork & {
 	publicationState: ZalipPublicationState;
 	publishedAt: string | null;
+	tmdbMediaType: 'movie' | 'tv' | null;
+	tmdbId: number | null;
+	seasons: PackedZalipSeason[];
 };
 
 export type PackedZalipDiscussion = {
@@ -120,6 +141,30 @@ export class ZalipCatalogService {
 			...this.packWork(work),
 			seasons: seasons.map(season => this.packSeason(season)),
 		};
+	}
+
+	/** Lists only editor-approved episode metadata belonging to a published canonical work. */
+	public async listPublishedSeasonEpisodes(
+		slug: string,
+		seasonNumber: number,
+	): Promise<PackedZalipEpisode[] | null> {
+		const work = await this.db.getRepository(MiZalipWork).findOneBy({
+			slug,
+			publicationState: 'published',
+		});
+		if (work == null) return null;
+
+		const season = await this.db.getRepository(MiZalipSeason).findOneBy({
+			workId: work.id,
+			seasonNumber,
+		});
+		if (season == null) return null;
+
+		const episodes = await this.db.getRepository(MiZalipEpisode).find({
+			where: { seasonId: season.id },
+			order: { episodeNumber: 'ASC' },
+		});
+		return episodes.map(episode => this.packEpisode(episode));
 	}
 
 	public async listLibrary(me: MiLocalUser): Promise<PackedZalipLibraryEntry[]> {
@@ -297,11 +342,109 @@ export class ZalipCatalogService {
 		};
 	}
 
-	public packAdminWork(work: MiZalipWork): PackedZalipAdminWork {
+	public packEpisode(episode: MiZalipEpisode): PackedZalipEpisode {
+		return {
+			id: episode.id,
+			episodeNumber: episode.episodeNumber,
+			title: episode.title,
+			originalTitle: episode.originalTitle,
+			description: episode.description,
+			airDate: episode.airDate,
+			stillPath: episode.stillPath,
+			runtimeMinutes: episode.runtimeMinutes,
+		};
+	}
+
+	/** Resolves a private editor sync target without exposing TMDB mappings in public APIs. */
+	public async getTmdbSeasonSyncTarget(
+		workId: MiZalipWork['id'],
+		seasonNumber: number,
+	): Promise<ZalipTmdbSeasonSyncTarget | null> {
+		const work = await this.db.getRepository(MiZalipWork).findOneBy({
+			id: workId,
+			tmdbMediaType: 'tv',
+		});
+		if (work?.tmdbId == null) return null;
+
+		const season = await this.db.getRepository(MiZalipSeason).findOneBy({ workId, seasonNumber });
+		if (season == null) return null;
+
+		return {
+			tmdbId: work.tmdbId,
+			seasonId: season.id,
+			seasonNumber: season.seasonNumber,
+		};
+	}
+
+	/**
+	 * Upserts a full TMDB season response. It intentionally never deletes rows: manual
+	 * editorial fixes survive a partial or temporarily inconsistent upstream response.
+	 */
+	public async syncSeasonEpisodes(
+		seasonId: MiZalipSeason['id'],
+		episodes: Array<{
+			tmdbEpisodeId: number;
+			episodeNumber: number;
+			title: string;
+			originalTitle: string | null;
+			description: string | null;
+			airDate: string | null;
+			stillPath: string | null;
+			runtimeMinutes: number | null;
+		}>,
+	): Promise<{ added: number; updated: number; total: number }> {
+		return await this.db.transaction(async manager => {
+			const seasons = manager.getRepository(MiZalipSeason);
+			const season = await seasons.findOneBy({ id: seasonId });
+			if (season == null) return { added: 0, updated: 0, total: 0 };
+
+			const repository = manager.getRepository(MiZalipEpisode);
+			const existing = await repository.findBy({ seasonId });
+			const byEpisodeNumber = new Map(existing.map(episode => [episode.episodeNumber, episode]));
+			const now = new Date();
+			let added = 0;
+			let updated = 0;
+			const saved = episodes.map(input => {
+				const episode = byEpisodeNumber.get(input.episodeNumber);
+				if (episode == null) {
+					added++;
+					return repository.create({
+						id: this.idService.gen(),
+						seasonId,
+						...input,
+						createdAt: now,
+						updatedAt: now,
+					});
+				}
+
+				updated++;
+				episode.tmdbEpisodeId = input.tmdbEpisodeId;
+				episode.title = input.title;
+				episode.originalTitle = input.originalTitle;
+				episode.description = input.description;
+				episode.airDate = input.airDate;
+				episode.stillPath = input.stillPath;
+				episode.runtimeMinutes = input.runtimeMinutes;
+				episode.updatedAt = now;
+				return episode;
+			});
+			if (saved.length > 0) await repository.save(saved);
+
+			season.episodeCount = episodes.length;
+			season.updatedAt = now;
+			await seasons.save(season);
+			return { added, updated, total: episodes.length };
+		});
+	}
+
+	public packAdminWork(work: MiZalipWork, seasons: MiZalipSeason[] = []): PackedZalipAdminWork {
 		return {
 			...this.packWork(work),
 			publicationState: work.publicationState,
 			publishedAt: work.publishedAt?.toISOString() ?? null,
+			tmdbMediaType: work.tmdbMediaType,
+			tmdbId: work.tmdbId,
+			seasons: seasons.map(season => this.packSeason(season)),
 		};
 	}
 
@@ -310,8 +453,18 @@ export class ZalipCatalogService {
 			order: { updatedAt: 'DESC' },
 			take: limit,
 		});
+		const seasons = works.length === 0 ? [] : await this.db.getRepository(MiZalipSeason).find({
+			where: { workId: In(works.map(work => work.id)) },
+			order: { seasonNumber: 'ASC' },
+		});
+		const seasonsByWorkId = new Map<string, MiZalipSeason[]>();
+		for (const season of seasons) {
+			const collection = seasonsByWorkId.get(season.workId) ?? [];
+			collection.push(season);
+			seasonsByWorkId.set(season.workId, collection);
+		}
 
-		return works.map(work => this.packAdminWork(work));
+		return works.map(work => this.packAdminWork(work, seasonsByWorkId.get(work.id)));
 	}
 
 	public async setPublicationState(

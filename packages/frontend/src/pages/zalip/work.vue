@@ -23,10 +23,22 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<section v-if="work.seasons.length" :class="$style.seasons">
 						<h2>Сезоны</h2>
 						<div :class="$style.seasonList">
-							<article v-for="season in work.seasons" :key="season.id" :class="$style.season">
-								<div><strong>{{ seasonLabel(season.seasonNumber, season.title) }}</strong><p v-if="season.airDate">{{ season.airDate.slice(0, 4) }}</p></div>
-								<span v-if="season.episodeCount != null">{{ season.episodeCount }} эп.</span>
-							</article>
+							<div v-for="season in work.seasons" :key="season.id" :class="$style.seasonBlock">
+								<button type="button" class="_button" :class="[$style.season, { [$style.selectedSeason]: selectedSeasonNumber === season.seasonNumber }]" :aria-expanded="selectedSeasonNumber === season.seasonNumber" @click="toggleSeason(season)">
+									<div><strong>{{ seasonLabel(season.seasonNumber, season.title) }}</strong><p v-if="season.airDate">{{ season.airDate.slice(0, 4) }}</p></div>
+									<span v-if="season.episodeCount != null">{{ season.episodeCount }} эп.</span>
+									<i :class="selectedSeasonNumber === season.seasonNumber ? 'ti ti-chevron-up' : 'ti ti-chevron-down'"></i>
+								</button>
+								<div v-if="selectedSeasonNumber === season.seasonNumber" :class="$style.episodes">
+									<p v-if="episodesPending" :class="$style.episodeState"><i class="ti ti-loader-2 ti-spin"></i> Загружаем эпизоды…</p>
+									<p v-else-if="episodes.length === 0" :class="$style.episodeState">Список серий пока не подготовлен редактором.</p>
+									<article v-for="episode in episodes" v-else :key="episode.id" :class="$style.episode">
+										<strong>{{ episodeLabel(episode) }}</strong>
+										<span v-if="episode.runtimeMinutes || episode.airDate">{{ episodeMeta(episode) }}</span>
+										<p v-if="episode.description">{{ episode.description }}</p>
+									</article>
+								</div>
+							</div>
 						</div>
 					</section>
 					<div :class="$style.actions">
@@ -71,12 +83,29 @@ type ZalipWork = {
 	}>;
 };
 
+type ZalipSeason = ZalipWork['seasons'][number];
+
+type ZalipEpisode = {
+	id: string;
+	episodeNumber: number;
+	title: string;
+	originalTitle: string | null;
+	description: string | null;
+	airDate: string | null;
+	stillPath: string | null;
+	runtimeMinutes: number | null;
+};
+
 const props = defineProps<{ slug: string }>();
 const work = ref<ZalipWork | null>(null);
 const pending = ref(true);
 const saving = ref(false);
 const saved = ref(false);
 const discussionNoteId = ref<string | null>(null);
+const selectedSeasonNumber = ref<number | null>(null);
+const episodes = ref<ZalipEpisode[]>([]);
+const episodesPending = ref(false);
+const episodeRequestId = ref(0);
 
 function tmdbImage(path: string): string {
 	return `https://image.tmdb.org/t/p/w500${path}`;
@@ -90,9 +119,20 @@ function seasonLabel(seasonNumber: number, title: string): string {
 	return seasonNumber === 0 ? title : `Сезон ${seasonNumber}: ${title}`;
 }
 
+function episodeLabel(episode: ZalipEpisode): string {
+	return `Серия ${episode.episodeNumber}: ${episode.title}`;
+}
+
+function episodeMeta(episode: ZalipEpisode): string {
+	return [episode.airDate?.slice(0, 4), episode.runtimeMinutes != null ? `${episode.runtimeMinutes} мин.` : null].filter((value): value is string => value != null).join(' · ');
+}
+
 async function load(): Promise<void> {
 	pending.value = true;
 	work.value = null;
+	selectedSeasonNumber.value = null;
+	episodes.value = [];
+	episodeRequestId.value++;
 	try {
 		work.value = await misskeyApiZalip<ZalipWork>('zalip/works/show', { slug: props.slug });
 		const discussion = await misskeyApiZalip<{ noteId: string | null }>('zalip/discussions/show', { workId: work.value.id });
@@ -102,6 +142,36 @@ async function load(): Promise<void> {
 		discussionNoteId.value = null;
 	} finally {
 		pending.value = false;
+	}
+}
+
+async function toggleSeason(season: ZalipSeason): Promise<void> {
+	if (work.value == null) return;
+	const requestId = ++episodeRequestId.value;
+	if (selectedSeasonNumber.value === season.seasonNumber) {
+		selectedSeasonNumber.value = null;
+		episodes.value = [];
+		episodesPending.value = false;
+		return;
+	}
+
+	selectedSeasonNumber.value = season.seasonNumber;
+	episodes.value = [];
+	episodesPending.value = true;
+	try {
+		const loadedEpisodes = await misskeyApiZalip<ZalipEpisode[]>('zalip/seasons/episodes', {
+			slug: work.value.slug,
+			seasonNumber: season.seasonNumber,
+		});
+		if (selectedSeasonNumber.value === season.seasonNumber && episodeRequestId.value === requestId) {
+			episodes.value = loadedEpisodes;
+		}
+	} catch {
+		if (selectedSeasonNumber.value === season.seasonNumber && episodeRequestId.value === requestId) {
+			episodes.value = [];
+		}
+	} finally {
+		if (episodeRequestId.value === requestId) episodesPending.value = false;
 	}
 }
 
@@ -208,14 +278,25 @@ definePage(() => ({
 	gap: 8px;
 }
 
+.seasonBlock {
+	border-radius: 12px;
+	background: var(--MI_THEME-panel);
+}
+
 .season {
 	display: flex;
+	width: 100%;
 	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
 	padding: 11px 13px;
 	border-radius: 12px;
-	background: var(--MI_THEME-panel);
+	color: var(--MI_THEME-fg);
+	text-align: left;
+}
+
+.selectedSeason {
+	background: color-mix(in srgb, var(--MI_THEME-accent) 18%, var(--MI_THEME-panel));
 }
 
 .season strong {
@@ -226,6 +307,40 @@ definePage(() => ({
 	margin: 3px 0 0;
 	color: var(--MI_THEME-fgTransparentWeak);
 	font-size: 0.78rem;
+}
+
+.episodes {
+	display: grid;
+	gap: 1px;
+	margin: 0 12px 12px;
+	overflow: hidden;
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: 10px;
+}
+
+.episode, .episodeState {
+	margin: 0;
+	padding: 10px 12px;
+	background: var(--MI_THEME-panelHighlight);
+}
+
+.episode {
+	display: grid;
+	gap: 3px;
+}
+
+.episode strong {
+	font-size: 0.85rem;
+}
+
+.episode span, .episode p, .episodeState {
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.78rem;
+}
+
+.episode p {
+	margin: 4px 0 0;
+	line-height: 1.45;
 }
 
 .actions {

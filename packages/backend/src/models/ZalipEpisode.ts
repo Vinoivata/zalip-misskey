@@ -14,6 +14,10 @@ export class MiZalipEpisode {
 	@PrimaryColumn(id())
 	public id: string;
 
+	/** Optional stable TMDB episode identifier; never exposed as a playback provider ID. */
+	@Column('integer', { nullable: true })
+	public tmdbEpisodeId: number | null;
+
 	@Column({ ...id(), comment: 'The parent canonical Zalip season ID.' })
 	public seasonId: MiZalipSeason['id'];
 

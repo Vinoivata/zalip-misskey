@@ -122,4 +122,49 @@ describe('ZalipTmdbImportService', () => {
 			}],
 		}));
 	});
+
+	it('syncs only validated episode metadata from a requested TMDB season', async () => {
+		process.env.ZALIP_TMDB_API_KEY = 'test-only-key';
+		const httpRequestService = {
+			getJson: vi.fn().mockResolvedValue({
+				season_number: 1,
+				episodes: [
+					{ id: 301, episode_number: 2, name: 'Вторая серия', overview: 'Далее.', air_date: '2026-02-02', still_path: '/still.jpg', runtime: 24 },
+					{ id: 300, episode_number: 1, name: '', overview: null, air_date: 'broken', runtime: 0 },
+					{ id: 'unsafe', episode_number: 3, name: 'Нельзя импортировать' },
+				],
+			}),
+		};
+		const zalipCatalogService = { syncSeasonEpisodes: vi.fn().mockResolvedValue({ added: 2, updated: 0, total: 2 }) };
+		const service = new ZalipTmdbImportService(httpRequestService as never, zalipCatalogService as never);
+		const target = { tmdbId: 77, seasonId: 'test-season', seasonNumber: 1 };
+
+		await expect(service.importSeasonEpisodes(target)).resolves.toEqual({ kind: 'synced', added: 2, updated: 0, total: 2 });
+		expect(zalipCatalogService.syncSeasonEpisodes).toHaveBeenCalledWith('test-season', [
+			{
+				tmdbEpisodeId: 300,
+				episodeNumber: 1,
+				title: 'Эпизод 1',
+				originalTitle: null,
+				description: null,
+				airDate: null,
+				stillPath: null,
+				runtimeMinutes: null,
+			},
+			{
+				tmdbEpisodeId: 301,
+				episodeNumber: 2,
+				title: 'Вторая серия',
+				originalTitle: null,
+				description: 'Далее.',
+				airDate: '2026-02-02',
+				stillPath: '/still.jpg',
+				runtimeMinutes: 24,
+			},
+		]);
+
+		const requestUrl = new URL(httpRequestService.getJson.mock.calls[0][0]);
+		expect(requestUrl.pathname).toBe('/3/tv/77/season/1');
+		expect(requestUrl.searchParams.get('language')).toBe('ru-RU');
+	});
 });

@@ -6,7 +6,7 @@
 import { Injectable } from '@nestjs/common';
 import { HttpRequestService } from '@/core/HttpRequestService.js';
 import { StatusError } from '@/misc/status-error.js';
-import { ZalipCatalogService } from '@/core/ZalipCatalogService.js';
+import { ZalipCatalogService, type ZalipTmdbSeasonSyncTarget } from '@/core/ZalipCatalogService.js';
 import type { MiZalipWork } from '@/models/ZalipWork.js';
 
 type TmdbMediaType = 'movie' | 'tv';
@@ -42,9 +42,30 @@ type TmdbSeason = {
 	episode_count?: unknown;
 };
 
+type TmdbSeasonDetails = {
+	season_number?: unknown;
+	episodes?: unknown;
+};
+
+type TmdbEpisode = {
+	id?: unknown;
+	episode_number?: unknown;
+	name?: unknown;
+	overview?: unknown;
+	air_date?: unknown;
+	still_path?: unknown;
+	runtime?: unknown;
+};
+
 export type TmdbImportResult =
 	| { kind: 'created'; work: MiZalipWork; }
 	| { kind: 'duplicate'; }
+	| { kind: 'not-configured'; }
+	| { kind: 'not-found'; }
+	| { kind: 'upstream-failure'; };
+
+export type TmdbSeasonEpisodeImportResult =
+	| { kind: 'synced'; added: number; updated: number; total: number; }
 	| { kind: 'not-configured'; }
 	| { kind: 'not-found'; }
 	| { kind: 'upstream-failure'; };
@@ -104,6 +125,43 @@ function tmdbSeasons(details: TmdbDetails, tmdbMediaType: TmdbMediaType) {
 		.sort((a, b) => a.seasonNumber - b.seasonNumber);
 }
 
+function tmdbSeasonEpisodes(details: TmdbSeasonDetails) {
+	if (!Array.isArray(details.episodes)) return [];
+
+	const byEpisodeNumber = new Map<number, {
+		tmdbEpisodeId: number;
+		episodeNumber: number;
+		title: string;
+		originalTitle: null;
+		description: string | null;
+		airDate: string | null;
+		stillPath: string | null;
+		runtimeMinutes: number | null;
+	}>();
+	for (const value of details.episodes) {
+		if (typeof value !== 'object' || value == null) continue;
+		const episode = value as TmdbEpisode;
+		const tmdbEpisodeId = typeof episode.id === 'number' && Number.isInteger(episode.id) && episode.id > 0 ? episode.id : null;
+		const episodeNumber = typeof episode.episode_number === 'number' && Number.isInteger(episode.episode_number) && episode.episode_number >= 0
+			? episode.episode_number
+			: null;
+		if (tmdbEpisodeId == null || episodeNumber == null || byEpisodeNumber.has(episodeNumber)) continue;
+
+		byEpisodeNumber.set(episodeNumber, {
+			tmdbEpisodeId,
+			episodeNumber,
+			title: nullableString(episode.name, 256) ?? `Эпизод ${episodeNumber}`,
+			originalTitle: null,
+			description: nullableString(episode.overview, 8192),
+			airDate: typeof episode.air_date === 'string' && releaseYear(episode.air_date) != null ? episode.air_date : null,
+			stillPath: nullableString(episode.still_path, 512),
+			runtimeMinutes: typeof episode.runtime === 'number' && Number.isInteger(episode.runtime) && episode.runtime > 0 ? episode.runtime : null,
+		});
+	}
+
+	return [...byEpisodeNumber.values()].sort((a, b) => a.episodeNumber - b.episodeNumber);
+}
+
 /**
  * Server-only import boundary. The browser submits only a TMDB media type and numeric ID;
  * its credential stays in the deployment environment and is never returned or logged.
@@ -151,5 +209,27 @@ export class ZalipTmdbImportService {
 		});
 
 		return work === 'duplicate' ? { kind: 'duplicate' } : { kind: 'created', work };
+	}
+
+	/** Imports one full season only on an editor action; it has no public playback side effect. */
+	public async importSeasonEpisodes(target: ZalipTmdbSeasonSyncTarget): Promise<TmdbSeasonEpisodeImportResult> {
+		const apiKey = process.env.ZALIP_TMDB_API_KEY?.trim();
+		if (apiKey == null || apiKey === '') return { kind: 'not-configured' };
+
+		const url = new URL(`https://api.themoviedb.org/3/tv/${target.tmdbId}/season/${target.seasonNumber}`);
+		url.searchParams.set('api_key', apiKey);
+		url.searchParams.set('language', 'ru-RU');
+
+		let details: TmdbSeasonDetails;
+		try {
+			details = await this.httpRequestService.getJson<TmdbSeasonDetails>(url.toString());
+		} catch (err) {
+			if (err instanceof StatusError && err.statusCode === 404) return { kind: 'not-found' };
+			return { kind: 'upstream-failure' };
+		}
+
+		if (details.season_number !== target.seasonNumber) return { kind: 'upstream-failure' };
+		const result = await this.zalipCatalogService.syncSeasonEpisodes(target.seasonId, tmdbSeasonEpisodes(details));
+		return { kind: 'synced', ...result };
 	}
 }

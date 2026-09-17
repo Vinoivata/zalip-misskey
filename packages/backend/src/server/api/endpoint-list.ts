@@ -450,6 +450,7 @@ export * as 'chat/read-all' from './endpoints/chat/read-all.js';
 export * as 'v2/admin/emoji/list' from './endpoints/v2/admin/emoji/list.js';
 export * as 'zalip/works/list' from './endpoints/zalip/works/list.js';
 export * as 'zalip/works/show' from './endpoints/zalip/works/show.js';
+export * as 'zalip/seasons/episodes' from './endpoints/zalip/seasons/episodes.js';
 export * as 'zalip/discussions/show' from './endpoints/zalip/discussions/show.js';
 export * as 'zalip/library/list' from './endpoints/zalip/library/list.js';
 export * as 'zalip/library/update' from './endpoints/zalip/library/update.js';
@@ -457,4 +458,5 @@ export * as 'zalip/admin/works/create' from './endpoints/zalip/admin/works/creat
 export * as 'zalip/admin/works/import-tmdb' from './endpoints/zalip/admin/works/import-tmdb.js';
 export * as 'zalip/admin/works/list' from './endpoints/zalip/admin/works/list.js';
 export * as 'zalip/admin/works/update-state' from './endpoints/zalip/admin/works/update-state.js';
+export * as 'zalip/admin/seasons/import-tmdb' from './endpoints/zalip/admin/seasons/import-tmdb.js';
 export * as 'zalip/admin/discussions/create' from './endpoints/zalip/admin/discussions/create.js';
