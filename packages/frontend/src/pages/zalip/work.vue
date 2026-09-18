@@ -23,6 +23,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<p v-if="work.originalTitle" :class="$style.original">{{ work.originalTitle }}</p>
 					<p v-if="work.description" :class="$style.description">{{ work.description }}</p>
 					<p v-else :class="$style.description">Описание появится после редакторской проверки.</p>
+					<section v-if="work.galleryPaths.length" :class="$style.gallery">
+						<h2><i class="ti ti-photo"></i> Кадры</h2>
+						<div :class="$style.galleryGrid">
+							<a v-for="path in work.galleryPaths" :key="path" :href="tmdbBackdrop(path)" target="_blank" rel="noopener noreferrer" :aria-label="`Открыть кадр из ${work.title}`"><img :src="tmdbGalleryImage(path)" alt="" loading="lazy"></a>
+						</div>
+					</section>
 					<section v-if="work.seasons.length" :class="$style.seasons">
 						<h2>Сезоны</h2>
 						<div :class="$style.seasonList">
@@ -97,6 +103,7 @@ type ZalipWork = {
 	releaseYear: number | null;
 	posterPath: string | null;
 	backdropPath: string | null;
+	galleryPaths: string[];
 	trailerYoutubeKey: string | null;
 	seasons: Array<{
 		id: string;
@@ -165,6 +172,10 @@ function tmdbImage(path: string): string {
 
 function tmdbBackdrop(path: string): string {
 	return `https://image.tmdb.org/t/p/w1280${path}`;
+}
+
+function tmdbGalleryImage(path: string): string {
+	return `https://image.tmdb.org/t/p/w780${path}`;
 }
 
 function youtubeEmbed(key: string): string {
@@ -422,6 +433,48 @@ definePage(() => ({
 	white-space: pre-line;
 	line-height: 1.65;
 	color: var(--MI_THEME-fgTransparentWeak);
+}
+
+.gallery {
+	margin-top: 24px;
+}
+
+.gallery h2 {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	margin: 0 0 10px;
+	font-size: 1rem;
+}
+
+.gallery h2 i {
+	color: var(--MI_THEME-accent);
+}
+
+.galleryGrid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 8px;
+}
+
+.galleryGrid a {
+	display: block;
+	overflow: hidden;
+	aspect-ratio: 16 / 9;
+	border-radius: 10px;
+	background: var(--MI_THEME-panelHighlight);
+}
+
+.galleryGrid img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	transition: transform 0.18s ease;
+}
+
+.galleryGrid a:hover img, .galleryGrid a:focus-visible img {
+	transform: scale(1.04);
 }
 
 .seasons {
@@ -729,6 +782,10 @@ definePage(() => ({
 
 	.personalActions {
 		width: 100%;
+	}
+
+	.galleryGrid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 }
 </style>

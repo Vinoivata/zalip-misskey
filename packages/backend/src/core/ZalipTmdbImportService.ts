@@ -6,7 +6,11 @@
 import { Injectable } from '@nestjs/common';
 import { HttpRequestService } from '@/core/HttpRequestService.js';
 import { StatusError } from '@/misc/status-error.js';
-import { ZalipCatalogService, type ZalipTmdbSeasonSyncTarget } from '@/core/ZalipCatalogService.js';
+import {
+	ZalipCatalogService,
+	type ZalipTmdbMediaSyncTarget,
+	type ZalipTmdbSeasonSyncTarget,
+} from '@/core/ZalipCatalogService.js';
 import type { MiZalipWork } from '@/models/ZalipWork.js';
 
 type TmdbMediaType = 'movie' | 'tv';
@@ -16,6 +20,10 @@ type TmdbVideo = {
 	site?: unknown;
 	type?: unknown;
 	iso_639_1?: unknown;
+};
+
+type TmdbImage = {
+	file_path?: unknown;
 };
 
 type TmdbDetails = {
@@ -30,6 +38,7 @@ type TmdbDetails = {
 	poster_path?: unknown;
 	backdrop_path?: unknown;
 	videos?: { results?: unknown };
+	images?: { backdrops?: unknown };
 	seasons?: unknown;
 };
 
@@ -70,10 +79,21 @@ export type TmdbSeasonEpisodeImportResult =
 	| { kind: 'not-found'; }
 	| { kind: 'upstream-failure'; };
 
+export type TmdbMediaRefreshResult =
+	| { kind: 'updated'; }
+	| { kind: 'not-configured'; }
+	| { kind: 'not-found'; }
+	| { kind: 'upstream-failure'; };
+
 function nullableString(value: unknown, maxLength: number): string | null {
 	if (typeof value !== 'string') return null;
 	const normalized = value.trim();
 	return normalized.length > 0 && normalized.length <= maxLength ? normalized : null;
+}
+
+function tmdbImagePath(value: unknown): string | null {
+	const path = nullableString(value, 512);
+	return path != null && /^\/[A-Za-z0-9._-]+$/.test(path) ? path : null;
 }
 
 function releaseYear(value: unknown): number | null {
@@ -96,6 +116,30 @@ function youtubeTrailer(details: TmdbDetails): string | null {
 		});
 
 	return candidates[0] != null && typeof candidates[0].key === 'string' ? candidates[0].key : null;
+}
+
+function tmdbGalleryPaths(details: TmdbDetails): string[] {
+	const backdrops = details.images?.backdrops;
+	if (!Array.isArray(backdrops)) return [];
+
+	const paths = new Set<string>();
+	for (const value of backdrops) {
+		if (typeof value !== 'object' || value == null) continue;
+		const path = tmdbImagePath((value as TmdbImage).file_path);
+		if (path == null) continue;
+		paths.add(path);
+		if (paths.size >= 18) break;
+	}
+	return [...paths];
+}
+
+function tmdbMedia(details: TmdbDetails) {
+	return {
+		posterPath: tmdbImagePath(details.poster_path),
+		backdropPath: tmdbImagePath(details.backdrop_path),
+		galleryPaths: tmdbGalleryPaths(details),
+		trailerYoutubeKey: youtubeTrailer(details),
+	};
 }
 
 function tmdbSeasons(details: TmdbDetails, tmdbMediaType: TmdbMediaType) {
@@ -181,7 +225,7 @@ export class ZalipTmdbImportService {
 		const url = new URL(`https://api.themoviedb.org/3/${tmdbMediaType}/${tmdbId}`);
 		url.searchParams.set('api_key', apiKey);
 		url.searchParams.set('language', 'ru-RU');
-		url.searchParams.set('append_to_response', 'videos');
+		url.searchParams.set('append_to_response', 'videos,images');
 
 		let details: TmdbDetails;
 		try {
@@ -202,13 +246,34 @@ export class ZalipTmdbImportService {
 			originalTitle: nullableString(tmdbMediaType === 'movie' ? details.original_title : details.original_name, 256),
 			description: nullableString(details.overview, 8192),
 			releaseYear: releaseYear(tmdbMediaType === 'movie' ? details.release_date : details.first_air_date),
-			posterPath: nullableString(details.poster_path, 512),
-			backdropPath: nullableString(details.backdrop_path, 512),
-			trailerYoutubeKey: youtubeTrailer(details),
+			...tmdbMedia(details),
 			seasons: tmdbSeasons(details, tmdbMediaType),
 		});
 
 		return work === 'duplicate' ? { kind: 'duplicate' } : { kind: 'created', work };
+	}
+
+	/** Re-fetches only TMDB-provided visuals for an existing title; editorial text is preserved. */
+	public async refreshMedia(target: ZalipTmdbMediaSyncTarget): Promise<TmdbMediaRefreshResult> {
+		const apiKey = process.env.ZALIP_TMDB_API_KEY?.trim();
+		if (apiKey == null || apiKey === '') return { kind: 'not-configured' };
+
+		const url = new URL(`https://api.themoviedb.org/3/${target.tmdbMediaType}/${target.tmdbId}`);
+		url.searchParams.set('api_key', apiKey);
+		url.searchParams.set('language', 'ru-RU');
+		url.searchParams.set('append_to_response', 'videos,images');
+
+		let details: TmdbDetails;
+		try {
+			details = await this.httpRequestService.getJson<TmdbDetails>(url.toString());
+		} catch (err) {
+			if (err instanceof StatusError && err.statusCode === 404) return { kind: 'not-found' };
+			return { kind: 'upstream-failure' };
+		}
+
+		if (details.id !== target.tmdbId) return { kind: 'upstream-failure' };
+		const work = await this.zalipCatalogService.updateTmdbMedia(target.workId, tmdbMedia(details));
+		return work == null ? { kind: 'upstream-failure' } : { kind: 'updated' };
 	}
 
 	/** Imports one full season only on an editor action; it has no public playback side effect. */

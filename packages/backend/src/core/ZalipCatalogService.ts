@@ -69,6 +69,7 @@ export type PackedZalipSeason = {
 };
 
 export type PackedZalipWorkDetail = PackedZalipWork & {
+	galleryPaths: string[];
 	seasons: PackedZalipSeason[];
 };
 
@@ -88,6 +89,12 @@ export type ZalipTmdbSeasonSyncTarget = {
 	tmdbId: number;
 	seasonId: string;
 	seasonNumber: number;
+};
+
+export type ZalipTmdbMediaSyncTarget = {
+	workId: string;
+	tmdbMediaType: 'movie' | 'tv';
+	tmdbId: number;
 };
 
 export type PackedZalipReleaseEvent = {
@@ -177,6 +184,7 @@ export class ZalipCatalogService {
 		});
 		return {
 			...this.packWork(work),
+			galleryPaths: work.galleryPaths,
 			seasons: seasons.map(season => this.packSeason(season)),
 		};
 	}
@@ -343,6 +351,7 @@ export class ZalipCatalogService {
 			tmdbId: null,
 			posterPath: null,
 			backdropPath: null,
+			galleryPaths: [],
 			trailerYoutubeKey: null,
 		}));
 	}
@@ -356,6 +365,7 @@ export class ZalipCatalogService {
 		releaseYear: number | null;
 		posterPath: string | null;
 		backdropPath: string | null;
+		galleryPaths: string[];
 		trailerYoutubeKey: string | null;
 		seasons: Array<{
 			seasonNumber: number;
@@ -394,6 +404,7 @@ export class ZalipCatalogService {
 				tmdbId: input.tmdbId,
 				posterPath: input.posterPath,
 				backdropPath: input.backdropPath,
+				galleryPaths: input.galleryPaths,
 				trailerYoutubeKey: input.trailerYoutubeKey,
 			}));
 
@@ -464,6 +475,40 @@ export class ZalipCatalogService {
 			seasonId: season.id,
 			seasonNumber: season.seasonNumber,
 		};
+	}
+
+	/** Source mapping for an editor-triggered artwork refresh. It is never exposed publicly. */
+	public async getTmdbMediaSyncTarget(workId: MiZalipWork['id']): Promise<ZalipTmdbMediaSyncTarget | null> {
+		const work = await this.db.getRepository(MiZalipWork).findOneBy({ id: workId });
+		if (work?.tmdbMediaType == null || work.tmdbId == null) return null;
+
+		return {
+			workId: work.id,
+			tmdbMediaType: work.tmdbMediaType,
+			tmdbId: work.tmdbId,
+		};
+	}
+
+	/** Refreshes only provider-owned visual media, leaving editor-written metadata untouched. */
+	public async updateTmdbMedia(
+		workId: MiZalipWork['id'],
+		input: {
+			posterPath: string | null;
+			backdropPath: string | null;
+			galleryPaths: string[];
+			trailerYoutubeKey: string | null;
+		},
+	): Promise<MiZalipWork | null> {
+		const repository = this.db.getRepository(MiZalipWork);
+		const work = await repository.findOneBy({ id: workId });
+		if (work == null) return null;
+
+		work.posterPath = input.posterPath;
+		work.backdropPath = input.backdropPath;
+		work.galleryPaths = input.galleryPaths;
+		work.trailerYoutubeKey = input.trailerYoutubeKey;
+		work.updatedAt = new Date();
+		return await repository.save(work);
 	}
 
 	/**

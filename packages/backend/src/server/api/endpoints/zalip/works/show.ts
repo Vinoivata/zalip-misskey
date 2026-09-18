@@ -29,6 +29,7 @@ export const meta = {
 			releaseYear: { type: 'integer', nullable: true },
 			posterPath: { type: 'string', nullable: true },
 			backdropPath: { type: 'string', nullable: true },
+			galleryPaths: { type: 'array', items: { type: 'string' } },
 			trailerYoutubeKey: { type: 'string', nullable: true },
 			seasons: {
 				type: 'array',
@@ -48,7 +49,7 @@ export const meta = {
 				},
 			},
 		},
-		required: ['id', 'slug', 'kind', 'title', 'originalTitle', 'description', 'releaseYear', 'posterPath', 'backdropPath', 'trailerYoutubeKey', 'seasons'],
+		required: ['id', 'slug', 'kind', 'title', 'originalTitle', 'description', 'releaseYear', 'posterPath', 'backdropPath', 'galleryPaths', 'trailerYoutubeKey', 'seasons'],
 	},
 
 	errors: {

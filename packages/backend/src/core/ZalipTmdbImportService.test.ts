@@ -69,6 +69,7 @@ describe('ZalipTmdbImportService', () => {
 			releaseYear: 2025,
 			posterPath: '/poster.jpg',
 			backdropPath: '/backdrop.jpg',
+			galleryPaths: [],
 			trailerYoutubeKey: 'russian001',
 			seasons: [],
 		});
@@ -76,7 +77,33 @@ describe('ZalipTmdbImportService', () => {
 		const requestUrl = new URL(httpRequestService.getJson.mock.calls[0][0]);
 		expect(requestUrl.pathname).toBe('/3/movie/11');
 		expect(requestUrl.searchParams.get('language')).toBe('ru-RU');
-		expect(requestUrl.searchParams.get('append_to_response')).toBe('videos');
+		expect(requestUrl.searchParams.get('append_to_response')).toBe('videos,images');
+	});
+
+	it('refreshes only TMDB-provided artwork for an existing title', async () => {
+		process.env.ZALIP_TMDB_API_KEY = 'test-only-key';
+		const httpRequestService = {
+			getJson: vi.fn().mockResolvedValue({
+				id: 11,
+				poster_path: '/poster.jpg',
+				backdrop_path: '/hero.jpg',
+				images: { backdrops: [{ file_path: '/hero.jpg' }, { file_path: '/frame.jpg' }, { file_path: '/frame.jpg' }, { file_path: 'not-a-path' }] },
+				videos: { results: [{ site: 'YouTube', type: 'Trailer', iso_639_1: 'ru', key: 'trailer001' }] },
+			}),
+		};
+		const zalipCatalogService = { updateTmdbMedia: vi.fn().mockResolvedValue({ id: 'test-work' }) };
+		const service = new ZalipTmdbImportService(httpRequestService as never, zalipCatalogService as never);
+
+		await expect(service.refreshMedia({ workId: 'test-work', tmdbMediaType: 'movie', tmdbId: 11 })).resolves.toEqual({ kind: 'updated' });
+		expect(zalipCatalogService.updateTmdbMedia).toHaveBeenCalledWith('test-work', {
+			posterPath: '/poster.jpg',
+			backdropPath: '/hero.jpg',
+			galleryPaths: ['/hero.jpg', '/frame.jpg'],
+			trailerYoutubeKey: 'trailer001',
+		});
+
+		const requestUrl = new URL(httpRequestService.getJson.mock.calls[0][0]);
+		expect(requestUrl.searchParams.get('append_to_response')).toBe('videos,images');
 	});
 
 	it('maps a TMDB 404 to a safe editor-facing result', async () => {

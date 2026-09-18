@@ -54,9 +54,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 									<button v-if="work.publicationState !== 'published'" class="_button" :class="$style.smallButton" :disabled="savingId === work.id" @click="setState(work, 'published')"><i class="ti ti-world"></i> Опубликовать</button>
 									<button v-else class="_button" :class="$style.smallButton" :disabled="savingId === work.id" @click="setState(work, 'archived')"><i class="ti ti-eye-off"></i> Снять</button>
 									<button v-if="work.publicationState === 'published'" class="_button" :class="$style.smallButton" :disabled="savingId === work.id" @click="openDiscussion(work)"><i class="ti ti-messages"></i> Обсуждение</button>
+									<button v-if="work.tmdbMediaType" class="_button" :class="$style.smallButton" :disabled="mediaSyncingId === work.id" @click="syncTmdbMedia(work)"><i class="ti ti-photo"></i> {{ mediaSyncingId === work.id ? 'Обновляем кадры…' : 'Кадры из TMDB' }}</button>
 									<button v-for="season in work.tmdbMediaType === 'tv' ? work.seasons : []" :key="season.id" class="_button" :class="$style.smallButton" :disabled="syncingSeasonKey === seasonKey(work, season.seasonNumber)" @click="syncSeason(work, season.seasonNumber)"><i class="ti ti-list-details"></i> {{ syncingSeasonKey === seasonKey(work, season.seasonNumber) ? 'Загружаем…' : `Серии: ${season.seasonNumber === 0 ? 'спец.' : season.seasonNumber}` }}</button>
 								</div>
 								<p v-if="seasonMessage.workId === work.id" :class="$style.syncMessage">{{ seasonMessage.text }}</p>
+								<p v-if="mediaMessage.workId === work.id" :class="$style.syncMessage">{{ mediaMessage.text }}</p>
 							</article>
 						</div>
 					</section>
@@ -102,6 +104,8 @@ const tmdbSubmitting = ref(false);
 const tmdbMessage = ref('');
 const syncingSeasonKey = ref<string | null>(null);
 const seasonMessage = reactive({ workId: '', text: '' });
+const mediaSyncingId = ref<string | null>(null);
+const mediaMessage = reactive({ workId: '', text: '' });
 const edits = reactive<Record<string, { title: string; originalTitle: string; description: string; releaseYear: string; }>>({});
 const manualSeasons = reactive<Record<string, { seasonNumber: string; title: string; description: string; airDate: string; }>>({});
 const manualEpisodes = reactive<Record<string, { episodeNumber: string; title: string; description: string; airDate: string; runtimeMinutes: string; }>>({});
@@ -317,6 +321,23 @@ async function syncSeason(work: AdminWork, seasonNumber: number): Promise<void> 
 		seasonMessage.text = 'Серии не загрузились: проверьте настройки TMDB и данные тайтла.';
 	} finally {
 		syncingSeasonKey.value = null;
+	}
+}
+
+async function syncTmdbMedia(work: AdminWork): Promise<void> {
+	mediaSyncingId.value = work.id;
+	mediaMessage.workId = '';
+	mediaMessage.text = '';
+	try {
+		await misskeyApiZalip('zalip/admin/works/sync-tmdb-media', { workId: work.id });
+		mediaMessage.workId = work.id;
+		mediaMessage.text = `Кадры и трейлер «${work.title}» обновлены из TMDB.`;
+		await load();
+	} catch (error) {
+		mediaMessage.workId = work.id;
+		mediaMessage.text = tmdbImportErrorMessage(error);
+	} finally {
+		mediaSyncingId.value = null;
 	}
 }
 
