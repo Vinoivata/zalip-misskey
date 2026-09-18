@@ -456,6 +456,8 @@ export * as 'zalip/playback/alloha/show' from './endpoints/zalip/playback/alloha
 export * as 'zalip/releases/list' from './endpoints/zalip/releases/list.js';
 export * as 'zalip/releases/subscribed' from './endpoints/zalip/releases/subscribed.js';
 export * as 'zalip/discussions/show' from './endpoints/zalip/discussions/show.js';
+export * as 'zalip/discussions/ensure' from './endpoints/zalip/discussions/ensure.js';
+export * as 'zalip/episodes/discussions/ensure' from './endpoints/zalip/episodes/discussions/ensure.js';
 export * as 'zalip/library/list' from './endpoints/zalip/library/list.js';
 export * as 'zalip/library/update' from './endpoints/zalip/library/update.js';
 export * as 'zalip/shares/create' from './endpoints/zalip/shares/create.js';
