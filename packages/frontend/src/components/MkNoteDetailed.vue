@@ -153,8 +153,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 					:myReaction="$appearNote.myReaction"
 					:noteId="appearNote.id"
 				/>
-				<button class="_button" :class="$style.noteFooterButton" @click="reply()">
-					<i class="ti ti-arrow-back-up"></i>
+				<button v-tooltip="'Комментарии'" class="_button" :class="$style.noteFooterButton" aria-label="Открыть комментарии" @click="openComments()">
+					<i class="ti ti-message-circle"></i>
 					<p v-if="appearNote.repliesCount > 0" :class="$style.noteFooterButtonCount">{{ number(appearNote.repliesCount) }}</p>
 				</button>
 				<button
@@ -186,16 +186,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</footer>
 		</article>
 		<div :class="$style.tabs">
-			<button class="_button" :class="[$style.tab, { [$style.tabActive]: tab === 'replies' }]" @click="tab = 'replies'"><i class="ti ti-arrow-back-up"></i> {{ i18n.ts.replies }}</button>
+			<button class="_button" :class="[$style.tab, { [$style.tabActive]: tab === 'replies' }]" @click="openComments()"><i class="ti ti-message-circle"></i> Комментарии<span v-if="appearNote.repliesCount > 0" :class="$style.tabCount">{{ number(appearNote.repliesCount) }}</span></button>
 			<button class="_button" :class="[$style.tab, { [$style.tabActive]: tab === 'renotes' }]" @click="tab = 'renotes'"><i class="ti ti-repeat"></i> {{ i18n.ts.renotes }}</button>
 			<button class="_button" :class="[$style.tab, { [$style.tabActive]: tab === 'reactions' }]" @click="tab = 'reactions'"><i class="ti ti-icons"></i> {{ i18n.ts.reactions }}</button>
 		</div>
 		<div>
-			<div v-if="tab === 'replies'">
-				<div v-if="!repliesLoaded" style="padding: 16px">
-					<MkButton style="margin: 0 auto;" primary rounded @click="loadReplies">{{ i18n.ts.loadReplies }}</MkButton>
+			<div v-if="tab === 'replies'" :class="$style.comments">
+				<div :class="$style.commentsHeader">
+					<h2>Комментарии<span v-if="appearNote.repliesCount > 0"> · {{ number(appearNote.repliesCount) }}</span></h2>
+					<button v-tooltip="'Обновить комментарии'" type="button" class="_button" :class="$style.refreshComments" :disabled="repliesPending" aria-label="Обновить комментарии" @click="loadReplies()"><i :class="repliesPending ? 'ti ti-loader-2 ti-spin' : 'ti ti-refresh'"></i></button>
 				</div>
-				<MkNoteSub v-for="note in replies" :key="note.id" :note="note" :class="$style.reply" :detail="true"/>
+				<div v-if="repliesPending" :class="$style.commentsState"><i class="ti ti-loader-2 ti-spin"></i> Загружаем комментарии…</div>
+				<p v-else-if="repliesLoaded && replies.length === 0" :class="$style.commentsState">Пока нет комментариев. Начните обсуждение.</p>
+				<MkNoteSub v-for="note in replies" :key="note.id" :note="note" :class="$style.reply" :detail="true" @reply="replyToComment"/>
+				<ZalipCommentForm :rootNote="appearNote" :replyTo="commentTarget" @posted="commentPosted" @cancelReply="commentTarget = appearNote"/>
 			</div>
 			<div v-else-if="tab === 'renotes'" :class="$style.tab_renotes">
 				<MkPagination :paginator="renotesPaginator" :forceDisableInfiniteScroll="true">
@@ -240,7 +244,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { inject, provide, ref, useTemplateRef, markRaw, computed } from 'vue';
+import { inject, provide, ref, useTemplateRef, markRaw, computed, onMounted } from 'vue';
 import * as Misskey from 'misskey-js';
 import { useNote } from '@/composables/use-note.js';
 import { prefer } from '@/preferences.js';
@@ -268,6 +272,7 @@ import MkPagination from '@/components/MkPagination.vue';
 import MkReactionIcon from '@/components/MkReactionIcon.vue';
 import MkButton from '@/components/MkButton.vue';
 import ZalipShareCard from '@/components/ZalipShareCard.vue';
+import ZalipCommentForm from '@/components/ZalipCommentForm.vue';
 
 const props = withDefaults(defineProps<{
 	note: Misskey.entities.Note;
@@ -352,16 +357,42 @@ const reactionsPaginator = markRaw(new Paginator('notes/reactions', {
 
 const replies = ref<Misskey.entities.Note[]>([]);
 const repliesLoaded = ref(false);
+const repliesPending = ref(false);
+const commentTarget = ref<Misskey.entities.Note>(appearNote);
 
-function loadReplies() {
+async function loadReplies(): Promise<void> {
 	repliesLoaded.value = true;
-	misskeyApi('notes/children', {
-		noteId: appearNote.id,
-		limit: 30,
-	}).then(res => {
+	repliesPending.value = true;
+	try {
+		const res = await misskeyApi('notes/children', {
+			noteId: appearNote.id,
+			limit: 30,
+		});
 		replies.value = res;
-	});
+	} catch {
+		replies.value = [];
+	} finally {
+		repliesPending.value = false;
+	}
 }
+
+function openComments(): void {
+	tab.value = 'replies';
+	void loadReplies();
+}
+
+function replyToComment(target: Misskey.entities.Note): void {
+	commentTarget.value = target;
+}
+
+function commentPosted(): void {
+	commentTarget.value = appearNote;
+	void loadReplies();
+}
+
+onMounted(() => {
+	if (tab.value === 'replies') void loadReplies();
+});
 
 const conversation = ref<Misskey.entities.Note[]>([]);
 const conversationLoaded = ref(false);
@@ -660,6 +691,47 @@ const keymap = {
 	border-bottom: solid 2px var(--MI_THEME-accent);
 }
 
+.tabCount {
+	margin-left: 4px;
+	opacity: 0.7;
+}
+
+.comments {
+	padding-top: 4px;
+}
+
+.commentsHeader {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin: 0;
+	padding: 18px 32px 10px;
+	border-bottom: solid 0.5px var(--MI_THEME-divider);
+}
+
+.commentsHeader h2 {
+	margin: 0;
+	font-size: 1.05em;
+}
+
+.commentsHeader h2 span {
+	font-weight: normal;
+	color: color(from var(--MI_THEME-fg) srgb r g b / 0.62);
+}
+
+.refreshComments {
+	padding: 6px;
+	border-radius: 7px;
+	color: color(from var(--MI_THEME-fg) srgb r g b / 0.7);
+}
+
+.commentsState {
+	margin: 0;
+	padding: 26px 32px;
+	text-align: center;
+	color: color(from var(--MI_THEME-fg) srgb r g b / 0.65);
+}
+
 .tab_renotes {
 	padding: 16px;
 }
@@ -703,6 +775,14 @@ const keymap = {
 	.noteHeaderAvatar {
 		width: 50px;
 		height: 50px;
+	}
+
+	.commentsHeader {
+		padding: 16px 16px 8px;
+	}
+
+	.commentsState {
+		padding: 24px 16px;
 	}
 }
 

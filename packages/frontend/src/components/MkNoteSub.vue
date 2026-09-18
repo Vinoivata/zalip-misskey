@@ -21,11 +21,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<div v-show="note.cw == null || showContent">
 					<MkSubNoteContent :class="$style.text" :note="note"/>
 				</div>
+				<button v-if="detail" type="button" class="_button" :class="$style.replyButton" @click="replyToComment"><i class="ti ti-message-circle"></i> Ответить</button>
 			</div>
 		</div>
 	</div>
 	<template v-if="depth < 5">
-		<MkNoteSub v-for="reply in replies" :key="reply.id" :note="reply" :class="$style.reply" :detail="true" :depth="depth + 1"/>
+		<MkNoteSub v-for="reply in replies" :key="reply.id" :note="reply" :class="$style.reply" :detail="true" :depth="depth + 1" @reply="emit('reply', $event)"/>
 	</template>
 	<div v-else :class="$style.more">
 		<MkA class="_link" :to="notePage(note)">{{ i18n.ts.continueThread }} <i class="ti ti-chevron-double-right"></i></MkA>
@@ -65,10 +66,18 @@ const props = withDefaults(defineProps<{
 	depth: 1,
 });
 
+const emit = defineEmits<{
+	(ev: 'reply', note: Misskey.entities.Note): void;
+}>();
+
 const muted = ref(props.note && $i ? checkWordMute(props.note, $i, $i.mutedWords) : false);
 
 const showContent = ref(false);
 const replies = ref<Misskey.entities.Note[]>([]);
+
+function replyToComment(): void {
+	if (props.note != null) emit('reply', props.note);
+}
 
 if (props.detail && props.note) {
 	misskeyApi('notes/children', {
@@ -135,6 +144,20 @@ if (props.detail && props.note) {
 .text {
 	margin: 0;
 	padding: 0;
+}
+
+.replyButton {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin: 7px 0 0;
+	padding: 3px 0;
+	font-size: 0.84em;
+	color: color(from var(--MI_THEME-fg) srgb r g b / 0.65);
+}
+
+.replyButton:hover {
+	color: var(--MI_THEME-accent);
 }
 
 .reply, .more {

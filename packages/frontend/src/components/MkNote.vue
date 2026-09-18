@@ -128,8 +128,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</template>
 			</MkReactionsViewer>
 			<footer :class="$style.footer">
-				<button :class="$style.footerButton" class="_button" @click="reply()">
-					<i class="ti ti-arrow-back-up"></i>
+				<button v-tooltip="'Комментарии'" :class="$style.footerButton" class="_button" aria-label="Открыть комментарии" @click="openComments()">
+					<i class="ti ti-message-circle"></i>
 					<p v-if="appearNote.repliesCount > 0" :class="$style.footerButtonCount">{{ number(appearNote.repliesCount) }}</p>
 				</button>
 				<button
@@ -209,6 +209,7 @@ import { isEnabledUrlPreview } from '@/utility/url-preview.js';
 import { focusPrev, focusNext } from '@/utility/focus.js';
 import number from '@/filters/number.js';
 import { DI } from '@/di.js';
+import { useRouter } from '@/router.js';
 import type { Keymap } from '@/utility/hotkey.js';
 
 // コンポーネント外部の依存関係
@@ -236,6 +237,8 @@ const emit = defineEmits<{
 	(ev: 'reaction', emoji: string): void;
 	(ev: 'removeReaction', emoji: string): void;
 }>();
+
+const router = useRouter();
 
 provide(DI.mock, props.mock);
 
@@ -325,6 +328,12 @@ function emitUpdReaction(emoji: string, delta: number) {
 	} else if (delta > 0) {
 		emit('reaction', emoji);
 	}
+}
+
+function openComments(): void {
+	router.push('/notes/:noteId/:initialTab?', {
+		params: { noteId: appearNote.id, initialTab: 'replies' },
+	});
 }
 
 // キーボードショートカットマップ
