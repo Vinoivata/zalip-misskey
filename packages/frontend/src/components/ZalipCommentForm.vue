@@ -87,12 +87,12 @@ async function submit(): Promise<void> {
 	posting.value = true;
 	error.value = null;
 	try {
-		const visibility = props.rootNote.visibility === 'specified' ? 'home' : props.rootNote.visibility;
+		const visibility = props.rootNote.visibility;
 		const result = await misskeyApi('notes/create', {
 			text: text.value.trim(),
 			replyId: props.replyTo.id,
 			visibility,
-			localOnly: visibility === 'specified' ? false : props.rootNote.localOnly,
+			localOnly: props.rootNote.localOnly,
 		});
 		text.value = '';
 		globalEvents.emit('notePosted', result.createdNote);

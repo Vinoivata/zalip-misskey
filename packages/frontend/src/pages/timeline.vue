@@ -27,7 +27,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, watch, provide, useTemplateRef, ref, onMounted, onActivated } from 'vue';
+import { computed, provide, useTemplateRef, ref, onMounted, onActivated } from 'vue';
 import type { Tab } from '@/components/global/MkPageHeader.tabs.vue';
 import type { MenuItem } from '@/types/menu.js';
 import type { BasicTimelineType } from '@/timelines.js';
@@ -43,7 +43,7 @@ import { antennasCache, userListsCache, favoritedChannelsCache } from '@/cache.j
 import { deviceKind } from '@/utility/device-kind.js';
 import { deepMerge } from '@/utility/merge.js';
 import { miLocalStorage } from '@/local-storage.js';
-import { availableBasicTimelines, hasWithReplies, isAvailableBasicTimeline, isBasicTimeline, basicTimelineIconClass } from '@/timelines.js';
+import { availableBasicTimelines, isAvailableBasicTimeline, isBasicTimeline, basicTimelineIconClass } from '@/timelines.js';
 import { prefer } from '@/preferences.js';
 
 const tlComponent = useTemplateRef('tlComponent');
@@ -60,43 +60,12 @@ const withRenotes = computed<boolean>({
 	set: (x) => saveTlFilter('withRenotes', x),
 });
 
-// computed内での無限ループを防ぐためのフラグ
-const localSocialTLFilterSwitchStore = ref<'withReplies' | 'onlyFiles' | false>(
-	store.r.tl.value.filter.withReplies ? 'withReplies' :
-	store.r.tl.value.filter.onlyFiles ? 'onlyFiles' :
-	false,
-);
-
-const withReplies = computed<boolean>({
-	get: () => {
-		if (!$i) return false;
-		if (['local', 'social'].includes(src.value) && localSocialTLFilterSwitchStore.value === 'onlyFiles') {
-			return false;
-		} else {
-			return store.r.tl.value.filter.withReplies;
-		}
-	},
-	set: (x) => saveTlFilter('withReplies', x),
-});
+// Zalip keeps replies in their discussion threads. A renote is still a normal feed entry,
+// but an ordinary reply must never turn the main timeline into a comments list.
+const withReplies = false;
 const onlyFiles = computed<boolean>({
-	get: () => {
-		if (['local', 'social'].includes(src.value) && localSocialTLFilterSwitchStore.value === 'withReplies') {
-			return false;
-		} else {
-			return store.r.tl.value.filter.onlyFiles;
-		}
-	},
+	get: () => store.r.tl.value.filter.onlyFiles,
 	set: (x) => saveTlFilter('onlyFiles', x),
-});
-
-watch([withReplies, onlyFiles], ([withRepliesTo, onlyFilesTo]) => {
-	if (withRepliesTo) {
-		localSocialTLFilterSwitchStore.value = 'withReplies';
-	} else if (onlyFilesTo) {
-		localSocialTLFilterSwitchStore.value = 'onlyFiles';
-	} else {
-		localSocialTLFilterSwitchStore.value = false;
-	}
 });
 
 const withSensitive = computed<boolean>({
@@ -218,16 +187,6 @@ const headerActions = computed<PageHeaderItem[]>(() => {
 				ref: withRenotes,
 			});
 
-			if (isBasicTimeline(src.value) && hasWithReplies(src.value)) {
-				menuItems.push({
-					type: 'switch',
-					icon: 'ti ti-messages',
-					text: i18n.ts.showRepliesToOthersInTimeline,
-					ref: withReplies,
-					disabled: onlyFiles,
-				});
-			}
-
 			menuItems.push({
 				type: 'switch',
 				icon: 'ti ti-eye-exclamation',
@@ -238,7 +197,7 @@ const headerActions = computed<PageHeaderItem[]>(() => {
 				icon: 'ti ti-photo',
 				text: i18n.ts.fileAttachedOnly,
 				ref: onlyFiles,
-				disabled: isBasicTimeline(src.value) && hasWithReplies(src.value) ? withReplies : false,
+				disabled: false,
 			}, {
 				type: 'divider',
 			}, {

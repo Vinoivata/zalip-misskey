@@ -464,7 +464,7 @@ const keymap = {
 .tip {
 	display: flex;
 	align-items: center;
-	padding: 16px 32px 8px 32px;
+	padding: 14px 26px 6px;
 	line-height: 24px;
 	font-size: 90%;
 	white-space: pre;
@@ -484,7 +484,7 @@ const keymap = {
 	position: relative;
 	display: flex;
 	align-items: center;
-	padding: 16px 32px 8px 32px;
+	padding: 14px 26px 6px;
 	line-height: 28px;
 	white-space: pre;
 	color: var(--MI_THEME-renote);
@@ -564,7 +564,7 @@ const keymap = {
 .article {
 	position: relative;
 	display: flex;
-	padding: 28px 32px;
+	padding: 22px 26px;
 }
 
 .colorBar {
@@ -580,13 +580,14 @@ const keymap = {
 .avatar {
 	flex-shrink: 0;
 	display: block !important;
-	margin: 0 14px 0 0;
-	width: 58px;
-	height: 58px;
+	margin: 0 12px 0 0;
+	width: 48px;
+	height: 48px;
+	border-radius: 50%;
 
 	&.useSticky {
 		position: sticky !important;
-		top: calc(22px + var(--MI-stickyTop, 0px));
+		top: calc(18px + var(--MI-stickyTop, 0px));
 		left: 0;
 	}
 }
@@ -700,7 +701,7 @@ const keymap = {
 	color: color-mix(in srgb, var(--MI_THEME-panel), var(--MI_THEME-fg) 70%); // opacityなど不透明度で表現するとレンダリングパフォーマンスに影響するので通常の色の混合で代用
 
 	&:not(:last-child) {
-		margin-right: 28px;
+		margin-right: 24px;
 	}
 
 	&:hover {
@@ -719,16 +720,16 @@ const keymap = {
 	}
 
 	.renote {
-		padding: 12px 26px 0 26px;
+		padding: 12px 22px 0;
 	}
 
 	.article {
-		padding: 24px 26px;
+		padding: 20px 22px;
 	}
 
 	.avatar {
-		width: 50px;
-		height: 50px;
+		width: 46px;
+		height: 46px;
 	}
 }
 
@@ -738,11 +739,11 @@ const keymap = {
 	}
 
 	.renote {
-		padding: 10px 22px 0 22px;
+		padding: 10px 18px 0;
 	}
 
 	.article {
-		padding: 20px 22px;
+		padding: 18px;
 	}
 
 	.footer {
@@ -772,8 +773,8 @@ const keymap = {
 @container (max-width: 450px) {
 	.avatar {
 		margin: 0 10px 0 0;
-		width: 46px;
-		height: 46px;
+		width: 42px;
+		height: 42px;
 
 		&.useSticky {
 			top: calc(14px + var(--MI-stickyTop, 0px));

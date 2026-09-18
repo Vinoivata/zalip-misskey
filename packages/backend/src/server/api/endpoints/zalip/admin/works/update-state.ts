@@ -56,7 +56,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 	) {
 		super(meta, paramDef, async (ps, me) => {
 			if (!await this.roleService.isAdministrator(me)) throw new ApiError(meta.errors.forbidden);
-			const work = await this.zalipCatalogService.setPublicationState(ps.workId, ps.publicationState);
+			const work = await this.zalipCatalogService.setPublicationState(me, ps.workId, ps.publicationState);
 			if (work == null) throw new ApiError(meta.errors.noSuchWork);
 			return {
 				id: work.id,

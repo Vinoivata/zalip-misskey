@@ -868,6 +868,7 @@ export class ZalipCatalogService {
 	}
 
 	public async setPublicationState(
+		me: MiLocalUser,
 		workId: MiZalipWork['id'],
 		publicationState: ZalipPublicationState,
 	): Promise<PackedZalipAdminWork | null> {
@@ -882,6 +883,12 @@ export class ZalipCatalogService {
 			work.publishedAt = now;
 		}
 		await repository.save(work);
+
+		// Every published title owns one native Misskey discussion branch. "home"
+		// visibility lets the title page show it without turning it into a feed post.
+		if (publicationState === 'published') {
+			await this.createDiscussion(me, work.id, null);
+		}
 
 		return this.packAdminWork(work);
 	}
@@ -1050,7 +1057,7 @@ export class ZalipCatalogService {
 			fileIds: [],
 			text: text ?? `Обсуждение: ${work.title}`,
 			cw: null,
-			visibility: 'public',
+			visibility: 'home',
 			visibleUserIds: [],
 			channelId: null,
 			localOnly: true,
@@ -1092,7 +1099,7 @@ export class ZalipCatalogService {
 			fileIds: [],
 			text: text ?? `Обсуждение: ${episode.season.work.title} — серия ${episode.episodeNumber}`,
 			cw: null,
-			visibility: 'public',
+			visibility: 'home',
 			visibleUserIds: [],
 			channelId: null,
 			localOnly: true,

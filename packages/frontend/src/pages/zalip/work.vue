@@ -94,9 +94,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<button v-if="$i" type="button" class="_button" :class="[$style.subscription, { [$style.subscribed]: releaseSubscribed }]" :aria-pressed="releaseSubscribed" :disabled="saving" @click="toggleReleaseSubscription"><i :class="releaseSubscribed ? 'ti ti-bell-filled' : 'ti ti-bell'"></i> {{ releaseSubscribed ? 'Слежу за сериями' : 'Следить за сериями' }}</button>
 						<button v-if="$i" type="button" class="_button" :class="$style.feed" @click="shareWork"><i class="ti ti-send"></i> Поделиться</button>
 						<MkA to="/timeline" :class="$style.feed"><i class="ti ti-news"></i> Лента</MkA>
-						<MkA v-if="discussionNoteId" :to="`/notes/${discussionNoteId}/replies`" :class="$style.feed"><i class="ti ti-messages"></i> Обсуждение</MkA>
 					</div>
-					<p :class="$style.note"><template v-if="discussionNoteId">Комментарии, реакции и ответы открываются как обычная ветка Misskey.</template><template v-else>Обсуждение для этого тайтла появится здесь как обычная ветка Misskey — без второго аккаунта и отдельной системы комментариев.</template></p>
+					<ZalipDiscussionPanel v-if="discussionNoteId" :note-id="discussionNoteId" :heading="`Комментарии к «${work.title}»`"/>
+					<section v-else :class="$style.discussionPending">
+						<p><i class="ti ti-messages"></i> У этого тайтла ещё нет ветки комментариев.</p>
+						<button v-if="iAmAdmin" type="button" class="_button" :class="$style.openDiscussion" :disabled="discussionCreating" @click="openDiscussion"><i :class="discussionCreating ? 'ti ti-loader-2 ti-spin' : 'ti ti-message-plus'"></i> {{ discussionCreating ? 'Открываем…' : 'Открыть комментарии' }}</button>
+						<p v-else>После публикации тайтла обсуждение будет доступно здесь — с той же учётной записью Zalip.</p>
+						<p v-if="discussionError" :class="$style.discussionError">{{ discussionError }}</p>
+					</section>
 				</div>
 			</article>
 		</div>
@@ -110,6 +115,7 @@ import { $i, iAmAdmin } from '@/i.js';
 import { definePage } from '@/page.js';
 import { useRouter } from '@/router.js';
 import * as os from '@/os.js';
+import ZalipDiscussionPanel from '@/components/ZalipDiscussionPanel.vue';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 
 type ZalipWork = {
@@ -190,6 +196,8 @@ const allohaPlayback = ref<AllohaPlayback | null>(null);
 const allohaPlayerOpen = ref(false);
 const selectedAllohaTranslationId = ref<number | null>(null);
 const discussionNoteId = ref<string | null>(null);
+const discussionCreating = ref(false);
+const discussionError = ref<string | null>(null);
 const selectedSeasonNumber = ref<number | null>(null);
 const episodes = ref<ZalipEpisode[]>([]);
 const episodesPending = ref(false);
@@ -268,6 +276,8 @@ async function load(): Promise<void> {
 	allohaPlayback.value = null;
 	allohaPlayerOpen.value = false;
 	selectedAllohaTranslationId.value = null;
+	discussionCreating.value = false;
+	discussionError.value = null;
 	selectedSeasonNumber.value = null;
 	episodes.value = [];
 	episodeRequestId.value++;
@@ -339,6 +349,20 @@ async function openEpisodeDiscussion(episode: ZalipEpisode): Promise<void> {
 		episodeDiscussionError.value = 'Не удалось открыть обсуждение серии.';
 	} finally {
 		discussionCreatingEpisodeId.value = null;
+	}
+}
+
+async function openDiscussion(): Promise<void> {
+	if (!iAmAdmin || work.value == null) return;
+	discussionCreating.value = true;
+	discussionError.value = null;
+	try {
+		const discussion = await misskeyApiZalip<{ noteId: string }>('zalip/admin/discussions/create', { workId: work.value.id });
+		discussionNoteId.value = discussion.noteId;
+	} catch {
+		discussionError.value = 'Не удалось открыть комментарии для этого тайтла.';
+	} finally {
+		discussionCreating.value = false;
 	}
 }
 
@@ -913,14 +937,37 @@ definePage(() => ({
 	color: var(--MI_THEME-fg);
 }
 
-.note {
-	margin: 28px 0 0;
-	padding: 14px;
-	border-left: 3px solid var(--MI_THEME-accent);
-	background: var(--MI_THEME-panel);
-	border-radius: 0 10px 10px 0;
-	font-size: 0.88rem;
+.discussionPending {
+	margin-top: 28px;
+	padding: 18px;
+	border: 1px dashed var(--MI_THEME-divider);
+	border-radius: 14px;
 	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.86rem;
+}
+
+.discussionPending p {
+	margin: 0;
+}
+
+.discussionPending p + p {
+	margin-top: 10px;
+}
+
+.openDiscussion {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	margin-top: 12px;
+	padding: 8px 11px;
+	border-radius: 9px;
+	background: var(--MI_THEME-accent);
+	color: var(--MI_THEME-fgOnAccent);
+	font-weight: 700;
+}
+
+.discussionError {
+	color: var(--MI_THEME-error);
 }
 
 @media (max-width: 600px) {
