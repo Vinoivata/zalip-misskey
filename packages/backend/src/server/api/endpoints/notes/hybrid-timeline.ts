@@ -157,7 +157,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				me,
 				redisTimelines: timelineConfig,
 				useDbFallback: this.serverSettings.enableFanoutTimelineDbFallback,
-				alwaysIncludeMyNotes: true,
+				// Do not bypass the reply filter for the author's own discussion comments.
+				alwaysIncludeMyNotes: false,
 				excludePureRenotes: !ps.withRenotes,
 				noteFilter: note => {
 					if (!ps.withReplies && note.replyId != null) return false;

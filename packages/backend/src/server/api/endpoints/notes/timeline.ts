@@ -110,7 +110,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				me,
 				useDbFallback: this.serverSettings.enableFanoutTimelineDbFallback,
 				redisTimelines: ps.withFiles ? [`homeTimelineWithFiles:${me.id}`] : [`homeTimeline:${me.id}`],
-				alwaysIncludeMyNotes: true,
+				// Discussions belong in a note's thread, including when the viewer is its author.
+				alwaysIncludeMyNotes: false,
 				excludePureRenotes: !ps.withRenotes,
 				noteFilter: note => {
 					if (note.replyId != null) return false;

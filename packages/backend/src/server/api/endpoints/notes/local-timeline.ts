@@ -120,7 +120,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					: ps.withReplies ? ['localTimeline', 'localTimelineWithReplies']
 					: me ? ['localTimeline', `localTimelineWithReplyTo:${me.id}`]
 					: ['localTimeline'],
-				alwaysIncludeMyNotes: true,
+				// A local timeline is a feed, not a view of the author's own comment history.
+				alwaysIncludeMyNotes: false,
 				excludePureRenotes: !ps.withRenotes,
 				noteFilter: note => ps.withReplies || note.replyId == null,
 				dbFallback: async (untilId, sinceId, limit) => await this.getFromDb({
