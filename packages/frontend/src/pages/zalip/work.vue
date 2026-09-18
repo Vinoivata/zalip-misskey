@@ -16,9 +16,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<i v-else class="ti ti-movie"></i>
 					</div>
 					<div :class="$style.sidebarActions">
-						<button type="button" class="_button" :class="$style.watchButton" @click="openPlayer"><i class="ti ti-player-play-filled"></i> {{ i18n.ts.zalip.watchTitle }}</button>
-						<button v-if="$i" type="button" class="_button" :class="$style.sideButton" :disabled="saving" @click="addToLibrary"><i class="ti ti-bookmark"></i> {{ saved ? i18n.ts.zalip.inLibrary : i18n.ts.zalip.addToList }}</button>
-						<button v-if="$i" type="button" class="_button" :class="$style.sideButton" @click="shareWork"><i class="ti ti-share-3"></i> {{ i18n.ts.zalip.shareTitle }}</button>
+						<button type="button" class="_button" :class="$style.watchButton" @click="openPlayer"><i class="ti ti-player-play-filled"></i><span>{{ i18n.ts.zalip.watchTitle }}</span></button>
+						<button v-if="$i" type="button" class="_button" :class="$style.sideButton" :disabled="saving" @click="addToLibrary"><i class="ti ti-bookmark"></i><span>{{ saved ? i18n.ts.zalip.inLibrary : i18n.ts.zalip.addToList }}</span></button>
+						<button v-if="$i" type="button" class="_button" :class="$style.sideButton" @click="shareWork"><i class="ti ti-share-3"></i><span>{{ i18n.ts.zalip.shareTitle }}</span></button>
 						<p :class="$style.sidebarMeta"><i class="ti ti-device-tv"></i> {{ kindLabel(work.kind) }}<span v-if="work.releaseYear"> · {{ work.releaseYear }}</span></p>
 					</div>
 				</aside>
@@ -38,11 +38,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 						</div>
 					<section ref="playerSection" :class="$style.player" aria-label="Просмотр">
 						<div :class="$style.playerTabs">
-							<button type="button" class="_button" :class="$style.playerTab" @click="focusAbout"><i class="ti ti-info-circle"></i> О тайтле</button>
-							<span :class="$style.playerTabActive"><i class="ti ti-device-tv"></i> Смотреть</span>
-							<button v-if="work.seasons.length" type="button" class="_button" :class="$style.playerTab" @click="focusEpisodes"><i class="ti ti-list-details"></i> {{ i18n.ts.zalip.episodes }}</button>
-							<button type="button" class="_button" :class="$style.playerTab" @click="focusDiscussion"><i class="ti ti-messages"></i> {{ discussionScope === 'episode' && selectedEpisode ? i18n.ts.zalip.episodeComments : i18n.ts.zalip.comments }}</button>
-							<button v-if="$i" type="button" class="_button" :class="$style.playerShare" @click="shareWork"><i class="ti ti-share-3"></i><span>Поделиться</span></button>
+							<button type="button" class="_button" :class="$style.playerTab" :aria-label="i18n.ts.zalip.aboutTitle" :title="i18n.ts.zalip.aboutTitle" @click="focusAbout"><i class="ti ti-info-circle"></i><span>{{ i18n.ts.zalip.aboutTitle }}</span></button>
+							<span :class="$style.playerTabActive"><i class="ti ti-device-tv"></i><span>{{ i18n.ts.zalip.watchTitle }}</span></span>
+							<button v-if="work.seasons.length" type="button" class="_button" :class="$style.playerTab" :aria-label="i18n.ts.zalip.episodes" :title="i18n.ts.zalip.episodes" @click="focusEpisodes"><i class="ti ti-list-details"></i><span>{{ i18n.ts.zalip.episodes }}</span></button>
+							<button type="button" class="_button" :class="$style.playerTab" :aria-label="discussionScope === 'episode' && selectedEpisode ? i18n.ts.zalip.episodeComments : i18n.ts.zalip.comments" :title="discussionScope === 'episode' && selectedEpisode ? i18n.ts.zalip.episodeComments : i18n.ts.zalip.comments" @click="focusDiscussion"><i class="ti ti-messages"></i><span>{{ discussionScope === 'episode' && selectedEpisode ? i18n.ts.zalip.episodeComments : i18n.ts.zalip.comments }}</span></button>
+							<button v-if="$i" type="button" class="_button" :class="$style.playerShare" :aria-label="i18n.ts.zalip.shareTitle" :title="i18n.ts.zalip.shareTitle" @click="shareWork"><i class="ti ti-share-3"></i><span>{{ i18n.ts.zalip.shareTitle }}</span></button>
 						</div>
 						<template v-if="$i">
 							<p v-if="allohaPlayback == null" :class="$style.playerState"><i class="ti ti-loader-2 ti-spin"></i> Проверяем доступность в Alloha…</p>
@@ -1481,36 +1481,71 @@ definePage(() => ({
 
 @media (max-width: 600px) {
 	.page {
-		padding-top: 12px;
+		padding: 12px var(--MI-margin) 28px;
 	}
 
 	.work {
-		grid-template-columns: 120px minmax(0, 1fr);
+		display: flex;
+		flex-direction: column;
 		gap: 18px;
 	}
 
+	.sidebar {
+		display: grid;
+		grid-template-columns: minmax(102px, 116px) minmax(0, 1fr);
+		align-items: start;
+		gap: 0 14px;
+	}
+
+	.poster {
+		border-radius: calc(var(--MI-radius) + 2px);
+	}
+
 	.sidebarActions {
-		gap: 6px;
-		margin-top: 8px;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 8px;
+		margin: 0;
 	}
 
 	.watchButton, .sideButton {
-		min-height: 36px;
-		padding: 7px 5px;
-		font-size: 0.72rem;
+		min-height: 44px;
+		padding: 9px 10px;
+		font-size: 0.78rem;
 	}
 
-	.sideButton i, .watchButton i {
-		display: none;
-	}
-
-	.info {
+	.watchButton {
 		grid-column: 1 / -1;
 	}
 
+	.sidebarMeta {
+		grid-column: 1 / -1;
+		justify-content: flex-start;
+		margin: 10px 0 0;
+		font-size: 0.78rem;
+		text-align: left;
+	}
+
+	.info {
+		min-width: 0;
+	}
+
 	.backdrop {
-		margin-inline: calc(var(--MI-margin) * -1);
-		border-radius: 0;
+		margin-bottom: 14px;
+		aspect-ratio: 16 / 8;
+		border-radius: var(--MI-radius);
+	}
+
+	.kind {
+		margin-top: 0;
+	}
+
+	.info h1 {
+		font-size: clamp(1.7rem, 9vw, 2.2rem);
+	}
+
+	.description {
+		margin-top: 16px;
+		line-height: 1.58;
 	}
 
 	.libraryControl {
@@ -1534,11 +1569,15 @@ definePage(() => ({
 	}
 
 	.playerTabs {
-		padding-inline: 10px;
+		min-height: 46px;
+		gap: 2px;
+		padding-inline: 8px;
 	}
 
 	.playerTab, .playerTabActive {
-		font-size: 0.76rem;
+		min-height: 44px;
+		padding: 0 7px;
+		font-size: 0.72rem;
 	}
 
 	.playerShare span {
@@ -1547,6 +1586,13 @@ definePage(() => ({
 
 	.playerToolbar {
 		grid-template-columns: auto minmax(0, 1fr) auto;
+		gap: 10px;
+		padding: 10px;
+	}
+
+	.episodeNav {
+		width: 40px;
+		height: 40px;
 	}
 
 	.translation, .providerLabel {
@@ -1560,7 +1606,7 @@ definePage(() => ({
 	}
 
 	.episodeTile {
-		flex-basis: 112px;
+		flex-basis: 118px;
 	}
 
 	.episodeGuide {
@@ -1579,6 +1625,50 @@ definePage(() => ({
 
 	.discussionScope {
 		margin-top: 20px;
+	}
+}
+
+@media (max-width: 420px) {
+	.sidebar {
+		grid-template-columns: 96px minmax(0, 1fr);
+		gap: 0 12px;
+	}
+
+	.watchButton, .sideButton {
+		padding-inline: 7px;
+	}
+
+	.sideButton span {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.playerTab, .playerTabActive {
+		justify-content: center;
+		min-width: 42px;
+		padding-inline: 9px;
+	}
+
+	.playerTab > span, .playerTabActive > span, .playerShare > span {
+		display: none;
+	}
+
+	.playerShare {
+		display: grid;
+		place-items: center;
+		width: 40px;
+		height: 40px;
+		padding: 0;
+	}
+
+	.playerEpisodes {
+		padding: 12px 10px;
+	}
+
+	.seasonPill {
+		min-width: 36px;
+		min-height: 36px;
 	}
 }
 </style>

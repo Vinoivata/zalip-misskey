@@ -5,31 +5,31 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div ref="rootEl" :class="$style.root">
-	<MkA :class="$style.item" :activeClass="$style.active" to="/" exact>
+	<MkA :class="$style.item" :activeClass="$style.active" :aria-label="navbarItemDef.zalip.title" :title="navbarItemDef.zalip.title" to="/" exact>
 		<div :class="$style.itemInner">
 			<i :class="$style.itemIcon" class="ti ti-movie"></i><span :class="$style.itemText">{{ navbarItemDef.zalip.title }}</span>
 		</div>
 	</MkA>
 
-	<MkA :class="$style.item" :activeClass="$style.active" to="/timeline">
+	<MkA :class="$style.item" :activeClass="$style.active" :aria-label="navbarItemDef.feed.title" :title="navbarItemDef.feed.title" to="/timeline">
 		<div :class="$style.itemInner">
 			<i :class="[$style.itemIcon, navbarItemDef.feed.icon]"></i><span :class="$style.itemText">{{ navbarItemDef.feed.title }}</span>
 		</div>
 	</MkA>
 
-	<MkA :class="$style.item" :activeClass="$style.active" to="/library">
+	<MkA :class="$style.item" :activeClass="$style.active" :aria-label="navbarItemDef.library.title" :title="navbarItemDef.library.title" to="/library">
 		<div :class="$style.itemInner">
 			<i :class="[$style.itemIcon, navbarItemDef.library.icon]"></i><span :class="$style.itemText">{{ navbarItemDef.library.title }}</span>
 		</div>
 	</MkA>
 
-	<MkA :class="$style.item" :activeClass="$style.active" to="/updates">
+	<MkA :class="$style.item" :activeClass="$style.active" :aria-label="navbarItemDef.updates.title" :title="navbarItemDef.updates.title" to="/updates">
 		<div :class="$style.itemInner">
 			<i :class="[$style.itemIcon, navbarItemDef.updates.icon]"></i><span :class="$style.itemText">{{ navbarItemDef.updates.title }}</span>
 		</div>
 	</MkA>
 
-	<MkA :class="$style.item" :activeClass="$style.active" to="/my/notifications">
+	<MkA :class="$style.item" :activeClass="$style.active" :aria-label="navbarItemDef.notifications.title" :title="navbarItemDef.notifications.title" to="/my/notifications">
 		<div :class="$style.itemInner">
 			<i :class="[$style.itemIcon, navbarItemDef.notifications.icon]"></i><span :class="$style.itemText">{{ navbarItemDef.notifications.title }}</span>
 			<span v-if="$i?.hasUnreadNotification" :class="$style.itemIndicator" class="_blink">
@@ -38,12 +38,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</MkA>
 
-	<MkA v-if="$i" :class="$style.item" :activeClass="$style.active" :to="`/@${$i.username}`">
+	<MkA v-if="$i" :class="$style.item" :activeClass="$style.active" :aria-label="navbarItemDef.profile.title" :title="navbarItemDef.profile.title" :to="`/@${$i.username}`">
 		<div :class="$style.itemInner">
 			<i :class="[$style.itemIcon, navbarItemDef.profile.icon]"></i><span :class="$style.itemText">{{ navbarItemDef.profile.title }}</span>
 		</div>
 	</MkA>
-	<button v-else :class="$style.item" class="_button" @click="signIn">
+	<button v-else :class="$style.item" class="_button" :aria-label="i18n.ts.login" :title="i18n.ts.login" @click="signIn">
 		<div :class="$style.itemInner">
 			<i :class="$style.itemIcon" class="ti ti-login"></i><span :class="$style.itemText">{{ i18n.ts.login }}</span>
 		</div>
@@ -94,8 +94,12 @@ watch(rootEl, () => {
 }
 
 .item {
-	display: block;
-	padding: 8px 0 9px;
+	display: flex;
+	align-items: stretch;
+	justify-content: center;
+	min-width: 0;
+	min-height: 56px;
+	padding: 6px 0;
 	color: inherit;
 	text-decoration: none;
 
@@ -120,8 +124,8 @@ watch(rootEl, () => {
 	position: relative;
 	display: grid;
 	justify-items: center;
-	gap: 3px;
-	padding: 4px 0;
+	gap: 4px;
+	padding: 5px 0;
 	width: 100%;
 	max-width: 42px;
 	margin: auto;
@@ -137,13 +141,18 @@ watch(rootEl, () => {
 }
 
 .itemIcon {
-	font-size: 15px;
+	font-size: 17px;
 }
 
 .itemText {
+	max-width: 100%;
+	overflow: hidden;
 	font-size: 0.6rem;
 	font-weight: 650;
 	line-height: 1.1;
+	text-align: center;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .itemIndicator {
@@ -158,6 +167,25 @@ watch(rootEl, () => {
 	&:has(.itemIndicateValueIcon) {
 		animation: none;
 		font-size: 8px;
+	}
+}
+
+@media (max-width: 400px) {
+	.root {
+		padding-inline: 2px;
+	}
+
+	.item {
+		min-height: 54px;
+	}
+
+	.itemInner {
+		max-width: 44px;
+		padding: 7px 0;
+	}
+
+	.itemText {
+		display: none;
 	}
 }
 </style>
