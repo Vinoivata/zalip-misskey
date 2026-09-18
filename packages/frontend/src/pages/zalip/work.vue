@@ -22,12 +22,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 							</div>
 							<div :class="$style.sidebarActions">
 								<button type="button" class="_button" :class="$style.watchButton" @click="openPlayer"><i class="ti ti-player-play-filled"></i><span>{{ i18n.ts.zalip.watchTitle }}</span></button>
-								<button v-if="$i" type="button" class="_button" :class="$style.sideButton" :disabled="saving" @click="addToLibrary"><i class="ti ti-bookmark"></i><span>{{ saved ? i18n.ts.zalip.inLibrary : i18n.ts.zalip.addToList }}</span></button>
-								<button v-if="$i" type="button" class="_button" :class="$style.sideButton" @click="shareWork"><i class="ti ti-share-3"></i><span>{{ i18n.ts.zalip.shareTitle }}</span></button>
+								<button type="button" class="_button" :class="$style.sideButton" :disabled="saving" @click="addToLibrary"><i class="ti ti-bookmark"></i><span>{{ saved ? i18n.ts.zalip.inList : i18n.ts.zalip.addToList }}</span></button>
+								<button type="button" class="_button" :class="$style.sideButton" @click="focusDiscussion"><i class="ti ti-messages"></i><span>{{ i18n.ts.zalip.discussTitle }}</span></button>
 							</div>
 						</aside>
 						<div :class="$style.info">
-							<div ref="aboutSection" :class="$style.titleArea">
+							<div :class="$style.titleArea">
 								<div :class="$style.titleContent">
 									<p :class="$style.kind">{{ kindLabel(work.kind) }}<span v-if="work.releaseYear"> · {{ work.releaseYear }}</span><span v-if="work.runtimeMinutes"> · {{ runtimeLabel(work.runtimeMinutes, work.kind) }}</span></p>
 									<h1>{{ work.title }}</h1>
@@ -43,11 +43,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<div :class="$style.content">
 					<section ref="playerSection" :class="$style.player" aria-label="Просмотр">
 						<div :class="$style.playerTabs">
-							<button type="button" class="_button" :class="$style.playerTab" :aria-label="i18n.ts.zalip.aboutTitle" :title="i18n.ts.zalip.aboutTitle" @click="focusAbout"><i class="ti ti-info-circle"></i><span>{{ i18n.ts.zalip.aboutTitle }}</span></button>
-							<span :class="$style.playerTabActive"><i class="ti ti-device-tv"></i><span>{{ i18n.ts.zalip.watchTitle }}</span></span>
-							<button v-if="work.seasons.length" type="button" class="_button" :class="$style.playerTab" :aria-label="i18n.ts.zalip.episodes" :title="i18n.ts.zalip.episodes" @click="focusEpisodes"><i class="ti ti-list-details"></i><span>{{ i18n.ts.zalip.episodes }}</span></button>
-							<button type="button" class="_button" :class="$style.playerTab" :aria-label="discussionScope === 'episode' && selectedEpisode ? i18n.ts.zalip.episodeComments : i18n.ts.zalip.comments" :title="discussionScope === 'episode' && selectedEpisode ? i18n.ts.zalip.episodeComments : i18n.ts.zalip.comments" @click="focusDiscussion"><i class="ti ti-messages"></i><span>{{ discussionScope === 'episode' && selectedEpisode ? i18n.ts.zalip.episodeComments : i18n.ts.zalip.comments }}</span></button>
-							<button v-if="$i" type="button" class="_button" :class="$style.playerShare" :aria-label="i18n.ts.zalip.shareTitle" :title="i18n.ts.zalip.shareTitle" @click="shareWork"><i class="ti ti-share-3"></i><span>{{ i18n.ts.zalip.shareTitle }}</span></button>
+							<button type="button" class="_button" :class="[$style.playerTab, $style.playerTabActive]" :aria-label="i18n.ts.zalip.playerTab" :title="i18n.ts.zalip.playerTab" @click="openPlayer"><i class="ti ti-device-tv"></i><span>{{ i18n.ts.zalip.playerTab }}</span></button>
+							<button v-if="work.trailerYoutubeKey" type="button" class="_button" :class="$style.playerTab" :aria-label="i18n.ts.zalip.trailerTab" :title="i18n.ts.zalip.trailerTab" @click="openTrailer"><i class="ti ti-player-play"></i><span>{{ i18n.ts.zalip.trailerTab }}</span></button>
 						</div>
 						<template v-if="$i">
 							<p v-if="allohaPlayback == null" :class="$style.playerState"><i class="ti ti-loader-2 ti-spin"></i> Проверяем доступность в Alloha…</p>
@@ -75,7 +72,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						</template>
 						<p v-else :class="$style.playerUnavailable"><i class="ti ti-login"></i> Войдите в Zalip, чтобы открыть плеер и сохранить подписку на новые серии.</p>
 
-						<div v-if="work.seasons.length" ref="episodesSection" :class="$style.playerEpisodes">
+						<div v-if="work.seasons.length" :class="$style.playerEpisodes">
 							<div :class="$style.seasonPicker"><span>Сезон</span><div><button v-for="season in work.seasons" :key="season.id" type="button" class="_button" :class="[$style.seasonPill, { [$style.selectedSeasonPill]: selectedSeasonNumber === season.seasonNumber }]" @click="selectSeason(season)">{{ season.seasonNumber === 0 ? 'Спец.' : season.seasonNumber }}</button></div></div>
 							<p v-if="episodesPending" :class="$style.episodeRailState"><i class="ti ti-loader-2 ti-spin"></i> Загружаем эпизоды…</p>
 							<p v-else-if="episodes.length === 0" :class="$style.episodeRailState">Список серий пока готовится редактором.</p>
@@ -105,31 +102,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<a v-for="path in work.galleryPaths" :key="path" :href="tmdbBackdrop(path)" target="_blank" rel="noopener noreferrer" :aria-label="`Открыть кадр из ${work.title}`"><img :src="tmdbGalleryImage(path)" alt="" loading="lazy"></a>
 						</div>
 					</section>
-					<section v-if="work.trailerYoutubeKey" :class="$style.trailer">
+					<section v-if="work.trailerYoutubeKey" ref="trailerSection" :class="$style.trailer">
 						<h2><i class="ti ti-player-play"></i> Официальный трейлер</h2>
 						<p v-if="!trailerOpen">Трейлер открывается по вашему действию через YouTube без cookies.</p>
-						<button v-if="!trailerOpen" type="button" class="_button" :class="$style.trailerButton" @click="trailerOpen = true"><i class="ti ti-player-play-filled"></i> Показать трейлер</button>
+						<button v-if="!trailerOpen" type="button" class="_button" :class="$style.trailerButton" @click="openTrailer"><i class="ti ti-player-play-filled"></i> Показать трейлер</button>
 						<div v-else :class="$style.trailerFrame"><iframe :src="youtubeEmbed(work.trailerYoutubeKey)" :title="`Официальный трейлер: ${work.title}`" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>
 					</section>
-					<div :class="$style.actions">
-						<div v-if="$i" :class="$style.libraryControl">
-							<select v-model="libraryStatus" class="_input" :disabled="saving" aria-label="Статус в библиотеке">
-								<option v-for="status in libraryStatuses" :key="status" :value="status">{{ libraryStatusLabel(status) }}</option>
-							</select>
-							<button :class="$style.library" class="_button" :disabled="saving" @click="addToLibrary"><i class="ti ti-bookmark"></i> {{ saving ? 'Сохраняем…' : saved ? 'Обновить статус' : 'Добавить в библиотеку' }}</button>
-						</div>
-						<div v-if="$i" :class="$style.personalActions">
-							<button type="button" class="_button" :class="[$style.favorite, { [$style.favorited]: isFavorite }]" :aria-pressed="isFavorite" :disabled="saving" @click="toggleFavorite"><i :class="isFavorite ? 'ti ti-star-filled' : 'ti ti-star'"></i> {{ isFavorite ? 'В избранном' : 'В избранное' }}</button>
-							<label :class="$style.rating"><i class="ti ti-star"></i><span class="_visuallyHidden">Личная оценка</span><select v-model="personalRating" class="_input" :disabled="saving" aria-label="Личная оценка" @change="savePersonalRating"><option :value="null">Без оценки</option><option v-for="rating in 10" :key="rating" :value="rating">{{ rating }}/10</option></select></label>
-							<label v-if="work.seasons.length" :class="$style.progress"><i class="ti ti-player-track-next"></i><span class="_visuallyHidden">Просмотрено эпизодов</span><input v-model.number="episodesWatched" class="_input" type="number" min="0" inputmode="numeric" :disabled="saving" aria-label="Просмотрено эпизодов" @change="saveEpisodesWatched"><span>эп.</span></label>
-						</div>
-						<button v-if="$i" type="button" class="_button" :class="[$style.subscription, { [$style.subscribed]: releaseSubscribed }]" :aria-pressed="releaseSubscribed" :disabled="saving" @click="toggleReleaseSubscription"><i :class="releaseSubscribed ? 'ti ti-bell-filled' : 'ti ti-bell'"></i> {{ releaseSubscribed ? 'Слежу за сериями' : 'Следить за сериями' }}</button>
-						<button v-if="$i" type="button" class="_button" :class="$style.feed" @click="shareWork"><i class="ti ti-send"></i> Поделиться</button>
-						<MkA to="/timeline" :class="$style.feed"><i class="ti ti-news"></i> Лента</MkA>
-					</div>
 					<section ref="discussionSection" :class="$style.discussionArea">
 						<div v-if="work.seasons.length" :class="$style.discussionScope" role="group" :aria-label="i18n.ts.zalip.discussionContext">
-							<button type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionScope === 'work' }]" :aria-pressed="discussionScope === 'work'" @click="selectDiscussionScope('work')"><i class="ti ti-movie"></i> {{ i18n.ts.zalip.aboutTitle }}</button>
+							<button type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionScope === 'work' }]" :aria-pressed="discussionScope === 'work'" @click="selectDiscussionScope('work')"><i class="ti ti-movie"></i> {{ i18n.ts.zalip.workDiscussionScope }}</button>
 							<button v-if="selectedEpisode" type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionScope === 'episode' }]" :aria-pressed="discussionScope === 'episode'" @click="selectDiscussionScope('episode')"><i class="ti ti-device-tv"></i> {{ episodeLabel(selectedEpisode) }}</button>
 						</div>
 						<ZalipDiscussionPanel v-if="activeDiscussionNoteId" :noteId="activeDiscussionNoteId" :heading="activeDiscussionHeading"/>
@@ -152,7 +133,6 @@ import { computed, nextTick, ref, watch } from 'vue';
 import { $i } from '@/i.js';
 import { i18n } from '@/i18n.js';
 import { definePage } from '@/page.js';
-import * as os from '@/os.js';
 import ZalipDiscussionPanel from '@/components/ZalipDiscussionPanel.vue';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { pleaseLogin } from '@/utility/please-login.js';
@@ -217,8 +197,6 @@ type AllohaPlayback = {
 	lastCheckedAt: string | null;
 };
 
-const libraryStatuses: LibraryStatus[] = ['watching', 'planned', 'completed', 'on_hold', 'dropped'];
-
 const props = defineProps<{ slug: string }>();
 const work = ref<ZalipWork | null>(null);
 const pending = ref(true);
@@ -238,9 +216,8 @@ const discussionError = ref<string | null>(null);
 const discussionScope = ref<'work' | 'episode'>('work');
 const openingDiscussionScope = ref<'work' | 'episode' | null>(null);
 const discussionSection = ref<HTMLElement | null>(null);
-const aboutSection = ref<HTMLElement | null>(null);
 const playerSection = ref<HTMLElement | null>(null);
-const episodesSection = ref<HTMLElement | null>(null);
+const trailerSection = ref<HTMLElement | null>(null);
 const selectedSeasonNumber = ref<number | null>(null);
 const episodes = ref<ZalipEpisode[]>([]);
 const episodesPending = ref(false);
@@ -314,22 +291,12 @@ function genreLink(genre: string): string {
 	return `/?genre=${encodeURIComponent(genre)}`;
 }
 
-function shareWork(): void {
-	if (work.value == null) return;
-	const { id, slug, kind, title, description, releaseYear, genres, posterPath } = work.value;
-	os.post({ zalipWork: { id, slug, kind, title, description, releaseYear, genres, posterPath } });
-}
-
 function episodeMeta(episode: ZalipEpisode): string {
 	return [episode.airDate?.slice(0, 4), episode.runtimeMinutes != null ? `${episode.runtimeMinutes} мин.` : null].filter((value): value is string => value != null).join(' · ');
 }
 
 function translationLabel(translation: AllohaPlayback['translations'][number]): string {
 	return [translation.name, translation.quality, translation.resolutions.join('/')].filter((value): value is string => value != null && value !== '').join(' · ');
-}
-
-function libraryStatusLabel(status: LibraryStatus): string {
-	return ({ watching: 'Смотрю', planned: 'В планах', completed: 'Просмотрено', on_hold: 'Отложено', dropped: 'Брошено' })[status];
 }
 
 async function load(): Promise<void> {
@@ -437,10 +404,6 @@ function focusDiscussion(): void {
 	discussionSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function focusAbout(): void {
-	aboutSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
 function focusPlayer(): void {
 	playerSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -450,8 +413,10 @@ function openPlayer(): void {
 	if ($i && allohaPlayback.value?.available) allohaPlayerOpen.value = true;
 }
 
-function focusEpisodes(): void {
-	episodesSection.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+async function openTrailer(): Promise<void> {
+	trailerOpen.value = true;
+	await nextTick();
+	trailerSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function signInForDiscussion(): Promise<void> {
@@ -515,23 +480,11 @@ async function updateLibrary(patch: Partial<LibraryUpdate> = {}): Promise<void> 
 }
 
 async function addToLibrary(): Promise<void> {
+	if (!$i) {
+		await pleaseLogin({ path: window.location.pathname + window.location.search });
+		return;
+	}
 	await updateLibrary();
-}
-
-async function toggleFavorite(): Promise<void> {
-	await updateLibrary({ isFavorite: !isFavorite.value });
-}
-
-async function savePersonalRating(): Promise<void> {
-	await updateLibrary({ personalRating: personalRating.value });
-}
-
-async function saveEpisodesWatched(): Promise<void> {
-	await updateLibrary({ episodesWatched: normalizedEpisodesWatched() });
-}
-
-async function toggleReleaseSubscription(): Promise<void> {
-	await updateLibrary({ isReleaseSubscribed: !releaseSubscribed.value });
 }
 
 watch(() => props.slug, () => void load(), { immediate: true });
@@ -809,18 +762,6 @@ definePage(() => ({
 .playerTabActive {
 	border-color: var(--MI_THEME-accent);
 	color: var(--MI_THEME-fg);
-}
-
-.playerShare {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	margin-left: auto;
-	padding: 7px 10px;
-	border-radius: 9px;
-	background: color-mix(in srgb, var(--MI_THEME-accent) 16%, var(--MI_THEME-panel));
-	color: var(--MI_THEME-accent);
-	font-weight: 700;
 }
 
 .playerState, .playerUnavailable {
@@ -1314,120 +1255,6 @@ definePage(() => ({
 	text-decoration: none;
 }
 
-.actions {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 10px;
-	margin-top: 24px;
-}
-
-.library, .feed {
-	display: inline-flex;
-	align-items: center;
-	gap: 8px;
-	padding: 10px 14px;
-	border-radius: 999px;
-	font-weight: 700;
-	text-decoration: none;
-}
-
-.libraryControl {
-	display: flex;
-	gap: 8px;
-}
-
-.libraryControl select {
-	max-width: 148px;
-	border-radius: 999px;
-}
-
-.library {
-	background: var(--MI_THEME-accent);
-	color: var(--MI_THEME-fgOnAccent);
-}
-
-.personalActions {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 8px;
-}
-
-.favorite, .rating, .progress {
-	display: inline-flex;
-	align-items: center;
-	gap: 7px;
-	min-height: 40px;
-	padding: 0 11px;
-	border: 1px solid var(--MI_THEME-divider);
-	border-radius: 999px;
-	color: var(--MI_THEME-fg);
-	font-weight: 700;
-}
-
-.favorite {
-	background: var(--MI_THEME-panel);
-}
-
-.favorited {
-	border-color: color-mix(in srgb, #f6be4f 55%, var(--MI_THEME-divider));
-	background: color-mix(in srgb, #f6be4f 13%, var(--MI_THEME-panel));
-	color: #d99c22;
-}
-
-.rating, .progress {
-	background: var(--MI_THEME-panel);
-	font-size: 0.84rem;
-}
-
-.rating i {
-	color: #d99c22;
-}
-
-.rating select, .progress input {
-	min-height: 30px;
-	padding: 0 2px;
-	border: 0;
-	background: transparent;
-	color: inherit;
-	font: inherit;
-}
-
-.rating select {
-	max-width: 106px;
-}
-
-.progress input {
-	width: 42px;
-	text-align: center;
-}
-
-.progress span {
-	color: var(--MI_THEME-fgTransparentWeak);
-}
-
-.subscription {
-	display: inline-flex;
-	align-items: center;
-	gap: 8px;
-	padding: 10px 14px;
-	border: 1px solid var(--MI_THEME-divider);
-	border-radius: 999px;
-	color: var(--MI_THEME-fg);
-	font-weight: 700;
-}
-
-.subscribed {
-	border-color: color-mix(in srgb, var(--MI_THEME-accent) 55%, var(--MI_THEME-divider));
-	background: color-mix(in srgb, var(--MI_THEME-accent) 16%, var(--MI_THEME-panel));
-	color: var(--MI_THEME-accent);
-}
-
-.feed {
-	background: var(--MI_THEME-panelHighlight);
-	color: var(--MI_THEME-fg);
-}
-
 .discussionArea {
 	scroll-margin-top: 72px;
 }
@@ -1567,18 +1394,6 @@ definePage(() => ({
 		line-height: 1.55;
 	}
 
-	.libraryControl {
-		width: 100%;
-	}
-
-	.libraryControl select, .library {
-		flex: 1;
-	}
-
-	.personalActions {
-		width: 100%;
-	}
-
 	.galleryGrid {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
@@ -1597,10 +1412,6 @@ definePage(() => ({
 		min-height: 44px;
 		padding: 0 7px;
 		font-size: 0.72rem;
-	}
-
-	.playerShare span {
-		display: none;
 	}
 
 	.playerToolbar {
@@ -1669,16 +1480,8 @@ definePage(() => ({
 		padding-inline: 9px;
 	}
 
-	.playerTab > span, .playerTabActive > span, .playerShare > span {
+	.playerTab > span, .playerTabActive > span {
 		display: none;
-	}
-
-	.playerShare {
-		display: grid;
-		place-items: center;
-		width: 40px;
-		height: 40px;
-		padding: 0;
 	}
 
 	.playerEpisodes {

@@ -1278,9 +1278,25 @@ export interface Locale extends ILocale {
          */
         "watchTitle": string;
         /**
+         * Плеер
+         */
+        "playerTab": string;
+        /**
+         * Трейлер
+         */
+        "trailerTab": string;
+        /**
+         * Обсудить
+         */
+        "discussTitle": string;
+        /**
          * В библиотеке
          */
         "inLibrary": string;
+        /**
+         * В списке
+         */
+        "inList": string;
         /**
          * Добавить в список
          */
@@ -1317,6 +1333,10 @@ export interface Locale extends ILocale {
          * Контекст комментариев
          */
         "discussionContext": string;
+        /**
+         * Тайтл
+         */
+        "workDiscussionScope": string;
         /**
          * О тайтле
          */
