@@ -81,21 +81,25 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div v-if="maxTextLength - textLength < 100" :class="['_acrylic', $style.textCount, { [$style.textOver]: textLength > maxTextLength }]">{{ maxTextLength - textLength }}</div>
 	</div>
 	<input v-show="withHashtags" ref="hashtagsInputEl" v-model="hashtags" :class="$style.hashtags" :placeholder="i18n.ts.hashtags" list="hashtags">
-	<ZalipShareCard v-if="props.zalipWork" :share="props.zalipWork" :preview="true"/>
-	<XPostFormAttaches v-if="!props.zalipWork" v-model="files" @detach="detachFile" @changeSensitive="updateFileSensitive" @changeName="updateFileName"/>
-	<div v-if="!props.zalipWork && uploader.items.value.length > 0" style="padding: 12px;">
+	<div v-if="selectedZalipWork" :class="$style.zalipShare">
+		<ZalipShareCard :share="selectedZalipWork" :preview="true"/>
+		<button v-tooltip="'Убрать тайтл'" class="_button" :class="$style.removeZalipShare" @click="removeZalipWork"><i class="ti ti-x"></i></button>
+	</div>
+	<XPostFormAttaches v-if="!selectedZalipWork" v-model="files" @detach="detachFile" @changeSensitive="updateFileSensitive" @changeName="updateFileName"/>
+	<div v-if="!selectedZalipWork && uploader.items.value.length > 0" style="padding: 12px;">
 		<MkTip k="postFormUploader">
 			{{ i18n.ts._postForm.uploaderTip }}
 		</MkTip>
 		<MkUploaderItems :items="uploader.items.value" @showMenu="(item, ev) => showPerUploadItemMenu(item, ev)" @showMenuViaContextmenu="(item, ev) => showPerUploadItemMenuViaContextmenu(item, ev)"/>
 	</div>
-	<MkPollEditor v-if="!props.zalipWork && poll" v-model="poll" @destroyed="poll = null"/>
+	<MkPollEditor v-if="!selectedZalipWork && poll" v-model="poll" @destroyed="poll = null"/>
 	<MkNotePreview v-if="showPreview" :class="$style.preview" :text="text" :files="files" :poll="poll ?? undefined" :useCw="useCw" :cw="cw" :user="postAccount ?? $i"/>
 	<div v-if="showingOptions" style="padding: 8px 16px;">
 	</div>
 	<footer ref="footerEl" :class="$style.footer">
 		<div :class="$style.footerLeft">
-			<template v-if="!props.zalipWork">
+			<button v-tooltip="selectedZalipWork ? 'Заменить тайтл' : 'Прикрепить фильм, сериал или аниме'" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: selectedZalipWork }]" @click="chooseZalipWork"><i class="ti ti-movie"></i></button>
+			<template v-if="!selectedZalipWork">
 				<button v-tooltip="i18n.ts.attachFile + ' (' + i18n.ts.upload + ')'" class="_button" :class="$style.footerButton" @click="chooseFileFromPc"><i class="ti ti-photo-plus"></i></button>
 				<button v-tooltip="i18n.ts.attachFile + ' (' + i18n.ts.fromDrive + ')'" class="_button" :class="$style.footerButton" @click="chooseFileFromDrive"><i class="ti ti-cloud-download"></i></button>
 				<button v-tooltip="i18n.ts.poll" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: poll }]" @click="togglePoll"><i class="ti ti-chart-arrows"></i></button>
@@ -125,7 +129,7 @@ import { toASCII } from 'punycode.js';
 import { host, url } from '@@/js/config.js';
 import MkUploaderItems from './MkUploaderItems.vue';
 import type { ShallowRef } from 'vue';
-import type { PostFormProps } from '@/types/post-form.js';
+import type { PostFormProps, ZalipWorkShare } from '@/types/post-form.js';
 import type { MenuItem } from '@/types/menu.js';
 import type { PollEditorModelValue } from '@/components/MkPollEditor.vue';
 import type { UploaderItem } from '@/composables/use-uploader.js';
@@ -227,6 +231,7 @@ const justEndedComposition = ref(false);
 const renoteTargetNote: ShallowRef<PostFormProps['renote'] | null> = shallowRef(props.renote);
 const replyTargetNote: ShallowRef<PostFormProps['reply'] | null> = shallowRef(props.reply);
 const targetChannel = shallowRef(props.channel);
+const selectedZalipWork = ref<ZalipWorkShare | null>(props.zalipWork ?? null);
 
 const serverDraftId = ref<string | null>(null);
 const postFormActions = getPluginHandlers('post_form_action');
@@ -287,8 +292,8 @@ const placeholder = computed((): string => {
 const submitText = computed((): string => {
 	return scheduledAt.value != null
 		? i18n.ts.schedule
-		: props.zalipWork
-			? 'Поделиться'
+		: selectedZalipWork.value
+		? 'Поделиться'
 			: renoteTargetNote.value
 			? i18n.ts.quote
 			: replyTargetNote.value
@@ -317,7 +322,7 @@ const maxCwTextLength = 100;
 const canPost = computed((): boolean => {
 	return !props.mock && !posting.value && !posted.value && !uploader.uploading.value && (uploader.items.value.length === 0 || uploader.readyForUpload.value) &&
 		(
-			props.zalipWork != null ||
+			selectedZalipWork.value != null ||
 			1 <= textLength.value ||
 			1 <= files.value.length ||
 			1 <= uploader.items.value.length ||
@@ -339,7 +344,7 @@ const canPost = computed((): boolean => {
 
 // cannot save pure renote as draft
 const canSaveAsServerDraft = computed((): boolean => {
-	return canPost.value && (textLength.value > 0 || files.value.length > 0 || poll.value != null);
+	return selectedZalipWork.value == null && canPost.value && (textLength.value > 0 || files.value.length > 0 || poll.value != null);
 });
 
 const withHashtags = store.model('postFormWithHashtags');
@@ -486,6 +491,38 @@ function togglePoll() {
 			expiredAfter: null,
 		};
 	}
+}
+
+async function chooseZalipWork(): Promise<void> {
+	if (props.mock) return;
+
+	const replacesAttachments = selectedZalipWork.value == null && (files.value.length > 0 || uploader.items.value.length > 0 || poll.value != null);
+	if (replacesAttachments) {
+		const { canceled } = await os.confirm({
+			type: 'question',
+			text: 'Карточка тайтла — отдельный формат записи. Прикреплённые файлы и опрос будут убраны.',
+		});
+		if (canceled) return;
+	}
+
+	const { dispose } = os.popup(defineAsyncComponent(() => import('@/components/ZalipWorkPickerDialog.vue')), {
+		initialQuery: selectedZalipWork.value?.title ?? '',
+	}, {
+		selected: work => {
+			if (replacesAttachments) {
+				files.value = [];
+				poll.value = null;
+				uploader.reset();
+			}
+			selectedZalipWork.value = work;
+			scheduledAt.value = null;
+		},
+		closed: () => dispose(),
+	});
+}
+
+function removeZalipWork(): void {
+	selectedZalipWork.value = null;
 }
 
 function addTag(tag: string) {
@@ -728,6 +765,7 @@ function clear() {
 	poll.value = null;
 	quoteId.value = null;
 	scheduledAt.value = null;
+	selectedZalipWork.value = props.zalipWork ?? null;
 	uploader.reset();
 }
 
@@ -1086,14 +1124,18 @@ async function post(ev?: PointerEvent) {
 	}
 
 	posting.value = true;
-	const postRequest = props.zalipWork
+	const postRequest = selectedZalipWork.value
 		? misskeyApi<{ createdNote: Misskey.entities.Note }>('zalip/shares/create' as never, {
-			workId: props.zalipWork.id,
+			workId: selectedZalipWork.value.id,
 			text: postData.text,
 			cw: postData.cw,
 			visibility: postData.visibility,
 			visibleUserIds: postData.visibleUserIds,
 			localOnly: postData.localOnly,
+			replyId: postData.replyId,
+			renoteId: postData.renoteId,
+			channelId: postData.channelId,
+			reactionAcceptance: postData.reactionAcceptance,
 		} as never, token)
 		: misskeyApi('notes/create', postData, token);
 
@@ -1671,6 +1713,30 @@ defineExpose({
 	max-height: 150px;
 	overflow: auto;
 	background-size: auto auto;
+}
+
+.zalipShare {
+	position: relative;
+	padding-top: 1px;
+}
+
+.removeZalipShare {
+	position: absolute;
+	top: 20px;
+	right: 24px;
+	display: grid;
+	width: 28px;
+	height: 28px;
+	place-items: center;
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--MI_THEME-panel) 86%, transparent);
+	color: var(--MI_THEME-fgTransparent);
+
+	&:hover {
+		color: var(--MI_THEME-fg);
+		background: var(--MI_THEME-panel);
+	}
 }
 
 html[data-color-scheme=dark] .preview {

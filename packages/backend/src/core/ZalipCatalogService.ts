@@ -1130,6 +1130,10 @@ export class ZalipCatalogService {
 			visibility: MiNote['visibility'];
 			localOnly: boolean;
 			visibleUserIds: MiUser['id'][];
+			replyId: MiNote['id'] | null;
+			renoteId: MiNote['id'] | null;
+			channelId: MiNote['channelId'];
+			reactionAcceptance: MiNote['reactionAcceptance'];
 		},
 	): Promise<MiNote | null> {
 		const work = await this.db.getRepository(MiZalipWork).findOneBy({
@@ -1140,16 +1144,16 @@ export class ZalipCatalogService {
 
 		const note = await this.noteCreateService.fetchAndCreate(me, {
 			createdAt: new Date(),
-			replyId: null,
-			renoteId: null,
+			replyId: input.replyId,
+			renoteId: input.renoteId,
 			fileIds: [],
 			text: input.text,
 			cw: input.cw,
 			visibility: input.visibility,
 			visibleUserIds: input.visibleUserIds,
-			channelId: null,
+			channelId: input.channelId,
 			localOnly: input.localOnly,
-			reactionAcceptance: null,
+			reactionAcceptance: input.reactionAcceptance,
 			poll: null,
 		});
 

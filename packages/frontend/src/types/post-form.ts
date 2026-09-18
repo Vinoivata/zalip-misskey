@@ -5,6 +5,17 @@
 
 import * as Misskey from 'misskey-js';
 
+export type ZalipWorkShare = {
+	id: string;
+	slug: string;
+	kind: 'movie' | 'series' | 'anime' | 'animation';
+	title: string;
+	description: string | null;
+	releaseYear: number | null;
+	genres: string[];
+	posterPath: string | null;
+};
+
 export interface PostFormProps {
 	reply?: Misskey.entities.Note | null;
 	renote?: Misskey.entities.Note | null;
@@ -25,15 +36,6 @@ export interface PostFormProps {
 	initialLocalOnly?: boolean;
 	initialVisibleUsers?: Misskey.entities.UserDetailed[];
 	initialNote?: Misskey.entities.Note;
-	zalipWork?: {
-		id: string;
-		slug: string;
-		kind: 'movie' | 'series' | 'anime' | 'animation';
-		title: string;
-		description: string | null;
-		releaseYear: number | null;
-		genres: string[];
-		posterPath: string | null;
-	};
+	zalipWork?: ZalipWorkShare;
 	instant?: boolean;
 };

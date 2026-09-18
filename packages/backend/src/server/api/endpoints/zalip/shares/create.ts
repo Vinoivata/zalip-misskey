@@ -42,6 +42,10 @@ export const paramDef = {
 		visibility: { type: 'string', enum: ['public', 'home', 'followers', 'specified'], default: 'public' },
 		visibleUserIds: { type: 'array', uniqueItems: true, items: { type: 'string', format: 'misskey:id' }, default: [] },
 		localOnly: { type: 'boolean', default: true },
+		replyId: { type: 'string', format: 'misskey:id', nullable: true },
+		renoteId: { type: 'string', format: 'misskey:id', nullable: true },
+		channelId: { type: 'string', format: 'misskey:id', nullable: true },
+		reactionAcceptance: { type: 'string', nullable: true, enum: [null, 'likeOnly', 'likeOnlyForRemote', 'nonSensitiveOnly', 'nonSensitiveOnlyForLocalLikeOnlyForRemote'], default: null },
 	},
 	required: ['workId'],
 } as const;
@@ -59,6 +63,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				visibility: ps.visibility,
 				localOnly: ps.localOnly,
 				visibleUserIds: ps.visibleUserIds ?? [],
+				replyId: ps.replyId ?? null,
+				renoteId: ps.renoteId ?? null,
+				channelId: ps.channelId ?? null,
+				reactionAcceptance: ps.reactionAcceptance ?? null,
 			});
 			if (note == null) throw new ApiError(meta.errors.noSuchWork);
 			return { createdNote: await this.noteEntityService.pack(note, me) };

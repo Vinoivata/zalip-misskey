@@ -45,6 +45,10 @@ describe('ZalipCatalogService', () => {
 			visibility: 'public',
 			localOnly: true,
 			visibleUserIds: [],
+			replyId: 'reply-1',
+			renoteId: null,
+			channelId: 'channel-1',
+			reactionAcceptance: 'likeOnly',
 		})).resolves.toEqual({ id: 'note-1' });
 
 		expect(noteCreateService.fetchAndCreate).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }), expect.objectContaining({
@@ -52,6 +56,9 @@ describe('ZalipCatalogService', () => {
 			visibility: 'public',
 			localOnly: true,
 			fileIds: [],
+			replyId: 'reply-1',
+			channelId: 'channel-1',
+			reactionAcceptance: 'likeOnly',
 		}));
 		expect(sharedNotesRepository.save).toHaveBeenCalledWith(expect.objectContaining({
 			noteId: 'note-1',
@@ -80,6 +87,10 @@ describe('ZalipCatalogService', () => {
 			visibility: 'public',
 			localOnly: true,
 			visibleUserIds: [],
+			replyId: null,
+			renoteId: null,
+			channelId: null,
+			reactionAcceptance: null,
 		})).resolves.toBeNull();
 		expect(noteCreateService.fetchAndCreate).not.toHaveBeenCalled();
 	});
