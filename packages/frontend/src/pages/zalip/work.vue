@@ -41,14 +41,17 @@ SPDX-License-Identifier: AGPL-3.0-only
 								<div v-if="selectedSeasonNumber === season.seasonNumber" :class="$style.episodes">
 									<p v-if="episodesPending" :class="$style.episodeState"><i class="ti ti-loader-2 ti-spin"></i> Загружаем эпизоды…</p>
 									<p v-else-if="episodes.length === 0" :class="$style.episodeState">Список серий пока не подготовлен редактором.</p>
-									<article v-for="episode in episodes" v-else :key="episode.id" :class="$style.episode">
-										<strong>{{ episodeLabel(episode) }}</strong>
-										<span v-if="episode.runtimeMinutes || episode.airDate">{{ episodeMeta(episode) }}</span>
-										<p v-if="episode.description">{{ episode.description }}</p>
-										<div :class="$style.episodeActions">
-											<MkA v-if="episode.discussionNoteId" :to="`/notes/${episode.discussionNoteId}/replies`"><i class="ti ti-messages"></i> Обсуждение серии</MkA>
-											<button v-else-if="iAmAdmin" type="button" class="_button" :disabled="discussionCreatingEpisodeId === episode.id" @click="openEpisodeDiscussion(episode)"><i class="ti ti-message-plus"></i> {{ discussionCreatingEpisodeId === episode.id ? 'Открываем…' : 'Открыть обсуждение' }}</button>
-											<span v-else>Обсуждение серии ещё не открыто.</span>
+									<article v-for="episode in episodes" v-else :key="episode.id" :class="[$style.episode, { [$style.episodeWithStill]: episode.stillPath }]">
+										<img v-if="episode.stillPath" :class="$style.episodeStill" :src="tmdbGalleryImage(episode.stillPath)" :alt="`Кадр: ${episodeLabel(episode)}`" loading="lazy">
+										<div :class="$style.episodeContent">
+											<strong>{{ episodeLabel(episode) }}</strong>
+											<span v-if="episode.runtimeMinutes || episode.airDate">{{ episodeMeta(episode) }}</span>
+											<p v-if="episode.description">{{ episode.description }}</p>
+											<div :class="$style.episodeActions">
+												<MkA v-if="episode.discussionNoteId" :to="`/notes/${episode.discussionNoteId}/replies`"><i class="ti ti-messages"></i> Обсуждение серии</MkA>
+												<button v-else-if="iAmAdmin" type="button" class="_button" :disabled="discussionCreatingEpisodeId === episode.id" @click="openEpisodeDiscussion(episode)"><i class="ti ti-message-plus"></i> {{ discussionCreatingEpisodeId === episode.id ? 'Открываем…' : 'Открыть обсуждение' }}</button>
+												<span v-else>Обсуждение серии ещё не открыто.</span>
+											</div>
 										</div>
 									</article>
 									<p v-if="episodeDiscussionError" :class="$style.episodeState">{{ episodeDiscussionError }}</p>
@@ -594,6 +597,25 @@ definePage(() => ({
 	gap: 3px;
 }
 
+.episodeWithStill {
+	grid-template-columns: 132px minmax(0, 1fr);
+	gap: 10px;
+}
+
+.episodeStill {
+	width: 100%;
+	height: 100%;
+	min-height: 74px;
+	border-radius: 7px;
+	object-fit: cover;
+	background: var(--MI_THEME-panel);
+}
+
+.episodeContent {
+	display: grid;
+	gap: 3px;
+}
+
 .episode strong {
 	font-size: 0.85rem;
 }
@@ -786,6 +808,10 @@ definePage(() => ({
 
 	.galleryGrid {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.episodeWithStill {
+		grid-template-columns: 108px minmax(0, 1fr);
 	}
 }
 </style>
