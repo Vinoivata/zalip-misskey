@@ -10,32 +10,37 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div v-if="pending" :class="$style.state"><i class="ti ti-loader-2 ti-spin"></i> Загружаем тайтл…</div>
 			<div v-else-if="work == null" :class="$style.state"><i class="ti ti-movie-off"></i> Тайтл не найден или ещё не опубликован.</div>
 			<article v-else :class="$style.work">
-				<aside :class="$style.sidebar">
-					<div :class="$style.poster">
-						<img v-if="work.posterPath" :src="tmdbImage(work.posterPath)" :alt="work.title">
-						<i v-else class="ti ti-movie"></i>
-					</div>
-					<div :class="$style.sidebarActions">
-						<button type="button" class="_button" :class="$style.watchButton" @click="openPlayer"><i class="ti ti-player-play-filled"></i><span>{{ i18n.ts.zalip.watchTitle }}</span></button>
-						<button v-if="$i" type="button" class="_button" :class="$style.sideButton" :disabled="saving" @click="addToLibrary"><i class="ti ti-bookmark"></i><span>{{ saved ? i18n.ts.zalip.inLibrary : i18n.ts.zalip.addToList }}</span></button>
-						<button v-if="$i" type="button" class="_button" :class="$style.sideButton" @click="shareWork"><i class="ti ti-share-3"></i><span>{{ i18n.ts.zalip.shareTitle }}</span></button>
-						<p :class="$style.sidebarMeta"><i class="ti ti-device-tv"></i> {{ kindLabel(work.kind) }}<span v-if="work.releaseYear"> · {{ work.releaseYear }}</span></p>
-					</div>
-				</aside>
-				<div :class="$style.info">
-					<div ref="aboutSection" :class="$style.titleArea">
-						<div v-if="work.backdropPath" :class="$style.backdrop">
+				<section :class="$style.hero">
+					<div v-if="work.backdropPath" :class="$style.heroBackground" aria-hidden="true">
 						<img :src="tmdbBackdrop(work.backdropPath)" alt="" loading="lazy">
+					</div>
+					<div :class="$style.heroContent">
+						<aside :class="$style.sidebar">
+							<div :class="$style.poster">
+								<img v-if="work.posterPath" :src="tmdbImage(work.posterPath)" :alt="work.title">
+								<i v-else class="ti ti-movie"></i>
+							</div>
+							<div :class="$style.sidebarActions">
+								<button type="button" class="_button" :class="$style.watchButton" @click="openPlayer"><i class="ti ti-player-play-filled"></i><span>{{ i18n.ts.zalip.watchTitle }}</span></button>
+								<button v-if="$i" type="button" class="_button" :class="$style.sideButton" :disabled="saving" @click="addToLibrary"><i class="ti ti-bookmark"></i><span>{{ saved ? i18n.ts.zalip.inLibrary : i18n.ts.zalip.addToList }}</span></button>
+								<button v-if="$i" type="button" class="_button" :class="$style.sideButton" @click="shareWork"><i class="ti ti-share-3"></i><span>{{ i18n.ts.zalip.shareTitle }}</span></button>
+							</div>
+						</aside>
+						<div :class="$style.info">
+							<div ref="aboutSection" :class="$style.titleArea">
+								<div :class="$style.titleContent">
+									<p :class="$style.kind">{{ kindLabel(work.kind) }}<span v-if="work.releaseYear"> · {{ work.releaseYear }}</span><span v-if="work.runtimeMinutes"> · {{ runtimeLabel(work.runtimeMinutes, work.kind) }}</span></p>
+									<h1>{{ work.title }}</h1>
+									<p v-if="work.originalTitle" :class="$style.original">{{ work.originalTitle }}</p>
+									<div v-if="work.genres.length" :class="$style.genres" aria-label="Жанры"><MkA v-for="genre in work.genres" :key="genre" :to="genreLink(genre)">{{ genre }}</MkA></div>
+									<p v-if="work.description" :class="$style.description">{{ work.description }}</p>
+									<p v-else :class="$style.description">Описание появится после редакторской проверки.</p>
+								</div>
+							</div>
 						</div>
-						<div :class="$style.titleContent">
-					<p :class="$style.kind">{{ kindLabel(work.kind) }}<span v-if="work.releaseYear"> · {{ work.releaseYear }}</span><span v-if="work.runtimeMinutes"> · {{ runtimeLabel(work.runtimeMinutes, work.kind) }}</span></p>
-					<h1>{{ work.title }}</h1>
-					<p v-if="work.originalTitle" :class="$style.original">{{ work.originalTitle }}</p>
-					<div v-if="work.genres.length" :class="$style.genres" aria-label="Жанры"><MkA v-for="genre in work.genres" :key="genre" :to="genreLink(genre)">{{ genre }}</MkA></div>
-					<p v-if="work.description" :class="$style.description">{{ work.description }}</p>
-					<p v-else :class="$style.description">Описание появится после редакторской проверки.</p>
-						</div>
-						</div>
+					</div>
+				</section>
+				<div :class="$style.content">
 					<section ref="playerSection" :class="$style.player" aria-label="Просмотр">
 						<div :class="$style.playerTabs">
 							<button type="button" class="_button" :class="$style.playerTab" :aria-label="i18n.ts.zalip.aboutTitle" :title="i18n.ts.zalip.aboutTitle" @click="focusAbout"><i class="ti ti-info-circle"></i><span>{{ i18n.ts.zalip.aboutTitle }}</span></button>
@@ -559,8 +564,52 @@ definePage(() => ({
 
 .work {
 	display: grid;
-	grid-template-columns: minmax(190px, 250px) minmax(0, 1fr);
-	gap: 30px;
+	gap: 24px;
+}
+
+.hero {
+	position: relative;
+	min-height: 480px;
+	overflow: hidden;
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: calc(var(--MI-radius) * 2);
+	background: var(--MI_THEME-panel);
+}
+
+.hero::after {
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(90deg, color-mix(in srgb, var(--MI_THEME-bg) 96%, transparent) 0%, color-mix(in srgb, var(--MI_THEME-bg) 78%, transparent) 50%, color-mix(in srgb, var(--MI_THEME-bg) 56%, transparent) 100%), linear-gradient(0deg, color-mix(in srgb, var(--MI_THEME-bg) 98%, transparent) 0%, color-mix(in srgb, var(--MI_THEME-bg) 38%, transparent) 62%, color-mix(in srgb, var(--MI_THEME-bg) 60%, transparent) 100%);
+	content: '';
+	pointer-events: none;
+}
+
+.heroBackground {
+	position: absolute;
+	inset: 0;
+	opacity: 0.9;
+}
+
+.heroBackground img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.heroContent {
+	position: relative;
+	z-index: 1;
+	display: grid;
+	grid-template-columns: minmax(190px, 230px) minmax(0, 1fr);
+	align-items: end;
+	gap: 32px;
+	min-height: 480px;
+	padding: 42px;
+}
+
+.content {
+	min-width: 0;
 }
 
 .sidebar {
@@ -572,7 +621,8 @@ definePage(() => ({
 	place-items: center;
 	overflow: hidden;
 	aspect-ratio: 2 / 3;
-	border-radius: 18px;
+	border: 1px solid color-mix(in srgb, var(--MI_THEME-fg) 16%, transparent);
+	border-radius: calc(var(--MI-radius) + 4px);
 	background: linear-gradient(145deg, var(--MI_THEME-panelHighlight), color-mix(in srgb, var(--MI_THEME-accent) 30%, var(--MI_THEME-panel)));
 	color: var(--MI_THEME-accent);
 	font-size: 3rem;
@@ -608,24 +658,10 @@ definePage(() => ({
 }
 
 .sideButton {
-	border: 1px solid var(--MI_THEME-divider);
-	background: var(--MI_THEME-panel);
+	border: 1px solid color-mix(in srgb, var(--MI_THEME-fg) 18%, transparent);
+	background: color-mix(in srgb, var(--MI_THEME-panel) 82%, transparent);
+	backdrop-filter: blur(12px);
 	color: var(--MI_THEME-fg);
-}
-
-.sidebarMeta {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 6px;
-	margin: 4px 0 0;
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.76rem;
-	text-align: center;
-}
-
-.sidebarMeta i {
-	color: var(--MI_THEME-accent);
 }
 
 .titleArea {
@@ -642,31 +678,9 @@ definePage(() => ({
 
 .info h1 {
 	margin: 0;
-	font-size: clamp(1.9rem, 5vw, 3rem);
+	font-size: clamp(2.15rem, 5vw, 3.75rem);
 	line-height: 1.08;
 	letter-spacing: -0.035em;
-}
-
-.backdrop {
-	position: relative;
-	margin-bottom: 20px;
-	overflow: hidden;
-	aspect-ratio: 16 / 7;
-	border-radius: var(--MI-radius);
-	background: var(--MI_THEME-panelHighlight);
-}
-
-.backdrop::after {
-	position: absolute;
-	inset: 0;
-	background: linear-gradient(90deg, rgb(0 0 0 / 18%), transparent 58%), linear-gradient(0deg, var(--MI_THEME-bg) 0%, transparent 34%);
-	content: '';
-}
-
-.backdrop img {
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
 }
 
 .original {
@@ -702,10 +716,11 @@ definePage(() => ({
 }
 
 .description {
-	margin: 22px 0 0;
+	max-width: 800px;
+	margin: 18px 0 0;
 	white-space: pre-line;
-	line-height: 1.65;
-	color: var(--MI_THEME-fgTransparentWeak);
+	line-height: 1.6;
+	color: color-mix(in srgb, var(--MI_THEME-fg) 82%, transparent);
 }
 
 .gallery {
@@ -1490,6 +1505,24 @@ definePage(() => ({
 		gap: 18px;
 	}
 
+	.hero {
+		min-height: 0;
+		border-radius: calc(var(--MI-radius) + 4px);
+	}
+
+	.hero::after {
+		background: linear-gradient(0deg, color-mix(in srgb, var(--MI_THEME-bg) 96%, transparent) 0%, color-mix(in srgb, var(--MI_THEME-bg) 74%, transparent) 62%, color-mix(in srgb, var(--MI_THEME-bg) 54%, transparent) 100%);
+	}
+
+	.heroContent {
+		display: flex;
+		flex-direction: column;
+		align-items: stretch;
+		gap: 18px;
+		min-height: 0;
+		padding: 108px 16px 18px;
+	}
+
 	.sidebar {
 		display: grid;
 		grid-template-columns: minmax(102px, 116px) minmax(0, 1fr);
@@ -1517,22 +1550,8 @@ definePage(() => ({
 		grid-column: 1 / -1;
 	}
 
-	.sidebarMeta {
-		grid-column: 1 / -1;
-		justify-content: flex-start;
-		margin: 10px 0 0;
-		font-size: 0.78rem;
-		text-align: left;
-	}
-
 	.info {
 		min-width: 0;
-	}
-
-	.backdrop {
-		margin-bottom: 14px;
-		aspect-ratio: 16 / 8;
-		border-radius: var(--MI-radius);
 	}
 
 	.kind {
@@ -1545,7 +1564,7 @@ definePage(() => ({
 
 	.description {
 		margin-top: 16px;
-		line-height: 1.58;
+		line-height: 1.55;
 	}
 
 	.libraryControl {
