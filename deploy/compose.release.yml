@@ -23,3 +23,7 @@ services:
       context: ${ZALIP_RELEASE_DIR:?Set ZALIP_RELEASE_DIR to the immutable release checkout}
     environment:
       ZALIP_TMDB_API_KEY: ${ZALIP_TMDB_API_KEY:-}
+      # Kept in the server-only env file. Never expose provider credentials to clients.
+      ZALIP_ALLOHA_API_TOKEN: ${ZALIP_ALLOHA_API_TOKEN:-}
+      # Optional exact iframe host allowlist; the application uses its safe default if empty.
+      ZALIP_ALLOHA_IFRAME_HOSTS: ${ZALIP_ALLOHA_IFRAME_HOSTS:-}
