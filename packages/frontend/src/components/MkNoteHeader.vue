@@ -54,12 +54,13 @@ const mock = inject(DI.mock, false);
 	display: flex;
 	align-items: baseline;
 	white-space: nowrap;
+	font-size: 0.95em;
 }
 
 .name {
 	flex-shrink: 1;
 	display: block;
-	margin: 0 .5em 0 0;
+	margin: 0 .35em 0 0;
 	padding: 0;
 	overflow: hidden;
 	font-size: 1em;
@@ -84,15 +85,22 @@ const mock = inject(DI.mock, false);
 
 .username {
 	flex-shrink: 9999999;
-	margin: 0 .5em 0 0;
+	margin: 0 .35em 0 0;
 	overflow: hidden;
+	color: var(--MI_THEME-fgTransparentWeak);
 	text-overflow: ellipsis;
 }
 
 .info {
 	flex-shrink: 0;
-	margin-left: auto;
+	margin-left: 0;
+	color: var(--MI_THEME-fgTransparentWeak);
 	font-size: 0.9em;
+
+	&::before {
+		margin-right: .4em;
+		content: '·';
+	}
 }
 
 .badgeRoles {

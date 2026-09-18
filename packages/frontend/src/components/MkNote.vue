@@ -393,6 +393,11 @@ const keymap = {
 	font-size: 1.05em;
 	overflow: clip;
 	contain: content;
+	transition: background 0.16s ease;
+
+	&:hover > .article {
+		background: color(from var(--MI_THEME-panelHighlight) srgb r g b / 0.42);
+	}
 
 	&:focus-visible {
 		outline: none;
@@ -564,7 +569,9 @@ const keymap = {
 .article {
 	position: relative;
 	display: flex;
-	padding: 22px 26px;
+	padding: 20px 24px 14px;
+	border-radius: 12px;
+	transition: background 0.16s ease;
 }
 
 .colorBar {
@@ -653,6 +660,8 @@ const keymap = {
 
 .text {
 	overflow-wrap: break-word;
+	padding-top: 3px;
+	line-height: 1.48;
 }
 
 .replyIcon {
@@ -692,26 +701,40 @@ const keymap = {
 }
 
 .footer {
-	margin-bottom: -14px;
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	margin: 7px 0 -4px -7px;
 }
 
 .footerButton {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 36px;
+	height: 36px;
 	margin: 0;
-	padding: 8px;
+	padding: 0 9px;
+	border-radius: 999px;
 	color: color-mix(in srgb, var(--MI_THEME-panel), var(--MI_THEME-fg) 70%); // opacityなど不透明度で表現するとレンダリングパフォーマンスに影響するので通常の色の混合で代用
-
-	&:not(:last-child) {
-		margin-right: 24px;
-	}
+	transition: color 0.16s ease, background 0.16s ease;
 
 	&:hover {
-		color: var(--MI_THEME-fgHighlighted);
+		background: var(--MI_THEME-panelHighlight);
+		color: var(--MI_THEME-accent);
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--MI_THEME-focus);
+		outline-offset: 2px;
 	}
 }
 
 .footerButtonCount {
 	display: inline;
-	margin: 0 0 0 8px;
+	margin: 0 0 0 6px;
+	font-size: 0.82em;
+	font-variant-numeric: tabular-nums;
 }
 
 @container (max-width: 580px) {
@@ -782,25 +805,7 @@ const keymap = {
 	}
 }
 
-@container (max-width: 400px) {
-	.root:not(.showActionsOnlyHover) {
-		.footerButton {
-			&:not(:last-child) {
-				margin-right: 18px;
-			}
-		}
-	}
-}
-
 @container (max-width: 350px) {
-	.root:not(.showActionsOnlyHover) {
-		.footerButton {
-			&:not(:last-child) {
-				margin-right: 12px;
-			}
-		}
-	}
-
 	.colorBar {
 		top: 6px;
 		left: 6px;
@@ -815,13 +820,6 @@ const keymap = {
 		height: 44px;
 	}
 
-	.root:not(.showActionsOnlyHover) {
-		.footerButton {
-			&:not(:last-child) {
-				margin-right: 8px;
-			}
-		}
-	}
 }
 
 @container (max-width: 250px) {

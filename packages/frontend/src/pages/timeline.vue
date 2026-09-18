@@ -284,12 +284,25 @@ definePage(() => ({
 }
 
 .postForm {
-	border-radius: var(--MI-radius);
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: 20px;
+	background: var(--MI_THEME-panel);
+	box-shadow: none;
 }
 
 .tl {
-	background: var(--MI_THEME-bg);
-	border-radius: var(--MI-radius);
+	background: var(--MI_THEME-panel);
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: 20px;
 	overflow: clip;
+}
+
+@media (max-width: 600px) {
+	.postForm, .tl {
+		margin-inline: calc(var(--MI-margin) * -1);
+		border-right: 0;
+		border-left: 0;
+		border-radius: 0;
+	}
 }
 </style>
