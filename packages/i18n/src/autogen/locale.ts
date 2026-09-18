@@ -1274,6 +1274,34 @@ export interface Locale extends ILocale {
          */
         "brand": string;
         /**
+         * Смотреть
+         */
+        "watchTitle": string;
+        /**
+         * В библиотеке
+         */
+        "inLibrary": string;
+        /**
+         * Добавить в список
+         */
+        "addToList": string;
+        /**
+         * Поделиться
+         */
+        "shareTitle": string;
+        /**
+         * Эпизоды
+         */
+        "episodes": string;
+        /**
+         * Смена серии перезагружает только внешний плеер Alloha — страница, выбранный сезон и ветка комментариев остаются на месте.
+         */
+        "playerEpisodeSwitchNotice": string;
+        /**
+         * Информация о серии
+         */
+        "episodeInformation": string;
+        /**
          * Комментарии
          */
         "comments": string;

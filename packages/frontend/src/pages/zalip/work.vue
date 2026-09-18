@@ -5,42 +5,49 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <PageWithHeader>
-	<div class="_spacer" style="--MI_SPACER-w: 980px;">
+	<div class="_spacer" style="--MI_SPACER-w: 1180px;">
 		<div :class="$style.page">
 			<div v-if="pending" :class="$style.state"><i class="ti ti-loader-2 ti-spin"></i> Загружаем тайтл…</div>
 			<div v-else-if="work == null" :class="$style.state"><i class="ti ti-movie-off"></i> Тайтл не найден или ещё не опубликован.</div>
 			<article v-else :class="$style.work">
-				<div :class="$style.poster">
-					<img v-if="work.posterPath" :src="tmdbImage(work.posterPath)" :alt="work.title">
-					<i v-else class="ti ti-movie"></i>
-				</div>
-				<div :class="$style.info">
-					<div v-if="work.backdropPath" :class="$style.backdrop">
-						<img :src="tmdbBackdrop(work.backdropPath)" alt="" loading="lazy">
+				<aside :class="$style.sidebar">
+					<div :class="$style.poster">
+						<img v-if="work.posterPath" :src="tmdbImage(work.posterPath)" :alt="work.title">
+						<i v-else class="ti ti-movie"></i>
 					</div>
+					<div :class="$style.sidebarActions">
+						<button type="button" class="_button" :class="$style.watchButton" @click="openPlayer"><i class="ti ti-player-play-filled"></i> {{ i18n.ts.zalip.watchTitle }}</button>
+						<button v-if="$i" type="button" class="_button" :class="$style.sideButton" :disabled="saving" @click="addToLibrary"><i class="ti ti-bookmark"></i> {{ saved ? i18n.ts.zalip.inLibrary : i18n.ts.zalip.addToList }}</button>
+						<button v-if="$i" type="button" class="_button" :class="$style.sideButton" @click="shareWork"><i class="ti ti-share-3"></i> {{ i18n.ts.zalip.shareTitle }}</button>
+						<p :class="$style.sidebarMeta"><i class="ti ti-device-tv"></i> {{ kindLabel(work.kind) }}<span v-if="work.releaseYear"> · {{ work.releaseYear }}</span></p>
+					</div>
+				</aside>
+				<div :class="$style.info">
+					<div ref="aboutSection" :class="$style.titleArea">
+						<div v-if="work.backdropPath" :class="$style.backdrop">
+						<img :src="tmdbBackdrop(work.backdropPath)" alt="" loading="lazy">
+						</div>
+						<div :class="$style.titleContent">
 					<p :class="$style.kind">{{ kindLabel(work.kind) }}<span v-if="work.releaseYear"> · {{ work.releaseYear }}</span><span v-if="work.runtimeMinutes"> · {{ runtimeLabel(work.runtimeMinutes, work.kind) }}</span></p>
 					<h1>{{ work.title }}</h1>
 					<p v-if="work.originalTitle" :class="$style.original">{{ work.originalTitle }}</p>
 					<div v-if="work.genres.length" :class="$style.genres" aria-label="Жанры"><MkA v-for="genre in work.genres" :key="genre" :to="genreLink(genre)">{{ genre }}</MkA></div>
 					<p v-if="work.description" :class="$style.description">{{ work.description }}</p>
 					<p v-else :class="$style.description">Описание появится после редакторской проверки.</p>
-					<section v-if="work.galleryPaths.length" :class="$style.gallery">
-						<h2><i class="ti ti-photo"></i> Кадры</h2>
-						<div :class="$style.galleryGrid">
-							<a v-for="path in work.galleryPaths" :key="path" :href="tmdbBackdrop(path)" target="_blank" rel="noopener noreferrer" :aria-label="`Открыть кадр из ${work.title}`"><img :src="tmdbGalleryImage(path)" alt="" loading="lazy"></a>
 						</div>
-					</section>
-					<section :class="$style.player" aria-label="Просмотр">
+						</div>
+					<section ref="playerSection" :class="$style.player" aria-label="Просмотр">
 						<div :class="$style.playerTabs">
+							<button type="button" class="_button" :class="$style.playerTab" @click="focusAbout"><i class="ti ti-info-circle"></i> О тайтле</button>
 							<span :class="$style.playerTabActive"><i class="ti ti-device-tv"></i> Смотреть</span>
-							<span v-if="work.seasons.length" :class="$style.playerTab"><i class="ti ti-list-details"></i> Эпизоды</span>
+							<button v-if="work.seasons.length" type="button" class="_button" :class="$style.playerTab" @click="focusEpisodes"><i class="ti ti-list-details"></i> {{ i18n.ts.zalip.episodes }}</button>
 							<button type="button" class="_button" :class="$style.playerTab" @click="focusDiscussion"><i class="ti ti-messages"></i> {{ discussionScope === 'episode' && selectedEpisode ? i18n.ts.zalip.episodeComments : i18n.ts.zalip.comments }}</button>
 							<button v-if="$i" type="button" class="_button" :class="$style.playerShare" @click="shareWork"><i class="ti ti-share-3"></i><span>Поделиться</span></button>
 						</div>
 						<template v-if="$i">
 							<p v-if="allohaPlayback == null" :class="$style.playerState"><i class="ti ti-loader-2 ti-spin"></i> Проверяем доступность в Alloha…</p>
 							<template v-else-if="allohaPlayback.available">
-								<div v-if="allohaPlayerOpen && activeAllohaIframe" :class="$style.playerFrame"><iframe :src="activeAllohaIframe" :title="`Плеер Alloha: ${work.title}`" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>
+								<div v-if="allohaPlayerOpen && activeAllohaIframe" :class="$style.playerFrame"><iframe :key="activeAllohaIframeKey" :src="activeAllohaIframe" :title="`Плеер Alloha: ${work.title}`" loading="lazy" referrerpolicy="origin" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>
 								<div v-else :class="$style.playerPreview">
 									<img v-if="selectedEpisode?.stillPath" :src="tmdbBackdrop(selectedEpisode.stillPath)" alt="" loading="lazy">
 									<img v-else-if="work.backdropPath" :src="tmdbBackdrop(work.backdropPath)" alt="" loading="lazy">
@@ -57,13 +64,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 									<label v-if="allohaPlayback.translations.length > 1" :class="$style.translation"><i class="ti ti-language"></i><span class="_visuallyHidden">Озвучка</span><select v-model="selectedAllohaTranslationId" class="_input" aria-label="Озвучка Alloha"><option v-for="translation in allohaPlayback.translations" :key="translation.id" :value="translation.id">{{ translationLabel(translation) }}</option></select></label>
 									<span v-else :class="$style.providerLabel">Alloha</span>
 								</div>
-								<p :class="$style.providerNotice">Внешний плеер Alloha переключает само видео в своём интерфейсе. Выбор серии здесь открывает её карточку, описание и ветку комментариев без перезагрузки страницы.</p>
+								<p :class="$style.providerNotice">{{ i18n.ts.zalip.playerEpisodeSwitchNotice }}</p>
 							</template>
 							<p v-else :class="$style.playerUnavailable"><i class="ti ti-clock"></i> В Alloha этот тайтл пока не найден. Доступность проверяется автоматически раз в час.</p>
 						</template>
 						<p v-else :class="$style.playerUnavailable"><i class="ti ti-login"></i> Войдите в Zalip, чтобы открыть плеер и сохранить подписку на новые серии.</p>
 
-						<div v-if="work.seasons.length" :class="$style.playerEpisodes">
+						<div v-if="work.seasons.length" ref="episodesSection" :class="$style.playerEpisodes">
 							<div :class="$style.seasonPicker"><span>Сезон</span><div><button v-for="season in work.seasons" :key="season.id" type="button" class="_button" :class="[$style.seasonPill, { [$style.selectedSeasonPill]: selectedSeasonNumber === season.seasonNumber }]" @click="selectSeason(season)">{{ season.seasonNumber === 0 ? 'Спец.' : season.seasonNumber }}</button></div></div>
 							<p v-if="episodesPending" :class="$style.episodeRailState"><i class="ti ti-loader-2 ti-spin"></i> Загружаем эпизоды…</p>
 							<p v-else-if="episodes.length === 0" :class="$style.episodeRailState">Список серий пока готовится редактором.</p>
@@ -77,31 +84,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 							</div>
 						</div>
 					</section>
-					<section v-if="work.seasons.length" :class="$style.seasons">
-						<h2>Сезоны</h2>
-						<div :class="$style.seasonList">
-							<div v-for="season in work.seasons" :key="season.id" :class="$style.seasonBlock">
-								<button type="button" class="_button" :class="[$style.season, { [$style.selectedSeason]: selectedSeasonNumber === season.seasonNumber }]" :aria-expanded="selectedSeasonNumber === season.seasonNumber" @click="toggleSeason(season)">
-									<div><strong>{{ seasonLabel(season.seasonNumber, season.title) }}</strong><p v-if="season.airDate">{{ season.airDate.slice(0, 4) }}</p></div>
-									<span v-if="season.episodeCount != null">{{ season.episodeCount }} эп.</span>
-									<i :class="selectedSeasonNumber === season.seasonNumber ? 'ti ti-chevron-up' : 'ti ti-chevron-down'"></i>
-								</button>
-								<div v-if="selectedSeasonNumber === season.seasonNumber" :class="$style.episodes">
-									<p v-if="episodesPending" :class="$style.episodeState"><i class="ti ti-loader-2 ti-spin"></i> Загружаем эпизоды…</p>
-									<p v-else-if="episodes.length === 0" :class="$style.episodeState">Список серий пока не подготовлен редактором.</p>
-									<article v-for="episode in episodes" v-else :key="episode.id" :class="[$style.episode, { [$style.episodeWithStill]: episode.stillPath }]">
-										<img v-if="episode.stillPath" :class="$style.episodeStill" :src="tmdbGalleryImage(episode.stillPath)" :alt="`Кадр: ${episodeLabel(episode)}`" loading="lazy">
-										<div :class="$style.episodeContent">
-											<strong>{{ episodeLabel(episode) }}</strong>
-											<span v-if="episode.runtimeMinutes || episode.airDate">{{ episodeMeta(episode) }}</span>
-											<p v-if="episode.description">{{ episode.description }}</p>
-											<div :class="$style.episodeActions">
-												<button type="button" class="_button" @click="selectEpisodeAndFocusDiscussion(episode)"><i class="ti ti-messages"></i> {{ episode.discussionNoteId ? i18n.ts.zalip.episodeComments : i18n.ts.zalip.discussEpisode }}</button>
-											</div>
-										</div>
-									</article>
-								</div>
-							</div>
+					<section v-if="selectedEpisode" :class="$style.episodeGuide">
+						<div v-if="selectedEpisode.stillPath" :class="$style.episodeGuideStill"><img :src="tmdbGalleryImage(selectedEpisode.stillPath)" :alt="`Кадр: ${episodeLabel(selectedEpisode)}`" loading="lazy"></div>
+						<div :class="$style.episodeGuideContent">
+							<p>{{ i18n.ts.zalip.episodeInformation }}</p>
+							<h2>{{ episodeLabel(selectedEpisode) }}</h2>
+							<span v-if="selectedEpisode.runtimeMinutes || selectedEpisode.airDate">{{ episodeMeta(selectedEpisode) }}</span>
+							<p v-if="selectedEpisode.description">{{ selectedEpisode.description }}</p>
+							<button type="button" class="_button" :class="$style.episodeDiscussButton" @click="selectDiscussionScope('episode')"><i class="ti ti-messages"></i> {{ selectedEpisode.discussionNoteId ? i18n.ts.zalip.episodeComments : i18n.ts.zalip.discussEpisode }}</button>
+						</div>
+					</section>
+					<section v-if="work.galleryPaths.length" :class="$style.gallery">
+						<h2><i class="ti ti-photo"></i> Кадры</h2>
+						<div :class="$style.galleryGrid">
+							<a v-for="path in work.galleryPaths" :key="path" :href="tmdbBackdrop(path)" target="_blank" rel="noopener noreferrer" :aria-label="`Открыть кадр из ${work.title}`"><img :src="tmdbGalleryImage(path)" alt="" loading="lazy"></a>
 						</div>
 					</section>
 					<section v-if="work.trailerYoutubeKey" :class="$style.trailer">
@@ -131,7 +127,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<button type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionScope === 'work' }]" :aria-pressed="discussionScope === 'work'" @click="selectDiscussionScope('work')"><i class="ti ti-movie"></i> {{ i18n.ts.zalip.aboutTitle }}</button>
 							<button v-if="selectedEpisode" type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionScope === 'episode' }]" :aria-pressed="discussionScope === 'episode'" @click="selectDiscussionScope('episode')"><i class="ti ti-device-tv"></i> {{ episodeLabel(selectedEpisode) }}</button>
 						</div>
-						<ZalipDiscussionPanel v-if="activeDiscussionNoteId" :note-id="activeDiscussionNoteId" :heading="activeDiscussionHeading"/>
+						<ZalipDiscussionPanel v-if="activeDiscussionNoteId" :noteId="activeDiscussionNoteId" :heading="activeDiscussionHeading"/>
 						<section v-else :class="$style.discussionPending">
 							<p><i class="ti ti-messages"></i> {{ activeDiscussionEmptyText }}</p>
 							<button v-if="$i" type="button" class="_button" :class="$style.openDiscussion" :disabled="openingDiscussionScope != null" @click="openActiveDiscussion"><i :class="openingDiscussionScope != null ? 'ti ti-loader-2 ti-spin' : 'ti ti-message-plus'"></i> {{ openingDiscussionScope != null ? i18n.ts.zalip.openingDiscussion : i18n.ts.zalip.startDiscussion }}</button>
@@ -237,21 +233,38 @@ const discussionError = ref<string | null>(null);
 const discussionScope = ref<'work' | 'episode'>('work');
 const openingDiscussionScope = ref<'work' | 'episode' | null>(null);
 const discussionSection = ref<HTMLElement | null>(null);
+const aboutSection = ref<HTMLElement | null>(null);
+const playerSection = ref<HTMLElement | null>(null);
+const episodesSection = ref<HTMLElement | null>(null);
 const selectedSeasonNumber = ref<number | null>(null);
 const episodes = ref<ZalipEpisode[]>([]);
 const episodesPending = ref(false);
 const episodeRequestId = ref(0);
 const selectedEpisodeId = ref<string | null>(null);
+const selectedEpisode = computed(() => episodes.value.find(episode => episode.id === selectedEpisodeId.value) ?? null);
 
 const activeAllohaIframe = computed(() => {
 	if (allohaPlayback.value == null) return null;
-	return allohaPlayback.value.translations.find(translation => translation.id === selectedAllohaTranslationId.value)?.iframe
+	const iframe = allohaPlayback.value.translations.find(translation => translation.id === selectedAllohaTranslationId.value)?.iframe
 		?? allohaPlayback.value.iframe
 		?? allohaPlayback.value.translations[0]?.iframe
 		?? null;
+	if (iframe == null || selectedEpisode.value == null || selectedSeasonNumber.value == null) return iframe;
+	try {
+		const url = new URL(iframe);
+		url.searchParams.set('season', selectedSeasonNumber.value.toString());
+		url.searchParams.set('episode', selectedEpisode.value.episodeNumber.toString());
+		return url.toString();
+	} catch {
+		return iframe;
+	}
 });
 
-const selectedEpisode = computed(() => episodes.value.find(episode => episode.id === selectedEpisodeId.value) ?? null);
+const activeAllohaIframeKey = computed(() => [
+	selectedSeasonNumber.value ?? 'movie',
+	selectedEpisode.value?.id ?? 'title',
+	selectedAllohaTranslationId.value ?? 'default',
+].join(':'));
 const selectedEpisodeIndex = computed(() => selectedEpisode.value == null ? -1 : episodes.value.findIndex(episode => episode.id === selectedEpisode.value?.id));
 const previousEpisode = computed(() => selectedEpisodeIndex.value > 0 ? episodes.value[selectedEpisodeIndex.value - 1] ?? null : null);
 const nextEpisode = computed(() => selectedEpisodeIndex.value >= 0 ? episodes.value[selectedEpisodeIndex.value + 1] ?? null : null);
@@ -286,10 +299,6 @@ function kindLabel(kind: ZalipWork['kind']): string {
 
 function runtimeLabel(runtimeMinutes: number, kind: ZalipWork['kind']): string {
 	return kind === 'movie' ? `${runtimeMinutes} мин.` : `~${runtimeMinutes} мин./эп.`;
-}
-
-function seasonLabel(seasonNumber: number, title: string): string {
-	return seasonNumber === 0 ? title : `Сезон ${seasonNumber}: ${title}`;
 }
 
 function episodeLabel(episode: ZalipEpisode): string {
@@ -398,23 +407,9 @@ async function selectSeason(season: ZalipSeason): Promise<void> {
 	await loadSeason(season);
 }
 
-async function toggleSeason(season: ZalipSeason): Promise<void> {
-	if (selectedSeasonNumber.value === season.seasonNumber) {
-		selectedSeasonNumber.value = null;
-		episodes.value = [];
-		selectedEpisodeId.value = null;
-		discussionScope.value = 'work';
-		episodesPending.value = false;
-		return;
-	}
-	await loadSeason(season);
-}
-
 function selectEpisode(episode: ZalipEpisode): void {
-	const hasChanged = selectedEpisodeId.value !== episode.id;
 	selectedEpisodeId.value = episode.id;
 	discussionScope.value = 'episode';
-	if (hasChanged) allohaPlayerOpen.value = false;
 }
 
 function selectRelativeEpisode(offset: -1 | 1): void {
@@ -426,12 +421,6 @@ function openAllohaPlayer(): void {
 	if (allohaPlayback.value?.available) allohaPlayerOpen.value = true;
 }
 
-async function selectEpisodeAndFocusDiscussion(episode: ZalipEpisode): Promise<void> {
-	selectEpisode(episode);
-	await nextTick();
-	focusDiscussion();
-}
-
 async function selectDiscussionScope(scope: 'work' | 'episode'): Promise<void> {
 	if (scope === 'episode' && selectedEpisode.value == null) return;
 	discussionScope.value = scope;
@@ -441,6 +430,23 @@ async function selectDiscussionScope(scope: 'work' | 'episode'): Promise<void> {
 
 function focusDiscussion(): void {
 	discussionSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function focusAbout(): void {
+	aboutSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function focusPlayer(): void {
+	playerSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function openPlayer(): void {
+	focusPlayer();
+	if ($i && allohaPlayback.value?.available) allohaPlayerOpen.value = true;
+}
+
+function focusEpisodes(): void {
+	episodesSection.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 async function signInForDiscussion(): Promise<void> {
@@ -553,8 +559,12 @@ definePage(() => ({
 
 .work {
 	display: grid;
-	grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+	grid-template-columns: minmax(190px, 250px) minmax(0, 1fr);
 	gap: 30px;
+}
+
+.sidebar {
+	align-self: start;
 }
 
 .poster {
@@ -574,6 +584,54 @@ definePage(() => ({
 	object-fit: cover;
 }
 
+.sidebarActions {
+	display: grid;
+	gap: 8px;
+	margin-top: 12px;
+}
+
+.watchButton, .sideButton {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	min-height: 42px;
+	padding: 9px 12px;
+	border-radius: calc(var(--MI-radius) / 1.2);
+	font-size: 0.86rem;
+	font-weight: 750;
+}
+
+.watchButton {
+	background: var(--MI_THEME-accent);
+	color: var(--MI_THEME-fgOnAccent);
+}
+
+.sideButton {
+	border: 1px solid var(--MI_THEME-divider);
+	background: var(--MI_THEME-panel);
+	color: var(--MI_THEME-fg);
+}
+
+.sidebarMeta {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	margin: 4px 0 0;
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.76rem;
+	text-align: center;
+}
+
+.sidebarMeta i {
+	color: var(--MI_THEME-accent);
+}
+
+.titleArea {
+	scroll-margin-top: 72px;
+}
+
 .kind {
 	margin: 5px 0 8px;
 	font-size: 0.78rem;
@@ -591,10 +649,10 @@ definePage(() => ({
 
 .backdrop {
 	position: relative;
-	margin-bottom: 18px;
+	margin-bottom: 20px;
 	overflow: hidden;
 	aspect-ratio: 16 / 7;
-	border-radius: 16px;
+	border-radius: var(--MI-radius);
 	background: var(--MI_THEME-panelHighlight);
 }
 
@@ -703,6 +761,7 @@ definePage(() => ({
 
 .player {
 	margin-top: 24px;
+	scroll-margin-top: 72px;
 	overflow: hidden;
 	border: 1px solid var(--MI_THEME-divider);
 	border-radius: 18px;
@@ -906,6 +965,7 @@ definePage(() => ({
 
 .playerEpisodes {
 	padding: 14px;
+	scroll-margin-top: 80px;
 }
 
 .seasonPicker {
@@ -932,7 +992,7 @@ definePage(() => ({
 	min-height: 30px;
 	padding: 0 8px;
 	border: 1px solid var(--MI_THEME-divider);
-	border-radius: 8px;
+	border-radius: calc(var(--MI-radius) / 2);
 	background: var(--MI_THEME-panelHighlight);
 	color: var(--MI_THEME-fgTransparentWeak);
 	font-size: 0.78rem;
@@ -1007,6 +1067,74 @@ definePage(() => ({
 .selectedEpisodeTile {
 	border-color: var(--MI_THEME-accent);
 	background: color-mix(in srgb, var(--MI_THEME-accent) 12%, var(--MI_THEME-panel));
+}
+
+.episodeGuide {
+	display: grid;
+	grid-template-columns: minmax(150px, 230px) minmax(0, 1fr);
+	gap: 16px;
+	margin-top: 18px;
+	overflow: hidden;
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: 16px;
+	background: var(--MI_THEME-panel);
+}
+
+.episodeGuideStill {
+	min-height: 150px;
+	background: var(--MI_THEME-panelHighlight);
+}
+
+.episodeGuideStill img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.episodeGuideContent {
+	display: grid;
+	align-content: center;
+	gap: 5px;
+	padding: 16px 18px 16px 0;
+}
+
+.episodeGuideContent > p {
+	margin: 0;
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.8rem;
+	line-height: 1.5;
+}
+
+.episodeGuideContent > p:first-child {
+	font-size: 0.72rem;
+	font-weight: 750;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
+.episodeGuideContent h2 {
+	margin: 0;
+	font-size: 1.05rem;
+}
+
+.episodeGuideContent > span {
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.78rem;
+}
+
+.episodeDiscussButton {
+	justify-self: start;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 5px;
+	padding: 7px 10px;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--MI_THEME-accent) 14%, var(--MI_THEME-panelHighlight));
+	color: var(--MI_THEME-accent);
+	font-size: 0.8rem;
+	font-weight: 700;
 }
 
 .trailer {
@@ -1361,6 +1489,21 @@ definePage(() => ({
 		gap: 18px;
 	}
 
+	.sidebarActions {
+		gap: 6px;
+		margin-top: 8px;
+	}
+
+	.watchButton, .sideButton {
+		min-height: 36px;
+		padding: 7px 5px;
+		font-size: 0.72rem;
+	}
+
+	.sideButton i, .watchButton i {
+		display: none;
+	}
+
 	.info {
 		grid-column: 1 / -1;
 	}
@@ -1418,6 +1561,20 @@ definePage(() => ({
 
 	.episodeTile {
 		flex-basis: 112px;
+	}
+
+	.episodeGuide {
+		grid-template-columns: 1fr;
+		gap: 0;
+	}
+
+	.episodeGuideStill {
+		aspect-ratio: 16 / 8;
+		min-height: 0;
+	}
+
+	.episodeGuideContent {
+		padding: 14px;
 	}
 
 	.discussionScope {
