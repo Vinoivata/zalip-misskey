@@ -21,6 +21,7 @@ import { FanoutTimelineEndpointService } from '@/core/FanoutTimelineEndpointServ
 import { ChannelMutingService } from '@/core/ChannelMutingService.js';
 import { ChannelFollowingService } from '@/core/ChannelFollowingService.js';
 import { ApiError } from '../../error.js';
+import { zalipDiscussionRootMarker } from '@/misc/zalip-discussion-root.js';
 
 export const meta = {
 	tags: ['notes'],
@@ -161,6 +162,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				alwaysIncludeMyNotes: false,
 				excludePureRenotes: !ps.withRenotes,
 				noteFilter: note => {
+					if (note.name === zalipDiscussionRootMarker) return false;
 					if (!ps.withReplies && note.replyId != null) return false;
 
 					if (note.reply && note.reply.visibility === 'followers') {
@@ -209,6 +211,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			.then(x => x.map(x => x.id).filter(x => !mutingChannelIds.includes(x)));
 
 		const query = this.queryService.makePaginationQuery(this.notesRepository.createQueryBuilder('note'), ps.sinceId, ps.untilId)
+			.andWhere('note.name IS DISTINCT FROM :zalipDiscussionRootMarker', { zalipDiscussionRootMarker })
 			.andWhere(new Brackets(qb => {
 				if (followees.length > 0) {
 					const meOrFolloweeIds = [me.id, ...followees.map(f => f.followeeId)];

@@ -18,6 +18,7 @@ import { MiLocalUser } from '@/models/User.js';
 import { FanoutTimelineEndpointService } from '@/core/FanoutTimelineEndpointService.js';
 import { ChannelMutingService } from '@/core/ChannelMutingService.js';
 import { ChannelFollowingService } from '@/core/ChannelFollowingService.js';
+import { zalipDiscussionRootMarker } from '@/misc/zalip-discussion-root.js';
 
 export const meta = {
 	tags: ['notes'],
@@ -114,7 +115,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				alwaysIncludeMyNotes: false,
 				excludePureRenotes: !ps.withRenotes,
 				noteFilter: note => {
-					if (note.replyId != null) return false;
+					if (note.replyId != null || note.name === zalipDiscussionRootMarker) return false;
 
 					if (note.reply && note.reply.visibility === 'followers') {
 						if (!Object.hasOwn(followings, note.reply.userId) && note.reply.userId !== me.id) return false;
@@ -154,6 +155,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 		//#region Construct query
 		const query = this.queryService.makePaginationQuery(this.notesRepository.createQueryBuilder('note'), ps.sinceId, ps.untilId)
+			.andWhere('note.name IS DISTINCT FROM :zalipDiscussionRootMarker', { zalipDiscussionRootMarker })
 			.innerJoinAndSelect('note.user', 'user')
 			.leftJoinAndSelect('note.reply', 'reply')
 			.leftJoinAndSelect('note.renote', 'renote')

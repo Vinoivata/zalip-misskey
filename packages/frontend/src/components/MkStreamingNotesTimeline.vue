@@ -285,7 +285,7 @@ function releaseQueue() {
 function prepend(note: Misskey.entities.Note & MisskeyEntity) {
 	// A reply belongs to its thread, not to Zalip's main social timelines. This also
 	// protects the live stream from a stale per-browser timeline preference.
-	if (['home', 'local', 'social', 'global'].includes(props.src) && note.replyId != null) return;
+	if (['home', 'local', 'social', 'global'].includes(props.src) && (note.replyId != null || note.isZalipDiscussionRoot)) return;
 
 	adInsertionCounter++;
 

@@ -17,6 +17,7 @@ import { MiLocalUser } from '@/models/User.js';
 import { FanoutTimelineEndpointService } from '@/core/FanoutTimelineEndpointService.js';
 import { ChannelMutingService } from '@/core/ChannelMutingService.js';
 import { ApiError } from '../../error.js';
+import { zalipDiscussionRootMarker } from '@/misc/zalip-discussion-root.js';
 
 export const meta = {
 	tags: ['notes'],
@@ -123,7 +124,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				// A local timeline is a feed, not a view of the author's own comment history.
 				alwaysIncludeMyNotes: false,
 				excludePureRenotes: !ps.withRenotes,
-				noteFilter: note => ps.withReplies || note.replyId == null,
+				noteFilter: note => note.name !== zalipDiscussionRootMarker && (ps.withReplies || note.replyId == null),
 				dbFallback: async (untilId, sinceId, limit) => await this.getFromDb({
 					untilId,
 					sinceId,
@@ -152,6 +153,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 	}, me: MiLocalUser | null) {
 		const query = this.queryService.makePaginationQuery(this.notesRepository.createQueryBuilder('note'),
 			ps.sinceId, ps.untilId)
+			.andWhere('note.name IS DISTINCT FROM :zalipDiscussionRootMarker', { zalipDiscussionRootMarker })
 			.andWhere('(note.visibility = \'public\') AND (note.userHost IS NULL) AND (note.channelId IS NULL)')
 			.innerJoinAndSelect('note.user', 'user')
 			.leftJoinAndSelect('note.reply', 'reply')

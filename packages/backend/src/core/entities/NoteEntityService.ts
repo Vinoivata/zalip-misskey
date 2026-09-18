@@ -18,6 +18,7 @@ import { bindThis } from '@/decorators.js';
 import { DebounceLoader } from '@/misc/loader.js';
 import { IdService } from '@/core/IdService.js';
 import { shouldHideNoteByTime } from '@/misc/should-hide-note-by-time.js';
+import { zalipDiscussionRootMarker } from '@/misc/zalip-discussion-root.js';
 import { ReactionsBufferingService } from '@/core/ReactionsBufferingService.js';
 import { CacheService } from '@/core/CacheService.js';
 import type { OnModuleInit } from '@nestjs/common';
@@ -442,6 +443,7 @@ export class NoteEntityService implements OnModuleInit {
 			cw: note.cw,
 			visibility: note.visibility,
 			localOnly: note.localOnly,
+			isZalipDiscussionRoot: note.name === zalipDiscussionRootMarker || undefined,
 			reactionAcceptance: note.reactionAcceptance,
 			visibleUserIds: note.visibility === 'specified' ? note.visibleUserIds : undefined,
 			renoteCount: note.renoteCount,

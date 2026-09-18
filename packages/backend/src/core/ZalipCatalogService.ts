@@ -8,6 +8,7 @@ import { DataSource, In, IsNull, Not } from 'typeorm';
 import { DI } from '@/di-symbols.js';
 import { IdService } from '@/core/IdService.js';
 import { NoteCreateService } from '@/core/NoteCreateService.js';
+import { zalipDiscussionRootMarker } from '@/misc/zalip-discussion-root.js';
 import { MiNote } from '@/models/Note.js';
 import type { MiLocalUser, MiUser } from '@/models/User.js';
 import {
@@ -1052,6 +1053,7 @@ export class ZalipCatalogService {
 
 		const note = await this.noteCreateService.fetchAndCreate(me, {
 			createdAt: new Date(),
+			name: zalipDiscussionRootMarker,
 			replyId: null,
 			renoteId: null,
 			fileIds: [],
@@ -1094,6 +1096,7 @@ export class ZalipCatalogService {
 
 		const note = await this.noteCreateService.fetchAndCreate(me, {
 			createdAt: new Date(),
+			name: zalipDiscussionRootMarker,
 			replyId: null,
 			renoteId: null,
 			fileIds: [],
