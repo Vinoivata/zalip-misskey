@@ -315,6 +315,7 @@ basicNotesBeforeCreateAccount: "基本的な注意事項"
 termsOfService: "利用規約"
 start: "始める"
 zalip:
+  brand: "Zalip"
   comments: "Комментарии"
   episodeComments: "Комментарии серии"
   discussEpisode: "Обсудить серию"

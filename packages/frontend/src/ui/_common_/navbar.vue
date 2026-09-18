@@ -7,9 +7,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 <div :class="[$style.root, { [$style.iconOnly]: iconOnly }]">
 	<div :class="$style.body">
 		<div :class="$style.top">
-			<button v-tooltip.noDelay.right="instance.name ?? i18n.ts.instance" class="_button" :class="$style.instance" @click="openInstanceMenu">
-				<img :src="instance.iconUrl || '/favicon.ico'" alt="" :class="$style.instanceIcon" style="view-transition-name: navbar-serverIcon;"/>
-			</button>
+			<MkA v-tooltip.noDelay.right="i18n.ts.zalip.brand" :aria-label="i18n.ts.zalip.brand" :class="$style.brand" to="/" exact>
+				<span :class="$style.brandMark">Z</span><span :class="$style.brandName">{{ i18n.ts.zalip.brand }}</span>
+			</MkA>
 			<button v-if="!iconOnly" v-tooltip.noDelay.right="i18n.ts.realtimeMode" class="_button" :class="[$style.realtimeMode, store.r.realtimeMode.value ? $style.on : null]" @click="toggleRealtimeMode">
 				<i v-if="store.r.realtimeMode.value" class="ti ti-bolt ti-fw"></i>
 				<i v-else class="ti ti-bolt-off ti-fw"></i>
@@ -96,12 +96,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script lang="ts" setup>
 import { computed, ref, watch } from 'vue';
-import { openInstanceMenu } from './common.js';
 import * as os from '@/os.js';
 import { isZalipConfigurableNavigationItem, navbarItemDef } from '@/navbar.js';
 import { store } from '@/store.js';
 import { i18n } from '@/i18n.js';
-import { instance } from '@/instance.js';
 import { prefer } from '@/preferences.js';
 import { getAccountMenu } from '@/accounts.js';
 import { $i } from '@/i.js';
@@ -240,6 +238,43 @@ async function openAccountMenu(ev: PointerEvent) {
 			rgb(0 0 0 / 100%) 100%
 		);
 	}
+}
+
+.brand {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: var(--nav-icon-only-width);
+	height: 80px;
+	color: var(--MI_THEME-navFg);
+	text-decoration: none;
+
+	&:hover {
+		color: var(--MI_THEME-navFg);
+		text-decoration: none;
+	}
+}
+
+.brandMark {
+	display: grid;
+	place-items: center;
+	width: 36px;
+	aspect-ratio: 1;
+	border-radius: var(--MI-radius);
+	background: linear-gradient(135deg, var(--MI_THEME-buttonGradateA), var(--MI_THEME-buttonGradateB));
+	color: var(--MI_THEME-fgOnAccent);
+	font-size: 20px;
+	font-weight: 900;
+	letter-spacing: -0.08em;
+}
+
+.brandName {
+	display: none;
+	margin-left: 10px;
+	font-size: 1.1rem;
+	font-weight: 850;
+	letter-spacing: 0.02em;
 }
 
 .middle {
@@ -385,17 +420,21 @@ async function openAccountMenu(ev: PointerEvent) {
 		padding-left: 6px;
 	}
 
-	.instance {
-		position: relative;
-		width: var(--top-height);
-	}
+		.brand {
+			justify-content: flex-start;
+			width: 150px;
+			padding-left: 27px;
+			box-sizing: border-box;
 
-	.instanceIcon {
-		display: inline-block;
-		width: 38px;
-		aspect-ratio: 1;
-		border-radius: 8px;
-	}
+			&:focus-visible {
+				outline: 2px solid var(--MI_THEME-focus);
+				outline-offset: -4px;
+			}
+		}
+
+		.brandName {
+			display: inline;
+		}
 
 	.realtimeMode {
 		display: inline-block;

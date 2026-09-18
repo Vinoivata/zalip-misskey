@@ -7,9 +7,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 <div :class="[$style.root, acrylic ? $style.acrylic : null]">
 	<div :class="$style.body">
 		<div>
-			<button v-click-anime :class="[$style.item, $style.instance]" class="_button" @click="openInstanceMenu">
-				<img :class="$style.instanceIcon" :src="instance.iconUrl ?? '/favicon.ico'" draggable="false"/>
-			</button>
+			<MkA v-click-anime v-tooltip="i18n.ts.zalip.brand" :aria-label="i18n.ts.zalip.brand" :class="$style.brand" to="/" exact>
+				<span :class="$style.brandMark">Z</span><span :class="$style.brandName">{{ i18n.ts.zalip.brand }}</span>
+			</MkA>
 			<MkA v-click-anime v-tooltip="navbarItemDef.zalip.title" :class="$style.item" :activeClass="$style.active" to="/" exact>
 				<i :class="$style.itemIcon" class="ti ti-movie ti-fw"></i>
 			</MkA>
@@ -47,11 +47,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script lang="ts" setup>
 import { computed, onMounted, ref } from 'vue';
-import { openInstanceMenu } from './common.js';
 import * as os from '@/os.js';
 import { isZalipConfigurableNavigationItem, navbarItemDef } from '@/navbar.js';
 import MkButton from '@/components/MkButton.vue';
-import { instance } from '@/instance.js';
 import { i18n } from '@/i18n.js';
 import { prefer } from '@/preferences.js';
 import { getAccountMenu } from '@/accounts.js';
@@ -163,27 +161,39 @@ onMounted(() => {
 	border-right: solid 0.5px var(--MI_THEME-divider);
 }
 
-.instance {
-	display: inline-block;
-	position: relative;
-	width: 56px;
-	height: 100%;
+.brand {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 0 18px;
+	height: var(--height);
 	vertical-align: bottom;
-	position: sticky;
-	top: 0;
-	left: 0;
-	z-index: 1;
+	color: var(--MI_THEME-navFg);
+	font-weight: 850;
+	letter-spacing: 0.02em;
+	text-decoration: none;
+
+	&:hover {
+		color: var(--MI_THEME-navFg);
+		text-decoration: none;
+	}
 }
 
-.instanceIcon {
-	display: inline-block;
-	width: 24px;
-	position: absolute;
-	top: 0;
-	right: 0;
-	bottom: 0;
-	left: 0;
-	margin: auto;
+.brandMark {
+	display: grid;
+	place-items: center;
+	width: 28px;
+	aspect-ratio: 1;
+	border-radius: calc(var(--MI-radius) / 2);
+	background: linear-gradient(135deg, var(--MI_THEME-buttonGradateA), var(--MI_THEME-buttonGradateB));
+	color: var(--MI_THEME-fgOnAccent);
+	font-size: 16px;
+	font-weight: 900;
+	letter-spacing: -0.08em;
+}
+
+.brandName {
+	font-size: 1rem;
 }
 
 .right {

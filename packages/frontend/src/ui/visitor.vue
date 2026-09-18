@@ -16,8 +16,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 	<div :class="$style.main">
 		<div v-if="narrow && !isRoot" :class="$style.header">
-			<img :src="instance.iconUrl || '/favicon.ico'" alt="" :class="$style.headerIcon"/>
-			<MkA to="/" :class="$style.headerTitle">{{ instanceName }}</MkA>
+			<MkA to="/" :aria-label="i18n.ts.zalip.brand" :class="$style.headerBrand">
+				<span :class="$style.headerMark">Z</span><span :class="$style.headerTitle">{{ i18n.ts.zalip.brand }}</span>
+			</MkA>
 			<MkButton primary rounded :class="$style.headerButton" @click="goHome">{{ i18n.ts.signup }}</MkButton>
 		</div>
 		<div :class="$style.content">
@@ -103,15 +104,36 @@ onMounted(() => {
 	background: var(--MI_THEME-panel);
 }
 
-.headerIcon {
-	width: 48px;
-	vertical-align: bottom;
-	border-radius: 8px;
+.headerBrand {
+	display: inline-flex;
+	align-items: center;
+	color: var(--MI_THEME-fg);
+	text-decoration: none;
+
+	&:hover {
+		color: var(--MI_THEME-fg);
+		text-decoration: none;
+	}
+}
+
+.headerMark {
+	display: grid;
+	place-items: center;
+	width: 36px;
+	aspect-ratio: 1;
+	border-radius: var(--MI-radius);
+	background: linear-gradient(135deg, var(--MI_THEME-buttonGradateA), var(--MI_THEME-buttonGradateB));
+	color: var(--MI_THEME-fgOnAccent);
+	font-size: 20px;
+	font-weight: 900;
+	letter-spacing: -0.08em;
 }
 
 .headerTitle {
-	margin: 0 16px;
-	font-weight: bold;
+	margin-left: 10px;
+	font-size: 1.1rem;
+	font-weight: 850;
+	letter-spacing: 0.02em;
 }
 
 .headerButton {

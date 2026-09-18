@@ -1270,6 +1270,10 @@ export interface Locale extends ILocale {
     "start": string;
     "zalip": {
         /**
+         * Zalip
+         */
+        "brand": string;
+        /**
          * Комментарии
          */
         "comments": string;
