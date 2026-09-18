@@ -4,7 +4,7 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import { DataSource, In } from 'typeorm';
+import { DataSource, In, IsNull, Not } from 'typeorm';
 import { DI } from '@/di-symbols.js';
 import { IdService } from '@/core/IdService.js';
 import { NoteCreateService } from '@/core/NoteCreateService.js';
@@ -497,6 +497,23 @@ export class ZalipCatalogService {
 			tmdbMediaType: work.tmdbMediaType,
 			tmdbId: work.tmdbId,
 		};
+	}
+
+	/** Bounded admin-only source list for an explicit bulk refresh; it is never returned by public catalogue APIs. */
+	public async listTmdbMediaSyncTargets(limit: number): Promise<ZalipTmdbMediaSyncTarget[]> {
+		const works = await this.db.getRepository(MiZalipWork).find({
+			where: {
+				tmdbMediaType: Not(IsNull()),
+				tmdbId: Not(IsNull()),
+			},
+			order: { updatedAt: 'ASC' },
+			take: limit,
+		});
+		return works.flatMap(work => work.tmdbMediaType != null && work.tmdbId != null ? [{
+			workId: work.id,
+			tmdbMediaType: work.tmdbMediaType,
+			tmdbId: work.tmdbId,
+		}] : []);
 	}
 
 	/** Refreshes provider-owned facts and visual media, leaving editor-written metadata untouched. */

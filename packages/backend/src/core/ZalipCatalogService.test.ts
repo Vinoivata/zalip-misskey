@@ -12,6 +12,34 @@ import { MiZalipSeason } from '@/models/ZalipSeason.js';
 import { MiZalipWork } from '@/models/ZalipWork.js';
 
 describe('ZalipCatalogService', () => {
+	it('returns only TMDB-backed works for a bounded explicit metadata refresh', async () => {
+		const worksRepository = {
+			find: vi.fn().mockResolvedValue([
+				{ id: 'movie-1', tmdbMediaType: 'movie', tmdbId: 11 },
+				{ id: 'manual-1', tmdbMediaType: null, tmdbId: null },
+				{ id: 'series-1', tmdbMediaType: 'tv', tmdbId: 22 },
+			]),
+		};
+		const dataSource = {
+			getRepository: (model: unknown) => {
+				if (model === MiZalipWork) return worksRepository;
+				throw new Error('Unexpected repository');
+			},
+		};
+		const service = new ZalipCatalogService(
+			dataSource as never,
+			{ gen: vi.fn() } as never,
+			{} as never,
+			{} as never,
+		);
+
+		await expect(service.listTmdbMediaSyncTargets(100)).resolves.toEqual([
+			{ workId: 'movie-1', tmdbMediaType: 'movie', tmdbId: 11 },
+			{ workId: 'series-1', tmdbMediaType: 'tv', tmdbId: 22 },
+		]);
+		expect(worksRepository.find).toHaveBeenCalledWith(expect.objectContaining({ take: 100 }));
+	});
+
 	it('delivers a committed episode arrival to every title subscriber and marks its outbox event', async () => {
 		const work = {
 			id: 'work-1',

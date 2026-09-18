@@ -460,6 +460,7 @@ export * as 'zalip/library/update' from './endpoints/zalip/library/update.js';
 export * as 'zalip/admin/works/create' from './endpoints/zalip/admin/works/create.js';
 export * as 'zalip/admin/works/import-tmdb' from './endpoints/zalip/admin/works/import-tmdb.js';
 export * as 'zalip/admin/works/list' from './endpoints/zalip/admin/works/list.js';
+export * as 'zalip/admin/works/sync-all-tmdb-media' from './endpoints/zalip/admin/works/sync-all-tmdb-media.js';
 export * as 'zalip/admin/works/sync-tmdb-media' from './endpoints/zalip/admin/works/sync-tmdb-media.js';
 export * as 'zalip/admin/works/update-state' from './endpoints/zalip/admin/works/update-state.js';
 export * as 'zalip/admin/works/update' from './endpoints/zalip/admin/works/update.js';

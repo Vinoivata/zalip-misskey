@@ -43,7 +43,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</section>
 
 					<section :class="$style.works">
-						<div :class="$style.sectionHeader"><div><p :class="$style.eyebrow">ПОСЛЕДНИЕ</p><h2>Тайтлы</h2></div><button class="_button" :class="$style.reload" :disabled="loading" @click="load"><i class="ti ti-refresh"></i></button></div>
+						<div :class="$style.sectionHeader"><div><p :class="$style.eyebrow">ПОСЛЕДНИЕ</p><h2>Тайтлы</h2></div><div :class="$style.sectionActions"><button class="_button" :class="$style.reload" :disabled="loading || bulkSyncing" @click="load"><i class="ti ti-refresh"></i></button><button class="_button" :class="$style.reload" :disabled="loading || bulkSyncing" @click="syncAllTmdbMedia"><i class="ti ti-database-import"></i> {{ bulkSyncing ? 'Обновляем TMDB…' : 'Обновить все TMDB' }}</button></div></div>
+						<p v-if="bulkMessage" :class="$style.bulkMessage">{{ bulkMessage }}</p>
 						<div v-if="loading" :class="$style.empty"><i class="ti ti-loader-2 ti-spin"></i> Загружаем…</div>
 						<div v-else-if="works.length === 0" :class="$style.empty"><i class="ti ti-movie-off"></i> Черновиков пока нет.</div>
 						<div v-else :class="$style.workList">
@@ -106,6 +107,8 @@ const syncingSeasonKey = ref<string | null>(null);
 const seasonMessage = reactive({ workId: '', text: '' });
 const mediaSyncingId = ref<string | null>(null);
 const mediaMessage = reactive({ workId: '', text: '' });
+const bulkSyncing = ref(false);
+const bulkMessage = ref('');
 const edits = reactive<Record<string, { title: string; originalTitle: string; description: string; releaseYear: string; }>>({});
 const manualSeasons = reactive<Record<string, { seasonNumber: string; title: string; description: string; airDate: string; }>>({});
 const manualEpisodes = reactive<Record<string, { episodeNumber: string; title: string; description: string; airDate: string; runtimeMinutes: string; }>>({});
@@ -341,6 +344,22 @@ async function syncTmdbMedia(work: AdminWork): Promise<void> {
 	}
 }
 
+async function syncAllTmdbMedia(): Promise<void> {
+	bulkSyncing.value = true;
+	bulkMessage.value = '';
+	try {
+		const result = await misskeyApiZalip<{ total: number; updated: number; failed: number }>('zalip/admin/works/sync-all-tmdb-media', {});
+		bulkMessage.value = result.failed === 0
+			? `TMDB обновлён: ${result.updated} из ${result.total} тайтлов.`
+			: `TMDB обновлён: ${result.updated} из ${result.total}; не удалось обновить: ${result.failed}.`;
+		await load();
+	} catch (error) {
+		bulkMessage.value = tmdbImportErrorMessage(error);
+	} finally {
+		bulkSyncing.value = false;
+	}
+}
+
 onMounted(() => void load());
 
 definePage(() => ({ title: 'Редактор Zalip', icon: 'ti ti-pencil' }));
@@ -349,6 +368,7 @@ definePage(() => ({ title: 'Редактор Zalip', icon: 'ti ti-pencil' }));
 <style lang="scss" module>
 .page { padding: 24px var(--MI-margin) 52px; }
 .header, .sectionHeader { display: flex; align-items: end; justify-content: space-between; gap: 16px; }
+.sectionActions { display: flex; align-items: center; flex-wrap: wrap; justify-content: end; gap: 8px; }
 .header { margin-bottom: 24px; }
 .eyebrow { display: flex; align-items: center; gap: 7px; margin: 0 0 8px; color: var(--MI_THEME-accent); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; }
 .header h1, .sectionHeader h2 { margin: 0; }
@@ -380,6 +400,7 @@ definePage(() => ({ title: 'Редактор Zalip', icon: 'ti ti-pencil' }));
 .meta { margin: 5px 0 0; color: var(--MI_THEME-fgTransparentWeak); font-size: 0.8rem; }
 .syncHint, .syncMessage { margin: 8px 0 0; color: var(--MI_THEME-fgTransparentWeak); font-size: 0.78rem; }
 .syncMessage { grid-column: 1 / -1; color: var(--MI_THEME-accent); }
+.bulkMessage { margin: 0 0 12px; color: var(--MI_THEME-fgTransparentWeak); font-size: 0.85rem; }
 .edit { margin-top: 12px; color: var(--MI_THEME-fgTransparentWeak); font-size: 0.8rem; }
 .edit summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--MI_THEME-accent); font-weight: 700; }
 .edit form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
@@ -388,5 +409,5 @@ definePage(() => ({ title: 'Редактор Zalip', icon: 'ti ti-pencil' }));
 .edit textarea { resize: vertical; }
 .editWide { grid-column: 1 / -1; }
 .workActions { display: flex; flex-wrap: wrap; justify-content: end; gap: 7px; }
-@media (max-width: 600px) { .page { padding-top: 12px; } .form, .importForm, .edit form { grid-template-columns: 1fr; } .wide, .editWide { grid-column: auto; } .work { align-items: start; flex-direction: column; } .workActions { justify-content: start; } .header { align-items: start; } }
+@media (max-width: 600px) { .page { padding-top: 12px; } .form, .importForm, .edit form { grid-template-columns: 1fr; } .wide, .editWide { grid-column: auto; } .work { align-items: start; flex-direction: column; } .workActions, .sectionActions { justify-content: start; } .header { align-items: start; } }
 </style>
