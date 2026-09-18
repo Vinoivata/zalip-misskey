@@ -1362,7 +1362,7 @@ definePage(() => ({
 	}
 
 	.sidebarActions {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
+		grid-template-columns: minmax(0, 1fr);
 		gap: 8px;
 		margin: 0;
 	}
@@ -1374,7 +1374,7 @@ definePage(() => ({
 	}
 
 	.watchButton {
-		grid-column: 1 / -1;
+		grid-column: auto;
 	}
 
 	.info {
@@ -1466,12 +1466,6 @@ definePage(() => ({
 
 	.watchButton, .sideButton {
 		padding-inline: 7px;
-	}
-
-	.sideButton span {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 	}
 
 	.playerTab, .playerTabActive {
