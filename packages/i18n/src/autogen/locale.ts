@@ -1268,6 +1268,64 @@ export interface Locale extends ILocale {
      * 始める
      */
     "start": string;
+    "zalip": {
+        /**
+         * Комментарии
+         */
+        "comments": string;
+        /**
+         * Комментарии серии
+         */
+        "episodeComments": string;
+        /**
+         * Обсудить серию
+         */
+        "discussEpisode": string;
+        /**
+         * Контекст комментариев
+         */
+        "discussionContext": string;
+        /**
+         * О тайтле
+         */
+        "aboutTitle": string;
+        /**
+         * Открываем…
+         */
+        "openingDiscussion": string;
+        /**
+         * Начать обсуждение
+         */
+        "startDiscussion": string;
+        /**
+         * Войти, чтобы комментировать
+         */
+        "loginToComment": string;
+        /**
+         * Комментарии к «{title}»
+         */
+        "workDiscussionHeading": ParameterizedString<"title">;
+        /**
+         * Комментарии к «{title}» · {episode}
+         */
+        "episodeDiscussionHeading": ParameterizedString<"title" | "episode">;
+        /**
+         * У «{episode}» пока нет комментариев. Начните обсуждение первым.
+         */
+        "emptyEpisodeDiscussion": ParameterizedString<"episode">;
+        /**
+         * У этого тайтла пока нет комментариев. Начните обсуждение первым.
+         */
+        "emptyWorkDiscussion": string;
+        /**
+         * Не удалось открыть комментарии к этой серии.
+         */
+        "openEpisodeDiscussionFailed": string;
+        /**
+         * Не удалось открыть комментарии для этого тайтла.
+         */
+        "openWorkDiscussionFailed": string;
+    };
     /**
      * ホーム
      */

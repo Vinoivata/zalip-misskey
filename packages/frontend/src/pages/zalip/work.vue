@@ -34,7 +34,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<div :class="$style.playerTabs">
 							<span :class="$style.playerTabActive"><i class="ti ti-device-tv"></i> Смотреть</span>
 							<span v-if="work.seasons.length" :class="$style.playerTab"><i class="ti ti-list-details"></i> Эпизоды</span>
-							<button type="button" class="_button" :class="$style.playerTab" @click="focusDiscussion"><i class="ti ti-messages"></i> {{ discussionScope === 'episode' && selectedEpisode ? 'Комментарии серии' : 'Комментарии' }}</button>
+							<button type="button" class="_button" :class="$style.playerTab" @click="focusDiscussion"><i class="ti ti-messages"></i> {{ discussionScope === 'episode' && selectedEpisode ? i18n.ts.zalip.episodeComments : i18n.ts.zalip.comments }}</button>
 							<button v-if="$i" type="button" class="_button" :class="$style.playerShare" @click="shareWork"><i class="ti ti-share-3"></i><span>Поделиться</span></button>
 						</div>
 						<template v-if="$i">
@@ -96,7 +96,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 											<span v-if="episode.runtimeMinutes || episode.airDate">{{ episodeMeta(episode) }}</span>
 											<p v-if="episode.description">{{ episode.description }}</p>
 											<div :class="$style.episodeActions">
-												<button type="button" class="_button" @click="selectEpisodeAndFocusDiscussion(episode)"><i class="ti ti-messages"></i> {{ episode.discussionNoteId ? 'Комментарии серии' : 'Обсудить серию' }}</button>
+												<button type="button" class="_button" @click="selectEpisodeAndFocusDiscussion(episode)"><i class="ti ti-messages"></i> {{ episode.discussionNoteId ? i18n.ts.zalip.episodeComments : i18n.ts.zalip.discussEpisode }}</button>
 											</div>
 										</div>
 									</article>
@@ -127,15 +127,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<MkA to="/timeline" :class="$style.feed"><i class="ti ti-news"></i> Лента</MkA>
 					</div>
 					<section ref="discussionSection" :class="$style.discussionArea">
-						<div v-if="work.seasons.length" :class="$style.discussionScope" role="tablist" aria-label="Контекст комментариев">
-							<button type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionScope === 'work' }]" :aria-selected="discussionScope === 'work'" @click="selectDiscussionScope('work')"><i class="ti ti-movie"></i> О тайтле</button>
-							<button v-if="selectedEpisode" type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionScope === 'episode' }]" :aria-selected="discussionScope === 'episode'" @click="selectDiscussionScope('episode')"><i class="ti ti-device-tv"></i> {{ episodeLabel(selectedEpisode) }}</button>
+						<div v-if="work.seasons.length" :class="$style.discussionScope" role="group" :aria-label="i18n.ts.zalip.discussionContext">
+							<button type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionScope === 'work' }]" :aria-pressed="discussionScope === 'work'" @click="selectDiscussionScope('work')"><i class="ti ti-movie"></i> {{ i18n.ts.zalip.aboutTitle }}</button>
+							<button v-if="selectedEpisode" type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionScope === 'episode' }]" :aria-pressed="discussionScope === 'episode'" @click="selectDiscussionScope('episode')"><i class="ti ti-device-tv"></i> {{ episodeLabel(selectedEpisode) }}</button>
 						</div>
 						<ZalipDiscussionPanel v-if="activeDiscussionNoteId" :note-id="activeDiscussionNoteId" :heading="activeDiscussionHeading"/>
 						<section v-else :class="$style.discussionPending">
 							<p><i class="ti ti-messages"></i> {{ activeDiscussionEmptyText }}</p>
-							<button v-if="$i" type="button" class="_button" :class="$style.openDiscussion" :disabled="openingDiscussionScope != null" @click="openActiveDiscussion"><i :class="openingDiscussionScope != null ? 'ti ti-loader-2 ti-spin' : 'ti ti-message-plus'"></i> {{ openingDiscussionScope != null ? 'Открываем…' : 'Начать обсуждение' }}</button>
-							<button v-else type="button" class="_button" :class="$style.openDiscussion" @click="signInForDiscussion"><i class="ti ti-login"></i> Войти, чтобы комментировать</button>
+							<button v-if="$i" type="button" class="_button" :class="$style.openDiscussion" :disabled="openingDiscussionScope != null" @click="openActiveDiscussion"><i :class="openingDiscussionScope != null ? 'ti ti-loader-2 ti-spin' : 'ti ti-message-plus'"></i> {{ openingDiscussionScope != null ? i18n.ts.zalip.openingDiscussion : i18n.ts.zalip.startDiscussion }}</button>
+							<button v-else type="button" class="_button" :class="$style.openDiscussion" @click="signInForDiscussion"><i class="ti ti-login"></i> {{ i18n.ts.zalip.loginToComment }}</button>
 							<p v-if="discussionError" :class="$style.discussionError">{{ discussionError }}</p>
 						</section>
 					</section>
@@ -149,6 +149,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script lang="ts" setup>
 import { computed, nextTick, ref, watch } from 'vue';
 import { $i } from '@/i.js';
+import { i18n } from '@/i18n.js';
 import { definePage } from '@/page.js';
 import * as os from '@/os.js';
 import ZalipDiscussionPanel from '@/components/ZalipDiscussionPanel.vue';
@@ -256,12 +257,12 @@ const previousEpisode = computed(() => selectedEpisodeIndex.value > 0 ? episodes
 const nextEpisode = computed(() => selectedEpisodeIndex.value >= 0 ? episodes.value[selectedEpisodeIndex.value + 1] ?? null : null);
 const activeDiscussionNoteId = computed(() => discussionScope.value === 'episode' ? selectedEpisode.value?.discussionNoteId ?? null : discussionNoteId.value);
 const activeDiscussionHeading = computed(() => {
-	if (discussionScope.value === 'episode' && selectedEpisode.value != null && work.value != null) return `Комментарии к «${work.value.title}» · ${episodeLabel(selectedEpisode.value)}`;
-	return work.value == null ? 'Комментарии' : `Комментарии к «${work.value.title}»`;
+	if (discussionScope.value === 'episode' && selectedEpisode.value != null && work.value != null) return i18n.tsx.zalip.episodeDiscussionHeading({ title: work.value.title, episode: episodeLabel(selectedEpisode.value) });
+	return work.value == null ? i18n.ts.zalip.comments : i18n.tsx.zalip.workDiscussionHeading({ title: work.value.title });
 });
 const activeDiscussionEmptyText = computed(() => discussionScope.value === 'episode' && selectedEpisode.value != null
-	? `У ${episodeLabel(selectedEpisode.value).toLowerCase()} пока нет комментариев. Начните обсуждение первым.`
-	: 'У этого тайтла пока нет комментариев. Начните обсуждение первым.');
+	? i18n.tsx.zalip.emptyEpisodeDiscussion({ episode: episodeLabel(selectedEpisode.value) })
+	: i18n.ts.zalip.emptyWorkDiscussion);
 
 function tmdbImage(path: string): string {
 	return `https://image.tmdb.org/t/p/w500${path}`;
@@ -370,6 +371,7 @@ async function loadSeason(season: ZalipSeason): Promise<void> {
 	selectedSeasonNumber.value = season.seasonNumber;
 	episodes.value = [];
 	selectedEpisodeId.value = null;
+	if (discussionScope.value === 'episode') discussionScope.value = 'work';
 	episodesPending.value = true;
 	try {
 		const loadedEpisodes = await misskeyApiZalip<ZalipEpisode[]>('zalip/seasons/episodes', {
@@ -401,6 +403,7 @@ async function toggleSeason(season: ZalipSeason): Promise<void> {
 		selectedSeasonNumber.value = null;
 		episodes.value = [];
 		selectedEpisodeId.value = null;
+		discussionScope.value = 'work';
 		episodesPending.value = false;
 		return;
 	}
@@ -462,7 +465,7 @@ async function openActiveDiscussion(): Promise<void> {
 		await nextTick();
 		focusDiscussion();
 	} catch {
-		discussionError.value = scope === 'episode' ? 'Не удалось открыть комментарии к этой серии.' : 'Не удалось открыть комментарии для этого тайтла.';
+		discussionError.value = scope === 'episode' ? i18n.ts.zalip.openEpisodeDiscussionFailed : i18n.ts.zalip.openWorkDiscussionFailed;
 	} finally {
 		openingDiscussionScope.value = null;
 	}

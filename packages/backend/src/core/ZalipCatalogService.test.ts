@@ -6,7 +6,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ZalipCatalogService } from '@/core/ZalipCatalogService.js';
 import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
+import { MiZalipEpisodeNoteContext } from '@/models/ZalipEpisodeNoteContext.js';
 import { MiZalipLibraryEntry } from '@/models/ZalipLibraryEntry.js';
+import { MiZalipNoteContext } from '@/models/ZalipNoteContext.js';
 import { MiZalipReleaseEvent } from '@/models/ZalipReleaseEvent.js';
 import { MiZalipSeason } from '@/models/ZalipSeason.js';
 import { MiZalipSharedNote } from '@/models/ZalipSharedNote.js';
@@ -93,6 +95,92 @@ describe('ZalipCatalogService', () => {
 			reactionAcceptance: null,
 		})).resolves.toBeNull();
 		expect(noteCreateService.fetchAndCreate).not.toHaveBeenCalled();
+	});
+
+	it('locks a title before creating its first discussion root', async () => {
+		const work = { id: 'work-1', title: 'Example series' };
+		const workQuery = {
+			setLock: vi.fn().mockReturnThis(),
+			where: vi.fn().mockReturnThis(),
+			andWhere: vi.fn().mockReturnThis(),
+			getOne: vi.fn().mockResolvedValue(work),
+		};
+		const worksRepository = { createQueryBuilder: vi.fn().mockReturnValue(workQuery) };
+		const contextsRepository = {
+			findOneBy: vi.fn().mockResolvedValue(null),
+			create: vi.fn((input) => input),
+			save: vi.fn().mockResolvedValue(null),
+		};
+		const manager = {
+			getRepository: (model: unknown) => {
+				if (model === MiZalipWork) return worksRepository;
+				if (model === MiZalipNoteContext) return contextsRepository;
+				throw new Error('Unexpected repository');
+			},
+		};
+		const dataSource = {
+			transaction: async (callback: (transactionManager: typeof manager) => Promise<unknown>) => await callback(manager),
+		};
+		const noteCreateService = { fetchAndCreate: vi.fn().mockResolvedValue({ id: 'note-1' }) };
+		const service = new ZalipCatalogService(
+			dataSource as never,
+			{} as never,
+			noteCreateService as never,
+			{} as never,
+		);
+
+		await expect(service.createDiscussion({ id: 'user-1' } as never, work.id, null)).resolves.toEqual({ noteId: 'note-1', created: true });
+
+		expect(workQuery.setLock).toHaveBeenCalledWith('pessimistic_write');
+		expect(noteCreateService.fetchAndCreate).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }), expect.objectContaining({
+			name: 'zalip:discussion-root',
+			visibility: 'home',
+			localOnly: true,
+		}));
+		expect(contextsRepository.save).toHaveBeenCalledWith(expect.objectContaining({ workId: work.id, noteId: 'note-1' }));
+	});
+
+	it('locks an episode before creating its first discussion root', async () => {
+		const episode = {
+			id: 'episode-1',
+			episodeNumber: 1,
+			season: { work: { title: 'Example series' } },
+		};
+		const episodeQuery = {
+			setLock: vi.fn().mockReturnThis(),
+			innerJoinAndSelect: vi.fn().mockReturnThis(),
+			where: vi.fn().mockReturnThis(),
+			andWhere: vi.fn().mockReturnThis(),
+			getOne: vi.fn().mockResolvedValue(episode),
+		};
+		const episodesRepository = { createQueryBuilder: vi.fn().mockReturnValue(episodeQuery) };
+		const contextsRepository = {
+			findOneBy: vi.fn().mockResolvedValue(null),
+			create: vi.fn((input) => input),
+			save: vi.fn().mockResolvedValue(null),
+		};
+		const manager = {
+			getRepository: (model: unknown) => {
+				if (model === MiZalipEpisode) return episodesRepository;
+				if (model === MiZalipEpisodeNoteContext) return contextsRepository;
+				throw new Error('Unexpected repository');
+			},
+		};
+		const dataSource = {
+			transaction: async (callback: (transactionManager: typeof manager) => Promise<unknown>) => await callback(manager),
+		};
+		const noteCreateService = { fetchAndCreate: vi.fn().mockResolvedValue({ id: 'note-1' }) };
+		const service = new ZalipCatalogService(
+			dataSource as never,
+			{} as never,
+			noteCreateService as never,
+			{} as never,
+		);
+
+		await expect(service.createEpisodeDiscussion({ id: 'user-1' } as never, episode.id, null)).resolves.toEqual({ noteId: 'note-1', created: true });
+
+		expect(episodeQuery.setLock).toHaveBeenCalledWith('pessimistic_write');
+		expect(contextsRepository.save).toHaveBeenCalledWith(expect.objectContaining({ episodeId: episode.id, noteId: 'note-1' }));
 	});
 
 	it('filters the public catalogue by an exact normalized genre tag in PostgreSQL', async () => {

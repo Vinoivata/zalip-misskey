@@ -1052,40 +1052,43 @@ export class ZalipCatalogService {
 		workId: MiZalipWork['id'],
 		text: string | null,
 	): Promise<PackedZalipDiscussion | null> {
-		const work = await this.db.getRepository(MiZalipWork).findOneBy({
-			id: workId,
-			publicationState: 'published',
+		return await this.db.transaction(async manager => {
+			const work = await manager.getRepository(MiZalipWork).createQueryBuilder('work')
+				.setLock('pessimistic_write')
+				.where('work.id = :workId', { workId })
+				.andWhere('work.publicationState = :publicationState', { publicationState: 'published' })
+				.getOne();
+			if (work == null) return null;
+
+			const contexts = manager.getRepository(MiZalipNoteContext);
+			const existing = await contexts.findOneBy({ workId: work.id });
+			if (existing != null) return { noteId: existing.noteId, created: false };
+
+			const note = await this.noteCreateService.fetchAndCreate(me, {
+				createdAt: new Date(),
+				name: zalipDiscussionRootMarker,
+				replyId: null,
+				renoteId: null,
+				fileIds: [],
+				text: text ?? `Обсуждение: ${work.title}`,
+				cw: null,
+				visibility: 'home',
+				visibleUserIds: [],
+				channelId: null,
+				localOnly: true,
+				reactionAcceptance: null,
+				poll: null,
+			});
+
+			await contexts.save(contexts.create({
+				workId: work.id,
+				noteId: note.id,
+				createdById: me.id,
+				createdAt: new Date(),
+			}));
+
+			return { noteId: note.id, created: true };
 		});
-		if (work == null) return null;
-
-		const contexts = this.db.getRepository(MiZalipNoteContext);
-		const existing = await contexts.findOneBy({ workId: work.id });
-		if (existing != null) return { noteId: existing.noteId, created: false };
-
-		const note = await this.noteCreateService.fetchAndCreate(me, {
-			createdAt: new Date(),
-			name: zalipDiscussionRootMarker,
-			replyId: null,
-			renoteId: null,
-			fileIds: [],
-			text: text ?? `Обсуждение: ${work.title}`,
-			cw: null,
-			visibility: 'home',
-			visibleUserIds: [],
-			channelId: null,
-			localOnly: true,
-			reactionAcceptance: null,
-			poll: null,
-		});
-
-		await contexts.save(contexts.create({
-			workId: work.id,
-			noteId: note.id,
-			createdById: me.id,
-			createdAt: new Date(),
-		}));
-
-		return { noteId: note.id, created: true };
 	}
 
 	public async createEpisodeDiscussion(
@@ -1093,42 +1096,45 @@ export class ZalipCatalogService {
 		episodeId: MiZalipEpisode['id'],
 		text: string | null,
 	): Promise<PackedZalipDiscussion | null> {
-		const episode = await this.db.getRepository(MiZalipEpisode).createQueryBuilder('episode')
-			.innerJoinAndSelect('episode.season', 'season')
-			.innerJoinAndSelect('season.work', 'work')
-			.where('episode.id = :episodeId', { episodeId })
-			.andWhere('work.publicationState = :publicationState', { publicationState: 'published' })
-			.getOne();
-		if (episode?.season?.work == null) return null;
+		return await this.db.transaction(async manager => {
+			const episode = await manager.getRepository(MiZalipEpisode).createQueryBuilder('episode')
+				.setLock('pessimistic_write')
+				.innerJoinAndSelect('episode.season', 'season')
+				.innerJoinAndSelect('season.work', 'work')
+				.where('episode.id = :episodeId', { episodeId })
+				.andWhere('work.publicationState = :publicationState', { publicationState: 'published' })
+				.getOne();
+			if (episode?.season?.work == null) return null;
 
-		const contexts = this.db.getRepository(MiZalipEpisodeNoteContext);
-		const existing = await contexts.findOneBy({ episodeId: episode.id });
-		if (existing != null) return { noteId: existing.noteId, created: false };
+			const contexts = manager.getRepository(MiZalipEpisodeNoteContext);
+			const existing = await contexts.findOneBy({ episodeId: episode.id });
+			if (existing != null) return { noteId: existing.noteId, created: false };
 
-		const note = await this.noteCreateService.fetchAndCreate(me, {
-			createdAt: new Date(),
-			name: zalipDiscussionRootMarker,
-			replyId: null,
-			renoteId: null,
-			fileIds: [],
-			text: text ?? `Обсуждение: ${episode.season.work.title} — серия ${episode.episodeNumber}`,
-			cw: null,
-			visibility: 'home',
-			visibleUserIds: [],
-			channelId: null,
-			localOnly: true,
-			reactionAcceptance: null,
-			poll: null,
+			const note = await this.noteCreateService.fetchAndCreate(me, {
+				createdAt: new Date(),
+				name: zalipDiscussionRootMarker,
+				replyId: null,
+				renoteId: null,
+				fileIds: [],
+				text: text ?? `Обсуждение: ${episode.season.work.title} — серия ${episode.episodeNumber}`,
+				cw: null,
+				visibility: 'home',
+				visibleUserIds: [],
+				channelId: null,
+				localOnly: true,
+				reactionAcceptance: null,
+				poll: null,
+			});
+
+			await contexts.save(contexts.create({
+				episodeId: episode.id,
+				noteId: note.id,
+				createdById: me.id,
+				createdAt: new Date(),
+			}));
+
+			return { noteId: note.id, created: true };
 		});
-
-		await contexts.save(contexts.create({
-			episodeId: episode.id,
-			noteId: note.id,
-			createdById: me.id,
-			createdAt: new Date(),
-		}));
-
-		return { noteId: note.id, created: true };
 	}
 
 	/** Creates an ordinary local Misskey post and attaches the canonical Zalip work as structured UI context. */

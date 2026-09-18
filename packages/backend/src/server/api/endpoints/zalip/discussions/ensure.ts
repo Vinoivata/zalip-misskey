@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Zalip contributors
+ * SPDX-FileCopyrightText: syuilo and misskey-project
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
@@ -13,12 +13,16 @@ export const meta = {
 	requireCredential: true,
 	prohibitMoved: true,
 	kind: 'write:notes',
+	limit: {
+		duration: 1000 * 60 * 60,
+		max: 30,
+	},
 	description: 'Create the hidden local root for a published Zalip title discussion when it does not exist yet.',
 	res: {
 		type: 'object', optional: false, nullable: false,
 		properties: {
-			noteId: { type: 'string', format: 'misskey:id' },
-			created: { type: 'boolean' },
+			noteId: { type: 'string', format: 'misskey:id', optional: false, nullable: false },
+			created: { type: 'boolean', optional: false, nullable: false },
 		},
 		required: ['noteId', 'created'],
 	},

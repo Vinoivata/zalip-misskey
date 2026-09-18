@@ -689,8 +689,12 @@ import type {
 	ZalipAdminWorksUpdateResponse,
 	ZalipAdminWorksUpdateStateRequest,
 	ZalipAdminWorksUpdateStateResponse,
+	ZalipDiscussionsEnsureRequest,
+	ZalipDiscussionsEnsureResponse,
 	ZalipDiscussionsShowRequest,
 	ZalipDiscussionsShowResponse,
+	ZalipEpisodesDiscussionsEnsureRequest,
+	ZalipEpisodesDiscussionsEnsureResponse,
 	ZalipLibraryListResponse,
 	ZalipLibraryUpdateRequest,
 	ZalipLibraryUpdateResponse,
@@ -1164,7 +1168,9 @@ export type Endpoints = {
 	'zalip/admin/works/sync-tmdb-media': { req: ZalipAdminWorksSyncTmdbMediaRequest; res: ZalipAdminWorksSyncTmdbMediaResponse };
 	'zalip/admin/works/update': { req: ZalipAdminWorksUpdateRequest; res: ZalipAdminWorksUpdateResponse };
 	'zalip/admin/works/update-state': { req: ZalipAdminWorksUpdateStateRequest; res: ZalipAdminWorksUpdateStateResponse };
+	'zalip/discussions/ensure': { req: ZalipDiscussionsEnsureRequest; res: ZalipDiscussionsEnsureResponse };
 	'zalip/discussions/show': { req: ZalipDiscussionsShowRequest; res: ZalipDiscussionsShowResponse };
+	'zalip/episodes/discussions/ensure': { req: ZalipEpisodesDiscussionsEnsureRequest; res: ZalipEpisodesDiscussionsEnsureResponse };
 	'zalip/library/list': { req: EmptyRequest; res: ZalipLibraryListResponse };
 	'zalip/library/update': { req: ZalipLibraryUpdateRequest; res: ZalipLibraryUpdateResponse };
 	'zalip/playback/alloha/show': { req: ZalipPlaybackAllohaShowRequest; res: ZalipPlaybackAllohaShowResponse };
