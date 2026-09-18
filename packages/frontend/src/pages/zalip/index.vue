@@ -42,16 +42,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 			<section :class="$style.catalogue">
 				<div :class="$style.sectionHeader">
-					<div><p :class="$style.eyebrow">КАТАЛОГ</p><h2>{{ activeSearch ? `Результаты: ${activeSearch}` : 'Новое и важное' }}</h2></div>
-					<span v-if="works.length" :class="$style.count">{{ works.length }} тайтлов</span>
+					<div><p :class="$style.eyebrow">КАТАЛОГ</p><h2>{{ catalogueTitle }}</h2></div>
+					<div :class="$style.catalogueMeta"><MkA v-if="activeGenre" to="/" :class="$style.resetGenre"><i class="ti ti-x"></i> Все жанры</MkA><span v-if="works.length" :class="$style.count">{{ works.length }} тайтлов</span></div>
 				</div>
 
 				<div v-if="pending" :class="$style.empty"><i class="ti ti-loader-2 ti-spin"></i> Загружаем каталог…</div>
 				<div v-else-if="loadError" :class="$style.empty"><i class="ti ti-alert-circle"></i> Каталог временно недоступен.</div>
 				<div v-else-if="works.length === 0" :class="$style.empty">
 					<i class="ti ti-sparkles"></i>
-					<strong>{{ activeSearch ? 'Ничего не найдено' : 'Каталог готов к первому тайтлу' }}</strong>
-					<span>{{ activeSearch ? 'Попробуйте другое название или оригинальное название.' : 'Администратор добавит его как черновик, проверит и только затем опубликует.' }}</span>
+					<strong>{{ activeSearch ? 'Ничего не найдено' : activeGenre ? 'В этом жанре пока нет тайтлов' : 'Каталог готов к первому тайтлу' }}</strong>
+					<span>{{ activeSearch ? 'Попробуйте другое название или оригинальное название.' : activeGenre ? 'Выберите другой жанр или вернитесь ко всему каталогу.' : 'Администратор добавит его как черновик, проверит и только затем опубликует.' }}</span>
 				</div>
 				<div v-else :class="$style.grid">
 					<MkA v-for="work in works" :key="work.id" :to="`/zalip/${work.slug}`" :class="$style.card">
@@ -74,7 +74,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { onMounted, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { definePage } from '@/page.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { iAmAdmin } from '@/i.js';
@@ -106,6 +106,11 @@ const pending = ref(true);
 const loadError = ref(false);
 const searchQuery = ref('');
 const activeSearch = ref('');
+const props = withDefaults(defineProps<{ genre?: string }>(), { genre: '' });
+const activeGenre = computed(() => props.genre.trim());
+const catalogueTitle = computed(() => activeSearch.value
+	? `Результаты: ${activeSearch.value}`
+	: activeGenre.value ? `Жанр: ${activeGenre.value}` : 'Новое и важное');
 
 function tmdbImage(path: string): string {
 	return `https://image.tmdb.org/t/p/w500${path}`;
@@ -124,7 +129,10 @@ async function loadCatalogue(): Promise<void> {
 	pending.value = true;
 	loadError.value = false;
 	try {
-		works.value = await misskeyApiZalip<ZalipWork[]>('zalip/works/list', { limit: 20 });
+		works.value = await misskeyApiZalip<ZalipWork[]>('zalip/works/list', {
+			limit: 20,
+			...(activeGenre.value ? { genre: activeGenre.value } : {}),
+		});
 		releaseEvents.value = await misskeyApiZalip<ZalipReleaseEvent[]>('zalip/releases/list', { limit: 12 }).catch(() => []);
 	} catch {
 		loadError.value = true;
@@ -160,7 +168,11 @@ async function resetSearch(): Promise<void> {
 	await loadCatalogue();
 }
 
-onMounted(() => void loadCatalogue());
+watch(activeGenre, () => {
+	activeSearch.value = '';
+	searchQuery.value = '';
+	void loadCatalogue();
+}, { immediate: true });
 
 definePage(() => ({
 	title: 'Zalip',
@@ -319,6 +331,23 @@ definePage(() => ({
 .count {
 	color: var(--MI_THEME-fgTransparentWeak);
 	font-size: 0.85rem;
+}
+
+.catalogueMeta {
+	display: flex;
+	align-items: center;
+	justify-content: end;
+	gap: 10px;
+}
+
+.resetGenre {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	color: var(--MI_THEME-accent);
+	font-size: 0.82rem;
+	font-weight: 700;
+	text-decoration: none;
 }
 
 .empty {

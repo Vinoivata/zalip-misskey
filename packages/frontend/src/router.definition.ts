@@ -26,6 +26,9 @@ function chatPage(...args: Parameters<typeof page>) {
 export const ROUTE_DEF = [{
 	name: 'index',
 	path: '/',
+	query: {
+		genre: 'genre',
+	},
 	component: PageZalipHome,
 }, {
 	path: '/timeline',

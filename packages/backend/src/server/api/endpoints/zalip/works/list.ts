@@ -47,6 +47,7 @@ export const paramDef = {
 	type: 'object',
 	properties: {
 		limit: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
+		genre: { type: 'string', minLength: 1, maxLength: 80 },
 	},
 	required: [],
 } as const;
@@ -57,7 +58,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		private zalipCatalogService: ZalipCatalogService,
 	) {
 		super(meta, paramDef, async (ps) => {
-			return await this.zalipCatalogService.listPublished(ps.limit);
+			return await this.zalipCatalogService.listPublished(ps.limit, ps.genre);
 		});
 	}
 }

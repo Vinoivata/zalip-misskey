@@ -95,6 +95,50 @@ describe('ZalipCatalogService', () => {
 		expect(noteCreateService.fetchAndCreate).not.toHaveBeenCalled();
 	});
 
+	it('filters the public catalogue by an exact normalized genre tag in PostgreSQL', async () => {
+		const query = {
+			where: vi.fn().mockReturnThis(),
+			andWhere: vi.fn().mockReturnThis(),
+			orderBy: vi.fn().mockReturnThis(),
+			addOrderBy: vi.fn().mockReturnThis(),
+			take: vi.fn().mockReturnThis(),
+			getMany: vi.fn().mockResolvedValue([{
+				id: 'work-1',
+				slug: 'example-series',
+				kind: 'series',
+				title: 'Example Series',
+				originalTitle: null,
+				description: null,
+				releaseYear: 2026,
+				genres: ['Драма'],
+				runtimeMinutes: 44,
+				posterPath: null,
+				backdropPath: null,
+				trailerYoutubeKey: null,
+			}]),
+		};
+		const worksRepository = { createQueryBuilder: vi.fn().mockReturnValue(query) };
+		const dataSource = {
+			getRepository: (model: unknown) => {
+				if (model === MiZalipWork) return worksRepository;
+				throw new Error('Unexpected repository');
+			},
+		};
+		const service = new ZalipCatalogService(
+			dataSource as never,
+			{} as never,
+			{} as never,
+			{} as never,
+		);
+
+		await expect(service.listPublished(12, '  Драма  ')).resolves.toEqual([expect.objectContaining({
+			id: 'work-1',
+			genres: ['Драма'],
+		})]);
+		expect(query.andWhere).toHaveBeenCalledWith('work.genres @> CAST(:genre AS jsonb)', { genre: '["Драма"]' });
+		expect(query.take).toHaveBeenCalledWith(12);
+	});
+
 	it('returns only TMDB-backed works for a bounded explicit metadata refresh', async () => {
 		const worksRepository = {
 			find: vi.fn().mockResolvedValue([

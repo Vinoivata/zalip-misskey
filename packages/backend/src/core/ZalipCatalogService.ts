@@ -173,12 +173,23 @@ export class ZalipCatalogService {
 		};
 	}
 
-	public async listPublished(limit: number): Promise<PackedZalipWork[]> {
-		const works = await this.db.getRepository(MiZalipWork).find({
-			where: { publicationState: 'published' },
-			order: { publishedAt: 'DESC', createdAt: 'DESC' },
-			take: limit,
-		});
+	public async listPublished(limit: number, genre?: string): Promise<PackedZalipWork[]> {
+		const normalizedGenre = genre?.trim();
+		if (normalizedGenre != null && normalizedGenre.length === 0) return [];
+
+		const works = normalizedGenre == null
+			? await this.db.getRepository(MiZalipWork).find({
+				where: { publicationState: 'published' },
+				order: { publishedAt: 'DESC', createdAt: 'DESC' },
+				take: limit,
+			})
+			: await this.db.getRepository(MiZalipWork).createQueryBuilder('work')
+				.where('work.publicationState = :publicationState', { publicationState: 'published' })
+				.andWhere('work.genres @> CAST(:genre AS jsonb)', { genre: JSON.stringify([normalizedGenre]) })
+				.orderBy('work.publishedAt', 'DESC')
+				.addOrderBy('work.createdAt', 'DESC')
+				.take(limit)
+				.getMany();
 
 		return works.map(work => this.packWork(work));
 	}

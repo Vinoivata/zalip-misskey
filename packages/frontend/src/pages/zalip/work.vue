@@ -21,7 +21,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<p :class="$style.kind">{{ kindLabel(work.kind) }}<span v-if="work.releaseYear"> · {{ work.releaseYear }}</span><span v-if="work.runtimeMinutes"> · {{ runtimeLabel(work.runtimeMinutes, work.kind) }}</span></p>
 					<h1>{{ work.title }}</h1>
 					<p v-if="work.originalTitle" :class="$style.original">{{ work.originalTitle }}</p>
-					<div v-if="work.genres.length" :class="$style.genres" aria-label="Жанры"><span v-for="genre in work.genres" :key="genre">{{ genre }}</span></div>
+					<div v-if="work.genres.length" :class="$style.genres" aria-label="Жанры"><MkA v-for="genre in work.genres" :key="genre" :to="genreLink(genre)">{{ genre }}</MkA></div>
 					<p v-if="work.description" :class="$style.description">{{ work.description }}</p>
 					<p v-else :class="$style.description">Описание появится после редакторской проверки.</p>
 					<section v-if="work.galleryPaths.length" :class="$style.gallery">
@@ -30,19 +30,53 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<a v-for="path in work.galleryPaths" :key="path" :href="tmdbBackdrop(path)" target="_blank" rel="noopener noreferrer" :aria-label="`Открыть кадр из ${work.title}`"><img :src="tmdbGalleryImage(path)" alt="" loading="lazy"></a>
 						</div>
 					</section>
-					<section v-if="$i" :class="$style.player">
-						<h2><i class="ti ti-device-tv"></i> Смотреть</h2>
-						<p v-if="allohaPlayback == null">Проверяем доступность в Alloha…</p>
-						<template v-else-if="allohaPlayback.available">
-							<p>Плеер работает через Alloha. Озвучку можно выбрать здесь, а серию — в самом плеере без перезагрузки карточки.</p>
-							<label v-if="allohaPlayback.translations.length > 1" :class="$style.translation"><span>Озвучка</span><select v-model="selectedAllohaTranslationId" class="_input" aria-label="Озвучка Alloha"><option v-for="translation in allohaPlayback.translations" :key="translation.id" :value="translation.id">{{ translationLabel(translation) }}</option></select></label>
-							<button v-if="!allohaPlayerOpen" type="button" class="_button" :class="$style.playerButton" @click="allohaPlayerOpen = true"><i class="ti ti-player-play-filled"></i> Открыть плеер Alloha</button>
-							<div v-else-if="activeAllohaIframe" :class="$style.playerFrame"><iframe :src="activeAllohaIframe" :title="`Плеер Alloha: ${work.title}`" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>
-							<p :class="$style.providerNotice">После открытия iframe Alloha может устанавливать свои cookies и обрабатывать данные по своим правилам.</p>
+					<section :class="$style.player" aria-label="Просмотр">
+						<div :class="$style.playerTabs">
+							<span :class="$style.playerTabActive"><i class="ti ti-device-tv"></i> Смотреть</span>
+							<span v-if="work.seasons.length" :class="$style.playerTab"><i class="ti ti-list-details"></i> Эпизоды</span>
+							<MkA v-if="discussionNoteId" :to="`/notes/${discussionNoteId}/replies`" :class="$style.playerTab"><i class="ti ti-messages"></i> Комментарии</MkA>
+							<button v-if="$i" type="button" class="_button" :class="$style.playerShare" @click="shareWork"><i class="ti ti-share-3"></i><span>Поделиться</span></button>
+						</div>
+						<template v-if="$i">
+							<p v-if="allohaPlayback == null" :class="$style.playerState"><i class="ti ti-loader-2 ti-spin"></i> Проверяем доступность в Alloha…</p>
+							<template v-else-if="allohaPlayback.available">
+								<div v-if="allohaPlayerOpen && activeAllohaIframe" :class="$style.playerFrame"><iframe :src="activeAllohaIframe" :title="`Плеер Alloha: ${work.title}`" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>
+								<div v-else :class="$style.playerPreview">
+									<img v-if="selectedEpisode?.stillPath" :src="tmdbBackdrop(selectedEpisode.stillPath)" alt="" loading="lazy">
+									<img v-else-if="work.backdropPath" :src="tmdbBackdrop(work.backdropPath)" alt="" loading="lazy">
+									<div :class="$style.playerPreviewShade">
+										<span>ALLOHA · ПЛЕЕР</span>
+										<strong>{{ selectedEpisode ? episodeLabel(selectedEpisode) : work.title }}</strong>
+										<button type="button" class="_button" :class="$style.playerButton" @click="openAllohaPlayer"><i class="ti ti-player-play-filled"></i> Открыть плеер</button>
+									</div>
+								</div>
+								<div :class="$style.playerToolbar">
+									<button type="button" class="_button" :class="$style.episodeNav" :disabled="previousEpisode == null" aria-label="Предыдущая серия" @click="selectRelativeEpisode(-1)"><i class="ti ti-chevron-left"></i></button>
+									<div :class="$style.nowPlaying"><span>Выбрано</span><strong>{{ selectedEpisode ? episodeLabel(selectedEpisode) : kindLabel(work.kind) }}</strong></div>
+									<button type="button" class="_button" :class="$style.episodeNav" :disabled="nextEpisode == null" aria-label="Следующая серия" @click="selectRelativeEpisode(1)"><i class="ti ti-chevron-right"></i></button>
+									<label v-if="allohaPlayback.translations.length > 1" :class="$style.translation"><i class="ti ti-language"></i><span class="_visuallyHidden">Озвучка</span><select v-model="selectedAllohaTranslationId" class="_input" aria-label="Озвучка Alloha"><option v-for="translation in allohaPlayback.translations" :key="translation.id" :value="translation.id">{{ translationLabel(translation) }}</option></select></label>
+									<span v-else :class="$style.providerLabel">Alloha</span>
+								</div>
+								<p :class="$style.providerNotice">Внешний плеер Alloha переключает само видео в своём интерфейсе. Выбор серии здесь открывает её карточку, описание и ветку комментариев без перезагрузки страницы.</p>
+							</template>
+							<p v-else :class="$style.playerUnavailable"><i class="ti ti-clock"></i> В Alloha этот тайтл пока не найден. Доступность проверяется автоматически раз в час.</p>
 						</template>
-						<p v-else :class="$style.playerUnavailable">В Alloha этот тайтл пока не найден. Доступность проверяется автоматически раз в час.</p>
+						<p v-else :class="$style.playerUnavailable"><i class="ti ti-login"></i> Войдите в Zalip, чтобы открыть плеер и сохранить подписку на новые серии.</p>
+
+						<div v-if="work.seasons.length" :class="$style.playerEpisodes">
+							<div :class="$style.seasonPicker"><span>Сезон</span><div><button v-for="season in work.seasons" :key="season.id" type="button" class="_button" :class="[$style.seasonPill, { [$style.selectedSeasonPill]: selectedSeasonNumber === season.seasonNumber }]" @click="selectSeason(season)">{{ season.seasonNumber === 0 ? 'Спец.' : season.seasonNumber }}</button></div></div>
+							<p v-if="episodesPending" :class="$style.episodeRailState"><i class="ti ti-loader-2 ti-spin"></i> Загружаем эпизоды…</p>
+							<p v-else-if="episodes.length === 0" :class="$style.episodeRailState">Список серий пока готовится редактором.</p>
+							<div v-else :class="$style.episodeRail" aria-label="Серии выбранного сезона">
+								<button v-for="episode in episodes" :key="episode.id" type="button" class="_button" :class="[$style.episodeTile, { [$style.selectedEpisodeTile]: selectedEpisode?.id === episode.id }]" :aria-pressed="selectedEpisode?.id === episode.id" @click="selectEpisode(episode)">
+									<img v-if="episode.stillPath" :src="tmdbGalleryImage(episode.stillPath)" :alt="`Кадр: ${episodeLabel(episode)}`" loading="lazy">
+									<span v-else :class="$style.episodeTileFallback"><i class="ti ti-device-tv"></i></span>
+									<strong>Эпизод {{ episode.episodeNumber }}</strong>
+									<small>{{ episode.title }}</small>
+								</button>
+							</div>
+						</div>
 					</section>
-					<section v-else :class="$style.player"><h2><i class="ti ti-device-tv"></i> Смотреть</h2><p>Войдите в Zalip, чтобы открыть плеер и сохранить подписку на новые серии.</p></section>
 					<section v-if="work.seasons.length" :class="$style.seasons">
 						<h2>Сезоны</h2>
 						<div :class="$style.seasonList">
@@ -202,6 +236,7 @@ const selectedSeasonNumber = ref<number | null>(null);
 const episodes = ref<ZalipEpisode[]>([]);
 const episodesPending = ref(false);
 const episodeRequestId = ref(0);
+const selectedEpisodeId = ref<string | null>(null);
 const discussionCreatingEpisodeId = ref<string | null>(null);
 const episodeDiscussionError = ref<string | null>(null);
 
@@ -212,6 +247,11 @@ const activeAllohaIframe = computed(() => {
 		?? allohaPlayback.value.translations[0]?.iframe
 		?? null;
 });
+
+const selectedEpisode = computed(() => episodes.value.find(episode => episode.id === selectedEpisodeId.value) ?? null);
+const selectedEpisodeIndex = computed(() => selectedEpisode.value == null ? -1 : episodes.value.findIndex(episode => episode.id === selectedEpisode.value?.id));
+const previousEpisode = computed(() => selectedEpisodeIndex.value > 0 ? episodes.value[selectedEpisodeIndex.value - 1] ?? null : null);
+const nextEpisode = computed(() => selectedEpisodeIndex.value >= 0 ? episodes.value[selectedEpisodeIndex.value + 1] ?? null : null);
 
 function tmdbImage(path: string): string {
 	return `https://image.tmdb.org/t/p/w500${path}`;
@@ -243,6 +283,10 @@ function seasonLabel(seasonNumber: number, title: string): string {
 
 function episodeLabel(episode: ZalipEpisode): string {
 	return `Серия ${episode.episodeNumber}: ${episode.title}`;
+}
+
+function genreLink(genre: string): string {
+	return `/?genre=${encodeURIComponent(genre)}`;
 }
 
 function shareWork(): void {
@@ -280,6 +324,7 @@ async function load(): Promise<void> {
 	discussionError.value = null;
 	selectedSeasonNumber.value = null;
 	episodes.value = [];
+	selectedEpisodeId.value = null;
 	episodeRequestId.value++;
 	try {
 		work.value = await misskeyApiZalip<ZalipWork>('zalip/works/show', { slug: props.slug });
@@ -298,6 +343,8 @@ async function load(): Promise<void> {
 		releaseSubscribed.value = entry?.isReleaseSubscribed ?? false;
 		allohaPlayback.value = playback;
 		selectedAllohaTranslationId.value = playback?.translations[0]?.id ?? null;
+		const initialSeason = work.value.seasons.find(season => season.seasonNumber > 0) ?? work.value.seasons[0];
+		if (initialSeason != null) void selectSeason(initialSeason);
 	} catch {
 		work.value = null;
 		discussionNoteId.value = null;
@@ -306,18 +353,12 @@ async function load(): Promise<void> {
 	}
 }
 
-async function toggleSeason(season: ZalipSeason): Promise<void> {
+async function loadSeason(season: ZalipSeason): Promise<void> {
 	if (work.value == null) return;
 	const requestId = ++episodeRequestId.value;
-	if (selectedSeasonNumber.value === season.seasonNumber) {
-		selectedSeasonNumber.value = null;
-		episodes.value = [];
-		episodesPending.value = false;
-		return;
-	}
-
 	selectedSeasonNumber.value = season.seasonNumber;
 	episodes.value = [];
+	selectedEpisodeId.value = null;
 	episodesPending.value = true;
 	episodeDiscussionError.value = null;
 	try {
@@ -327,6 +368,9 @@ async function toggleSeason(season: ZalipSeason): Promise<void> {
 		});
 		if (selectedSeasonNumber.value === season.seasonNumber && episodeRequestId.value === requestId) {
 			episodes.value = loadedEpisodes;
+			selectedEpisodeId.value = loadedEpisodes.find(episode => episode.episodeNumber > episodesWatched.value)?.id
+				?? loadedEpisodes[0]?.id
+				?? null;
 		}
 	} catch {
 		if (selectedSeasonNumber.value === season.seasonNumber && episodeRequestId.value === requestId) {
@@ -335,6 +379,35 @@ async function toggleSeason(season: ZalipSeason): Promise<void> {
 	} finally {
 		if (episodeRequestId.value === requestId) episodesPending.value = false;
 	}
+}
+
+async function selectSeason(season: ZalipSeason): Promise<void> {
+	if (selectedSeasonNumber.value === season.seasonNumber && (episodes.value.length > 0 || episodesPending.value)) return;
+	await loadSeason(season);
+}
+
+async function toggleSeason(season: ZalipSeason): Promise<void> {
+	if (selectedSeasonNumber.value === season.seasonNumber) {
+		selectedSeasonNumber.value = null;
+		episodes.value = [];
+		selectedEpisodeId.value = null;
+		episodesPending.value = false;
+		return;
+	}
+	await loadSeason(season);
+}
+
+function selectEpisode(episode: ZalipEpisode): void {
+	selectedEpisodeId.value = episode.id;
+}
+
+function selectRelativeEpisode(offset: -1 | 1): void {
+	const episode = offset === -1 ? previousEpisode.value : nextEpisode.value;
+	if (episode != null) selectEpisode(episode);
+}
+
+function openAllohaPlayer(): void {
+	if (allohaPlayback.value?.available) allohaPlayerOpen.value = true;
 }
 
 async function openEpisodeDiscussion(episode: ZalipEpisode): Promise<void> {
@@ -518,7 +591,9 @@ definePage(() => ({
 	margin-top: 12px;
 }
 
-.genres span {
+.genres a {
+	display: inline-flex;
+	align-items: center;
 	padding: 5px 9px;
 	border: 1px solid var(--MI_THEME-divider);
 	border-radius: 999px;
@@ -526,6 +601,14 @@ definePage(() => ({
 	color: var(--MI_THEME-fgTransparentWeak);
 	font-size: 0.78rem;
 	font-weight: 650;
+	text-decoration: none;
+	transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+}
+
+.genres a:hover, .genres a:focus-visible {
+	border-color: color-mix(in srgb, var(--MI_THEME-accent) 65%, var(--MI_THEME-divider));
+	background: color-mix(in srgb, var(--MI_THEME-accent) 14%, var(--MI_THEME-panel));
+	color: var(--MI_THEME-accent);
 }
 
 .description {
@@ -588,61 +671,114 @@ definePage(() => ({
 
 .player {
 	margin-top: 24px;
-	padding: 15px;
+	overflow: hidden;
 	border: 1px solid var(--MI_THEME-divider);
-	border-radius: 16px;
+	border-radius: 18px;
 	background: var(--MI_THEME-panel);
 }
 
-.player h2 {
+.playerTabs {
+	display: flex;
+	align-items: center;
+	min-height: 54px;
+	gap: 8px;
+	padding: 0 14px;
+	border-bottom: 1px solid var(--MI_THEME-divider);
+	overflow-x: auto;
+}
+
+.playerTab, .playerTabActive {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 52px;
+	border-bottom: 2px solid transparent;
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.84rem;
+	font-weight: 700;
+	text-decoration: none;
+	white-space: nowrap;
+}
+
+.playerTabActive {
+	border-color: var(--MI_THEME-accent);
+	color: var(--MI_THEME-fg);
+}
+
+.playerShare {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin-left: auto;
+	padding: 7px 10px;
+	border-radius: 9px;
+	background: color-mix(in srgb, var(--MI_THEME-accent) 16%, var(--MI_THEME-panel));
+	color: var(--MI_THEME-accent);
+	font-weight: 700;
+}
+
+.playerState, .playerUnavailable {
 	display: flex;
 	align-items: center;
 	gap: 8px;
 	margin: 0;
-	font-size: 1rem;
-}
-
-.player h2 i {
-	color: var(--MI_THEME-accent);
-}
-
-.player p {
-	margin: 8px 0 12px;
+	padding: 24px 18px;
 	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.84rem;
+	font-size: 0.86rem;
 }
 
-.translation {
-	display: grid;
-	grid-template-columns: auto minmax(0, 1fr);
+.playerPreview, .playerFrame {
+	position: relative;
+	overflow: hidden;
+	aspect-ratio: 16 / 9;
+	background: #050607;
+}
+
+.playerPreview > img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	opacity: 0.68;
+}
+
+.playerPreviewShade {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
 	align-items: center;
+	justify-content: center;
 	gap: 10px;
-	margin-bottom: 10px;
-	font-size: 0.84rem;
-	font-weight: 650;
+	padding: 24px;
+	background: linear-gradient(90deg, rgb(0 0 0 / 74%), rgb(0 0 0 / 35%)), linear-gradient(0deg, rgb(0 0 0 / 56%), transparent 58%);
+	color: #fff;
+	text-align: center;
 }
 
-.translation select {
-	min-width: 0;
+.playerPreviewShade > span {
+	font-size: 0.7rem;
+	font-weight: 800;
+	letter-spacing: 0.12em;
+	color: color-mix(in srgb, var(--MI_THEME-accent) 72%, white);
+}
+
+.playerPreviewShade > strong {
+	max-width: 540px;
+	font-size: clamp(1.1rem, 3vw, 1.7rem);
+	line-height: 1.15;
 }
 
 .playerButton {
 	display: inline-flex;
 	align-items: center;
 	gap: 8px;
-	padding: 9px 12px;
+	margin-top: 4px;
+	padding: 10px 14px;
 	border-radius: 10px;
 	background: var(--MI_THEME-accent);
 	color: var(--MI_THEME-fgOnAccent);
-	font-weight: 700;
-}
-
-.playerFrame {
-	overflow: hidden;
-	margin-top: 13px;
-	aspect-ratio: 16 / 9;
-	border-radius: 10px;
-	background: #000;
+	font-weight: 800;
 }
 
 .playerFrame iframe {
@@ -652,13 +788,193 @@ definePage(() => ({
 	border: 0;
 }
 
-.providerNotice {
-	margin-bottom: 0 !important;
-	font-size: 0.76rem !important;
+.playerToolbar {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto minmax(140px, 0.8fr);
+	align-items: center;
+	gap: 8px;
+	padding: 10px 12px;
+	border-bottom: 1px solid var(--MI_THEME-divider);
+	background: color-mix(in srgb, var(--MI_THEME-bg) 35%, var(--MI_THEME-panel));
 }
 
-.playerUnavailable {
-	margin-bottom: 0 !important;
+.episodeNav {
+	display: grid;
+	place-items: center;
+	width: 34px;
+	height: 34px;
+	border-radius: 9px;
+	background: var(--MI_THEME-panelHighlight);
+	color: var(--MI_THEME-fg);
+}
+
+.episodeNav:disabled {
+	opacity: 0.42;
+}
+
+.nowPlaying {
+	display: grid;
+	gap: 1px;
+	min-width: 0;
+}
+
+.nowPlaying span {
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.68rem;
+	font-weight: 650;
+}
+
+.nowPlaying strong {
+	overflow: hidden;
+	font-size: 0.82rem;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.translation {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	padding: 0 8px;
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: 9px;
+	background: var(--MI_THEME-panel);
+	color: var(--MI_THEME-fgTransparentWeak);
+}
+
+.translation select {
+	min-width: 0;
+	width: 100%;
+	height: 34px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--MI_THEME-fg);
+	font-size: 0.78rem;
+}
+
+.providerLabel {
+	justify-self: end;
+	padding: 8px 10px;
+	border-radius: 9px;
+	background: var(--MI_THEME-panelHighlight);
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.78rem;
+	font-weight: 700;
+}
+
+.providerNotice {
+	margin: 0;
+	padding: 10px 14px 0;
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.74rem;
+	line-height: 1.45;
+}
+
+.playerEpisodes {
+	padding: 14px;
+}
+
+.seasonPicker {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 12px;
+}
+
+.seasonPicker > span {
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.78rem;
+	font-weight: 700;
+}
+
+.seasonPicker > div {
+	display: flex;
+	gap: 5px;
+	overflow-x: auto;
+}
+
+.seasonPill {
+	min-width: 32px;
+	min-height: 30px;
+	padding: 0 8px;
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: 8px;
+	background: var(--MI_THEME-panelHighlight);
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.78rem;
+	font-weight: 750;
+}
+
+.selectedSeasonPill {
+	border-color: color-mix(in srgb, var(--MI_THEME-accent) 68%, var(--MI_THEME-divider));
+	background: color-mix(in srgb, var(--MI_THEME-accent) 18%, var(--MI_THEME-panel));
+	color: var(--MI_THEME-accent);
+}
+
+.episodeRailState {
+	margin: 0;
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.8rem;
+}
+
+.episodeRail {
+	display: flex;
+	gap: 10px;
+	overflow-x: auto;
+	padding-bottom: 2px;
+	scroll-snap-type: x proximity;
+}
+
+.episodeTile {
+	display: grid;
+	grid-template-rows: 70px auto auto;
+	gap: 4px;
+	flex: 0 0 122px;
+	overflow: hidden;
+	padding: 0 0 8px;
+	border: 1px solid transparent;
+	border-radius: 10px;
+	background: transparent;
+	color: var(--MI_THEME-fg);
+	text-align: left;
+	scroll-snap-align: start;
+}
+
+.episodeTile > img, .episodeTileFallback {
+	width: 100%;
+	height: 70px;
+	border-radius: 9px;
+	object-fit: cover;
+	background: var(--MI_THEME-panelHighlight);
+}
+
+.episodeTileFallback {
+	display: grid;
+	place-items: center;
+	color: var(--MI_THEME-fgTransparentWeak);
+}
+
+.episodeTile strong, .episodeTile small {
+	overflow: hidden;
+	padding: 0 4px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.episodeTile strong {
+	font-size: 0.76rem;
+}
+
+.episodeTile small {
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.68rem;
+}
+
+.selectedEpisodeTile {
+	border-color: var(--MI_THEME-accent);
+	background: color-mix(in srgb, var(--MI_THEME-accent) 12%, var(--MI_THEME-panel));
 }
 
 .trailer {
@@ -1007,6 +1323,36 @@ definePage(() => ({
 
 	.episodeWithStill {
 		grid-template-columns: 108px minmax(0, 1fr);
+	}
+
+	.playerTabs {
+		padding-inline: 10px;
+	}
+
+	.playerTab, .playerTabActive {
+		font-size: 0.76rem;
+	}
+
+	.playerShare span {
+		display: none;
+	}
+
+	.playerToolbar {
+		grid-template-columns: auto minmax(0, 1fr) auto;
+	}
+
+	.translation, .providerLabel {
+		grid-column: 1 / -1;
+		justify-self: stretch;
+	}
+
+	.providerLabel {
+		justify-self: stretch;
+		text-align: center;
+	}
+
+	.episodeTile {
+		flex-basis: 112px;
 	}
 }
 </style>
