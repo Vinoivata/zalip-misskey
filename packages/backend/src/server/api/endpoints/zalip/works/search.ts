@@ -17,11 +17,13 @@ const workSchema = {
 		originalTitle: { type: 'string', nullable: true },
 		description: { type: 'string', nullable: true },
 		releaseYear: { type: 'integer', nullable: true },
+		genres: { type: 'array', items: { type: 'string' } },
+		runtimeMinutes: { type: 'integer', nullable: true },
 		posterPath: { type: 'string', nullable: true },
 		backdropPath: { type: 'string', nullable: true },
 		trailerYoutubeKey: { type: 'string', nullable: true },
 	},
-	required: ['id', 'slug', 'kind', 'title', 'originalTitle', 'description', 'releaseYear', 'posterPath', 'backdropPath', 'trailerYoutubeKey'],
+	required: ['id', 'slug', 'kind', 'title', 'originalTitle', 'description', 'releaseYear', 'genres', 'runtimeMinutes', 'posterPath', 'backdropPath', 'trailerYoutubeKey'],
 } as const;
 
 export const meta = {

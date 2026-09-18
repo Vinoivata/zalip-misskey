@@ -54,7 +54,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 									<button v-if="work.publicationState !== 'published'" class="_button" :class="$style.smallButton" :disabled="savingId === work.id" @click="setState(work, 'published')"><i class="ti ti-world"></i> Опубликовать</button>
 									<button v-else class="_button" :class="$style.smallButton" :disabled="savingId === work.id" @click="setState(work, 'archived')"><i class="ti ti-eye-off"></i> Снять</button>
 									<button v-if="work.publicationState === 'published'" class="_button" :class="$style.smallButton" :disabled="savingId === work.id" @click="openDiscussion(work)"><i class="ti ti-messages"></i> Обсуждение</button>
-									<button v-if="work.tmdbMediaType" class="_button" :class="$style.smallButton" :disabled="mediaSyncingId === work.id" @click="syncTmdbMedia(work)"><i class="ti ti-photo"></i> {{ mediaSyncingId === work.id ? 'Обновляем кадры…' : 'Кадры из TMDB' }}</button>
+									<button v-if="work.tmdbMediaType" class="_button" :class="$style.smallButton" :disabled="mediaSyncingId === work.id" @click="syncTmdbMedia(work)"><i class="ti ti-refresh"></i> {{ mediaSyncingId === work.id ? 'Обновляем данные…' : 'Данные из TMDB' }}</button>
 									<button v-for="season in work.tmdbMediaType === 'tv' ? work.seasons : []" :key="season.id" class="_button" :class="$style.smallButton" :disabled="syncingSeasonKey === seasonKey(work, season.seasonNumber)" @click="syncSeason(work, season.seasonNumber)"><i class="ti ti-list-details"></i> {{ syncingSeasonKey === seasonKey(work, season.seasonNumber) ? 'Загружаем…' : `Серии: ${season.seasonNumber === 0 ? 'спец.' : season.seasonNumber}` }}</button>
 								</div>
 								<p v-if="seasonMessage.workId === work.id" :class="$style.syncMessage">{{ seasonMessage.text }}</p>
@@ -331,7 +331,7 @@ async function syncTmdbMedia(work: AdminWork): Promise<void> {
 	try {
 		await misskeyApiZalip('zalip/admin/works/sync-tmdb-media', { workId: work.id });
 		mediaMessage.workId = work.id;
-		mediaMessage.text = `Кадры и трейлер «${work.title}» обновлены из TMDB.`;
+		mediaMessage.text = `Жанры, длительность, кадры и трейлер для «${work.title}» обновлены из TMDB.`;
 		await load();
 	} catch (error) {
 		mediaMessage.workId = work.id;

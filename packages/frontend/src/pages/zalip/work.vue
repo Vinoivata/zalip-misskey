@@ -18,9 +18,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<div v-if="work.backdropPath" :class="$style.backdrop">
 						<img :src="tmdbBackdrop(work.backdropPath)" alt="" loading="lazy">
 					</div>
-					<p :class="$style.kind">{{ kindLabel(work.kind) }}<span v-if="work.releaseYear"> · {{ work.releaseYear }}</span></p>
+					<p :class="$style.kind">{{ kindLabel(work.kind) }}<span v-if="work.releaseYear"> · {{ work.releaseYear }}</span><span v-if="work.runtimeMinutes"> · {{ runtimeLabel(work.runtimeMinutes, work.kind) }}</span></p>
 					<h1>{{ work.title }}</h1>
 					<p v-if="work.originalTitle" :class="$style.original">{{ work.originalTitle }}</p>
+					<div v-if="work.genres.length" :class="$style.genres" aria-label="Жанры"><span v-for="genre in work.genres" :key="genre">{{ genre }}</span></div>
 					<p v-if="work.description" :class="$style.description">{{ work.description }}</p>
 					<p v-else :class="$style.description">Описание появится после редакторской проверки.</p>
 					<section v-if="work.galleryPaths.length" :class="$style.gallery">
@@ -104,6 +105,8 @@ type ZalipWork = {
 	originalTitle: string | null;
 	description: string | null;
 	releaseYear: number | null;
+	genres: string[];
+	runtimeMinutes: number | null;
 	posterPath: string | null;
 	backdropPath: string | null;
 	galleryPaths: string[];
@@ -187,6 +190,10 @@ function youtubeEmbed(key: string): string {
 
 function kindLabel(kind: ZalipWork['kind']): string {
 	return ({ movie: 'Фильм', series: 'Сериал', anime: 'Аниме', animation: 'Анимация' })[kind];
+}
+
+function runtimeLabel(runtimeMinutes: number, kind: ZalipWork['kind']): string {
+	return kind === 'movie' ? `${runtimeMinutes} мин.` : `~${runtimeMinutes} мин./эп.`;
 }
 
 function seasonLabel(seasonNumber: number, title: string): string {
@@ -429,6 +436,23 @@ definePage(() => ({
 .original {
 	margin: 8px 0 0;
 	color: var(--MI_THEME-fgTransparentWeak);
+}
+
+.genres {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 12px;
+}
+
+.genres span {
+	padding: 5px 9px;
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: 999px;
+	background: var(--MI_THEME-panel);
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.78rem;
+	font-weight: 650;
 }
 
 .description {

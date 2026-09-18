@@ -57,6 +57,14 @@ export class MiZalipWork {
 	@Column('integer', { nullable: true })
 	public releaseYear: number | null;
 
+	/** Provider-supplied genre labels, normalized on import for catalogue display and filtering. */
+	@Column('jsonb', { default: () => "'[]'::jsonb" })
+	public genres: string[];
+
+	/** Runtime in minutes for a film, or the representative episode runtime for a series. */
+	@Column('integer', { nullable: true })
+	public runtimeMinutes: number | null;
+
 	@Column('varchar', { length: 16, nullable: true })
 	public tmdbMediaType: ZalipTmdbMediaType | null;
 

@@ -27,6 +27,8 @@ export const meta = {
 			originalTitle: { type: 'string', nullable: true },
 			description: { type: 'string', nullable: true },
 			releaseYear: { type: 'integer', nullable: true },
+			genres: { type: 'array', items: { type: 'string' } },
+			runtimeMinutes: { type: 'integer', nullable: true },
 			posterPath: { type: 'string', nullable: true },
 			backdropPath: { type: 'string', nullable: true },
 			galleryPaths: { type: 'array', items: { type: 'string' } },
@@ -49,7 +51,7 @@ export const meta = {
 				},
 			},
 		},
-		required: ['id', 'slug', 'kind', 'title', 'originalTitle', 'description', 'releaseYear', 'posterPath', 'backdropPath', 'galleryPaths', 'trailerYoutubeKey', 'seasons'],
+		required: ['id', 'slug', 'kind', 'title', 'originalTitle', 'description', 'releaseYear', 'genres', 'runtimeMinutes', 'posterPath', 'backdropPath', 'galleryPaths', 'trailerYoutubeKey', 'seasons'],
 	},
 
 	errors: {

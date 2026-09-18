@@ -43,6 +43,8 @@ export type PackedZalipWork = {
 	originalTitle: string | null;
 	description: string | null;
 	releaseYear: number | null;
+	genres: string[];
+	runtimeMinutes: number | null;
 	posterPath: string | null;
 	backdropPath: string | null;
 	trailerYoutubeKey: string | null;
@@ -139,6 +141,8 @@ export class ZalipCatalogService {
 			originalTitle: work.originalTitle,
 			description: work.description,
 			releaseYear: work.releaseYear,
+			genres: work.genres,
+			runtimeMinutes: work.runtimeMinutes,
 			posterPath: work.posterPath,
 			backdropPath: work.backdropPath,
 			trailerYoutubeKey: work.trailerYoutubeKey,
@@ -347,6 +351,8 @@ export class ZalipCatalogService {
 			originalTitle: input.originalTitle ?? null,
 			description: input.description ?? null,
 			releaseYear: input.releaseYear ?? null,
+			genres: [],
+			runtimeMinutes: null,
 			tmdbMediaType: null,
 			tmdbId: null,
 			posterPath: null,
@@ -363,6 +369,8 @@ export class ZalipCatalogService {
 		originalTitle: string | null;
 		description: string | null;
 		releaseYear: number | null;
+		genres: string[];
+		runtimeMinutes: number | null;
 		posterPath: string | null;
 		backdropPath: string | null;
 		galleryPaths: string[];
@@ -400,6 +408,8 @@ export class ZalipCatalogService {
 				originalTitle: input.originalTitle,
 				description: input.description,
 				releaseYear: input.releaseYear,
+				genres: input.genres,
+				runtimeMinutes: input.runtimeMinutes,
 				tmdbMediaType: input.tmdbMediaType,
 				tmdbId: input.tmdbId,
 				posterPath: input.posterPath,
@@ -489,10 +499,12 @@ export class ZalipCatalogService {
 		};
 	}
 
-	/** Refreshes only provider-owned visual media, leaving editor-written metadata untouched. */
+	/** Refreshes provider-owned facts and visual media, leaving editor-written metadata untouched. */
 	public async updateTmdbMedia(
 		workId: MiZalipWork['id'],
 		input: {
+			genres: string[];
+			runtimeMinutes: number | null;
 			posterPath: string | null;
 			backdropPath: string | null;
 			galleryPaths: string[];
@@ -505,6 +517,8 @@ export class ZalipCatalogService {
 
 		work.posterPath = input.posterPath;
 		work.backdropPath = input.backdropPath;
+		work.genres = input.genres;
+		work.runtimeMinutes = input.runtimeMinutes;
 		work.galleryPaths = input.galleryPaths;
 		work.trailerYoutubeKey = input.trailerYoutubeKey;
 		work.updatedAt = new Date();

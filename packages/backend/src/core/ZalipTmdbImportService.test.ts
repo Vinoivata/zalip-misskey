@@ -35,8 +35,10 @@ describe('ZalipTmdbImportService', () => {
 				id: 11,
 				title: 'Тестовый фильм',
 				original_title: 'Test Movie',
-				overview: 'Описание для проверки.',
-				release_date: '2025-04-12',
+			overview: 'Описание для проверки.',
+			release_date: '2025-04-12',
+			runtime: 118,
+			genres: [{ name: 'Драма' }, { name: 'Триллер' }, { name: 'Драма' }, { name: '' }],
 				poster_path: '/poster.jpg',
 				backdrop_path: '/backdrop.jpg',
 				seasons: [{
@@ -67,6 +69,8 @@ describe('ZalipTmdbImportService', () => {
 			originalTitle: 'Test Movie',
 			description: 'Описание для проверки.',
 			releaseYear: 2025,
+			genres: ['Драма', 'Триллер'],
+			runtimeMinutes: 118,
 			posterPath: '/poster.jpg',
 			backdropPath: '/backdrop.jpg',
 			galleryPaths: [],
@@ -85,6 +89,8 @@ describe('ZalipTmdbImportService', () => {
 		const httpRequestService = {
 			getJson: vi.fn().mockResolvedValue({
 				id: 11,
+				runtime: 0,
+				genres: [{ name: 'Боевик' }, { name: 12 }],
 				poster_path: '/poster.jpg',
 				backdrop_path: '/hero.jpg',
 				images: { backdrops: [{ file_path: '/hero.jpg' }, { file_path: '/frame.jpg' }, { file_path: '/frame.jpg' }, { file_path: 'not-a-path' }] },
@@ -96,6 +102,8 @@ describe('ZalipTmdbImportService', () => {
 
 		await expect(service.refreshMedia({ workId: 'test-work', tmdbMediaType: 'movie', tmdbId: 11 })).resolves.toEqual({ kind: 'updated' });
 		expect(zalipCatalogService.updateTmdbMedia).toHaveBeenCalledWith('test-work', {
+			genres: ['Боевик'],
+			runtimeMinutes: null,
 			posterPath: '/poster.jpg',
 			backdropPath: '/hero.jpg',
 			galleryPaths: ['/hero.jpg', '/frame.jpg'],
@@ -122,6 +130,8 @@ describe('ZalipTmdbImportService', () => {
 			getJson: vi.fn().mockResolvedValue({
 				id: 77,
 				name: 'Тестовый сериал',
+				episode_run_time: [25, 45],
+				genres: [{ name: 'Анимация' }],
 				seasons: [{
 					season_number: 0,
 					name: '',
@@ -138,6 +148,8 @@ describe('ZalipTmdbImportService', () => {
 		await expect(service.importDraft('tv', 77)).resolves.toEqual({ kind: 'created', work });
 		expect(zalipCatalogService.createTmdbDraft).toHaveBeenCalledWith(expect.objectContaining({
 			tmdbMediaType: 'tv',
+			genres: ['Анимация'],
+			runtimeMinutes: 25,
 			seasons: [{
 				seasonNumber: 0,
 				title: 'Спецэпизоды',

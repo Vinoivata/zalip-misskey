@@ -26,6 +26,10 @@ type TmdbImage = {
 	file_path?: unknown;
 };
 
+type TmdbGenre = {
+	name?: unknown;
+};
+
 type TmdbDetails = {
 	id?: unknown;
 	title?: unknown;
@@ -37,6 +41,9 @@ type TmdbDetails = {
 	first_air_date?: unknown;
 	poster_path?: unknown;
 	backdrop_path?: unknown;
+	genres?: unknown;
+	runtime?: unknown;
+	episode_run_time?: unknown;
 	videos?: { results?: unknown };
 	images?: { backdrops?: unknown };
 	seasons?: unknown;
@@ -133,8 +140,35 @@ function tmdbGalleryPaths(details: TmdbDetails): string[] {
 	return [...paths];
 }
 
-function tmdbMedia(details: TmdbDetails) {
+function tmdbGenres(details: TmdbDetails): string[] {
+	if (!Array.isArray(details.genres)) return [];
+
+	const genres = new Set<string>();
+	for (const value of details.genres) {
+		if (typeof value !== 'object' || value == null) continue;
+		const genre = nullableString((value as TmdbGenre).name, 64);
+		if (genre == null) continue;
+		genres.add(genre);
+		if (genres.size >= 8) break;
+	}
+	return [...genres];
+}
+
+function tmdbRuntimeMinutes(details: TmdbDetails, tmdbMediaType: TmdbMediaType): number | null {
+	const candidates = tmdbMediaType === 'movie'
+		? [details.runtime]
+		: Array.isArray(details.episode_run_time) ? details.episode_run_time : [];
+	for (const value of candidates) {
+		if (typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 1440) return value;
+	}
+	return null;
+}
+
+/** Provider-owned presentation data. Editor-authored titles, descriptions and seasons stay untouched on refresh. */
+function tmdbMedia(details: TmdbDetails, tmdbMediaType: TmdbMediaType) {
 	return {
+		genres: tmdbGenres(details),
+		runtimeMinutes: tmdbRuntimeMinutes(details, tmdbMediaType),
 		posterPath: tmdbImagePath(details.poster_path),
 		backdropPath: tmdbImagePath(details.backdrop_path),
 		galleryPaths: tmdbGalleryPaths(details),
@@ -246,14 +280,14 @@ export class ZalipTmdbImportService {
 			originalTitle: nullableString(tmdbMediaType === 'movie' ? details.original_title : details.original_name, 256),
 			description: nullableString(details.overview, 8192),
 			releaseYear: releaseYear(tmdbMediaType === 'movie' ? details.release_date : details.first_air_date),
-			...tmdbMedia(details),
+			...tmdbMedia(details, tmdbMediaType),
 			seasons: tmdbSeasons(details, tmdbMediaType),
 		});
 
 		return work === 'duplicate' ? { kind: 'duplicate' } : { kind: 'created', work };
 	}
 
-	/** Re-fetches only TMDB-provided visuals for an existing title; editorial text is preserved. */
+	/** Re-fetches TMDB-owned catalogue facts and visuals for an existing title; editorial text is preserved. */
 	public async refreshMedia(target: ZalipTmdbMediaSyncTarget): Promise<TmdbMediaRefreshResult> {
 		const apiKey = process.env.ZALIP_TMDB_API_KEY?.trim();
 		if (apiKey == null || apiKey === '') return { kind: 'not-configured' };
@@ -272,7 +306,7 @@ export class ZalipTmdbImportService {
 		}
 
 		if (details.id !== target.tmdbId) return { kind: 'upstream-failure' };
-		const work = await this.zalipCatalogService.updateTmdbMedia(target.workId, tmdbMedia(details));
+		const work = await this.zalipCatalogService.updateTmdbMedia(target.workId, tmdbMedia(details, target.tmdbMediaType));
 		return work == null ? { kind: 'upstream-failure' } : { kind: 'updated' };
 	}
 
