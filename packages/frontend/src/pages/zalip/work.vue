@@ -30,6 +30,19 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<a v-for="path in work.galleryPaths" :key="path" :href="tmdbBackdrop(path)" target="_blank" rel="noopener noreferrer" :aria-label="`Открыть кадр из ${work.title}`"><img :src="tmdbGalleryImage(path)" alt="" loading="lazy"></a>
 						</div>
 					</section>
+					<section v-if="$i" :class="$style.player">
+						<h2><i class="ti ti-device-tv"></i> Смотреть</h2>
+						<p v-if="allohaPlayback == null">Проверяем доступность в Alloha…</p>
+						<template v-else-if="allohaPlayback.available">
+							<p>Плеер работает через Alloha. Озвучку можно выбрать здесь, а серию — в самом плеере без перезагрузки карточки.</p>
+							<label v-if="allohaPlayback.translations.length > 1" :class="$style.translation"><span>Озвучка</span><select v-model="selectedAllohaTranslationId" class="_input" aria-label="Озвучка Alloha"><option v-for="translation in allohaPlayback.translations" :key="translation.id" :value="translation.id">{{ translationLabel(translation) }}</option></select></label>
+							<button v-if="!allohaPlayerOpen" type="button" class="_button" :class="$style.playerButton" @click="allohaPlayerOpen = true"><i class="ti ti-player-play-filled"></i> Открыть плеер Alloha</button>
+							<div v-else-if="activeAllohaIframe" :class="$style.playerFrame"><iframe :src="activeAllohaIframe" :title="`Плеер Alloha: ${work.title}`" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>
+							<p :class="$style.providerNotice">После открытия iframe Alloha может устанавливать свои cookies и обрабатывать данные по своим правилам.</p>
+						</template>
+						<p v-else :class="$style.playerUnavailable">В Alloha этот тайтл пока не найден. Доступность проверяется автоматически раз в час.</p>
+					</section>
+					<section v-else :class="$style.player"><h2><i class="ti ti-device-tv"></i> Смотреть</h2><p>Войдите в Zalip, чтобы открыть плеер и сохранить подписку на новые серии.</p></section>
 					<section v-if="work.seasons.length" :class="$style.seasons">
 						<h2>Сезоны</h2>
 						<div :class="$style.seasonList">
@@ -91,7 +104,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { $i, iAmAdmin } from '@/i.js';
 import { definePage } from '@/page.js';
 import { useRouter } from '@/router.js';
@@ -150,6 +163,13 @@ type LibraryEntry = {
 
 type LibraryUpdate = Pick<LibraryEntry, 'status' | 'episodesWatched' | 'personalRating' | 'isFavorite' | 'isReleaseSubscribed'>;
 
+type AllohaPlayback = {
+	available: boolean;
+	iframe: string | null;
+	translations: Array<{ id: number; name: string; quality: string | null; resolutions: string[]; iframe: string }>;
+	lastCheckedAt: string | null;
+};
+
 const libraryStatuses: LibraryStatus[] = ['watching', 'planned', 'completed', 'on_hold', 'dropped'];
 
 const props = defineProps<{ slug: string }>();
@@ -164,6 +184,9 @@ const personalRating = ref<number | null>(null);
 const isFavorite = ref(false);
 const releaseSubscribed = ref(false);
 const trailerOpen = ref(false);
+const allohaPlayback = ref<AllohaPlayback | null>(null);
+const allohaPlayerOpen = ref(false);
+const selectedAllohaTranslationId = ref<number | null>(null);
 const discussionNoteId = ref<string | null>(null);
 const selectedSeasonNumber = ref<number | null>(null);
 const episodes = ref<ZalipEpisode[]>([]);
@@ -171,6 +194,14 @@ const episodesPending = ref(false);
 const episodeRequestId = ref(0);
 const discussionCreatingEpisodeId = ref<string | null>(null);
 const episodeDiscussionError = ref<string | null>(null);
+
+const activeAllohaIframe = computed(() => {
+	if (allohaPlayback.value == null) return null;
+	return allohaPlayback.value.translations.find(translation => translation.id === selectedAllohaTranslationId.value)?.iframe
+		?? allohaPlayback.value.iframe
+		?? allohaPlayback.value.translations[0]?.iframe
+		?? null;
+});
 
 function tmdbImage(path: string): string {
 	return `https://image.tmdb.org/t/p/w500${path}`;
@@ -208,6 +239,10 @@ function episodeMeta(episode: ZalipEpisode): string {
 	return [episode.airDate?.slice(0, 4), episode.runtimeMinutes != null ? `${episode.runtimeMinutes} мин.` : null].filter((value): value is string => value != null).join(' · ');
 }
 
+function translationLabel(translation: AllohaPlayback['translations'][number]): string {
+	return [translation.name, translation.quality, translation.resolutions.join('/')].filter((value): value is string => value != null && value !== '').join(' · ');
+}
+
 function libraryStatusLabel(status: LibraryStatus): string {
 	return ({ watching: 'Смотрю', planned: 'В планах', completed: 'Просмотрено', on_hold: 'Отложено', dropped: 'Брошено' })[status];
 }
@@ -222,14 +257,18 @@ async function load(): Promise<void> {
 	isFavorite.value = false;
 	releaseSubscribed.value = false;
 	trailerOpen.value = false;
+	allohaPlayback.value = null;
+	allohaPlayerOpen.value = false;
+	selectedAllohaTranslationId.value = null;
 	selectedSeasonNumber.value = null;
 	episodes.value = [];
 	episodeRequestId.value++;
 	try {
 		work.value = await misskeyApiZalip<ZalipWork>('zalip/works/show', { slug: props.slug });
-		const [discussion, entries] = await Promise.all([
+		const [discussion, entries, playback] = await Promise.all([
 			misskeyApiZalip<{ noteId: string | null }>('zalip/discussions/show', { workId: work.value.id }),
 			$i ? misskeyApiZalip<LibraryEntry[]>('zalip/library/list') : Promise.resolve([]),
+			$i ? misskeyApiZalip<AllohaPlayback>('zalip/playback/alloha/show', { slug: work.value.slug }).catch(() => null) : Promise.resolve(null),
 		]);
 		discussionNoteId.value = discussion.noteId;
 		const entry = entries.find(candidate => candidate.work?.id === work.value?.id);
@@ -239,6 +278,8 @@ async function load(): Promise<void> {
 		personalRating.value = entry?.personalRating ?? null;
 		isFavorite.value = entry?.isFavorite ?? false;
 		releaseSubscribed.value = entry?.isReleaseSubscribed ?? false;
+		allohaPlayback.value = playback;
+		selectedAllohaTranslationId.value = playback?.translations[0]?.id ?? null;
 	} catch {
 		work.value = null;
 		discussionNoteId.value = null;
@@ -511,6 +552,81 @@ definePage(() => ({
 .seasons h2 {
 	margin: 0 0 10px;
 	font-size: 1rem;
+}
+
+.player {
+	margin-top: 24px;
+	padding: 15px;
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: 16px;
+	background: var(--MI_THEME-panel);
+}
+
+.player h2 {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	font-size: 1rem;
+}
+
+.player h2 i {
+	color: var(--MI_THEME-accent);
+}
+
+.player p {
+	margin: 8px 0 12px;
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.84rem;
+}
+
+.translation {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 10px;
+	font-size: 0.84rem;
+	font-weight: 650;
+}
+
+.translation select {
+	min-width: 0;
+}
+
+.playerButton {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 9px 12px;
+	border-radius: 10px;
+	background: var(--MI_THEME-accent);
+	color: var(--MI_THEME-fgOnAccent);
+	font-weight: 700;
+}
+
+.playerFrame {
+	overflow: hidden;
+	margin-top: 13px;
+	aspect-ratio: 16 / 9;
+	border-radius: 10px;
+	background: #000;
+}
+
+.playerFrame iframe {
+	display: block;
+	width: 100%;
+	height: 100%;
+	border: 0;
+}
+
+.providerNotice {
+	margin-bottom: 0 !important;
+	font-size: 0.76rem !important;
+}
+
+.playerUnavailable {
+	margin-bottom: 0 !important;
 }
 
 .trailer {

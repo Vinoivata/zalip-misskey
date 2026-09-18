@@ -665,6 +665,7 @@ import type {
 	V2AdminEmojiListRequest,
 	V2AdminEmojiListResponse,
 	VerifyEmailRequest,
+	ZalipAdminAllohaSyncResponse,
 	ZalipAdminDiscussionsCreateRequest,
 	ZalipAdminDiscussionsCreateResponse,
 	ZalipAdminEpisodesCreateRequest,
@@ -681,6 +682,9 @@ import type {
 	ZalipAdminWorksImportTmdbResponse,
 	ZalipAdminWorksListRequest,
 	ZalipAdminWorksListResponse,
+	ZalipAdminWorksSyncAllTmdbMediaResponse,
+	ZalipAdminWorksSyncTmdbMediaRequest,
+	ZalipAdminWorksSyncTmdbMediaResponse,
 	ZalipAdminWorksUpdateRequest,
 	ZalipAdminWorksUpdateResponse,
 	ZalipAdminWorksUpdateStateRequest,
@@ -690,6 +694,8 @@ import type {
 	ZalipLibraryListResponse,
 	ZalipLibraryUpdateRequest,
 	ZalipLibraryUpdateResponse,
+	ZalipPlaybackAllohaShowRequest,
+	ZalipPlaybackAllohaShowResponse,
 	ZalipReleasesListRequest,
 	ZalipReleasesListResponse,
 	ZalipReleasesSubscribedRequest,
@@ -1143,6 +1149,7 @@ export type Endpoints = {
 	'users/update-memo': { req: UsersUpdateMemoRequest; res: EmptyResponse };
 	'v2/admin/emoji/list': { req: V2AdminEmojiListRequest; res: V2AdminEmojiListResponse };
 	'verify-email': { req: VerifyEmailRequest; res: EmptyResponse };
+	'zalip/admin/alloha/sync': { req: EmptyRequest; res: ZalipAdminAllohaSyncResponse };
 	'zalip/admin/discussions/create': { req: ZalipAdminDiscussionsCreateRequest; res: ZalipAdminDiscussionsCreateResponse };
 	'zalip/admin/episodes/create': { req: ZalipAdminEpisodesCreateRequest; res: ZalipAdminEpisodesCreateResponse };
 	'zalip/admin/episodes/discussions/create': { req: ZalipAdminEpisodesDiscussionsCreateRequest; res: ZalipAdminEpisodesDiscussionsCreateResponse };
@@ -1151,11 +1158,14 @@ export type Endpoints = {
 	'zalip/admin/works/create': { req: ZalipAdminWorksCreateRequest; res: ZalipAdminWorksCreateResponse };
 	'zalip/admin/works/import-tmdb': { req: ZalipAdminWorksImportTmdbRequest; res: ZalipAdminWorksImportTmdbResponse };
 	'zalip/admin/works/list': { req: ZalipAdminWorksListRequest; res: ZalipAdminWorksListResponse };
+	'zalip/admin/works/sync-all-tmdb-media': { req: EmptyRequest; res: ZalipAdminWorksSyncAllTmdbMediaResponse };
+	'zalip/admin/works/sync-tmdb-media': { req: ZalipAdminWorksSyncTmdbMediaRequest; res: ZalipAdminWorksSyncTmdbMediaResponse };
 	'zalip/admin/works/update': { req: ZalipAdminWorksUpdateRequest; res: ZalipAdminWorksUpdateResponse };
 	'zalip/admin/works/update-state': { req: ZalipAdminWorksUpdateStateRequest; res: ZalipAdminWorksUpdateStateResponse };
 	'zalip/discussions/show': { req: ZalipDiscussionsShowRequest; res: ZalipDiscussionsShowResponse };
 	'zalip/library/list': { req: EmptyRequest; res: ZalipLibraryListResponse };
 	'zalip/library/update': { req: ZalipLibraryUpdateRequest; res: ZalipLibraryUpdateResponse };
+	'zalip/playback/alloha/show': { req: ZalipPlaybackAllohaShowRequest; res: ZalipPlaybackAllohaShowResponse };
 	'zalip/releases/list': { req: ZalipReleasesListRequest; res: ZalipReleasesListResponse };
 	'zalip/releases/subscribed': { req: ZalipReleasesSubscribedRequest; res: ZalipReleasesSubscribedResponse };
 	'zalip/seasons/episodes': { req: ZalipSeasonsEpisodesRequest; res: ZalipSeasonsEpisodesResponse };

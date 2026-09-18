@@ -10953,6 +10953,18 @@ export interface Locale extends ILocale {
          */
         "zalipEpisodeReleasedDescription": ParameterizedString<"title" | "season" | "episode" | "episodeTitle">;
         /**
+         * Allohaで視聴可能
+         */
+        "zalipAllohaAvailable": string;
+        /**
+         * {title}がAllohaで視聴可能になりました
+         */
+        "zalipAllohaMovieAvailableDescription": ParameterizedString<"title">;
+        /**
+         * {title}・シーズン{season} 第{episode}話がAllohaで視聴可能になりました
+         */
+        "zalipAllohaEpisodeAvailableDescription": ParameterizedString<"title" | "season" | "episode">;
+        /**
          * 通知テスト
          */
         "testNotification": string;
@@ -11073,6 +11085,10 @@ export interface Locale extends ILocale {
              * ZALIPの新着エピソード
              */
             "zalipEpisodeReleased": string;
+            /**
+             * ZALIPのAlloha視聴可能通知
+             */
+            "zalipAllohaAvailable": string;
             /**
              * エクスポートが完了した
              */

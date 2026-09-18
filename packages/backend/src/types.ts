@@ -21,6 +21,7 @@
  * achievementEarned - 実績を獲得
  * exportCompleted - エクスポートが完了
  * zalipEpisodeReleased - ZALIPの購読中作品に新しいエピソードが追加された
+ * zalipAllohaAvailable - ZALIPの購読中作品がAllohaで視聴可能になった
  * login - ログイン
  * createToken - トークン作成
  * app - アプリ通知
@@ -44,6 +45,7 @@ export const notificationTypes = [
 	'achievementEarned',
 	'exportCompleted',
 	'zalipEpisodeReleased',
+	'zalipAllohaAvailable',
 	'login',
 	'createToken',
 	'app',

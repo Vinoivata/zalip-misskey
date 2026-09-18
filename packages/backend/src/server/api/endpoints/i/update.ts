@@ -217,6 +217,7 @@ export const paramDef = {
 				chatRoomInvitationReceived: notificationRecieveConfig,
 				achievementEarned: notificationRecieveConfig,
 				zalipEpisodeReleased: notificationRecieveConfig,
+				zalipAllohaAvailable: notificationRecieveConfig,
 				app: notificationRecieveConfig,
 				test: notificationRecieveConfig,
 			},

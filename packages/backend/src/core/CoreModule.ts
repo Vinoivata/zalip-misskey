@@ -80,6 +80,7 @@ import { RegistryApiService } from './RegistryApiService.js';
 import { ReversiService } from './ReversiService.js';
 import { PageService } from './PageService.js';
 import { ZalipCatalogService } from './ZalipCatalogService.js';
+import { ZalipAllohaService } from './ZalipAllohaService.js';
 import { ZalipTmdbImportService } from './ZalipTmdbImportService.js';
 
 import { ChartLoggerService } from './chart/ChartLoggerService.js';
@@ -387,6 +388,7 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		ReversiService,
 		PageService,
 		ZalipCatalogService,
+		ZalipAllohaService,
 		ZalipTmdbImportService,
 
 		ChartLoggerService,
@@ -691,6 +693,7 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		ReversiService,
 		PageService,
 		ZalipCatalogService,
+		ZalipAllohaService,
 		ZalipTmdbImportService,
 
 		FederationChart,

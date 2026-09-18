@@ -23,6 +23,8 @@ import { MiZalipNoteContext } from '@/models/ZalipNoteContext.js';
 import { MiZalipSeason } from '@/models/ZalipSeason.js';
 import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
 import { MiZalipEpisodeNoteContext } from '@/models/ZalipEpisodeNoteContext.js';
+import { MiZalipAllohaAvailabilityEvent } from '@/models/ZalipAllohaAvailabilityEvent.js';
+import { MiZalipAllohaSource, type ZalipAllohaTranslation } from '@/models/ZalipAllohaSource.js';
 import { MiZalipReleaseEvent } from '@/models/ZalipReleaseEvent.js';
 import { NotificationService } from '@/core/NotificationService.js';
 
@@ -33,6 +35,15 @@ type ZalipEpisodeReleaseNotificationPayload = {
 	seasonNumber: number;
 	episodeNumber: number;
 	episodeTitle: string;
+};
+
+type ZalipAllohaAvailabilityNotificationPayload = {
+	workId: MiZalipWork['id'];
+	workSlug: string;
+	workTitle: string;
+	seasonNumber: number | null;
+	episodeNumber: number | null;
+	translationCount: number;
 };
 
 export type PackedZalipWork = {
@@ -97,6 +108,17 @@ export type ZalipTmdbMediaSyncTarget = {
 	workId: string;
 	tmdbMediaType: 'movie' | 'tv';
 	tmdbId: number;
+};
+
+/** Private provider mapping used only by the server-side Alloha sync service. */
+export type ZalipAllohaSyncTarget = ZalipTmdbMediaSyncTarget;
+
+/** Safe, authenticated playback response. Provider IDs and API credentials stay server-side. */
+export type PackedZalipAllohaPlayback = {
+	available: boolean;
+	iframe: string | null;
+	translations: ZalipAllohaTranslation[];
+	lastCheckedAt: string | null;
 };
 
 export type PackedZalipReleaseEvent = {
@@ -514,6 +536,141 @@ export class ZalipCatalogService {
 			tmdbMediaType: work.tmdbMediaType,
 			tmdbId: work.tmdbId,
 		}] : []);
+	}
+
+	/** Bounded provider source list. TMDB IDs are intentionally kept at this server-only boundary. */
+	public async listAllohaSyncTargets(limit: number): Promise<ZalipAllohaSyncTarget[]> {
+		return await this.listTmdbMediaSyncTargets(Math.max(1, Math.min(limit, 100)));
+	}
+
+	/** Records a validated Alloha response without exposing the source mapping on catalogue endpoints. */
+	public async upsertAllohaSource(input: {
+		workId: MiZalipWork['id'];
+		category: string;
+		isAvailable: boolean;
+		iframe: string | null;
+		translations: ZalipAllohaTranslation[];
+	}): Promise<{ created: boolean }> {
+		const repository = this.db.getRepository(MiZalipAllohaSource);
+		const existing = await repository.findOneBy({ workId: input.workId });
+		const now = new Date();
+		if (existing != null) {
+			existing.category = input.category;
+			existing.isAvailable = input.isAvailable;
+			existing.iframe = input.iframe;
+			existing.translations = input.translations;
+			existing.lastCheckedAt = now;
+			existing.updatedAt = now;
+			await repository.save(existing);
+			return { created: false };
+		}
+
+		await repository.save(repository.create({
+			id: this.idService.gen(),
+			workId: input.workId,
+			category: input.category,
+			isAvailable: input.isAvailable,
+			iframe: input.iframe,
+			translations: input.translations,
+			lastCheckedAt: now,
+			createdAt: now,
+			updatedAt: now,
+		}));
+		return { created: true };
+	}
+
+	/** Player data is only available for a published work after a normal Zalip login. */
+	public async getAllohaPlayback(slug: string): Promise<PackedZalipAllohaPlayback | null> {
+		const work = await this.db.getRepository(MiZalipWork).findOneBy({
+			slug,
+			publicationState: 'published',
+		});
+		if (work == null) return null;
+
+		const source = await this.db.getRepository(MiZalipAllohaSource).findOneBy({ workId: work.id });
+		if (source == null) {
+			return {
+				available: false,
+				iframe: null,
+				translations: [],
+				lastCheckedAt: null,
+			};
+		}
+
+		return {
+			available: source.isAvailable && (source.iframe != null || source.translations.length > 0),
+			iframe: source.iframe,
+			translations: source.translations,
+			lastCheckedAt: source.lastCheckedAt.toISOString(),
+		};
+	}
+
+	/** Creates at most one availability event per provider film or episode. */
+	public async recordAllohaAvailability(input: {
+		workId: MiZalipWork['id'];
+		seasonNumber: number | null;
+		episodeNumber: number | null;
+		translationCount: number;
+		suppressNotification: boolean;
+	}): Promise<boolean> {
+		const availabilityKey = input.seasonNumber != null && input.episodeNumber != null
+			? `s${input.seasonNumber}e${input.episodeNumber}`
+			: 'movie';
+		const repository = this.db.getRepository(MiZalipAllohaAvailabilityEvent);
+		if (await repository.existsBy({ workId: input.workId, availabilityKey })) return false;
+
+		const now = new Date();
+		try {
+			await repository.save(repository.create({
+				id: this.idService.gen(),
+				workId: input.workId,
+				availabilityKey,
+				seasonNumber: input.seasonNumber,
+				episodeNumber: input.episodeNumber,
+				translationCount: input.translationCount,
+				createdAt: now,
+				notificationDeliveredAt: input.suppressNotification ? now : null,
+			}));
+			return true;
+		} catch (err) {
+			// Another process may have inserted the same unique availability event after existsBy.
+			if (await repository.existsBy({ workId: input.workId, availabilityKey })) return false;
+			throw err;
+		}
+	}
+
+	/** Delivers the persistent Alloha availability outbox to the existing Zalip subscription list. */
+	public async dispatchPendingAllohaAvailabilityNotifications(): Promise<void> {
+		const events = await this.db.getRepository(MiZalipAllohaAvailabilityEvent).createQueryBuilder('event')
+			.innerJoinAndSelect('event.work', 'work')
+			.where('event.notificationDeliveredAt IS NULL')
+			.andWhere('work.publicationState = :publicationState', { publicationState: 'published' })
+			.orderBy('event.createdAt', 'ASC')
+			.take(100)
+			.getMany();
+
+		for (const event of events) {
+			if (event.work == null) continue;
+			const entries = await this.db.getRepository(MiZalipLibraryEntry).find({
+				select: { userId: true },
+				where: { workId: event.work.id, isReleaseSubscribed: true },
+			});
+			await Promise.all(entries.map(entry => this.notificationService.createNotificationAndWait(
+				entry.userId,
+				'zalipAllohaAvailable',
+				{
+					workId: event.work!.id,
+					workSlug: event.work!.slug,
+					workTitle: event.work!.title,
+					seasonNumber: event.seasonNumber,
+					episodeNumber: event.episodeNumber,
+					translationCount: event.translationCount,
+				} satisfies ZalipAllohaAvailabilityNotificationPayload,
+			)));
+			await this.db.getRepository(MiZalipAllohaAvailabilityEvent).update(event.id, {
+				notificationDeliveredAt: new Date(),
+			});
+		}
 	}
 
 	/** Refreshes provider-owned facts and visual media, leaving editor-written metadata untouched. */

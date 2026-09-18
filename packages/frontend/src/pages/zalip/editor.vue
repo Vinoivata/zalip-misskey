@@ -43,7 +43,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</section>
 
 					<section :class="$style.works">
-						<div :class="$style.sectionHeader"><div><p :class="$style.eyebrow">ПОСЛЕДНИЕ</p><h2>Тайтлы</h2></div><div :class="$style.sectionActions"><button class="_button" :class="$style.reload" :disabled="loading || bulkSyncing" @click="load"><i class="ti ti-refresh"></i></button><button class="_button" :class="$style.reload" :disabled="loading || bulkSyncing" @click="syncAllTmdbMedia"><i class="ti ti-database-import"></i> {{ bulkSyncing ? 'Обновляем TMDB…' : 'Обновить все TMDB' }}</button></div></div>
+						<div :class="$style.sectionHeader"><div><p :class="$style.eyebrow">ПОСЛЕДНИЕ</p><h2>Тайтлы</h2></div><div :class="$style.sectionActions"><button class="_button" :class="$style.reload" :disabled="loading || bulkSyncing || allohaSyncing" @click="load"><i class="ti ti-refresh"></i></button><button class="_button" :class="$style.reload" :disabled="loading || bulkSyncing || allohaSyncing" @click="syncAllTmdbMedia"><i class="ti ti-database-import"></i> {{ bulkSyncing ? 'Обновляем TMDB…' : 'Обновить все TMDB' }}</button><button class="_button" :class="$style.reload" :disabled="loading || bulkSyncing || allohaSyncing" @click="syncAlloha"><i class="ti ti-device-tv"></i> {{ allohaSyncing ? 'Проверяем Alloha…' : 'Проверить Alloha' }}</button></div></div>
 						<p v-if="bulkMessage" :class="$style.bulkMessage">{{ bulkMessage }}</p>
 						<div v-if="loading" :class="$style.empty"><i class="ti ti-loader-2 ti-spin"></i> Загружаем…</div>
 						<div v-else-if="works.length === 0" :class="$style.empty"><i class="ti ti-movie-off"></i> Черновиков пока нет.</div>
@@ -109,6 +109,7 @@ const mediaSyncingId = ref<string | null>(null);
 const mediaMessage = reactive({ workId: '', text: '' });
 const bulkSyncing = ref(false);
 const bulkMessage = ref('');
+const allohaSyncing = ref(false);
 const edits = reactive<Record<string, { title: string; originalTitle: string; description: string; releaseYear: string; }>>({});
 const manualSeasons = reactive<Record<string, { seasonNumber: string; title: string; description: string; airDate: string; }>>({});
 const manualEpisodes = reactive<Record<string, { episodeNumber: string; title: string; description: string; airDate: string; runtimeMinutes: string; }>>({});
@@ -357,6 +358,22 @@ async function syncAllTmdbMedia(): Promise<void> {
 		bulkMessage.value = tmdbImportErrorMessage(error);
 	} finally {
 		bulkSyncing.value = false;
+	}
+}
+
+async function syncAlloha(): Promise<void> {
+	allohaSyncing.value = true;
+	bulkMessage.value = '';
+	try {
+		const result = await misskeyApiZalip<{ checked: number; available: number; events: number }>('zalip/admin/alloha/sync', {});
+		bulkMessage.value = `Alloha проверена: ${result.available} из ${result.checked} тайтлов доступны; новых событий: ${result.events}.`;
+	} catch (error) {
+		const code = typeof error === 'object' && error != null && 'code' in error && typeof error.code === 'string' ? error.code : null;
+		bulkMessage.value = code === 'ZALIP_ALLOHA_NOT_CONFIGURED'
+			? 'Alloha не настроена на сервере.'
+			: 'Alloha временно недоступна. Повторите проверку позже.';
+	} finally {
+		allohaSyncing.value = false;
 	}
 }
 

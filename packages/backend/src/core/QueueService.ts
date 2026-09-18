@@ -80,6 +80,10 @@ const REPEATABLE_SYSTEM_JOB_DEF = [{
 	// 毎時30分に起動
 	pattern: '30 * * * *',
 }, {
+	// Keep under Alloha's public API rate budget while making new episode alerts timely.
+	name: 'syncZalipAlloha',
+	pattern: '11 * * * *',
+}, {
 	name: 'cleanRemoteNotes',
 	// 毎日午前4時に起動(最も人の少ない時間帯)
 	pattern: '0 4 * * *',

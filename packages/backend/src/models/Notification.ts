@@ -116,6 +116,16 @@ export type MiNotification = {
 	episodeNumber: number;
 	episodeTitle: string;
 } | {
+	type: 'zalipAllohaAvailable';
+	id: string;
+	createdAt: string;
+	workId: MiZalipWork['id'];
+	workSlug: string;
+	workTitle: string;
+	seasonNumber: number | null;
+	episodeNumber: number | null;
+	translationCount: number;
+} | {
 	type: 'login';
 	id: string;
 	createdAt: string;

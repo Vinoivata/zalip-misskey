@@ -35,6 +35,7 @@ export const notificationTypes = [
 	'achievementEarned',
 	'exportCompleted',
 	'zalipEpisodeReleased',
+	'zalipAllohaAvailable',
 	'test',
 	'login',
 	'createToken',

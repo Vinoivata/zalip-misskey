@@ -87,6 +87,8 @@ import { MiBubbleGameRecord } from '@/models/BubbleGameRecord.js';
 import { MiReversiGame } from '@/models/ReversiGame.js';
 import { MiChatApproval } from '@/models/ChatApproval.js';
 import { MiSystemAccount } from '@/models/SystemAccount.js';
+import { MiZalipAllohaAvailabilityEvent } from '@/models/ZalipAllohaAvailabilityEvent.js';
+import { MiZalipAllohaSource } from '@/models/ZalipAllohaSource.js';
 import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
 import { MiZalipEpisodeNoteContext } from '@/models/ZalipEpisodeNoteContext.js';
 import { MiZalipLibraryEntry } from '@/models/ZalipLibraryEntry.js';
@@ -225,6 +227,8 @@ export const entities = [
 	MiHashtag,
 	MiSwSubscription,
 	MiSystemAccount,
+	MiZalipAllohaSource,
+	MiZalipAllohaAvailabilityEvent,
 	MiZalipWork,
 	MiZalipSeason,
 	MiZalipEpisode,

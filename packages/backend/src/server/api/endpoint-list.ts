@@ -452,6 +452,7 @@ export * as 'zalip/works/list' from './endpoints/zalip/works/list.js';
 export * as 'zalip/works/show' from './endpoints/zalip/works/show.js';
 export * as 'zalip/works/search' from './endpoints/zalip/works/search.js';
 export * as 'zalip/seasons/episodes' from './endpoints/zalip/seasons/episodes.js';
+export * as 'zalip/playback/alloha/show' from './endpoints/zalip/playback/alloha/show.js';
 export * as 'zalip/releases/list' from './endpoints/zalip/releases/list.js';
 export * as 'zalip/releases/subscribed' from './endpoints/zalip/releases/subscribed.js';
 export * as 'zalip/discussions/show' from './endpoints/zalip/discussions/show.js';
@@ -462,6 +463,7 @@ export * as 'zalip/admin/works/import-tmdb' from './endpoints/zalip/admin/works/
 export * as 'zalip/admin/works/list' from './endpoints/zalip/admin/works/list.js';
 export * as 'zalip/admin/works/sync-all-tmdb-media' from './endpoints/zalip/admin/works/sync-all-tmdb-media.js';
 export * as 'zalip/admin/works/sync-tmdb-media' from './endpoints/zalip/admin/works/sync-tmdb-media.js';
+export * as 'zalip/admin/alloha/sync' from './endpoints/zalip/admin/alloha/sync.js';
 export * as 'zalip/admin/works/update-state' from './endpoints/zalip/admin/works/update-state.js';
 export * as 'zalip/admin/works/update' from './endpoints/zalip/admin/works/update.js';
 export * as 'zalip/admin/seasons/create' from './endpoints/zalip/admin/seasons/create.js';
