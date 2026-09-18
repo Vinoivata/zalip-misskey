@@ -4176,6 +4176,15 @@ export type paths = {
          */
         post: operations["zalip___seasons___episodes"];
     };
+    "/zalip/shares/create": {
+        /**
+         * zalip/shares/create
+         * @description Creates a local Misskey note with a structured card for one published Zalip title.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:notes*
+         */
+        post: operations["zalip___shares___create"];
+    };
     "/zalip/works/list": {
         /**
          * zalip/works/list
@@ -4743,6 +4752,16 @@ export type components = {
             repliesCount: number;
             uri?: string;
             url?: string;
+            zalipShare?: {
+                slug: string;
+                /** @enum {string} */
+                kind: "movie" | "series" | "anime" | "animation";
+                title: string;
+                description: string | null;
+                releaseYear: number | null;
+                genres: string[];
+                posterPath: string | null;
+            };
             reactionAndUserPairCache?: string[];
             clippedCount?: number;
             hasPoll?: boolean;
@@ -39010,6 +39029,85 @@ export interface operations {
                         /** Format: misskey:id */
                         discussionNoteId: string | null;
                     }[];
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    zalip___shares___create: {
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: misskey:id */
+                    workId: string;
+                    text?: string | null;
+                    cw?: string | null;
+                    /**
+                     * @default public
+                     * @enum {string}
+                     */
+                    visibility?: "public" | "home" | "followers" | "specified";
+                    /** @default [] */
+                    visibleUserIds?: string[];
+                    /** @default true */
+                    localOnly?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        createdNote: components["schemas"]["Note"];
+                    };
                 };
             };
             /** @description Client error */

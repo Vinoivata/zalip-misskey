@@ -4,13 +4,15 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import { EntityNotFoundError, In } from 'typeorm';
+import { DataSource, EntityNotFoundError, In } from 'typeorm';
 import { ModuleRef } from '@nestjs/core';
 import { DI } from '@/di-symbols.js';
 import type { Packed } from '@/misc/json-schema.js';
 import { awaitAll } from '@/misc/prelude/await-all.js';
 import type { MiUser } from '@/models/User.js';
 import type { MiNote } from '@/models/Note.js';
+import { MiZalipSharedNote } from '@/models/ZalipSharedNote.js';
+import type { MiZalipWork } from '@/models/ZalipWork.js';
 import type { UsersRepository, NotesRepository, FollowingsRepository, PollsRepository, PollVotesRepository, NoteReactionsRepository, ChannelsRepository, MiMeta } from '@/models/_.js';
 import { bindThis } from '@/decorators.js';
 import { DebounceLoader } from '@/misc/loader.js';
@@ -48,6 +50,16 @@ function getAppearNoteIds(notes: MiNote[]): Set<string> {
 	return appearNoteIds;
 }
 
+type PackedZalipShare = {
+	slug: string;
+	kind: MiZalipWork['kind'];
+	title: string;
+	description: string | null;
+	releaseYear: number | null;
+	genres: string[];
+	posterPath: string | null;
+};
+
 async function nullIfEntityNotFound<T>(promise: Promise<T>): Promise<T | null> {
 	try {
 		return await promise;
@@ -72,6 +84,9 @@ export class NoteEntityService implements OnModuleInit {
 
 	constructor(
 		private moduleRef: ModuleRef,
+
+		@Inject(DI.db)
+		private db: DataSource,
 
 		@Inject(DI.meta)
 		private meta: MiMeta,
@@ -115,6 +130,30 @@ export class NoteEntityService implements OnModuleInit {
 		this.reactionsBufferingService = this.moduleRef.get('ReactionsBufferingService');
 		this.idService = this.moduleRef.get('IdService');
 		this.cacheService = this.moduleRef.get('CacheService');
+	}
+
+	/** Fetches title cards in one query so a timeline never turns into N+1 share lookups. */
+	private async packZalipShares(noteIds: readonly MiNote['id'][]): Promise<Map<MiNote['id'], PackedZalipShare>> {
+		if (noteIds.length === 0) return new Map();
+		const shares = await this.db.getRepository(MiZalipSharedNote).find({
+			where: { noteId: In([...new Set(noteIds)]) },
+			relations: { work: true },
+		});
+		const packed = new Map<MiNote['id'], PackedZalipShare>();
+		for (const share of shares) {
+			const work = share.work;
+			if (work == null || work.publicationState !== 'published') continue;
+			packed.set(share.noteId, {
+				slug: work.slug,
+				kind: work.kind,
+				title: work.title,
+				description: work.description,
+				releaseYear: work.releaseYear,
+				genres: work.genres,
+				posterPath: work.posterPath,
+			});
+		}
+		return packed;
 	}
 
 	@bindThis
@@ -351,7 +390,8 @@ export class NoteEntityService implements OnModuleInit {
 				bufferedReactions: Map<MiNote['id'], { deltas: Record<string, number>; pairs: ([MiUser['id'], string])[] }> | null;
 				myReactions: Map<MiNote['id'], string | null>;
 				packedFiles: Map<MiNote['fileIds'][number], Packed<'DriveFile'> | null>;
-				packedUsers: Map<MiUser['id'], Packed<'UserLite'>>
+				packedUsers: Map<MiUser['id'], Packed<'UserLite'>>;
+				zalipShares: Map<MiNote['id'], PackedZalipShare>;
 			};
 		},
 	): Promise<Packed<'Note'>> {
@@ -363,6 +403,7 @@ export class NoteEntityService implements OnModuleInit {
 
 		const meId = me ? me.id : null;
 		const note = typeof src === 'object' ? src : await this.noteLoader.load(src);
+		const zalipShares = opts._hint_?.zalipShares ?? await this.packZalipShares([note.id]);
 		const host = note.userHost;
 
 		const bufferedReactions = opts._hint_?.bufferedReactions != null
@@ -428,6 +469,7 @@ export class NoteEntityService implements OnModuleInit {
 			hasPoll: note.hasPoll || undefined,
 			uri: note.uri ?? undefined,
 			url: note.url ?? undefined,
+			zalipShare: zalipShares.get(note.id),
 
 			...(opts.detail ? {
 				clippedCount: note.clippedCount,
@@ -549,6 +591,8 @@ export class NoteEntityService implements OnModuleInit {
 		];
 		const packedUsers = await this.userEntityService.packMany(users, me)
 			.then(users => new Map(users.map(u => [u.id, u])));
+		const relatedNoteIds = notes.flatMap(note => [note.id, note.reply?.id, note.renote?.id].filter((id): id is string => id != null));
+		const zalipShares = await this.packZalipShares(relatedNoteIds);
 
 		return await Promise.all(notes.map(n => this.pack(n, me, {
 			...options,
@@ -557,6 +601,7 @@ export class NoteEntityService implements OnModuleInit {
 				myReactions: myReactionsMap,
 				packedFiles,
 				packedUsers,
+				zalipShares,
 			},
 		})));
 	}

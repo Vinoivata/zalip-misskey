@@ -9,9 +9,81 @@ import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
 import { MiZalipLibraryEntry } from '@/models/ZalipLibraryEntry.js';
 import { MiZalipReleaseEvent } from '@/models/ZalipReleaseEvent.js';
 import { MiZalipSeason } from '@/models/ZalipSeason.js';
+import { MiZalipSharedNote } from '@/models/ZalipSharedNote.js';
 import { MiZalipWork } from '@/models/ZalipWork.js';
 
 describe('ZalipCatalogService', () => {
+	it('creates a normal local note and stores its canonical Zalip work card', async () => {
+		const work = { id: 'work-1', publicationState: 'published' };
+		const worksRepository = {
+			findOneBy: vi.fn().mockResolvedValue(work),
+		};
+		const sharedNotesRepository = {
+			create: vi.fn((input) => input),
+			save: vi.fn().mockResolvedValue(null),
+		};
+		const dataSource = {
+			getRepository: (model: unknown) => {
+				if (model === MiZalipWork) return worksRepository;
+				if (model === MiZalipSharedNote) return sharedNotesRepository;
+				throw new Error('Unexpected repository');
+			},
+		};
+		const noteCreateService = {
+			fetchAndCreate: vi.fn().mockResolvedValue({ id: 'note-1' }),
+		};
+		const service = new ZalipCatalogService(
+			dataSource as never,
+			{} as never,
+			noteCreateService as never,
+			{} as never,
+		);
+
+		await expect(service.createShare({ id: 'user-1' } as never, work.id, {
+			text: null,
+			cw: null,
+			visibility: 'public',
+			localOnly: true,
+			visibleUserIds: [],
+		})).resolves.toEqual({ id: 'note-1' });
+
+		expect(noteCreateService.fetchAndCreate).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }), expect.objectContaining({
+			text: null,
+			visibility: 'public',
+			localOnly: true,
+			fileIds: [],
+		}));
+		expect(sharedNotesRepository.save).toHaveBeenCalledWith(expect.objectContaining({
+			noteId: 'note-1',
+			workId: work.id,
+		}));
+	});
+
+	it('does not create a share for an unpublished or missing work', async () => {
+		const worksRepository = {
+			findOneBy: vi.fn().mockResolvedValue(null),
+		};
+		const dataSource = {
+			getRepository: () => worksRepository,
+		};
+		const noteCreateService = { fetchAndCreate: vi.fn() };
+		const service = new ZalipCatalogService(
+			dataSource as never,
+			{} as never,
+			noteCreateService as never,
+			{} as never,
+		);
+
+		await expect(service.createShare({ id: 'user-1' } as never, 'missing-work', {
+			text: 'Не должно публиковаться',
+			cw: null,
+			visibility: 'public',
+			localOnly: true,
+			visibleUserIds: [],
+		})).resolves.toBeNull();
+		expect(noteCreateService.fetchAndCreate).not.toHaveBeenCalled();
+	});
+
 	it('returns only TMDB-backed works for a bounded explicit metadata refresh', async () => {
 		const worksRepository = {
 			find: vi.fn().mockResolvedValue([

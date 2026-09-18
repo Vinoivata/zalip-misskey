@@ -110,6 +110,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<Mfm :text="translation.text" :author="appearNote.user" :nyaize="'respect'" :emojiUrls="appearNote.emojis" class="_selectable"/>
 						</div>
 					</div>
+					<ZalipShareCard v-if="appearNote.zalipShare" :share="appearNote.zalipShare"/>
 					<div v-if="appearNote.files && appearNote.files.length > 0">
 						<MkMediaList ref="galleryEl" :mediaList="appearNote.files"/>
 					</div>
@@ -266,6 +267,7 @@ import MkUserCardMini from '@/components/MkUserCardMini.vue';
 import MkPagination from '@/components/MkPagination.vue';
 import MkReactionIcon from '@/components/MkReactionIcon.vue';
 import MkButton from '@/components/MkButton.vue';
+import ZalipShareCard from '@/components/ZalipShareCard.vue';
 
 const props = withDefaults(defineProps<{
 	note: Misskey.entities.Note;

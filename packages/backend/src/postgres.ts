@@ -95,6 +95,7 @@ import { MiZalipLibraryEntry } from '@/models/ZalipLibraryEntry.js';
 import { MiZalipNoteContext } from '@/models/ZalipNoteContext.js';
 import { MiZalipReleaseEvent } from '@/models/ZalipReleaseEvent.js';
 import { MiZalipSeason } from '@/models/ZalipSeason.js';
+import { MiZalipSharedNote } from '@/models/ZalipSharedNote.js';
 import { MiZalipWork } from '@/models/ZalipWork.js';
 
 pg.types.setTypeParser(20, Number);
@@ -235,6 +236,7 @@ export const entities = [
 	MiZalipEpisodeNoteContext,
 	MiZalipLibraryEntry,
 	MiZalipNoteContext,
+	MiZalipSharedNote,
 	MiZalipReleaseEvent,
 	MiAbuseUserReport,
 	MiAbuseReportNotificationRecipient,

@@ -244,6 +244,19 @@ export const packedNoteSchema = {
 			type: 'string',
 			optional: true, nullable: false,
 		},
+		zalipShare: {
+			type: 'object',
+			optional: true, nullable: false,
+			properties: {
+				slug: { type: 'string', optional: false, nullable: false },
+				kind: { type: 'string', optional: false, nullable: false, enum: ['movie', 'series', 'anime', 'animation'] },
+				title: { type: 'string', optional: false, nullable: false },
+				description: { type: 'string', optional: false, nullable: true },
+				releaseYear: { type: 'integer', optional: false, nullable: true },
+				genres: { type: 'array', optional: false, nullable: false, items: { type: 'string', optional: false, nullable: false } },
+				posterPath: { type: 'string', optional: false, nullable: true },
+			},
+		},
 		reactionAndUserPairCache: {
 			type: 'array',
 			optional: true, nullable: false,

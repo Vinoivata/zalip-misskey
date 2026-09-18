@@ -92,6 +92,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<label v-if="work.seasons.length" :class="$style.progress"><i class="ti ti-player-track-next"></i><span class="_visuallyHidden">Просмотрено эпизодов</span><input v-model.number="episodesWatched" class="_input" type="number" min="0" inputmode="numeric" :disabled="saving" aria-label="Просмотрено эпизодов" @change="saveEpisodesWatched"><span>эп.</span></label>
 						</div>
 						<button v-if="$i" type="button" class="_button" :class="[$style.subscription, { [$style.subscribed]: releaseSubscribed }]" :aria-pressed="releaseSubscribed" :disabled="saving" @click="toggleReleaseSubscription"><i :class="releaseSubscribed ? 'ti ti-bell-filled' : 'ti ti-bell'"></i> {{ releaseSubscribed ? 'Слежу за сериями' : 'Следить за сериями' }}</button>
+						<button v-if="$i" type="button" class="_button" :class="$style.feed" @click="shareWork"><i class="ti ti-send"></i> Поделиться</button>
 						<MkA to="/timeline" :class="$style.feed"><i class="ti ti-news"></i> Лента</MkA>
 						<MkA v-if="discussionNoteId" :to="`/notes/${discussionNoteId}/replies`" :class="$style.feed"><i class="ti ti-messages"></i> Обсуждение</MkA>
 					</div>
@@ -108,6 +109,7 @@ import { computed, ref, watch } from 'vue';
 import { $i, iAmAdmin } from '@/i.js';
 import { definePage } from '@/page.js';
 import { useRouter } from '@/router.js';
+import * as os from '@/os.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 
 type ZalipWork = {
@@ -233,6 +235,12 @@ function seasonLabel(seasonNumber: number, title: string): string {
 
 function episodeLabel(episode: ZalipEpisode): string {
 	return `Серия ${episode.episodeNumber}: ${episode.title}`;
+}
+
+function shareWork(): void {
+	if (work.value == null) return;
+	const { id, slug, kind, title, description, releaseYear, genres, posterPath } = work.value;
+	os.post({ zalipWork: { id, slug, kind, title, description, releaseYear, genres, posterPath } });
 }
 
 function episodeMeta(episode: ZalipEpisode): string {

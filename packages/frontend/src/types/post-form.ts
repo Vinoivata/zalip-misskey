@@ -25,5 +25,15 @@ export interface PostFormProps {
 	initialLocalOnly?: boolean;
 	initialVisibleUsers?: Misskey.entities.UserDetailed[];
 	initialNote?: Misskey.entities.Note;
+	zalipWork?: {
+		id: string;
+		slug: string;
+		kind: 'movie' | 'series' | 'anime' | 'animation';
+		title: string;
+		description: string | null;
+		releaseYear: number | null;
+		genres: string[];
+		posterPath: string | null;
+	};
 	instant?: boolean;
 };

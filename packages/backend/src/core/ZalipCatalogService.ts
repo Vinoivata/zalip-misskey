@@ -9,7 +9,7 @@ import { DI } from '@/di-symbols.js';
 import { IdService } from '@/core/IdService.js';
 import { NoteCreateService } from '@/core/NoteCreateService.js';
 import { MiNote } from '@/models/Note.js';
-import type { MiLocalUser } from '@/models/User.js';
+import type { MiLocalUser, MiUser } from '@/models/User.js';
 import {
 	MiZalipLibraryEntry,
 	type ZalipLibraryStatus,
@@ -26,6 +26,7 @@ import { MiZalipEpisodeNoteContext } from '@/models/ZalipEpisodeNoteContext.js';
 import { MiZalipAllohaAvailabilityEvent } from '@/models/ZalipAllohaAvailabilityEvent.js';
 import { MiZalipAllohaSource, type ZalipAllohaTranslation } from '@/models/ZalipAllohaSource.js';
 import { MiZalipReleaseEvent } from '@/models/ZalipReleaseEvent.js';
+import { MiZalipSharedNote } from '@/models/ZalipSharedNote.js';
 import { NotificationService } from '@/core/NotificationService.js';
 
 type ZalipEpisodeReleaseNotificationPayload = {
@@ -1107,5 +1108,47 @@ export class ZalipCatalogService {
 		}));
 
 		return { noteId: note.id, created: true };
+	}
+
+	/** Creates an ordinary local Misskey post and attaches the canonical Zalip work as structured UI context. */
+	public async createShare(
+		me: MiLocalUser,
+		workId: MiZalipWork['id'],
+		input: {
+			text: string | null;
+			cw: string | null;
+			visibility: MiNote['visibility'];
+			localOnly: boolean;
+			visibleUserIds: MiUser['id'][];
+		},
+	): Promise<MiNote | null> {
+		const work = await this.db.getRepository(MiZalipWork).findOneBy({
+			id: workId,
+			publicationState: 'published',
+		});
+		if (work == null) return null;
+
+		const note = await this.noteCreateService.fetchAndCreate(me, {
+			createdAt: new Date(),
+			replyId: null,
+			renoteId: null,
+			fileIds: [],
+			text: input.text,
+			cw: input.cw,
+			visibility: input.visibility,
+			visibleUserIds: input.visibleUserIds,
+			channelId: null,
+			localOnly: input.localOnly,
+			reactionAcceptance: null,
+			poll: null,
+		});
+
+		const shares = this.db.getRepository(MiZalipSharedNote);
+		await shares.save(shares.create({
+			noteId: note.id,
+			workId: work.id,
+			createdAt: new Date(),
+		}));
+		return note;
 	}
 }

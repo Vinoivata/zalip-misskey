@@ -458,6 +458,7 @@ export * as 'zalip/releases/subscribed' from './endpoints/zalip/releases/subscri
 export * as 'zalip/discussions/show' from './endpoints/zalip/discussions/show.js';
 export * as 'zalip/library/list' from './endpoints/zalip/library/list.js';
 export * as 'zalip/library/update' from './endpoints/zalip/library/update.js';
+export * as 'zalip/shares/create' from './endpoints/zalip/shares/create.js';
 export * as 'zalip/admin/works/create' from './endpoints/zalip/admin/works/create.js';
 export * as 'zalip/admin/works/import-tmdb' from './endpoints/zalip/admin/works/import-tmdb.js';
 export * as 'zalip/admin/works/list' from './endpoints/zalip/admin/works/list.js';

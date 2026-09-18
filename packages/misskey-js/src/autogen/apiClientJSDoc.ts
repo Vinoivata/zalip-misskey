@@ -5552,6 +5552,18 @@ declare module '../api.js' {
 
 
     /**
+     * Creates a local Misskey note with a structured card for one published Zalip title.
+     *
+     * **Credential required**: *Yes* / **Permission**: *write:notes*
+     */
+    request<E extends 'zalip/shares/create', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+
+    /**
      * List published Zalip cinema titles.
      *
      * **Credential required**: *No*

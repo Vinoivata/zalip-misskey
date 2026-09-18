@@ -86,6 +86,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							</div>
 						</div>
 					</div>
+					<ZalipShareCard v-if="appearNote.zalipShare" :share="appearNote.zalipShare"/>
 					<div v-if="appearNote.files && appearNote.files.length > 0" style="margin-top: 8px;">
 						<MkMediaList ref="galleryEl" :mediaList="appearNote.files"/>
 					</div>
@@ -220,6 +221,7 @@ import MkCwButton from '@/components/MkCwButton.vue';
 import MkPoll from '@/components/MkPoll.vue';
 import MkUrlPreview from '@/components/MkUrlPreview.vue';
 import MkInstanceTicker from '@/components/MkInstanceTicker.vue';
+import ZalipShareCard from '@/components/ZalipShareCard.vue';
 
 const props = withDefaults(defineProps<{
 	note: Misskey.entities.Note;

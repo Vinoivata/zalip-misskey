@@ -702,6 +702,8 @@ import type {
 	ZalipReleasesSubscribedResponse,
 	ZalipSeasonsEpisodesRequest,
 	ZalipSeasonsEpisodesResponse,
+	ZalipSharesCreateRequest,
+	ZalipSharesCreateResponse,
 	ZalipWorksListRequest,
 	ZalipWorksListResponse,
 	ZalipWorksSearchRequest,
@@ -1169,6 +1171,7 @@ export type Endpoints = {
 	'zalip/releases/list': { req: ZalipReleasesListRequest; res: ZalipReleasesListResponse };
 	'zalip/releases/subscribed': { req: ZalipReleasesSubscribedRequest; res: ZalipReleasesSubscribedResponse };
 	'zalip/seasons/episodes': { req: ZalipSeasonsEpisodesRequest; res: ZalipSeasonsEpisodesResponse };
+	'zalip/shares/create': { req: ZalipSharesCreateRequest; res: ZalipSharesCreateResponse };
 	'zalip/works/list': { req: ZalipWorksListRequest; res: ZalipWorksListResponse };
 	'zalip/works/search': { req: ZalipWorksSearchRequest; res: ZalipWorksSearchResponse };
 	'zalip/works/show': { req: ZalipWorksShowRequest; res: ZalipWorksShowResponse };

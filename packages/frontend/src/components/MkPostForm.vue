@@ -81,22 +81,25 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div v-if="maxTextLength - textLength < 100" :class="['_acrylic', $style.textCount, { [$style.textOver]: textLength > maxTextLength }]">{{ maxTextLength - textLength }}</div>
 	</div>
 	<input v-show="withHashtags" ref="hashtagsInputEl" v-model="hashtags" :class="$style.hashtags" :placeholder="i18n.ts.hashtags" list="hashtags">
-	<XPostFormAttaches v-model="files" @detach="detachFile" @changeSensitive="updateFileSensitive" @changeName="updateFileName"/>
-	<div v-if="uploader.items.value.length > 0" style="padding: 12px;">
+	<ZalipShareCard v-if="props.zalipWork" :share="props.zalipWork" :preview="true"/>
+	<XPostFormAttaches v-if="!props.zalipWork" v-model="files" @detach="detachFile" @changeSensitive="updateFileSensitive" @changeName="updateFileName"/>
+	<div v-if="!props.zalipWork && uploader.items.value.length > 0" style="padding: 12px;">
 		<MkTip k="postFormUploader">
 			{{ i18n.ts._postForm.uploaderTip }}
 		</MkTip>
 		<MkUploaderItems :items="uploader.items.value" @showMenu="(item, ev) => showPerUploadItemMenu(item, ev)" @showMenuViaContextmenu="(item, ev) => showPerUploadItemMenuViaContextmenu(item, ev)"/>
 	</div>
-	<MkPollEditor v-if="poll" v-model="poll" @destroyed="poll = null"/>
+	<MkPollEditor v-if="!props.zalipWork && poll" v-model="poll" @destroyed="poll = null"/>
 	<MkNotePreview v-if="showPreview" :class="$style.preview" :text="text" :files="files" :poll="poll ?? undefined" :useCw="useCw" :cw="cw" :user="postAccount ?? $i"/>
 	<div v-if="showingOptions" style="padding: 8px 16px;">
 	</div>
 	<footer ref="footerEl" :class="$style.footer">
 		<div :class="$style.footerLeft">
-			<button v-tooltip="i18n.ts.attachFile + ' (' + i18n.ts.upload + ')'" class="_button" :class="$style.footerButton" @click="chooseFileFromPc"><i class="ti ti-photo-plus"></i></button>
-			<button v-tooltip="i18n.ts.attachFile + ' (' + i18n.ts.fromDrive + ')'" class="_button" :class="$style.footerButton" @click="chooseFileFromDrive"><i class="ti ti-cloud-download"></i></button>
-			<button v-tooltip="i18n.ts.poll" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: poll }]" @click="togglePoll"><i class="ti ti-chart-arrows"></i></button>
+			<template v-if="!props.zalipWork">
+				<button v-tooltip="i18n.ts.attachFile + ' (' + i18n.ts.upload + ')'" class="_button" :class="$style.footerButton" @click="chooseFileFromPc"><i class="ti ti-photo-plus"></i></button>
+				<button v-tooltip="i18n.ts.attachFile + ' (' + i18n.ts.fromDrive + ')'" class="_button" :class="$style.footerButton" @click="chooseFileFromDrive"><i class="ti ti-cloud-download"></i></button>
+				<button v-tooltip="i18n.ts.poll" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: poll }]" @click="togglePoll"><i class="ti ti-chart-arrows"></i></button>
+			</template>
 			<button v-tooltip="i18n.ts.useCw" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: useCw }]" @click="useCw = !useCw"><i class="ti ti-eye-off"></i></button>
 			<button v-tooltip="i18n.ts.hashtags" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: withHashtags }]" @click="withHashtags = !withHashtags"><i class="ti ti-hash"></i></button>
 			<button v-tooltip="i18n.ts.mention" class="_button" :class="$style.footerButton" @click="insertMention"><i class="ti ti-at"></i></button>
@@ -127,6 +130,7 @@ import type { MenuItem } from '@/types/menu.js';
 import type { PollEditorModelValue } from '@/components/MkPollEditor.vue';
 import type { UploaderItem } from '@/composables/use-uploader.js';
 import MkNotePreview from '@/components/MkNotePreview.vue';
+import ZalipShareCard from '@/components/ZalipShareCard.vue';
 import XPostFormAttaches from '@/components/MkPostFormAttaches.vue';
 import XTextCounter from '@/components/MkPostForm.TextCounter.vue';
 import MkPollEditor from '@/components/MkPollEditor.vue';
@@ -247,7 +251,9 @@ uploader.events.on('itemUploaded', ctx => {
 const draftKey = computed((): string => {
 	let key = targetChannel.value ? `channel:${targetChannel.value.id}` : '';
 
-	if (renoteTargetNote.value) {
+	if (props.zalipWork) {
+		key += `zalip:${props.zalipWork.id}`;
+	} else if (renoteTargetNote.value) {
 		key += `renote:${renoteTargetNote.value.id}`;
 	} else if (replyTargetNote.value) {
 		key += `reply:${replyTargetNote.value.id}`;
@@ -281,7 +287,9 @@ const placeholder = computed((): string => {
 const submitText = computed((): string => {
 	return scheduledAt.value != null
 		? i18n.ts.schedule
-		: renoteTargetNote.value
+		: props.zalipWork
+			? 'Поделиться'
+			: renoteTargetNote.value
 			? i18n.ts.quote
 			: replyTargetNote.value
 				? i18n.ts.reply
@@ -309,6 +317,7 @@ const maxCwTextLength = 100;
 const canPost = computed((): boolean => {
 	return !props.mock && !posting.value && !posted.value && !uploader.uploading.value && (uploader.items.value.length === 0 || uploader.readyForUpload.value) &&
 		(
+			props.zalipWork != null ||
 			1 <= textLength.value ||
 			1 <= files.value.length ||
 			1 <= uploader.items.value.length ||
@@ -1077,7 +1086,18 @@ async function post(ev?: PointerEvent) {
 	}
 
 	posting.value = true;
-	misskeyApi('notes/create', postData, token).then((res) => {
+	const postRequest = props.zalipWork
+		? misskeyApi<{ createdNote: Misskey.entities.Note }>('zalip/shares/create' as never, {
+			workId: props.zalipWork.id,
+			text: postData.text,
+			cw: postData.cw,
+			visibility: postData.visibility,
+			visibleUserIds: postData.visibleUserIds,
+			localOnly: postData.localOnly,
+		} as never, token)
+		: misskeyApi('notes/create', postData, token);
+
+	postRequest.then((res) => {
 		if (props.freezeAfterPosted) {
 			posted.value = true;
 		} else {
