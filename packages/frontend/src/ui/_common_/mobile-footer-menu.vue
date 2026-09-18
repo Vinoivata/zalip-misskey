@@ -5,62 +5,66 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div ref="rootEl" :class="$style.root">
-	<button :class="$style.item" class="_button" @click="drawerMenuShowing = true">
+	<MkA :class="$style.item" :activeClass="$style.active" to="/" exact>
 		<div :class="$style.itemInner">
-			<i :class="$style.itemIcon" class="ti ti-menu-2"></i><span v-if="menuIndicated" :class="$style.itemIndicator" class="_blink"><i class="_indicatorCircle"></i></span>
+			<i :class="$style.itemIcon" class="ti ti-movie"></i><span :class="$style.itemText">{{ navbarItemDef.zalip.title }}</span>
 		</div>
-	</button>
+	</MkA>
 
-	<button :class="$style.item" class="_button" @click="mainRouter.push('/')">
+	<MkA :class="$style.item" :activeClass="$style.active" to="/timeline">
 		<div :class="$style.itemInner">
-			<i :class="$style.itemIcon" class="ti ti-home"></i>
+			<i :class="[$style.itemIcon, navbarItemDef.feed.icon]"></i><span :class="$style.itemText">{{ navbarItemDef.feed.title }}</span>
 		</div>
-	</button>
+	</MkA>
 
-	<button :class="$style.item" class="_button" @click="mainRouter.push('/my/notifications')">
+	<MkA :class="$style.item" :activeClass="$style.active" to="/library">
 		<div :class="$style.itemInner">
-			<i :class="$style.itemIcon" class="ti ti-bell"></i>
+			<i :class="[$style.itemIcon, navbarItemDef.library.icon]"></i><span :class="$style.itemText">{{ navbarItemDef.library.title }}</span>
+		</div>
+	</MkA>
+
+	<MkA :class="$style.item" :activeClass="$style.active" to="/updates">
+		<div :class="$style.itemInner">
+			<i :class="[$style.itemIcon, navbarItemDef.updates.icon]"></i><span :class="$style.itemText">{{ navbarItemDef.updates.title }}</span>
+		</div>
+	</MkA>
+
+	<MkA :class="$style.item" :activeClass="$style.active" to="/my/notifications">
+		<div :class="$style.itemInner">
+			<i :class="[$style.itemIcon, navbarItemDef.notifications.icon]"></i><span :class="$style.itemText">{{ navbarItemDef.notifications.title }}</span>
 			<span v-if="$i?.hasUnreadNotification" :class="$style.itemIndicator" class="_blink">
 				<span class="_indicateCounter" :class="$style.itemIndicateValueIcon">{{ $i.unreadNotificationsCount > 99 ? '99+' : $i.unreadNotificationsCount }}</span>
 			</span>
 		</div>
-	</button>
+	</MkA>
 
-	<button :class="$style.item" class="_button" @click="widgetsShowing = true">
+	<MkA v-if="$i" :class="$style.item" :activeClass="$style.active" :to="`/@${$i.username}`">
 		<div :class="$style.itemInner">
-			<i :class="$style.itemIcon" class="ti ti-apps"></i>
+			<i :class="[$style.itemIcon, navbarItemDef.profile.icon]"></i><span :class="$style.itemText">{{ navbarItemDef.profile.title }}</span>
 		</div>
-	</button>
-
-	<button :class="[$style.item, $style.post]" class="_button" @click="os.post()">
+	</MkA>
+	<button v-else :class="$style.item" class="_button" @click="signIn">
 		<div :class="$style.itemInner">
-			<i :class="$style.itemIcon" class="ti ti-pencil"></i>
+			<i :class="$style.itemIcon" class="ti ti-login"></i><span :class="$style.itemText">{{ i18n.ts.login }}</span>
 		</div>
 	</button>
 </div>
 </template>
 
 <script lang="ts" setup>
-import { computed, ref, useTemplateRef, watch } from 'vue';
+import { ref, useTemplateRef, watch } from 'vue';
 import { $i } from '@/i.js';
-import * as os from '@/os.js';
-import { mainRouter } from '@/router.js';
 import { navbarItemDef } from '@/navbar.js';
-
-const drawerMenuShowing = defineModel<boolean>('drawerMenuShowing');
-const widgetsShowing = defineModel<boolean>('widgetsShowing');
+import { i18n } from '@/i18n.js';
+import { pleaseLogin } from '@/utility/please-login.js';
 
 const rootEl = useTemplateRef('rootEl');
 
-const menuIndicated = computed(() => {
-	for (const def in navbarItemDef) {
-		if (def === 'notifications') continue; // 通知は下にボタンとして表示されてるから
-		if (navbarItemDef[def].indicated) return true;
-	}
-	return false;
-});
-
 const rootElHeight = ref(0);
+
+function signIn(): void {
+	void pleaseLogin();
+}
 
 watch(rootEl, () => {
 	if (rootEl.value) {
@@ -81,7 +85,7 @@ watch(rootEl, () => {
 	z-index: 1;
 	padding-bottom: env(safe-area-inset-bottom, 0px);
 	display: grid;
-	grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+	grid-template-columns: repeat(6, minmax(0, 1fr));
 	width: 100%;
 	box-sizing: border-box;
 	background: var(--MI_THEME-navBg);
@@ -90,7 +94,10 @@ watch(rootEl, () => {
 }
 
 .item {
-	padding: 12px 0;
+	display: block;
+	padding: 8px 0 9px;
+	color: inherit;
+	text-decoration: none;
 
 	&:first-child {
 		padding-left: 12px;
@@ -100,30 +107,24 @@ watch(rootEl, () => {
 		padding-right: 12px;
 	}
 
-	&.post {
+	&.active {
+		color: var(--MI_THEME-accent);
+
 		.itemInner {
-			background: linear-gradient(90deg, var(--MI_THEME-buttonGradateA), var(--MI_THEME-buttonGradateB));
-			color: var(--MI_THEME-fgOnAccent);
-
-			&:hover {
-				background: linear-gradient(90deg, hsl(from var(--MI_THEME-accent) h s calc(l + 5)), hsl(from var(--MI_THEME-accent) h s calc(l + 5)));
-			}
-
-			&:active {
-				background: linear-gradient(90deg, hsl(from var(--MI_THEME-accent) h s calc(l + 5)), hsl(from var(--MI_THEME-accent) h s calc(l + 5)));
-			}
+			background: var(--MI_THEME-accentedBg);
 		}
 	}
 }
 
 .itemInner {
 	position: relative;
-	padding: 0;
-	aspect-ratio: 1;
+	display: grid;
+	justify-items: center;
+	gap: 3px;
+	padding: 4px 0;
 	width: 100%;
 	max-width: 42px;
 	margin: auto;
-	align-content: center;
 	border-radius: 100%;
 
 	&:hover {
@@ -137,6 +138,12 @@ watch(rootEl, () => {
 
 .itemIcon {
 	font-size: 15px;
+}
+
+.itemText {
+	font-size: 0.6rem;
+	font-weight: 650;
+	line-height: 1.1;
 }
 
 .itemIndicator {

@@ -77,7 +77,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 			<XNavbarH v-if="!isMobile && prefer.r['deck.navbarPosition'].value === 'bottom'" :acrylic="withWallpaper"/>
 
-			<XMobileFooterMenu v-if="isMobile" v-model:drawerMenuShowing="drawerMenuShowing" v-model:widgetsShowing="widgetsShowing"/>
+			<XMobileFooterMenu v-if="isMobile"/>
 		</div>
 	</div>
 

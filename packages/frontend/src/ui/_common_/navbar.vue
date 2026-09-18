@@ -19,14 +19,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</button>
 		</div>
 		<div :class="$style.middle">
-			<MkA v-tooltip.noDelay.right="i18n.ts.timeline" :class="$style.item" :activeClass="$style.active" to="/" exact>
-				<i :class="$style.itemIcon" class="ti ti-home ti-fw" style="view-transition-name: navbar-homeIcon;"></i><span :class="$style.itemText">{{ i18n.ts.timeline }}</span>
+			<MkA v-tooltip.noDelay.right="navbarItemDef.zalip.title" :class="$style.item" :activeClass="$style.active" to="/" exact>
+				<i :class="$style.itemIcon" class="ti ti-movie ti-fw" style="view-transition-name: navbar-homeIcon;"></i><span :class="$style.itemText">{{ navbarItemDef.zalip.title }}</span>
 			</MkA>
-			<template v-for="item in prefer.r.menu.value">
-				<div v-if="item === '-'" :class="$style.divider"></div>
+			<template v-for="item in primaryMenu" :key="item">
 				<component
 					:is="navbarItemDef[item].to ? 'MkA' : 'button'"
-					v-else-if="navbarItemDef[item] && (navbarItemDef[item].show == null || navbarItemDef[item].show.value !== false)"
+					v-if="navbarItemDef[item] && (navbarItemDef[item].show == null || navbarItemDef[item].show.value !== false)"
 					v-tooltip.noDelay.right="navbarItemDef[item].title"
 					class="_button"
 					:class="[$style.item]"
@@ -41,14 +40,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</span>
 				</component>
 			</template>
+			<MkA v-if="$i != null" v-tooltip.noDelay.right="navbarItemDef.notifications.title" :class="$style.item" :activeClass="$style.active" to="/my/notifications">
+				<i :class="[$style.itemIcon, navbarItemDef.notifications.icon]" style="view-transition-name: navbar-item-notifications;"></i><span :class="$style.itemText">{{ navbarItemDef.notifications.title }}</span>
+				<span v-if="navbarItemDef.notifications.indicated" :class="$style.itemIndicator" class="_blink"><span v-if="navbarItemDef.notifications.indicateValue" class="_indicateCounter" :class="$style.itemIndicateValueIcon">{{ navbarItemDef.notifications.indicateValue }}</span><i v-else class="_indicatorCircle"></i></span>
+			</MkA>
 			<div :class="$style.divider"></div>
 			<MkA v-if="$i != null && ($i.isAdmin || $i.isModerator)" v-tooltip.noDelay.right="i18n.ts.controlPanel" :class="$style.item" :activeClass="$style.active" to="/admin">
 				<i :class="$style.itemIcon" class="ti ti-dashboard ti-fw" style="view-transition-name: navbar-controlPanel;"></i><span :class="$style.itemText">{{ i18n.ts.controlPanel }}</span>
 			</MkA>
-			<button class="_button" :class="$style.item" @click="more">
-				<i :class="$style.itemIcon" class="ti ti-grid-dots ti-fw" style="view-transition-name: navbar-more;"></i><span :class="$style.itemText">{{ i18n.ts.more }}</span>
-				<span v-if="otherMenuItemIndicated" :class="$style.itemIndicator" class="_blink"><i class="_indicatorCircle"></i></span>
-			</button>
 			<MkA v-tooltip.noDelay.right="i18n.ts.settings" :class="$style.item" :activeClass="$style.active" to="/settings">
 				<i :class="$style.itemIcon" class="ti ti-settings ti-fw" style="view-transition-name: navbar-settings;"></i><span :class="$style.itemText">{{ i18n.ts.settings }}</span>
 			</MkA>
@@ -79,14 +78,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 	-->
 
 	<div v-if="!forceIconOnly && prefer.r.showNavbarSubButtons.value" :class="$style.subButtons">
-		<div :class="$style.subButton">
-			<svg viewBox="0 0 16 64" :class="$style.subButtonShape">
-				<g transform="matrix(0.333333,0,0,0.222222,0.000895785,21.3333)">
-					<path d="M47.488,7.995C47.79,10.11 47.943,12.266 47.943,14.429C47.997,26.989 47.997,84 47.997,84C47.997,84 44.018,118.246 23.997,133.5C-0.374,152.07 -0.003,192 -0.003,192L-0.003,-96C-0.003,-96 0.151,-56.216 23.997,-37.5C40.861,-24.265 46.043,-1.243 47.488,7.995Z" style="fill:var(--MI_THEME-navBg);"/>
-				</g>
-			</svg>
-			<button class="_button" :class="$style.subButtonClickable" @click="menuEdit"><i :class="$style.subButtonIcon" class="ti ti-settings-2"></i></button>
-		</div>
 		<template v-if="!props.asDrawer">
 			<div :class="$style.subButtonGapFill"></div>
 			<div :class="$style.subButtonGapFillDivider"></div>
@@ -104,20 +95,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, defineAsyncComponent, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { openInstanceMenu } from './common.js';
 import * as os from '@/os.js';
-import { navbarItemDef } from '@/navbar.js';
+import { isZalipConfigurableNavigationItem, navbarItemDef } from '@/navbar.js';
 import { store } from '@/store.js';
 import { i18n } from '@/i18n.js';
 import { instance } from '@/instance.js';
-import { getHTMLElementOrNull } from '@/utility/get-dom-node-or-null.js';
-import { useRouter } from '@/router.js';
 import { prefer } from '@/preferences.js';
 import { getAccountMenu } from '@/accounts.js';
 import { $i } from '@/i.js';
-
-const router = useRouter();
 
 const props = defineProps<{
 	showWidgetButton?: boolean;
@@ -133,13 +120,7 @@ const iconOnly = computed(() => {
 	return !props.asDrawer && (forceIconOnly.value || (store.r.menuDisplay.value === 'sideIcon'));
 });
 
-const otherMenuItemIndicated = computed(() => {
-	for (const def in navbarItemDef) {
-		if (prefer.r.menu.value.includes(def)) continue;
-		if (navbarItemDef[def].indicated) return true;
-	}
-	return false;
-});
+const primaryMenu = computed(() => prefer.r.menu.value.filter(isZalipConfigurableNavigationItem));
 
 function calcViewState() {
 	forceIconOnly.value = window.innerWidth <= 1279;
@@ -183,19 +164,6 @@ async function openAccountMenu(ev: PointerEvent) {
 	os.popupMenu(menuItems, ev.currentTarget ?? ev.target);
 }
 
-async function more(ev: PointerEvent) {
-	const target = getHTMLElementOrNull(ev.currentTarget ?? ev.target);
-	if (!target) return;
-	const { dispose } = await os.popupAsyncWithDialog(import('@/components/MkLaunchPad.vue').then(x => x.default), {
-		anchorElement: target,
-	}, {
-		closed: () => dispose(),
-	});
-}
-
-function menuEdit() {
-	router.push('/settings/navbar');
-}
 </script>
 
 <style lang="scss" module>

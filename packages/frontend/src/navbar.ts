@@ -15,6 +15,20 @@ import * as os from '@/os.js';
 import { i18n } from '@/i18n.js';
 import { unisonReload } from '@/utility/unison-reload.js';
 
+// Misskey is Zalip's internal social core. Keep the consumer navigation small
+// and intentional while the remaining core capabilities stay available to the
+// product through the dedicated screens and account menu.
+export const zalipNavigationItems = ['feed', 'library', 'updates', 'notifications', 'profile'] as const;
+export const zalipConfigurableNavigationItems = ['feed', 'library', 'updates'] as const;
+
+export function isZalipNavigationItem(item: string): item is (typeof zalipNavigationItems)[number] {
+	return (zalipNavigationItems as readonly string[]).includes(item);
+}
+
+export function isZalipConfigurableNavigationItem(item: string): item is (typeof zalipConfigurableNavigationItems)[number] {
+	return (zalipConfigurableNavigationItems as readonly string[]).includes(item);
+}
+
 export const navbarItemDef = reactive<{
 	[key: string]: {
 		title: string;

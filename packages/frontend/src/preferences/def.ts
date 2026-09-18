@@ -187,22 +187,9 @@ export const PREF_DEF = definePreferences({
 	},
 	menu: {
 		default: [
-			'zalip',
 			'feed',
 			'library',
 			'updates',
-			'notifications',
-			'clips',
-			'drive',
-			'followRequests',
-			'chat',
-			'-',
-			'explore',
-			'announcements',
-			'channels',
-			'search',
-			'-',
-			'ui',
 		],
 	},
 	statusbars: {

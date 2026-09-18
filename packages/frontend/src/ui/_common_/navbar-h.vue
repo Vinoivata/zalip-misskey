@@ -10,24 +10,23 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<button v-click-anime :class="[$style.item, $style.instance]" class="_button" @click="openInstanceMenu">
 				<img :class="$style.instanceIcon" :src="instance.iconUrl ?? '/favicon.ico'" draggable="false"/>
 			</button>
-			<MkA v-click-anime v-tooltip="i18n.ts.timeline" :class="$style.item" :activeClass="$style.active" to="/" exact>
-				<i :class="$style.itemIcon" class="ti ti-home ti-fw"></i>
+			<MkA v-click-anime v-tooltip="navbarItemDef.zalip.title" :class="$style.item" :activeClass="$style.active" to="/" exact>
+				<i :class="$style.itemIcon" class="ti ti-movie ti-fw"></i>
 			</MkA>
-			<template v-for="item in menu">
-				<div v-if="item === '-'" :class="$style.divider"></div>
-				<component :is="navbarItemDef[item].to ? 'MkA' : 'button'" v-else-if="navbarItemDef[item] && (navbarItemDef[item].show == null || navbarItemDef[item].show.value !== false)" v-click-anime v-tooltip="navbarItemDef[item].title" class="_button" :class="$style.item" :activeClass="$style.active" :to="navbarItemDef[item].to" v-on="navbarItemDef[item].action ? { click: navbarItemDef[item].action } : {}">
+			<template v-for="item in primaryMenu" :key="item">
+				<component :is="navbarItemDef[item].to ? 'MkA' : 'button'" v-if="navbarItemDef[item] && (navbarItemDef[item].show == null || navbarItemDef[item].show.value !== false)" v-click-anime v-tooltip="navbarItemDef[item].title" class="_button" :class="$style.item" :activeClass="$style.active" :to="navbarItemDef[item].to" v-on="navbarItemDef[item].action ? { click: navbarItemDef[item].action } : {}">
 					<i :class="[$style.itemIcon, navbarItemDef[item].icon]" class="ti-fw"></i>
 					<span v-if="navbarItemDef[item].indicated" :class="$style.indicator" class="_blink"><i class="_indicatorCircle"></i></span>
 				</component>
 			</template>
+			<MkA v-if="$i" v-click-anime v-tooltip="navbarItemDef.notifications.title" :class="$style.item" :activeClass="$style.active" to="/my/notifications">
+				<i :class="[$style.itemIcon, navbarItemDef.notifications.icon]" class="ti-fw"></i>
+				<span v-if="navbarItemDef.notifications.indicated" :class="$style.indicator" class="_blink"><i class="_indicatorCircle"></i></span>
+			</MkA>
 			<div :class="$style.divider"></div>
 			<MkA v-if="$i && ($i.isAdmin || $i.isModerator)" v-click-anime v-tooltip="i18n.ts.controlPanel" class="item" :activeClass="$style.active" to="/admin" :behavior="settingsWindowed ? 'window' : null">
 				<i :class="$style.itemIcon" class="ti ti-dashboard ti-fw"></i>
 			</MkA>
-			<button v-click-anime :class="$style.item" class="_button" @click="more">
-				<i :class="$style.itemIcon" class="ti ti-dots ti-fw"></i>
-				<span v-if="otherNavItemIndicated" :class="$style.indicator" class="_blink"><i class="_indicatorCircle"></i></span>
-			</button>
 		</div>
 		<div :class="$style.right">
 			<MkA v-click-anime v-tooltip="i18n.ts.settings" :class="$style.item" :activeClass="$style.active" to="/settings" :behavior="settingsWindowed ? 'window' : null">
@@ -47,17 +46,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { openInstanceMenu } from './common.js';
 import * as os from '@/os.js';
-import { navbarItemDef } from '@/navbar.js';
+import { isZalipConfigurableNavigationItem, navbarItemDef } from '@/navbar.js';
 import MkButton from '@/components/MkButton.vue';
 import { instance } from '@/instance.js';
 import { i18n } from '@/i18n.js';
 import { prefer } from '@/preferences.js';
 import { getAccountMenu } from '@/accounts.js';
 import { $i } from '@/i.js';
-import { getHTMLElementOrNull } from '@/utility/get-dom-node-or-null.js';
 
 const WINDOW_THRESHOLD = 1400;
 
@@ -66,27 +64,8 @@ const props = defineProps<{
 }>();
 
 const settingsWindowed = ref(window.innerWidth > WINDOW_THRESHOLD);
-const menu = ref(prefer.s.menu);
+const primaryMenu = computed(() => prefer.r.menu.value.filter(isZalipConfigurableNavigationItem));
 // const menuDisplay = store.model('menuDisplay');
-const otherNavItemIndicated = computed<boolean>(() => {
-	for (const def in navbarItemDef) {
-		if (menu.value.includes(def)) continue;
-		if (navbarItemDef[def].indicated) return true;
-	}
-	return false;
-});
-
-async function more(ev: PointerEvent) {
-	const target = getHTMLElementOrNull(ev.currentTarget ?? ev.target);
-	if (!target) return;
-
-	const { dispose } = await os.popupAsyncWithDialog(import('@/components/MkLaunchPad.vue').then(x => x.default), {
-		anchorElement: target,
-		anchor: { x: 'center', y: 'bottom' },
-	}, {
-		closed: () => dispose(),
-	});
-}
 
 async function openAccountMenu(ev: PointerEvent) {
 	const menuItems = await getAccountMenu({

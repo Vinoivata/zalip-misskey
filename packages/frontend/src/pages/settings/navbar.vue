@@ -16,7 +16,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				>
 					<template #default="{ item, dragStart }">
 						<div
-							v-if="item.type === '-' || navbarItemDef[item.type]"
+							v-if="navbarItemDef[item.type]"
 							:class="$style.item"
 						>
 							<button class="_button" :class="$style.itemHandle" tabindex="-1" :draggable="true" @dragstart.stop="dragStart"><i class="ti ti-menu"></i></button>
@@ -64,7 +64,7 @@ import MkSwitch from '@/components/MkSwitch.vue';
 import MkPreferenceContainer from '@/components/MkPreferenceContainer.vue';
 import MkDraggable from '@/components/MkDraggable.vue';
 import * as os from '@/os.js';
-import { navbarItemDef } from '@/navbar.js';
+import { isZalipConfigurableNavigationItem, navbarItemDef, zalipConfigurableNavigationItems } from '@/navbar.js';
 import { store } from '@/store.js';
 import { i18n } from '@/i18n.js';
 import { definePage } from '@/page.js';
@@ -72,7 +72,7 @@ import { prefer } from '@/preferences.js';
 import { getInitialPrefValue } from '@/preferences/manager.js';
 import { genId } from '@/utility/id.js';
 
-const items = ref(prefer.s.menu.map(x => ({
+const items = ref(prefer.s.menu.filter(isZalipConfigurableNavigationItem).map(x => ({
 	id: genId(),
 	type: x,
 })));
@@ -82,14 +82,12 @@ const menuDisplay = store.model('menuDisplay');
 const showNavbarSubButtons = prefer.model('showNavbarSubButtons');
 
 async function addItem() {
-	const menu = Object.keys(navbarItemDef).filter(k => !itemTypeValues.value.includes(k));
+	const menu = zalipConfigurableNavigationItems.filter(k => !itemTypeValues.value.includes(k));
 	const { canceled, result: item } = await os.select({
 		title: i18n.ts.addItem,
 		items: [...menu.map(k => ({
 			value: k, label: navbarItemDef[k].title,
-		})), {
-			value: '-', label: i18n.ts.divider,
-		}],
+		}))],
 	});
 	if (canceled || item == null) return;
 	items.value = [...items.value, {
@@ -103,12 +101,12 @@ function removeItem(itemId: string) {
 }
 
 function save() {
-	prefer.commit('menu', itemTypeValues.value);
+	prefer.commit('menu', itemTypeValues.value.filter(isZalipConfigurableNavigationItem));
 	os.success();
 }
 
 function reset() {
-	items.value = getInitialPrefValue('menu').map(x => ({
+	items.value = getInitialPrefValue('menu').filter(isZalipConfigurableNavigationItem).map(x => ({
 		id: genId(),
 		type: x,
 	}));
