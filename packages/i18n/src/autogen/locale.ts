@@ -1290,9 +1290,33 @@ export interface Locale extends ILocale {
          */
         "freshEpisodes": string;
         /**
+         * Продолжения вышли
+         */
+        "freshEpisodesTitle": string;
+        /**
+         * НОВИНКИ КАТАЛОГА
+         */
+        "newCatalogue": string;
+        /**
+         * Добавлено недавно
+         */
+        "newCatalogueTitle": string;
+        /**
          * Новый эпизод
          */
         "newEpisode": string;
+        /**
+         * Новый тайтл
+         */
+        "newCatalogueItem": string;
+        /**
+         * обновлений
+         */
+        "updatesLabel": string;
+        /**
+         * тайтлов
+         */
+        "titlesLabel": string;
         /**
          * Обсудить
          */

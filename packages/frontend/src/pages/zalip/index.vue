@@ -27,20 +27,22 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<div :class="$style.orb" aria-hidden="true"><i class="ti ti-player-play-filled"></i></div>
 			</section>
 
-			<section v-if="releaseEvents.length" :class="$style.releases">
+			<section v-if="showcaseItems.length" :class="$style.releases">
 				<div :class="$style.sectionHeader">
-					<div><p :class="$style.eyebrow">СВЕЖИЕ СЕРИИ</p><h2>Продолжения вышли</h2></div>
-					<span :class="$style.count">{{ releaseEvents.length }} обновлений</span>
+					<div><p :class="$style.eyebrow">{{ showcaseEyebrow }}</p><h2>{{ showcaseTitle }}</h2></div>
+					<span :class="$style.count">{{ showcaseItems.length }} {{ isEpisodeShowcase ? i18n.ts.zalip.updatesLabel : i18n.ts.zalip.titlesLabel }}</span>
 				</div>
-				<div :class="$style.releaseRail" role="list" :aria-label="i18n.ts.zalip.freshEpisodes">
-					<MkA v-for="release in releaseEvents" :key="release.id" :to="`/zalip/${release.work.slug}`" :class="$style.releaseCard" role="listitem">
-						<div :class="$style.releasePoster">
-							<img v-if="release.work.posterPath" :src="tmdbImage(release.work.posterPath)" :alt="release.work.title" loading="lazy">
-							<i v-else class="ti ti-movie"></i>
-							<span :class="$style.releaseBadge"><i class="ti ti-player-play-filled"></i>{{ releaseLabel(release) }}</span>
-						</div>
-						<div :class="$style.releaseBody"><strong>{{ release.work.title }}</strong><span>{{ release.episode.title || i18n.ts.zalip.newEpisode }}</span></div>
-					</MkA>
+				<div :class="$style.releaseRail" role="list" :aria-label="showcaseTitle">
+					<div v-for="item in showcaseItems" :key="item.id" :class="$style.releaseListItem" role="listitem">
+						<MkA :to="`/zalip/${item.work.slug}`" :class="$style.releaseCard">
+							<div :class="$style.releasePoster">
+								<img v-if="item.work.posterPath" :src="tmdbImage(item.work.posterPath)" :alt="item.work.title" loading="lazy">
+								<i v-else class="ti ti-movie"></i>
+								<span :class="$style.releaseBadge"><i :class="isEpisodeShowcase ? 'ti ti-player-play-filled' : 'ti ti-sparkles'"></i><span :class="$style.releaseBadgeText">{{ item.badge }}</span></span>
+							</div>
+							<div :class="$style.releaseBody"><strong>{{ item.work.title }}</strong><span>{{ item.subtitle }}</span></div>
+						</MkA>
+					</div>
 				</div>
 			</section>
 
@@ -105,8 +107,16 @@ type ZalipReleaseEvent = {
 	episode: { episodeNumber: number; title: string };
 };
 
+type ZalipShowcaseItem = {
+	id: string;
+	work: ZalipWork;
+	badge: string;
+	subtitle: string;
+};
+
 const works = ref<ZalipWork[]>([]);
 const releaseEvents = ref<ZalipReleaseEvent[]>([]);
+const releaseEventsLoaded = ref(false);
 const pending = ref(true);
 const loadError = ref(false);
 const searchQuery = ref('');
@@ -116,6 +126,26 @@ const activeGenre = computed(() => props.genre.trim());
 const catalogueTitle = computed(() => activeSearch.value
 	? `Результаты: ${activeSearch.value}`
 	: activeGenre.value ? `Жанр: ${activeGenre.value}` : 'Новое и важное');
+const isEpisodeShowcase = computed(() => releaseEvents.value.length > 0);
+const showcaseItems = computed<ZalipShowcaseItem[]>(() => {
+	if (releaseEvents.value.length > 0) return releaseEvents.value.map(release => ({
+		id: release.id,
+		work: release.work,
+		badge: releaseLabel(release),
+		subtitle: release.episode.title || i18n.ts.zalip.newEpisode,
+	}));
+
+	if (!releaseEventsLoaded.value) return [];
+	if (activeSearch.value || activeGenre.value) return [];
+	return works.value.slice(0, 12).map(work => ({
+		id: `catalogue-${work.id}`,
+		work,
+		badge: `${kindLabel(work.kind)}${work.releaseYear == null ? '' : ` · ${work.releaseYear}`}`,
+		subtitle: work.originalTitle || i18n.ts.zalip.newCatalogueItem,
+	}));
+});
+const showcaseEyebrow = computed(() => isEpisodeShowcase.value ? i18n.ts.zalip.freshEpisodes : i18n.ts.zalip.newCatalogue);
+const showcaseTitle = computed(() => isEpisodeShowcase.value ? i18n.ts.zalip.freshEpisodesTitle : i18n.ts.zalip.newCatalogueTitle);
 
 function tmdbImage(path: string): string {
 	return `https://image.tmdb.org/t/p/w500${path}`;
@@ -133,12 +163,18 @@ function releaseLabel(release: ZalipReleaseEvent): string {
 async function loadCatalogue(): Promise<void> {
 	pending.value = true;
 	loadError.value = false;
+	releaseEventsLoaded.value = false;
 	try {
 		works.value = await misskeyApiZalip<ZalipWork[]>('zalip/works/list', {
 			limit: 20,
 			...(activeGenre.value ? { genre: activeGenre.value } : {}),
 		});
-		releaseEvents.value = await misskeyApiZalip<ZalipReleaseEvent[]>('zalip/releases/list', { limit: 12 }).catch(() => []);
+		try {
+			releaseEvents.value = await misskeyApiZalip<ZalipReleaseEvent[]>('zalip/releases/list', { limit: 12 });
+			releaseEventsLoaded.value = true;
+		} catch {
+			releaseEvents.value = [];
+		}
 	} catch {
 		loadError.value = true;
 	} finally {
@@ -392,15 +428,20 @@ definePage(() => ({
 	scrollbar-color: color-mix(in srgb, var(--MI_THEME-accent) 55%, transparent) transparent;
 }
 
-.releaseCard {
+.releaseListItem {
 	flex: 0 0 clamp(145px, 16.5vw, 184px);
+	scroll-snap-align: start;
+}
+
+.releaseCard {
+	display: block;
+	height: 100%;
 	overflow: hidden;
 	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 78%, transparent);
 	border-radius: var(--MI-radius);
 	background: var(--MI_THEME-panel);
 	color: var(--MI_THEME-fg);
 	text-decoration: none;
-	scroll-snap-align: start;
 	transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -458,14 +499,19 @@ definePage(() => ({
 	font-size: 0.67rem;
 	font-weight: 700;
 	line-height: 1.2;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 
 .releaseBadge i {
 	flex: 0 0 auto;
 	color: var(--MI_THEME-accent);
 	font-size: 0.78rem;
+}
+
+.releaseBadgeText {
+	overflow: hidden;
+	min-width: 0;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .releaseBody {
@@ -574,7 +620,7 @@ definePage(() => ({
 		padding-right: var(--MI-margin);
 	}
 
-	.releaseCard {
+	.releaseListItem {
 		flex-basis: 142px;
 	}
 }
