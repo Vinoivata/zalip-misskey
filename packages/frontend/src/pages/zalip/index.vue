@@ -32,10 +32,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<div><p :class="$style.eyebrow">СВЕЖИЕ СЕРИИ</p><h2>Продолжения вышли</h2></div>
 					<span :class="$style.count">{{ releaseEvents.length }} обновлений</span>
 				</div>
-				<div :class="$style.releaseGrid">
-					<MkA v-for="release in releaseEvents" :key="release.id" :to="`/zalip/${release.work.slug}`" :class="$style.releaseCard">
-						<img v-if="release.work.posterPath" :src="tmdbImage(release.work.posterPath)" :alt="release.work.title" loading="lazy">
-						<div :class="$style.releaseBody"><strong>{{ release.work.title }}</strong><span>{{ releaseLabel(release) }}</span></div>
+				<div :class="$style.releaseRail" role="list" :aria-label="i18n.ts.zalip.freshEpisodes">
+					<MkA v-for="release in releaseEvents" :key="release.id" :to="`/zalip/${release.work.slug}`" :class="$style.releaseCard" role="listitem">
+						<div :class="$style.releasePoster">
+							<img v-if="release.work.posterPath" :src="tmdbImage(release.work.posterPath)" :alt="release.work.title" loading="lazy">
+							<i v-else class="ti ti-movie"></i>
+							<span :class="$style.releaseBadge"><i class="ti ti-player-play-filled"></i>{{ releaseLabel(release) }}</span>
+						</div>
+						<div :class="$style.releaseBody"><strong>{{ release.work.title }}</strong><span>{{ release.episode.title || i18n.ts.zalip.newEpisode }}</span></div>
 					</MkA>
 				</div>
 			</section>
@@ -76,6 +80,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script lang="ts" setup>
 import { computed, ref, watch } from 'vue';
 import { definePage } from '@/page.js';
+import { i18n } from '@/i18n.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { iAmAdmin } from '@/i.js';
 
@@ -376,47 +381,114 @@ definePage(() => ({
 	gap: 14px;
 }
 
-.releaseGrid {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-	gap: 10px;
+.releaseRail {
+	display: flex;
+	gap: 12px;
+	overflow-x: auto;
+	overflow-y: hidden;
+	padding: 1px 1px 10px;
+	scroll-padding-inline: 1px;
+	scroll-snap-type: x proximity;
+	scrollbar-color: color-mix(in srgb, var(--MI_THEME-accent) 55%, transparent) transparent;
 }
 
 .releaseCard {
-	display: grid;
-	grid-template-columns: 54px minmax(0, 1fr);
+	flex: 0 0 clamp(145px, 16.5vw, 184px);
 	overflow: hidden;
-	min-height: 72px;
-	border-radius: 14px;
+	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 78%, transparent);
+	border-radius: var(--MI-radius);
 	background: var(--MI_THEME-panel);
 	color: var(--MI_THEME-fg);
 	text-decoration: none;
+	scroll-snap-align: start;
+	transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.releaseCard > img {
-	width: 54px;
-	height: 72px;
-	object-fit: cover;
-	background: var(--MI_THEME-panelHighlight);
+.releaseCard:hover {
+	transform: translateY(-3px);
+	border-color: color-mix(in srgb, var(--MI_THEME-accent) 50%, var(--MI_THEME-divider));
+	box-shadow: 0 12px 28px color-mix(in srgb, var(--MI_THEME-shadow) 32%, transparent);
 }
 
-.releaseBody {
+.releaseCard:focus-visible {
+	outline: 2px solid var(--MI_THEME-accent);
+	outline-offset: 3px;
+}
+
+.releasePoster {
+	position: relative;
 	display: grid;
-	align-content: center;
-	gap: 5px;
-	padding: 10px;
+	place-items: center;
+	overflow: hidden;
+	aspect-ratio: 2 / 3;
+	background: linear-gradient(145deg, var(--MI_THEME-panelHighlight), color-mix(in srgb, var(--MI_THEME-accent) 26%, var(--MI_THEME-panel)));
+	color: var(--MI_THEME-accent);
+	font-size: 2rem;
 }
 
-.releaseBody strong {
+.releasePoster::after {
+	position: absolute;
+	inset: 40% 0 0;
+	background: linear-gradient(transparent, color-mix(in srgb, var(--MI_THEME-bg) 84%, transparent));
+	content: '';
+	pointer-events: none;
+}
+
+.releasePoster img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.releaseBadge {
+	position: absolute;
+	z-index: 1;
+	bottom: 8px;
+	left: 8px;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	max-width: calc(100% - 16px);
 	overflow: hidden;
-	font-size: 0.86rem;
+	padding: 4px 7px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--MI_THEME-bg) 82%, transparent);
+	backdrop-filter: blur(8px);
+	color: var(--MI_THEME-fg);
+	font-size: 0.67rem;
+	font-weight: 700;
+	line-height: 1.2;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
+.releaseBadge i {
+	flex: 0 0 auto;
+	color: var(--MI_THEME-accent);
+	font-size: 0.78rem;
+}
+
+.releaseBody {
+	display: grid;
+	gap: 4px;
+	padding: 10px 11px 12px;
+}
+
+.releaseBody strong,
+.releaseBody span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.releaseBody strong {
+	font-size: 0.86rem;
+	line-height: 1.25;
+}
+
 .releaseBody span {
 	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.76rem;
+	font-size: 0.74rem;
 }
 
 .credits {
@@ -494,6 +566,16 @@ definePage(() => ({
 
 	.grid {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.releaseRail {
+		gap: 10px;
+		margin-right: calc(var(--MI-margin) * -1);
+		padding-right: var(--MI-margin);
+	}
+
+	.releaseCard {
+		flex-basis: 142px;
 	}
 }
 </style>

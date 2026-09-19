@@ -1286,6 +1286,14 @@ export interface Locale extends ILocale {
          */
         "trailerTab": string;
         /**
+         * Свежие серии
+         */
+        "freshEpisodes": string;
+        /**
+         * Новый эпизод
+         */
+        "newEpisode": string;
+        /**
          * Обсудить
          */
         "discussTitle": string;

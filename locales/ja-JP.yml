@@ -319,6 +319,8 @@ zalip:
   watchTitle: "Смотреть"
   playerTab: "Плеер"
   trailerTab: "Трейлер"
+  freshEpisodes: "Свежие серии"
+  newEpisode: "Новый эпизод"
   discussTitle: "Обсудить"
   inLibrary: "В библиотеке"
   inList: "В списке"
