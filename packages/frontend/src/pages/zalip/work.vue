@@ -22,8 +22,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 							</div>
 							<div :class="$style.sidebarActions">
 								<button type="button" class="_button" :class="$style.watchButton" @click="openPlayer"><i class="ti ti-player-play-filled"></i><span>{{ i18n.ts.zalip.watchTitle }}</span></button>
-								<button type="button" class="_button" :class="$style.sideButton" :disabled="saving" @click="addToLibrary"><i class="ti ti-bookmark"></i><span>{{ saved ? i18n.ts.zalip.inList : i18n.ts.zalip.addToList }}</span></button>
+								<button type="button" class="_button" :class="[$style.sideButton, { [$style.sideButtonActive]: saved }]" :disabled="saving" @click="showLibraryMenu"><i :class="saved ? 'ti ti-bookmark-filled' : 'ti ti-plus'"></i><span>{{ i18n.ts.zalip.addToList }}</span></button>
 								<button type="button" class="_button" :class="$style.sideButton" @click="focusDiscussion"><i class="ti ti-messages"></i><span>{{ i18n.ts.zalip.discussTitle }}</span></button>
+							</div>
+							<div :class="$style.quickActions" role="group" :aria-label="i18n.ts.zalip.workActions">
+								<button type="button" class="_button" :class="[$style.quickAction, { [$style.quickActionActive]: isFavorite }]" :aria-label="i18n.ts.zalip.favoriteTitle" :aria-pressed="isFavorite" :disabled="saving" @click="toggleFavorite"><i :class="isFavorite ? 'ti ti-star-filled' : 'ti ti-star'"></i><span>{{ i18n.ts.zalip.favoriteTitle }}</span></button>
+								<button v-if="work.seasons.length" type="button" class="_button" :class="[$style.quickAction, { [$style.quickActionActive]: releaseSubscribed }]" :aria-label="i18n.ts.zalip.releaseSubscriptionTitle" :aria-pressed="releaseSubscribed" :disabled="saving" @click="toggleReleaseSubscription"><i :class="releaseSubscribed ? 'ti ti-bell-filled' : 'ti ti-bell'"></i><span>{{ i18n.ts.zalip.releaseSubscriptionTitle }}</span></button>
+								<button type="button" class="_button" :class="$style.quickAction" :aria-label="i18n.ts.zalip.shareTitle" @click="shareWork"><i class="ti ti-share-3"></i><span>{{ i18n.ts.zalip.shareTitle }}</span></button>
 							</div>
 						</aside>
 						<div :class="$style.info">
@@ -43,9 +48,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<div :class="$style.content">
 					<section ref="playerSection" :class="$style.player" aria-label="Просмотр">
 						<div :class="$style.playerTabs">
-							<button type="button" class="_button" :class="[$style.playerTab, $style.playerTabActive]" :aria-label="i18n.ts.zalip.playerTab" :title="i18n.ts.zalip.playerTab" @click="openPlayer"><i class="ti ti-device-tv"></i><span>{{ i18n.ts.zalip.playerTab }}</span></button>
-							<button v-if="work.trailerYoutubeKey" type="button" class="_button" :class="$style.playerTab" :aria-label="i18n.ts.zalip.trailerTab" :title="i18n.ts.zalip.trailerTab" @click="openTrailer"><i class="ti ti-player-play"></i><span>{{ i18n.ts.zalip.trailerTab }}</span></button>
+							<button type="button" class="_button" :class="[$style.playerTab, { [$style.playerTabActive]: playerView === 'player' }]" :aria-label="i18n.ts.zalip.playerTab" :aria-pressed="playerView === 'player'" :title="i18n.ts.zalip.playerTab" @click="openPlayer"><i class="ti ti-device-tv"></i><span>{{ i18n.ts.zalip.playerTab }}</span></button>
+							<button v-if="work.trailerYoutubeKey" type="button" class="_button" :class="[$style.playerTab, { [$style.playerTabActive]: playerView === 'trailer' }]" :aria-label="i18n.ts.zalip.trailerTab" :aria-pressed="playerView === 'trailer'" :title="i18n.ts.zalip.trailerTab" @click="openTrailer"><i class="ti ti-player-play"></i><span>{{ i18n.ts.zalip.trailerTab }}</span></button>
 						</div>
+						<div v-if="work.trailerYoutubeKey" v-show="playerView === 'trailer'" :class="$style.playerFrame"><iframe :src="youtubeEmbed(work.trailerYoutubeKey)" :title="`Официальный трейлер: ${work.title}`" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>
+						<div v-show="playerView === 'player'">
 						<template v-if="$i">
 							<p v-if="allohaPlayback == null" :class="$style.playerState"><i class="ti ti-loader-2 ti-spin"></i> Проверяем доступность в Alloha…</p>
 							<template v-else-if="allohaPlayback.available">
@@ -71,8 +78,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<p v-else :class="$style.playerUnavailable"><i class="ti ti-clock"></i> В Alloha этот тайтл пока не найден. Доступность проверяется автоматически раз в час.</p>
 						</template>
 						<p v-else :class="$style.playerUnavailable"><i class="ti ti-login"></i> Войдите в Zalip, чтобы открыть плеер и сохранить подписку на новые серии.</p>
+						</div>
 
-						<div v-if="work.seasons.length" :class="$style.playerEpisodes">
+						<div v-if="playerView === 'player' && work.seasons.length" :class="$style.playerEpisodes">
 							<div :class="$style.seasonPicker"><span>Сезон</span><div><button v-for="season in work.seasons" :key="season.id" type="button" class="_button" :class="[$style.seasonPill, { [$style.selectedSeasonPill]: selectedSeasonNumber === season.seasonNumber }]" @click="selectSeason(season)">{{ season.seasonNumber === 0 ? 'Спец.' : season.seasonNumber }}</button></div></div>
 							<p v-if="episodesPending" :class="$style.episodeRailState"><i class="ti ti-loader-2 ti-spin"></i> Загружаем эпизоды…</p>
 							<p v-else-if="episodes.length === 0" :class="$style.episodeRailState">Список серий пока готовится редактором.</p>
@@ -102,12 +110,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<a v-for="path in work.galleryPaths" :key="path" :href="tmdbBackdrop(path)" target="_blank" rel="noopener noreferrer" :aria-label="`Открыть кадр из ${work.title}`"><img :src="tmdbGalleryImage(path)" alt="" loading="lazy"></a>
 						</div>
 					</section>
-					<section v-if="work.trailerYoutubeKey" ref="trailerSection" :class="$style.trailer">
-						<h2><i class="ti ti-player-play"></i> Официальный трейлер</h2>
-						<p v-if="!trailerOpen">Трейлер открывается по вашему действию через YouTube без cookies.</p>
-						<button v-if="!trailerOpen" type="button" class="_button" :class="$style.trailerButton" @click="openTrailer"><i class="ti ti-player-play-filled"></i> Показать трейлер</button>
-						<div v-else :class="$style.trailerFrame"><iframe :src="youtubeEmbed(work.trailerYoutubeKey)" :title="`Официальный трейлер: ${work.title}`" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>
-					</section>
 					<section ref="discussionSection" :class="$style.discussionArea">
 						<div v-if="work.seasons.length" :class="$style.discussionScope" role="group" :aria-label="i18n.ts.zalip.discussionContext">
 							<button type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionScope === 'work' }]" :aria-pressed="discussionScope === 'work'" @click="selectDiscussionScope('work')"><i class="ti ti-movie"></i> {{ i18n.ts.zalip.workDiscussionScope }}</button>
@@ -132,6 +134,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed, nextTick, ref, watch } from 'vue';
 import { $i } from '@/i.js';
 import { i18n } from '@/i18n.js';
+import * as os from '@/os.js';
 import { definePage } from '@/page.js';
 import ZalipDiscussionPanel from '@/components/ZalipDiscussionPanel.vue';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
@@ -207,7 +210,7 @@ const episodesWatched = ref(0);
 const personalRating = ref<number | null>(null);
 const isFavorite = ref(false);
 const releaseSubscribed = ref(false);
-const trailerOpen = ref(false);
+const playerView = ref<'player' | 'trailer'>('player');
 const allohaPlayback = ref<AllohaPlayback | null>(null);
 const allohaPlayerOpen = ref(false);
 const selectedAllohaTranslationId = ref<number | null>(null);
@@ -217,7 +220,6 @@ const discussionScope = ref<'work' | 'episode'>('work');
 const openingDiscussionScope = ref<'work' | 'episode' | null>(null);
 const discussionSection = ref<HTMLElement | null>(null);
 const playerSection = ref<HTMLElement | null>(null);
-const trailerSection = ref<HTMLElement | null>(null);
 const selectedSeasonNumber = ref<number | null>(null);
 const episodes = ref<ZalipEpisode[]>([]);
 const episodesPending = ref(false);
@@ -299,6 +301,36 @@ function translationLabel(translation: AllohaPlayback['translations'][number]): 
 	return [translation.name, translation.quality, translation.resolutions.join('/')].filter((value): value is string => value != null && value !== '').join(' · ');
 }
 
+function libraryStatusText(status: LibraryStatus): string {
+	return ({
+		planned: i18n.ts.zalip.libraryPlanned,
+		watching: i18n.ts.zalip.libraryWatching,
+		on_hold: i18n.ts.zalip.libraryOnHold,
+		completed: i18n.ts.zalip.libraryCompleted,
+		dropped: i18n.ts.zalip.libraryDropped,
+	})[status];
+}
+
+function libraryStatusCaption(status: LibraryStatus): string {
+	return ({
+		planned: i18n.ts.zalip.libraryPlannedCaption,
+		watching: i18n.ts.zalip.libraryWatchingCaption,
+		on_hold: i18n.ts.zalip.libraryOnHoldCaption,
+		completed: i18n.ts.zalip.libraryCompletedCaption,
+		dropped: i18n.ts.zalip.libraryDroppedCaption,
+	})[status];
+}
+
+function libraryStatusIcon(status: LibraryStatus): string {
+	return ({
+		planned: 'ti ti-bookmark',
+		watching: 'ti ti-eye',
+		on_hold: 'ti ti-player-pause',
+		completed: 'ti ti-check',
+		dropped: 'ti ti-x',
+	})[status];
+}
+
 async function load(): Promise<void> {
 	pending.value = true;
 	work.value = null;
@@ -308,7 +340,7 @@ async function load(): Promise<void> {
 	personalRating.value = null;
 	isFavorite.value = false;
 	releaseSubscribed.value = false;
-	trailerOpen.value = false;
+	playerView.value = 'player';
 	allohaPlayback.value = null;
 	allohaPlayerOpen.value = false;
 	selectedAllohaTranslationId.value = null;
@@ -409,14 +441,14 @@ function focusPlayer(): void {
 }
 
 function openPlayer(): void {
+	playerView.value = 'player';
 	focusPlayer();
 	if ($i && allohaPlayback.value?.available) allohaPlayerOpen.value = true;
 }
 
-async function openTrailer(): Promise<void> {
-	trailerOpen.value = true;
-	await nextTick();
-	trailerSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+function openTrailer(): void {
+	playerView.value = 'trailer';
+	focusPlayer();
 }
 
 async function signInForDiscussion(): Promise<void> {
@@ -479,12 +511,87 @@ async function updateLibrary(patch: Partial<LibraryUpdate> = {}): Promise<void> 
 	}
 }
 
-async function addToLibrary(): Promise<void> {
+async function showLibraryMenu(event: MouseEvent): Promise<void> {
 	if (!$i) {
 		await pleaseLogin({ path: window.location.pathname + window.location.search });
 		return;
 	}
-	await updateLibrary();
+	if (work.value == null) return;
+	void os.popupMenu([
+		{ type: 'label', text: i18n.ts.zalip.libraryMenuTitle, caption: work.value.title },
+		{
+			text: i18n.ts.zalip.favoriteTitle,
+			caption: i18n.ts.zalip.favoriteCaption,
+			icon: isFavorite.value ? 'ti ti-star-filled' : 'ti ti-star',
+			active: isFavorite.value,
+			action: () => void toggleFavorite(),
+		},
+		null,
+		{ type: 'label', text: i18n.ts.zalip.libraryStatusHeading },
+		...(['planned', 'watching', 'on_hold', 'completed', 'dropped'] as const).map(status => ({
+			text: libraryStatusText(status),
+			caption: libraryStatusCaption(status),
+			icon: libraryStatusIcon(status),
+			active: saved.value && libraryStatus.value === status,
+			action: () => void setLibraryStatus(status),
+		})),
+	], event.currentTarget, { align: 'left', width: 320 });
+}
+
+async function setLibraryStatus(status: LibraryStatus): Promise<void> {
+	if (!$i) {
+		await pleaseLogin({ path: window.location.pathname + window.location.search });
+		return;
+	}
+	if (saving.value) return;
+	const previousStatus = libraryStatus.value;
+	libraryStatus.value = status;
+	try {
+		await updateLibrary({ status });
+	} catch {
+		libraryStatus.value = previousStatus;
+		os.toast(i18n.ts.zalip.libraryUpdateFailed);
+	}
+}
+
+async function toggleFavorite(): Promise<void> {
+	if (!$i) {
+		await pleaseLogin({ path: window.location.pathname + window.location.search });
+		return;
+	}
+	if (saving.value) return;
+	const previousFavorite = isFavorite.value;
+	isFavorite.value = !isFavorite.value;
+	try {
+		await updateLibrary({ isFavorite: isFavorite.value });
+	} catch {
+		isFavorite.value = previousFavorite;
+		os.toast(i18n.ts.zalip.libraryUpdateFailed);
+	}
+}
+
+async function toggleReleaseSubscription(): Promise<void> {
+	if (!$i) {
+		await pleaseLogin({ path: window.location.pathname + window.location.search });
+		return;
+	}
+	if (saving.value) return;
+	const previousSubscription = releaseSubscribed.value;
+	releaseSubscribed.value = !releaseSubscribed.value;
+	try {
+		await updateLibrary({ isReleaseSubscribed: releaseSubscribed.value });
+	} catch {
+		releaseSubscribed.value = previousSubscription;
+		os.toast(i18n.ts.zalip.libraryUpdateFailed);
+	}
+}
+
+function shareWork(): void {
+	if (work.value == null) return;
+	const { id, slug, kind, title, description, releaseYear, genres, posterPath } = work.value;
+	void os.post({
+		zalipWork: { id, slug, kind, title, description, releaseYear, genres, posterPath },
+	});
 }
 
 watch(() => props.slug, () => void load(), { immediate: true });
@@ -615,6 +722,50 @@ definePage(() => ({
 	background: color-mix(in srgb, var(--MI_THEME-panel) 82%, transparent);
 	backdrop-filter: blur(12px);
 	color: var(--MI_THEME-fg);
+}
+
+.sideButtonActive {
+	border-color: color-mix(in srgb, var(--MI_THEME-accent) 72%, var(--MI_THEME-divider));
+	color: var(--MI_THEME-accent);
+}
+
+.quickActions {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 6px;
+	margin-top: 8px;
+}
+
+.quickAction:last-child:nth-child(odd) {
+	grid-column: 1 / -1;
+}
+
+.quickAction {
+	display: flex;
+	min-width: 0;
+	min-height: 34px;
+	align-items: center;
+	justify-content: center;
+	gap: 5px;
+	padding: 6px 4px;
+	border: 1px solid color-mix(in srgb, var(--MI_THEME-fg) 14%, transparent);
+	border-radius: calc(var(--MI-radius) / 1.35);
+	background: color-mix(in srgb, var(--MI_THEME-panel) 72%, transparent);
+	backdrop-filter: blur(12px);
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.66rem;
+	font-weight: 700;
+	white-space: nowrap;
+}
+
+.quickAction i {
+	font-size: 0.9rem;
+}
+
+.quickActionActive {
+	border-color: color-mix(in srgb, var(--MI_THEME-accent) 68%, var(--MI_THEME-divider));
+	background: color-mix(in srgb, var(--MI_THEME-accent) 16%, var(--MI_THEME-panel));
+	color: var(--MI_THEME-accent);
 }
 
 .titleArea {
@@ -1093,58 +1244,6 @@ definePage(() => ({
 	font-weight: 700;
 }
 
-.trailer {
-	margin-top: 24px;
-	padding: 15px;
-	border: 1px solid var(--MI_THEME-divider);
-	border-radius: 16px;
-	background: var(--MI_THEME-panel);
-}
-
-.trailer h2 {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	margin: 0;
-	font-size: 1rem;
-}
-
-.trailer h2 i {
-	color: var(--MI_THEME-accent);
-}
-
-.trailer p {
-	margin: 8px 0 12px;
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.84rem;
-}
-
-.trailerButton {
-	display: inline-flex;
-	align-items: center;
-	gap: 8px;
-	padding: 9px 12px;
-	border-radius: 10px;
-	background: var(--MI_THEME-accent);
-	color: var(--MI_THEME-fgOnAccent);
-	font-weight: 700;
-}
-
-.trailerFrame {
-	overflow: hidden;
-	margin-top: 13px;
-	aspect-ratio: 16 / 9;
-	border-radius: 10px;
-	background: #000;
-}
-
-.trailerFrame iframe {
-	display: block;
-	width: 100%;
-	height: 100%;
-	border: 0;
-}
-
 .seasonList {
 	display: grid;
 	gap: 8px;
@@ -1365,6 +1464,16 @@ definePage(() => ({
 		grid-template-columns: minmax(0, 1fr);
 		gap: 8px;
 		margin: 0;
+	}
+
+	.quickActions {
+		grid-column: 1 / -1;
+		margin-top: 10px;
+	}
+
+	.quickAction {
+		min-height: 38px;
+		font-size: 0.7rem;
 	}
 
 	.watchButton, .sideButton {

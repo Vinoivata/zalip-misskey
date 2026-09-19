@@ -1298,13 +1298,81 @@ export interface Locale extends ILocale {
          */
         "inList": string;
         /**
-         * Добавить в список
+         * В список
          */
         "addToList": string;
         /**
          * Поделиться
          */
         "shareTitle": string;
+        /**
+         * Действия с тайтлом
+         */
+        "workActions": string;
+        /**
+         * Избранное
+         */
+        "favoriteTitle": string;
+        /**
+         * Мой список
+         */
+        "favoriteCaption": string;
+        /**
+         * Следить
+         */
+        "releaseSubscriptionTitle": string;
+        /**
+         * Закладки
+         */
+        "libraryMenuTitle": string;
+        /**
+         * По статусу
+         */
+        "libraryStatusHeading": string;
+        /**
+         * В планах
+         */
+        "libraryPlanned": string;
+        /**
+         * В очереди — посмотрю, когда будет время.
+         */
+        "libraryPlannedCaption": string;
+        /**
+         * Смотрю
+         */
+        "libraryWatching": string;
+        /**
+         * Сейчас смотрю этот тайтл.
+         */
+        "libraryWatchingCaption": string;
+        /**
+         * Отложено
+         */
+        "libraryOnHold": string;
+        /**
+         * Остановился, но планирую вернуться.
+         */
+        "libraryOnHoldCaption": string;
+        /**
+         * Просмотрено
+         */
+        "libraryCompleted": string;
+        /**
+         * Досмотрел до конца.
+         */
+        "libraryCompletedCaption": string;
+        /**
+         * Брошено
+         */
+        "libraryDropped": string;
+        /**
+         * Не зашло — возвращаться не планирую.
+         */
+        "libraryDroppedCaption": string;
+        /**
+         * Не удалось сохранить изменения. Попробуйте ещё раз.
+         */
+        "libraryUpdateFailed": string;
         /**
          * Эпизоды
          */
