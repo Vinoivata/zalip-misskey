@@ -227,6 +227,30 @@ describe('ZalipCatalogService', () => {
 		expect(query.take).toHaveBeenCalledWith(12);
 	});
 
+	it('lists every published genre facet independently of the catalogue page size', async () => {
+		const dataSource = {
+			query: vi.fn().mockResolvedValue([
+				{ genre: 'Комедия' },
+				{ genre: 'Драма' },
+				{ genre: 'Триллер' },
+			]),
+		};
+		const service = new ZalipCatalogService(
+			dataSource as never,
+			{} as never,
+			{} as never,
+			{} as never,
+		);
+
+		await expect(service.listPublishedGenres()).resolves.toEqual(['Драма', 'Комедия', 'Триллер']);
+		await expect(service.listPublishedGenres()).resolves.toEqual(['Драма', 'Комедия', 'Триллер']);
+		expect(dataSource.query).toHaveBeenCalledTimes(1);
+		expect(dataSource.query).toHaveBeenCalledWith(
+			expect.stringContaining('jsonb_array_elements_text'),
+			['published'],
+		);
+	});
+
 	it('returns only TMDB-backed works for a bounded explicit metadata refresh', async () => {
 		const worksRepository = {
 			find: vi.fn().mockResolvedValue([

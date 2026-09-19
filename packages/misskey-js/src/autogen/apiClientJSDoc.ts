@@ -5050,6 +5050,17 @@ declare module '../api.js' {
     ): Promise<SwitchCaseResponseType<E, P>>;
 
     /**
+     * List genre facets used by published Zalip cinema titles.
+     *
+     * **Credential required**: *No*
+     */
+    request<E extends 'zalip/genres/list', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
      * No description provided.
      *
      * **Credential required**: *Yes* / **Permission**: *read:account*

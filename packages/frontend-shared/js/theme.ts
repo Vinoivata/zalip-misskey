@@ -44,6 +44,10 @@ export const getBuiltinThemes = () => Promise.all(
 		'l-cherry',
 		'l-sushi',
 		'l-u0',
+		'l-zalip-sapphire',
+		'l-zalip-violet',
+		'l-zalip-emerald',
+		'l-zalip-amber',
 
 		'd-dark',
 		'd-persimmon',
@@ -55,6 +59,10 @@ export const getBuiltinThemes = () => Promise.all(
 		'd-cherry',
 		'd-ice',
 		'd-u0',
+		'd-zalip-sapphire',
+		'd-zalip-violet',
+		'd-zalip-emerald',
+		'd-zalip-amber',
 	].map(name => import(`@@/themes/${name}.json5`).then(({ default: _default }): Theme => _default)),
 );
 

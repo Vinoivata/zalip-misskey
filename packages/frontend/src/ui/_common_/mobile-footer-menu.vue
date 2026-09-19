@@ -38,14 +38,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</MkA>
 
-	<MkA v-if="$i" :class="$style.item" :activeClass="$style.active" :aria-label="navbarItemDef.profile.title" :title="navbarItemDef.profile.title" :to="`/@${$i.username}`">
+	<button type="button" class="_button" :class="$style.item" :aria-label="i18n.ts.zalip.more" :title="i18n.ts.zalip.more" @click="openMoreMenu">
 		<div :class="$style.itemInner">
-			<i :class="[$style.itemIcon, navbarItemDef.profile.icon]"></i><span :class="$style.itemText">{{ navbarItemDef.profile.title }}</span>
-		</div>
-	</MkA>
-	<button v-else :class="$style.item" class="_button" :aria-label="i18n.ts.login" :title="i18n.ts.login" @click="signIn">
-		<div :class="$style.itemInner">
-			<i :class="$style.itemIcon" class="ti ti-login"></i><span :class="$style.itemText">{{ i18n.ts.login }}</span>
+			<i :class="$style.itemIcon" class="ti ti-menu-2"></i><span :class="$style.itemText">{{ i18n.ts.zalip.more }}</span>
 		</div>
 	</button>
 </div>
@@ -57,6 +52,9 @@ import { $i } from '@/i.js';
 import { navbarItemDef } from '@/navbar.js';
 import { i18n } from '@/i18n.js';
 import { pleaseLogin } from '@/utility/please-login.js';
+import * as os from '@/os.js';
+import type { MenuItem } from '@/types/menu.js';
+import { getZalipAppearanceMenu } from '@/utility/zalip-theme.js';
 
 const rootEl = useTemplateRef('rootEl');
 
@@ -64,6 +62,19 @@ const rootElHeight = ref(0);
 
 function signIn(): void {
 	void pleaseLogin();
+}
+
+function openMoreMenu(event: PointerEvent): void {
+	const accountItems: MenuItem[] = $i
+		? [{ type: 'link', text: navbarItemDef.profile.title, icon: navbarItemDef.profile.icon, to: `/@${$i.username}` }]
+		: [{ text: i18n.ts.login, icon: 'ti ti-login', action: () => signIn() }];
+
+	void os.popupMenu([
+		...accountItems,
+		{ type: 'link', text: i18n.ts.settings, icon: 'ti ti-settings', to: '/settings' },
+		{ type: 'divider' },
+		...getZalipAppearanceMenu(),
+	], event.currentTarget ?? event.target, { align: 'right', width: 280 });
 }
 
 watch(rootEl, () => {

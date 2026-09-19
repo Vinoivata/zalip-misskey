@@ -29,6 +29,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</MkA>
 		</div>
 		<div :class="$style.right">
+			<button v-click-anime v-tooltip="i18n.ts.zalip.appearanceTitle" type="button" class="_button" :class="$style.item" @click="openAppearanceMenu">
+				<i :class="$style.itemIcon" class="ti ti-palette ti-fw"></i>
+			</button>
 			<MkA v-click-anime v-tooltip="i18n.ts.settings" :class="$style.item" :activeClass="$style.active" to="/settings" :behavior="settingsWindowed ? 'window' : null">
 				<i :class="$style.itemIcon" class="ti ti-settings ti-fw"></i>
 			</MkA>
@@ -54,6 +57,7 @@ import { i18n } from '@/i18n.js';
 import { prefer } from '@/preferences.js';
 import { getAccountMenu } from '@/accounts.js';
 import { $i } from '@/i.js';
+import { getZalipAppearanceMenu } from '@/utility/zalip-theme.js';
 
 const WINDOW_THRESHOLD = 1400;
 
@@ -71,6 +75,10 @@ async function openAccountMenu(ev: PointerEvent) {
 	});
 
 	os.popupMenu(menuItems, ev.currentTarget ?? ev.target);
+}
+
+function openAppearanceMenu(ev: PointerEvent): void {
+	void os.popupMenu(getZalipAppearanceMenu(), ev.currentTarget ?? ev.target, { align: 'right', width: 280 });
 }
 
 onMounted(() => {

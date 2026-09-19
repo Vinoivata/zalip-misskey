@@ -451,6 +451,7 @@ export * as 'v2/admin/emoji/list' from './endpoints/v2/admin/emoji/list.js';
 export * as 'zalip/works/list' from './endpoints/zalip/works/list.js';
 export * as 'zalip/works/show' from './endpoints/zalip/works/show.js';
 export * as 'zalip/works/search' from './endpoints/zalip/works/search.js';
+export * as 'zalip/genres/list' from './endpoints/zalip/genres/list.js';
 export * as 'zalip/seasons/episodes' from './endpoints/zalip/seasons/episodes.js';
 export * as 'zalip/playback/alloha/show' from './endpoints/zalip/playback/alloha/show.js';
 export * as 'zalip/releases/list' from './endpoints/zalip/releases/list.js';

@@ -1477,6 +1477,70 @@ export interface Locale extends ILocale {
          * Не удалось открыть комментарии для этого тайтла.
          */
         "openWorkDiscussionFailed": string;
+        /**
+         * Оформление
+         */
+        "appearanceTitle": string;
+        /**
+         * Системная
+         */
+        "appearanceSystem": string;
+        /**
+         * Светлая
+         */
+        "appearanceLight": string;
+        /**
+         * Тёмная
+         */
+        "appearanceDark": string;
+        /**
+         * Палитра
+         */
+        "appearancePalette": string;
+        /**
+         * Сапфир
+         */
+        "appearancePaletteSapphire": string;
+        /**
+         * Фиалка
+         */
+        "appearancePaletteViolet": string;
+        /**
+         * Изумруд
+         */
+        "appearancePaletteEmerald": string;
+        /**
+         * Янтарь
+         */
+        "appearancePaletteAmber": string;
+        /**
+         * Все настройки оформления
+         */
+        "appearanceSettings": string;
+        /**
+         * Ещё
+         */
+        "more": string;
+        /**
+         * Сортировка
+         */
+        "catalogueSort": string;
+        /**
+         * По году выпуска
+         */
+        "catalogueSortYear": string;
+        /**
+         * По названию
+         */
+        "catalogueSortTitle": string;
+        /**
+         * Жанры
+         */
+        "catalogueGenres": string;
+        /**
+         * Все жанры
+         */
+        "catalogueAllGenres": string;
     };
     /**
      * ホーム

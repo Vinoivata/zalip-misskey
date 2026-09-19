@@ -48,6 +48,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkA v-if="$i != null && ($i.isAdmin || $i.isModerator)" v-tooltip.noDelay.right="i18n.ts.controlPanel" :class="$style.item" :activeClass="$style.active" to="/admin">
 				<i :class="$style.itemIcon" class="ti ti-dashboard ti-fw" style="view-transition-name: navbar-controlPanel;"></i><span :class="$style.itemText">{{ i18n.ts.controlPanel }}</span>
 			</MkA>
+			<button v-tooltip.noDelay.right="i18n.ts.zalip.appearanceTitle" type="button" class="_button" :class="$style.item" @click="openAppearanceMenu">
+				<i :class="$style.itemIcon" class="ti ti-palette ti-fw"></i><span :class="$style.itemText">{{ i18n.ts.zalip.appearanceTitle }}</span>
+			</button>
 			<MkA v-tooltip.noDelay.right="i18n.ts.settings" :class="$style.item" :activeClass="$style.active" to="/settings">
 				<i :class="$style.itemIcon" class="ti ti-settings ti-fw" style="view-transition-name: navbar-settings;"></i><span :class="$style.itemText">{{ i18n.ts.settings }}</span>
 			</MkA>
@@ -103,6 +106,7 @@ import { i18n } from '@/i18n.js';
 import { prefer } from '@/preferences.js';
 import { getAccountMenu } from '@/accounts.js';
 import { $i } from '@/i.js';
+import { getZalipAppearanceMenu } from '@/utility/zalip-theme.js';
 
 const props = defineProps<{
 	showWidgetButton?: boolean;
@@ -160,6 +164,10 @@ async function openAccountMenu(ev: PointerEvent) {
 	});
 
 	os.popupMenu(menuItems, ev.currentTarget ?? ev.target);
+}
+
+function openAppearanceMenu(ev: PointerEvent): void {
+	void os.popupMenu(getZalipAppearanceMenu(), ev.currentTarget ?? ev.target, { align: 'right', width: 280 });
 }
 
 </script>

@@ -51,6 +51,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<div><p :class="$style.eyebrow">КАТАЛОГ</p><h2>{{ catalogueTitle }}</h2></div>
 					<div :class="$style.catalogueMeta"><MkA v-if="activeGenre" to="/" :class="$style.resetGenre"><i class="ti ti-x"></i> Все жанры</MkA><span v-if="works.length" :class="$style.count">{{ works.length }} тайтлов</span></div>
 				</div>
+				<div v-if="works.length || activeGenre" :class="$style.catalogueControls">
+					<button type="button" class="_button" :class="$style.sortControl" :aria-label="i18n.ts.zalip.catalogueSort" @click="showSortMenu"><i class="ti ti-arrows-sort"></i><span>{{ sortLabel }}</span><i class="ti ti-chevron-down"></i></button>
+					<div :class="$style.genreRail" :aria-label="i18n.ts.zalip.catalogueGenres" role="list">
+						<MkA to="/" :class="[$style.genreChip, { [$style.genreChipActive]: !activeGenre }]" role="listitem"><i class="ti ti-layout-grid"></i>{{ i18n.ts.zalip.catalogueAllGenres }}</MkA>
+						<MkA v-for="genre in genreChips" :key="genre" :to="`/?genre=${encodeURIComponent(genre)}`" :class="[$style.genreChip, { [$style.genreChipActive]: activeGenre === genre }]" role="listitem">{{ genre }}</MkA>
+					</div>
+				</div>
 
 				<div v-if="pending" :class="$style.empty"><i class="ti ti-loader-2 ti-spin"></i> Загружаем каталог…</div>
 				<div v-else-if="loadError" :class="$style.empty"><i class="ti ti-alert-circle"></i> Каталог временно недоступен.</div>
@@ -60,7 +67,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<span>{{ activeSearch ? 'Попробуйте другое название или оригинальное название.' : activeGenre ? 'Выберите другой жанр или вернитесь ко всему каталогу.' : 'Администратор добавит его как черновик, проверит и только затем опубликует.' }}</span>
 				</div>
 				<div v-else :class="$style.grid">
-					<MkA v-for="work in works" :key="work.id" :to="`/zalip/${work.slug}`" :class="$style.card">
+					<MkA v-for="work in sortedWorks" :key="work.id" :to="`/zalip/${work.slug}`" :class="$style.card">
 						<div :class="$style.poster">
 							<img v-if="work.posterPath" :src="tmdbImage(work.posterPath)" :alt="work.title" loading="lazy">
 							<i v-else class="ti ti-movie"></i>
@@ -85,6 +92,7 @@ import { definePage } from '@/page.js';
 import { i18n } from '@/i18n.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { iAmAdmin } from '@/i.js';
+import * as os from '@/os.js';
 
 type ZalipWork = {
 	id: string;
@@ -97,6 +105,7 @@ type ZalipWork = {
 	posterPath: string | null;
 	backdropPath: string | null;
 	trailerYoutubeKey: string | null;
+	genres: string[];
 };
 
 type ZalipReleaseEvent = {
@@ -114,13 +123,17 @@ type ZalipShowcaseItem = {
 	subtitle: string;
 };
 
+type ZalipSort = 'year' | 'title';
+
 const works = ref<ZalipWork[]>([]);
+const catalogueGenres = ref<string[]>([]);
 const releaseEvents = ref<ZalipReleaseEvent[]>([]);
 const releaseEventsLoaded = ref(false);
 const pending = ref(true);
 const loadError = ref(false);
 const searchQuery = ref('');
 const activeSearch = ref('');
+const sort = ref<ZalipSort>('year');
 const props = withDefaults(defineProps<{ genre?: string }>(), { genre: '' });
 const activeGenre = computed(() => props.genre.trim());
 const catalogueTitle = computed(() => activeSearch.value
@@ -146,6 +159,15 @@ const showcaseItems = computed<ZalipShowcaseItem[]>(() => {
 });
 const showcaseEyebrow = computed(() => isEpisodeShowcase.value ? i18n.ts.zalip.freshEpisodes : i18n.ts.zalip.newCatalogue);
 const showcaseTitle = computed(() => isEpisodeShowcase.value ? i18n.ts.zalip.freshEpisodesTitle : i18n.ts.zalip.newCatalogueTitle);
+const sortLabel = computed(() => sort.value === 'year' ? i18n.ts.zalip.catalogueSortYear : i18n.ts.zalip.catalogueSortTitle);
+const sortedWorks = computed(() => [...works.value].sort((left, right) => {
+	if (sort.value === 'title') return left.title.localeCompare(right.title, 'ru');
+	return (right.releaseYear ?? 0) - (left.releaseYear ?? 0) || left.title.localeCompare(right.title, 'ru');
+}));
+const genreChips = computed(() => Array.from(new Set([
+	...catalogueGenres.value,
+	...(activeGenre.value ? [activeGenre.value] : []),
+])).sort((left, right) => left.localeCompare(right, 'ru')));
 
 function tmdbImage(path: string): string {
 	return `https://image.tmdb.org/t/p/w500${path}`;
@@ -160,6 +182,24 @@ function releaseLabel(release: ZalipReleaseEvent): string {
 	return `${season} · серия ${release.episode.episodeNumber}`;
 }
 
+function showSortMenu(event: MouseEvent): void {
+	void os.popupMenu([
+		{ type: 'label', text: i18n.ts.zalip.catalogueSort },
+		{
+			text: i18n.ts.zalip.catalogueSortYear,
+			icon: 'ti ti-calendar',
+			active: sort.value === 'year',
+			action: () => { sort.value = 'year'; },
+		},
+		{
+			text: i18n.ts.zalip.catalogueSortTitle,
+			icon: 'ti ti-sort-a-z',
+			active: sort.value === 'title',
+			action: () => { sort.value = 'title'; },
+		},
+	], event.currentTarget ?? event.target, { align: 'left', width: 260 });
+}
+
 async function loadCatalogue(): Promise<void> {
 	pending.value = true;
 	loadError.value = false;
@@ -169,6 +209,11 @@ async function loadCatalogue(): Promise<void> {
 			limit: 20,
 			...(activeGenre.value ? { genre: activeGenre.value } : {}),
 		});
+		try {
+			catalogueGenres.value = await misskeyApiZalip<string[]>('zalip/genres/list');
+		} catch {
+			// Keep the last successful facet list if a transient facet request fails.
+		}
 		try {
 			releaseEvents.value = await misskeyApiZalip<ZalipReleaseEvent[]>('zalip/releases/list', { limit: 12 });
 			releaseEventsLoaded.value = true;
@@ -379,6 +424,73 @@ definePage(() => ({
 	align-items: center;
 	justify-content: end;
 	gap: 10px;
+}
+
+.catalogueControls {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: -2px 0 18px;
+}
+
+.sortControl {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	flex: 0 0 auto;
+	padding: 10px 12px;
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: 999px;
+	background: var(--MI_THEME-panel);
+	color: var(--MI_THEME-fg);
+	font-size: 0.82rem;
+	font-weight: 700;
+}
+
+.sortControl i:last-child {
+	font-size: 0.9rem;
+	color: var(--MI_THEME-fgTransparentWeak);
+}
+
+.genreRail {
+	display: flex;
+	gap: 7px;
+	min-width: 0;
+	overflow-x: auto;
+	padding: 1px;
+	scrollbar-width: none;
+}
+
+.genreRail::-webkit-scrollbar {
+	display: none;
+}
+
+.genreChip {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	flex: 0 0 auto;
+	padding: 9px 11px;
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: 999px;
+	background: var(--MI_THEME-panel);
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.78rem;
+	font-weight: 700;
+	text-decoration: none;
+	transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.genreChip:hover {
+	border-color: color-mix(in srgb, var(--MI_THEME-accent) 55%, var(--MI_THEME-divider));
+	color: var(--MI_THEME-fg);
+	text-decoration: none;
+}
+
+.genreChipActive {
+	border-color: var(--MI_THEME-accent);
+	background: var(--MI_THEME-accentedBg);
+	color: var(--MI_THEME-accent);
 }
 
 .resetGenre {
@@ -622,6 +734,15 @@ definePage(() => ({
 
 	.releaseListItem {
 		flex-basis: 142px;
+	}
+
+	.catalogueControls {
+		align-items: stretch;
+		flex-direction: column;
+	}
+
+	.sortControl {
+		align-self: flex-start;
 	}
 }
 </style>

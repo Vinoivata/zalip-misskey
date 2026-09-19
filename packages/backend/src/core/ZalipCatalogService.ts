@@ -29,6 +29,7 @@ import { MiZalipAllohaSource, type ZalipAllohaTranslation } from '@/models/Zalip
 import { MiZalipReleaseEvent } from '@/models/ZalipReleaseEvent.js';
 import { MiZalipSharedNote } from '@/models/ZalipSharedNote.js';
 import { NotificationService } from '@/core/NotificationService.js';
+import { MemorySingleCache } from '@/misc/cache.js';
 
 type ZalipEpisodeReleaseNotificationPayload = {
 	workId: MiZalipWork['id'];
@@ -146,6 +147,8 @@ export type PackedZalipDiscussion = {
 
 @Injectable()
 export class ZalipCatalogService {
+	private readonly publishedGenreCache = new MemorySingleCache<string[]>(1000 * 60); // 1m
+
 	constructor(
 		@Inject(DI.db)
 		private db: DataSource,
@@ -192,6 +195,17 @@ export class ZalipCatalogService {
 				.getMany();
 
 		return works.map(work => this.packWork(work));
+	}
+
+	/** All normalized genre facets used by published catalogue titles, independent of paging. */
+	public async listPublishedGenres(): Promise<string[]> {
+		return await this.publishedGenreCache.fetch(async () => {
+			const rows = await this.db.query<Array<{ genre: string }>>(
+				'SELECT DISTINCT jsonb_array_elements_text("genres") AS "genre" FROM "zalip_work" WHERE "publicationState" = $1',
+				['published'],
+			);
+			return rows.map(row => row.genre).sort((left, right) => left.localeCompare(right, 'ru'));
+		});
 	}
 
 	/** Bounded literal title search over published works. Wildcards are escaped rather than exposed. */
@@ -709,7 +723,9 @@ export class ZalipCatalogService {
 		work.galleryPaths = input.galleryPaths;
 		work.trailerYoutubeKey = input.trailerYoutubeKey;
 		work.updatedAt = new Date();
-		return await repository.save(work);
+		const saved = await repository.save(work);
+		if (saved.publicationState === 'published') this.publishedGenreCache.delete();
+		return saved;
 	}
 
 	/**
@@ -895,6 +911,7 @@ export class ZalipCatalogService {
 			work.publishedAt = now;
 		}
 		await repository.save(work);
+		this.publishedGenreCache.delete();
 
 		// Every published title owns one native Misskey discussion branch. "home"
 		// visibility lets the title page show it without turning it into a feed post.

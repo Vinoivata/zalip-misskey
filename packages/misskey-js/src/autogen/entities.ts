@@ -698,6 +698,7 @@ export type ZalipDiscussionsShowRequest = operations['zalip___discussions___show
 export type ZalipDiscussionsShowResponse = operations['zalip___discussions___show']['responses']['200']['content']['application/json'];
 export type ZalipEpisodesDiscussionsEnsureRequest = operations['zalip___episodes___discussions___ensure']['requestBody']['content']['application/json'];
 export type ZalipEpisodesDiscussionsEnsureResponse = operations['zalip___episodes___discussions___ensure']['responses']['200']['content']['application/json'];
+export type ZalipGenresListResponse = operations['zalip___genres___list']['responses']['200']['content']['application/json'];
 export type ZalipLibraryListResponse = operations['zalip___library___list']['responses']['200']['content']['application/json'];
 export type ZalipLibraryUpdateRequest = operations['zalip___library___update']['requestBody']['content']['application/json'];
 export type ZalipLibraryUpdateResponse = operations['zalip___library___update']['responses']['200']['content']['application/json'];

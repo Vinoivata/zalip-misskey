@@ -2229,6 +2229,7 @@ declare namespace entities {
         ZalipDiscussionsShowResponse,
         ZalipEpisodesDiscussionsEnsureRequest,
         ZalipEpisodesDiscussionsEnsureResponse,
+        ZalipGenresListResponse,
         ZalipLibraryListResponse,
         ZalipLibraryUpdateRequest,
         ZalipLibraryUpdateResponse,
@@ -3906,6 +3907,9 @@ type ZalipEpisodesDiscussionsEnsureRequest = operations['zalip___episodes___disc
 
 // @public (undocumented)
 type ZalipEpisodesDiscussionsEnsureResponse = operations['zalip___episodes___discussions___ensure']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipGenresListResponse = operations['zalip___genres___list']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
 type ZalipLibraryListResponse = operations['zalip___library___list']['responses']['200']['content']['application/json'];

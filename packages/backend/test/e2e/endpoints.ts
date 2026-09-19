@@ -13,6 +13,7 @@ import { Blob } from 'node-fetch';
 import { api, castAsError, initTestDb, post, role, signup, simpleGet, uploadFile } from '../utils.js';
 import type * as misskey from 'misskey-js';
 import { MiUser } from '@/models/_.js';
+import { MiZalipWork } from '@/models/ZalipWork.js';
 
 const waitForPushToTlOptions = { timeout: 3000, interval: 25 };
 
@@ -1248,6 +1249,84 @@ describe('Endpoints', () => {
 
 			assert.strictEqual((resAlice.body as unknown as { memo: string }).memo, memoAliceToBob);
 			assert.strictEqual((resCarol.body as unknown as { memo: string }).memo, memoCarolToBob);
+		});
+	});
+
+	describe('zalip/genres/list', () => {
+		test('returns only distinct facets from published titles to an anonymous visitor', async () => {
+			const connection = await initTestDb(true);
+			const works = connection.getRepository(MiZalipWork);
+			const now = new Date();
+			await works.save([
+				works.create({
+					id: 'zalipgenrepub0001',
+					createdAt: now,
+					updatedAt: now,
+					publishedAt: now,
+					slug: 'published-genre-fixture',
+					kind: 'series',
+					publicationState: 'published',
+					title: 'Published genre fixture',
+					originalTitle: null,
+					description: null,
+					releaseYear: 2026,
+					genres: ['Драма', 'Триллер'],
+					runtimeMinutes: null,
+					tmdbMediaType: null,
+					tmdbId: null,
+					posterPath: null,
+					backdropPath: null,
+					galleryPaths: [],
+					trailerYoutubeKey: null,
+				}),
+				works.create({
+					id: 'zalipgenredraft001',
+					createdAt: now,
+					updatedAt: now,
+					publishedAt: null,
+					slug: 'draft-genre-fixture',
+					kind: 'series',
+					publicationState: 'draft',
+					title: 'Draft genre fixture',
+					originalTitle: null,
+					description: null,
+					releaseYear: 2026,
+					genres: ['Черновик'],
+					runtimeMinutes: null,
+					tmdbMediaType: null,
+					tmdbId: null,
+					posterPath: null,
+					backdropPath: null,
+					galleryPaths: [],
+					trailerYoutubeKey: null,
+				}),
+				works.create({
+					id: 'zalipgenrearch001',
+					createdAt: now,
+					updatedAt: now,
+					publishedAt: now,
+					slug: 'archived-genre-fixture',
+					kind: 'series',
+					publicationState: 'archived',
+					title: 'Archived genre fixture',
+					originalTitle: null,
+					description: null,
+					releaseYear: 2026,
+					genres: ['Архив'],
+					runtimeMinutes: null,
+					tmdbMediaType: null,
+					tmdbId: null,
+					posterPath: null,
+					backdropPath: null,
+					galleryPaths: [],
+					trailerYoutubeKey: null,
+				}),
+			]);
+
+			const res = await api('zalip/genres/list', {});
+
+			assert.strictEqual(res.status, 200);
+			assert.deepStrictEqual(res.body, ['Драма', 'Триллер']);
 		});
 	});
 });
