@@ -20,7 +20,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkNoteSub v-for="comment in comments" :key="comment.id" :note="comment" :detail="true" @reply="replyTo = $event"/>
 		</div>
 		<p v-else :class="$style.empty">Пока нет комментариев. Начните обсуждение первым.</p>
-		<ZalipCommentForm v-if="replyTo != null" :root-note="rootNote" :reply-to="replyTo" @posted="commentPosted" @cancel-reply="replyTo = rootNote"/>
+		<ZalipCommentForm v-if="replyTo != null" :rootNote="rootNote" :replyTo="replyTo" @posted="commentPosted" @cancelReply="replyTo = rootNote"/>
 	</template>
 </section>
 </template>

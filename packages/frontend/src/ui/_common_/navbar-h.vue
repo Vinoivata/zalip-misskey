@@ -13,6 +13,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkA v-click-anime v-tooltip="navbarItemDef.zalip.title" :class="$style.item" :activeClass="$style.active" to="/" exact>
 				<i :class="$style.itemIcon" class="ti ti-movie ti-fw"></i>
 			</MkA>
+			<button v-click-anime v-tooltip="i18n.ts.zalip.searchTitle" type="button" class="_button" :class="$style.item" @click="openSearch">
+				<i :class="$style.itemIcon" class="ti ti-search ti-fw"></i>
+			</button>
 			<template v-for="item in primaryMenu" :key="item">
 				<component :is="navbarItemDef[item].to ? 'MkA' : 'button'" v-if="navbarItemDef[item] && (navbarItemDef[item].show == null || navbarItemDef[item].show.value !== false)" v-click-anime v-tooltip="navbarItemDef[item].title" class="_button" :class="$style.item" :activeClass="$style.active" :to="navbarItemDef[item].to" v-on="navbarItemDef[item].action ? { click: navbarItemDef[item].action } : {}">
 					<i :class="[$style.itemIcon, navbarItemDef[item].icon]" class="ti-fw"></i>
@@ -58,6 +61,7 @@ import { prefer } from '@/preferences.js';
 import { getAccountMenu } from '@/accounts.js';
 import { $i } from '@/i.js';
 import { getZalipAppearanceMenu } from '@/utility/zalip-theme.js';
+import { openZalipSearch } from '@/utility/zalip-search.js';
 
 const WINDOW_THRESHOLD = 1400;
 
@@ -79,6 +83,10 @@ async function openAccountMenu(ev: PointerEvent) {
 
 function openAppearanceMenu(ev: PointerEvent): void {
 	void os.popupMenu(getZalipAppearanceMenu(), ev.currentTarget ?? ev.target, { align: 'right', width: 280 });
+}
+
+function openSearch(): void {
+	openZalipSearch();
 }
 
 onMounted(() => {

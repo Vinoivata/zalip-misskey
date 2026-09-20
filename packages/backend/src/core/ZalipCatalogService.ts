@@ -17,6 +17,7 @@ import {
 } from '@/models/ZalipLibraryEntry.js';
 import {
 	MiZalipWork,
+	zalipWorkKinds,
 	type ZalipPublicationState,
 	type ZalipWorkKind,
 } from '@/models/ZalipWork.js';
@@ -176,23 +177,29 @@ export class ZalipCatalogService {
 		};
 	}
 
-	public async listPublished(limit: number, genre?: string): Promise<PackedZalipWork[]> {
+	public async listPublished(limit: number, genre?: string, kind?: ZalipWorkKind): Promise<PackedZalipWork[]> {
 		const normalizedGenre = genre?.trim();
 		if (normalizedGenre != null && normalizedGenre.length === 0) return [];
+		if (kind != null && !zalipWorkKinds.includes(kind)) return [];
 
-		const works = normalizedGenre == null
-			? await this.db.getRepository(MiZalipWork).find({
+		let works: MiZalipWork[];
+		if (normalizedGenre == null && kind == null) {
+			works = await this.db.getRepository(MiZalipWork).find({
 				where: { publicationState: 'published' },
 				order: { publishedAt: 'DESC', createdAt: 'DESC' },
 				take: limit,
-			})
-			: await this.db.getRepository(MiZalipWork).createQueryBuilder('work')
-				.where('work.publicationState = :publicationState', { publicationState: 'published' })
-				.andWhere('work.genres @> CAST(:genre AS jsonb)', { genre: JSON.stringify([normalizedGenre]) })
+			});
+		} else {
+			const query = this.db.getRepository(MiZalipWork).createQueryBuilder('work')
+				.where('work.publicationState = :publicationState', { publicationState: 'published' });
+			if (normalizedGenre != null) query.andWhere('work.genres @> CAST(:genre AS jsonb)', { genre: JSON.stringify([normalizedGenre]) });
+			if (kind != null) query.andWhere('work.kind = :kind', { kind });
+			works = await query
 				.orderBy('work.publishedAt', 'DESC')
 				.addOrderBy('work.createdAt', 'DESC')
 				.take(limit)
 				.getMany();
+		}
 
 		return works.map(work => this.packWork(work));
 	}
@@ -209,13 +216,16 @@ export class ZalipCatalogService {
 	}
 
 	/** Bounded literal title search over published works. Wildcards are escaped rather than exposed. */
-	public async searchPublished(query: string, limit: number): Promise<PackedZalipWork[]> {
+	public async searchPublished(query: string, limit: number, kind?: ZalipWorkKind): Promise<PackedZalipWork[]> {
 		const normalized = query.trim();
 		if (normalized.length < 2) return [];
+		if (kind != null && !zalipWorkKinds.includes(kind)) return [];
 		const pattern = `%${normalized.replace(/[\\%_]/g, '\\$&')}%`;
-		const works = await this.db.getRepository(MiZalipWork).createQueryBuilder('work')
+		const queryBuilder = this.db.getRepository(MiZalipWork).createQueryBuilder('work')
 			.where('work.publicationState = :publicationState', { publicationState: 'published' })
-			.andWhere("(work.title ILIKE :pattern ESCAPE '\\' OR work.originalTitle ILIKE :pattern ESCAPE '\\')", { pattern })
+			.andWhere('(work.title ILIKE :pattern ESCAPE \'\\\' OR work.originalTitle ILIKE :pattern ESCAPE \'\\\')', { pattern });
+		if (kind != null) queryBuilder.andWhere('work.kind = :kind', { kind });
+		const works = await queryBuilder
 			.orderBy('work.publishedAt', 'DESC')
 			.addOrderBy('work.createdAt', 'DESC')
 			.take(limit)

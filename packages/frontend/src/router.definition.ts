@@ -28,6 +28,7 @@ export const ROUTE_DEF = [{
 	path: '/',
 	query: {
 		genre: 'genre',
+		kind: 'kind',
 	},
 	component: PageZalipHome,
 }, {

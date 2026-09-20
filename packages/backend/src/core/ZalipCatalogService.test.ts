@@ -219,12 +219,57 @@ describe('ZalipCatalogService', () => {
 			{} as never,
 		);
 
-		await expect(service.listPublished(12, '  Драма  ')).resolves.toEqual([expect.objectContaining({
+		await expect(service.listPublished(12, '  Драма  ', 'series')).resolves.toEqual([expect.objectContaining({
 			id: 'work-1',
 			genres: ['Драма'],
 		})]);
 		expect(query.andWhere).toHaveBeenCalledWith('work.genres @> CAST(:genre AS jsonb)', { genre: '["Драма"]' });
+		expect(query.andWhere).toHaveBeenCalledWith('work.kind = :kind', { kind: 'series' });
 		expect(query.take).toHaveBeenCalledWith(12);
+	});
+
+	it('limits a title search to the requested catalogue kind', async () => {
+		const query = {
+			where: vi.fn().mockReturnThis(),
+			andWhere: vi.fn().mockReturnThis(),
+			orderBy: vi.fn().mockReturnThis(),
+			addOrderBy: vi.fn().mockReturnThis(),
+			take: vi.fn().mockReturnThis(),
+			getMany: vi.fn().mockResolvedValue([{
+				id: 'work-2',
+				slug: 'example-movie',
+				kind: 'movie',
+				title: 'Example Movie',
+				originalTitle: null,
+				description: null,
+				releaseYear: 2026,
+				genres: ['Драма'],
+				runtimeMinutes: 120,
+				posterPath: null,
+				backdropPath: null,
+				trailerYoutubeKey: null,
+			}]),
+		};
+		const worksRepository = { createQueryBuilder: vi.fn().mockReturnValue(query) };
+		const dataSource = {
+			getRepository: (model: unknown) => {
+				if (model === MiZalipWork) return worksRepository;
+				throw new Error('Unexpected repository');
+			},
+		};
+		const service = new ZalipCatalogService(
+			dataSource as never,
+			{} as never,
+			{} as never,
+			{} as never,
+		);
+
+		await expect(service.searchPublished('  Example  ', 8, 'movie')).resolves.toEqual([expect.objectContaining({
+			id: 'work-2',
+			kind: 'movie',
+		})]);
+		expect(query.andWhere).toHaveBeenCalledWith('work.kind = :kind', { kind: 'movie' });
+		expect(query.take).toHaveBeenCalledWith(8);
 	});
 
 	it('lists every published genre facet independently of the catalogue page size', async () => {

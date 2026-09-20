@@ -28,6 +28,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<div :class="$style.quickActions" role="group" :aria-label="i18n.ts.zalip.workActions">
 								<button type="button" class="_button" :class="[$style.quickAction, { [$style.quickActionActive]: isFavorite }]" :aria-label="i18n.ts.zalip.favoriteTitle" :aria-pressed="isFavorite" :disabled="saving" @click="toggleFavorite"><i :class="isFavorite ? 'ti ti-star-filled' : 'ti ti-star'"></i><span>{{ i18n.ts.zalip.favoriteTitle }}</span></button>
 								<button v-if="work.seasons.length" type="button" class="_button" :class="[$style.quickAction, { [$style.quickActionActive]: releaseSubscribed }]" :aria-label="i18n.ts.zalip.releaseSubscriptionTitle" :aria-pressed="releaseSubscribed" :disabled="saving" @click="toggleReleaseSubscription"><i :class="releaseSubscribed ? 'ti ti-bell-filled' : 'ti ti-bell'"></i><span>{{ i18n.ts.zalip.releaseSubscriptionTitle }}</span></button>
+								<button type="button" class="_button" :class="[$style.quickAction, { [$style.quickActionActive]: personalRating != null }]" :aria-label="i18n.ts.zalip.ratingTitle" :disabled="saving" @click="choosePersonalRating"><i :class="personalRating == null ? 'ti ti-star' : 'ti ti-star-filled'"></i><span>{{ ratingLabel }}</span></button>
 								<button type="button" class="_button" :class="$style.quickAction" :aria-label="i18n.ts.zalip.shareTitle" @click="shareWork"><i class="ti ti-share-3"></i><span>{{ i18n.ts.zalip.shareTitle }}</span></button>
 							</div>
 						</aside>
@@ -253,6 +254,7 @@ const selectedEpisodeIndex = computed(() => selectedEpisode.value == null ? -1 :
 const previousEpisode = computed(() => selectedEpisodeIndex.value > 0 ? episodes.value[selectedEpisodeIndex.value - 1] ?? null : null);
 const nextEpisode = computed(() => selectedEpisodeIndex.value >= 0 ? episodes.value[selectedEpisodeIndex.value + 1] ?? null : null);
 const activeDiscussionNoteId = computed(() => discussionScope.value === 'episode' ? selectedEpisode.value?.discussionNoteId ?? null : discussionNoteId.value);
+const ratingLabel = computed(() => personalRating.value == null ? i18n.ts.zalip.ratingUnset : i18n.tsx.zalip.ratingValue({ rating: personalRating.value.toString() }));
 const activeDiscussionHeading = computed(() => {
 	if (discussionScope.value === 'episode' && selectedEpisode.value != null && work.value != null) return i18n.tsx.zalip.episodeDiscussionHeading({ title: work.value.title, episode: episodeLabel(selectedEpisode.value) });
 	return work.value == null ? i18n.ts.zalip.comments : i18n.tsx.zalip.workDiscussionHeading({ title: work.value.title });
@@ -582,6 +584,34 @@ async function toggleReleaseSubscription(): Promise<void> {
 		await updateLibrary({ isReleaseSubscribed: releaseSubscribed.value });
 	} catch {
 		releaseSubscribed.value = previousSubscription;
+		os.toast(i18n.ts.zalip.libraryUpdateFailed);
+	}
+}
+
+async function choosePersonalRating(): Promise<void> {
+	if (!$i) {
+		await pleaseLogin({ path: window.location.pathname + window.location.search });
+		return;
+	}
+	if (saving.value) return;
+	const { canceled, result } = await os.select({
+		title: i18n.ts.zalip.ratingTitle,
+		default: personalRating.value ?? 0,
+		items: [
+			{ value: 0, label: i18n.ts.zalip.ratingClear },
+			...Array.from({ length: 10 }, (_, index) => {
+				const rating = index + 1;
+				return { value: rating, label: i18n.tsx.zalip.ratingValue({ rating: rating.toString() }) };
+			}),
+		],
+	});
+	if (canceled || result == null) return;
+	const previousRating = personalRating.value;
+	personalRating.value = result === 0 ? null : result;
+	try {
+		await updateLibrary({ personalRating: personalRating.value });
+	} catch {
+		personalRating.value = previousRating;
 		os.toast(i18n.ts.zalip.libraryUpdateFailed);
 	}
 }

@@ -1541,6 +1541,126 @@ export interface Locale extends ILocale {
          * Все жанры
          */
         "catalogueAllGenres": string;
+        /**
+         * Тип контента
+         */
+        "catalogueKinds": string;
+        /**
+         * Всё
+         */
+        "catalogueAllKinds": string;
+        /**
+         * В этом разделе пока нет тайтлов
+         */
+        "catalogueFilteredEmptyTitle": string;
+        /**
+         * Выберите другой тип, жанр или вернитесь ко всему каталогу.
+         */
+        "catalogueFilteredEmptyDescription": string;
+        /**
+         * Поиск
+         */
+        "search": string;
+        /**
+         * Поиск Zalip
+         */
+        "searchTitle": string;
+        /**
+         * ZALIP DISCOVER
+         */
+        "searchEyebrow": string;
+        /**
+         * Найти своё кино и людей
+         */
+        "searchHeading": string;
+        /**
+         * Каталог и социальная часть — в одном быстром поиске.
+         */
+        "searchDescription": string;
+        /**
+         * Фильм, сериал, аниме, запись или профиль
+         */
+        "searchPlaceholder": string;
+        /**
+         * Очистить запрос
+         */
+        "searchClear": string;
+        /**
+         * Разделы поиска
+         */
+        "searchSections": string;
+        /**
+         * Каталог
+         */
+        "searchCatalogue": string;
+        /**
+         * Фильмы
+         */
+        "searchMovies": string;
+        /**
+         * Сериалы
+         */
+        "searchSeries": string;
+        /**
+         * Аниме
+         */
+        "searchAnime": string;
+        /**
+         * Анимация
+         */
+        "searchAnimation": string;
+        /**
+         * Посты
+         */
+        "searchPosts": string;
+        /**
+         * Профили
+         */
+        "searchProfiles": string;
+        /**
+         * Начните с названия или имени
+         */
+        "searchStartTitle": string;
+        /**
+         * Введите хотя бы две буквы, затем выберите раздел — результаты не смешиваются.
+         */
+        "searchStartDescription": string;
+        /**
+         * Ищем точные совпадения…
+         */
+        "searchLoading": string;
+        /**
+         * Этот раздел поиска временно недоступен. Попробуйте ещё раз.
+         */
+        "searchUnavailable": string;
+        /**
+         * Ничего не найдено. Попробуйте другое название или имя.
+         */
+        "searchNoResults": string;
+        /**
+         * Запись без текста
+         */
+        "searchPostWithoutText": string;
+        /**
+         * ESC — Закрыть
+         */
+        "searchCloseHint": string;
+        /**
+         * Оценка
+         */
+        "ratingTitle": string;
+        /**
+         * Оценить
+         */
+        "ratingUnset": string;
+        /**
+         * {rating}/10
+         */
+        "ratingValue": ParameterizedString<"rating">;
+        /**
+         * Без оценки
+         */
+        "ratingClear": string;
     };
     /**
      * ホーム

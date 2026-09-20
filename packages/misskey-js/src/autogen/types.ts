@@ -39419,6 +39419,8 @@ export interface operations {
                     /** @default 20 */
                     limit?: number;
                     genre?: string;
+                    /** @enum {string} */
+                    kind?: 'movie' | 'series' | 'anime' | 'animation';
                 };
             };
         };
@@ -39501,6 +39503,8 @@ export interface operations {
                     query: string;
                     /** @default 20 */
                     limit?: number;
+                    /** @enum {string} */
+                    kind?: 'movie' | 'series' | 'anime' | 'animation';
                 };
             };
         };

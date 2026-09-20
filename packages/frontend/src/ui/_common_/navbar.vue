@@ -22,6 +22,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkA v-tooltip.noDelay.right="navbarItemDef.zalip.title" :class="$style.item" :activeClass="$style.active" to="/" exact>
 				<i :class="$style.itemIcon" class="ti ti-movie ti-fw" style="view-transition-name: navbar-homeIcon;"></i><span :class="$style.itemText">{{ navbarItemDef.zalip.title }}</span>
 			</MkA>
+			<button v-tooltip.noDelay.right="i18n.ts.zalip.searchTitle" type="button" class="_button" :class="$style.item" @click="openSearch">
+				<i :class="$style.itemIcon" class="ti ti-search ti-fw"></i><span :class="$style.itemText">{{ i18n.ts.zalip.search }}</span>
+			</button>
 			<template v-for="item in primaryMenu" :key="item">
 				<component
 					:is="navbarItemDef[item].to ? 'MkA' : 'button'"
@@ -107,6 +110,7 @@ import { prefer } from '@/preferences.js';
 import { getAccountMenu } from '@/accounts.js';
 import { $i } from '@/i.js';
 import { getZalipAppearanceMenu } from '@/utility/zalip-theme.js';
+import { openZalipSearch } from '@/utility/zalip-search.js';
 
 const props = defineProps<{
 	showWidgetButton?: boolean;
@@ -168,6 +172,10 @@ async function openAccountMenu(ev: PointerEvent) {
 
 function openAppearanceMenu(ev: PointerEvent): void {
 	void os.popupMenu(getZalipAppearanceMenu(), ev.currentTarget ?? ev.target, { align: 'right', width: 280 });
+}
+
+function openSearch(): void {
+	openZalipSearch();
 }
 
 </script>

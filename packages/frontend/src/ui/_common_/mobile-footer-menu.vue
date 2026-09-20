@@ -55,6 +55,7 @@ import { pleaseLogin } from '@/utility/please-login.js';
 import * as os from '@/os.js';
 import type { MenuItem } from '@/types/menu.js';
 import { getZalipAppearanceMenu } from '@/utility/zalip-theme.js';
+import { openZalipSearch } from '@/utility/zalip-search.js';
 
 const rootEl = useTemplateRef('rootEl');
 
@@ -70,6 +71,8 @@ function openMoreMenu(event: PointerEvent): void {
 		: [{ text: i18n.ts.login, icon: 'ti ti-login', action: () => signIn() }];
 
 	void os.popupMenu([
+		{ text: i18n.ts.zalip.search, icon: 'ti ti-search', action: () => openZalipSearch() },
+		{ type: 'divider' },
 		...accountItems,
 		{ type: 'link', text: i18n.ts.settings, icon: 'ti ti-settings', to: '/settings' },
 		{ type: 'divider' },

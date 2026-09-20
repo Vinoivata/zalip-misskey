@@ -4,6 +4,7 @@
  */
 
 import { Injectable } from '@nestjs/common';
+import { zalipWorkKinds } from '@/models/ZalipWork.js';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { ZalipCatalogService } from '@/core/ZalipCatalogService.js';
 
@@ -38,6 +39,7 @@ export const paramDef = {
 	properties: {
 		query: { type: 'string', minLength: 2, maxLength: 100 },
 		limit: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
+		kind: { type: 'string', enum: zalipWorkKinds },
 	},
 	required: ['query'],
 } as const;
@@ -47,6 +49,6 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 	constructor(
 		private zalipCatalogService: ZalipCatalogService,
 	) {
-		super(meta, paramDef, async (ps) => await this.zalipCatalogService.searchPublished(ps.query, ps.limit));
+		super(meta, paramDef, async (ps) => await this.zalipCatalogService.searchPublished(ps.query, ps.limit, ps.kind));
 	}
 }
