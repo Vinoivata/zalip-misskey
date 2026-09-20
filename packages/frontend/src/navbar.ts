@@ -45,6 +45,11 @@ export const navbarItemDef = reactive<{
 		icon: 'ti ti-movie',
 		to: '/',
 	},
+	catalogue: {
+		title: 'Каталог',
+		icon: 'ti ti-layout-grid',
+		to: '/catalog',
+	},
 	feed: {
 		title: 'Лента',
 		icon: 'ti ti-news',

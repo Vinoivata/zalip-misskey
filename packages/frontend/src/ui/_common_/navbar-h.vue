@@ -13,6 +13,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkA v-click-anime v-tooltip="navbarItemDef.zalip.title" :class="$style.item" :activeClass="$style.active" to="/" exact>
 				<i :class="$style.itemIcon" class="ti ti-movie ti-fw"></i>
 			</MkA>
+			<MkA v-click-anime v-tooltip="navbarItemDef.catalogue.title" :class="$style.item" :activeClass="$style.active" to="/catalog">
+				<i :class="[$style.itemIcon, navbarItemDef.catalogue.icon]" class="ti-fw"></i>
+			</MkA>
 			<button v-click-anime v-tooltip="i18n.ts.zalip.searchTitle" type="button" class="_button" :class="$style.item" @click="openSearch">
 				<i :class="$style.itemIcon" class="ti ti-search ti-fw"></i>
 			</button>

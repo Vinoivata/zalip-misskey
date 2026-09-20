@@ -13,6 +13,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<h1>Смотри. <em>Обсуждай.</em><br>Сохраняй истории.</h1>
 					<p :class="$style.lead">Кино, сериалы и аниме живут в том же пространстве, что и ваша лента, профиль и уведомления.</p>
 					<div :class="$style.actions">
+						<MkA to="/catalog" :class="$style.primaryAction"><i class="ti ti-layout-grid"></i> Каталог</MkA>
 						<MkA to="/timeline" :class="$style.primaryAction"><i class="ti ti-news"></i> Открыть ленту</MkA>
 						<MkA to="/library" :class="$style.secondaryAction"><i class="ti ti-bookmark"></i> Моя библиотека</MkA>
 						<MkA v-if="iAmAdmin" to="/zalip/editor" :class="$style.secondaryAction"><i class="ti ti-pencil"></i> Редактор</MkA>
@@ -45,60 +46,17 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</div>
 				</div>
 			</section>
-
-			<section :class="$style.catalogue">
-				<div :class="$style.sectionHeader">
-					<div><p :class="$style.eyebrow">КАТАЛОГ</p><h2>{{ catalogueTitle }}</h2></div>
-					<div :class="$style.catalogueMeta"><MkA v-if="activeGenre || activeKind" :to="catalogueLink()" :class="$style.resetGenre"><i class="ti ti-x"></i> Все жанры</MkA><span v-if="works.length" :class="$style.count">{{ works.length }} тайтлов</span></div>
-				</div>
-				<div v-if="works.length || activeGenre || activeKind" :class="$style.catalogueControls">
-					<div :class="$style.kindRail" :aria-label="i18n.ts.zalip.catalogueKinds" role="list">
-						<MkA :to="catalogueLink({ genre: activeGenre })" :class="[$style.kindChip, { [$style.kindChipActive]: !activeKind }]" role="listitem"><i class="ti ti-layout-grid"></i>{{ i18n.ts.zalip.catalogueAllKinds }}</MkA>
-						<MkA v-for="workKind in catalogueKinds" :key="workKind" :to="catalogueLink({ kind: workKind, genre: activeGenre })" :class="[$style.kindChip, { [$style.kindChipActive]: activeKind === workKind }]" role="listitem"><i :class="kindIcon(workKind)"></i>{{ kindLabel(workKind) }}</MkA>
-					</div>
-					<div :class="$style.filterLine">
-						<button type="button" class="_button" :class="$style.sortControl" :aria-label="i18n.ts.zalip.catalogueSort" @click="showSortMenu"><i class="ti ti-arrows-sort"></i><span>{{ sortLabel }}</span><i class="ti ti-chevron-down"></i></button>
-						<div :class="$style.genreRail" :aria-label="i18n.ts.zalip.catalogueGenres" role="list">
-							<MkA :to="catalogueLink({ kind: activeKind })" :class="[$style.genreChip, { [$style.genreChipActive]: !activeGenre }]" role="listitem"><i class="ti ti-tag"></i>{{ i18n.ts.zalip.catalogueAllGenres }}</MkA>
-							<MkA v-for="genreName in genreChips" :key="genreName" :to="catalogueLink({ kind: activeKind, genre: genreName })" :class="[$style.genreChip, { [$style.genreChipActive]: activeGenre === genreName }]" role="listitem">{{ genreName }}</MkA>
-						</div>
-					</div>
-				</div>
-
-				<div v-if="pending" :class="$style.empty"><i class="ti ti-loader-2 ti-spin"></i> Загружаем каталог…</div>
-				<div v-else-if="loadError" :class="$style.empty"><i class="ti ti-alert-circle"></i> Каталог временно недоступен.</div>
-				<div v-else-if="works.length === 0" :class="$style.empty">
-					<i class="ti ti-sparkles"></i>
-					<strong>{{ activeGenre || activeKind ? i18n.ts.zalip.catalogueFilteredEmptyTitle : 'Каталог готов к первому тайтлу' }}</strong>
-					<span>{{ activeGenre || activeKind ? i18n.ts.zalip.catalogueFilteredEmptyDescription : 'Администратор добавит его как черновик, проверит и только затем опубликует.' }}</span>
-				</div>
-				<div v-else :class="$style.grid">
-					<MkA v-for="work in sortedWorks" :key="work.id" :to="`/zalip/${work.slug}`" :class="$style.card">
-						<div :class="$style.poster">
-							<img v-if="work.posterPath" :src="tmdbImage(work.posterPath)" :alt="work.title" loading="lazy">
-							<i v-else class="ti ti-movie"></i>
-						</div>
-						<div :class="$style.cardBody">
-							<p>{{ kindLabel(work.kind) }}<span v-if="work.releaseYear"> · {{ work.releaseYear }}</span></p>
-							<h3>{{ work.title }}</h3>
-							<span v-if="work.originalTitle">{{ work.originalTitle }}</span>
-						</div>
-					</MkA>
-				</div>
-				<p :class="$style.credits">Метаданные каталога: <MkA to="/zalip/credits">TMDB и другие указанные источники</MkA>.</p>
-			</section>
 		</div>
 	</div>
 </PageWithHeader>
 </template>
 
 <script lang="ts" setup>
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { definePage } from '@/page.js';
 import { i18n } from '@/i18n.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { iAmAdmin } from '@/i.js';
-import * as os from '@/os.js';
 import { openZalipSearch } from '@/utility/zalip-search.js';
 
 type ZalipWork = {
@@ -131,21 +89,10 @@ type ZalipShowcaseItem = {
 };
 
 type WorkKind = ZalipWork['kind'];
-type ZalipSort = 'year' | 'title';
-
 const works = ref<ZalipWork[]>([]);
-const catalogueGenres = ref<string[]>([]);
 const releaseEvents = ref<ZalipReleaseEvent[]>([]);
 const releaseEventsLoaded = ref(false);
-const pending = ref(true);
-const loadError = ref(false);
 const searchQuery = ref('');
-const sort = ref<ZalipSort>('year');
-const props = withDefaults(defineProps<{ genre?: string; kind?: WorkKind }>(), { genre: '', kind: undefined });
-const activeGenre = computed(() => props.genre.trim());
-const activeKind = computed<WorkKind | ''>(() => props.kind ?? '');
-const catalogueKinds: WorkKind[] = ['movie', 'series', 'anime', 'animation'];
-const catalogueTitle = computed(() => activeGenre.value ? `Жанр: ${activeGenre.value}` : activeKind.value ? kindLabel(activeKind.value) : 'Новое и важное');
 const isEpisodeShowcase = computed(() => releaseEvents.value.length > 0);
 const showcaseItems = computed<ZalipShowcaseItem[]>(() => {
 	if (releaseEvents.value.length > 0) return releaseEvents.value.map(release => ({
@@ -156,7 +103,6 @@ const showcaseItems = computed<ZalipShowcaseItem[]>(() => {
 	}));
 
 	if (!releaseEventsLoaded.value) return [];
-	if (activeGenre.value || activeKind.value) return [];
 	return works.value.slice(0, 12).map(work => ({
 		id: `catalogue-${work.id}`,
 		work,
@@ -166,15 +112,6 @@ const showcaseItems = computed<ZalipShowcaseItem[]>(() => {
 });
 const showcaseEyebrow = computed(() => isEpisodeShowcase.value ? i18n.ts.zalip.freshEpisodes : i18n.ts.zalip.newCatalogue);
 const showcaseTitle = computed(() => isEpisodeShowcase.value ? i18n.ts.zalip.freshEpisodesTitle : i18n.ts.zalip.newCatalogueTitle);
-const sortLabel = computed(() => sort.value === 'year' ? i18n.ts.zalip.catalogueSortYear : i18n.ts.zalip.catalogueSortTitle);
-const sortedWorks = computed(() => [...works.value].sort((left, right) => {
-	if (sort.value === 'title') return left.title.localeCompare(right.title, 'ru');
-	return (right.releaseYear ?? 0) - (left.releaseYear ?? 0) || left.title.localeCompare(right.title, 'ru');
-}));
-const genreChips = computed(() => Array.from(new Set([
-	...catalogueGenres.value,
-	...(activeGenre.value ? [activeGenre.value] : []),
-])).sort((left, right) => left.localeCompare(right, 'ru')));
 
 function tmdbImage(path: string): string {
 	return `https://image.tmdb.org/t/p/w500${path}`;
@@ -184,66 +121,26 @@ function kindLabel(kind: WorkKind): string {
 	return ({ movie: i18n.ts.zalip.searchMovies, series: i18n.ts.zalip.searchSeries, anime: i18n.ts.zalip.searchAnime, animation: i18n.ts.zalip.searchAnimation })[kind];
 }
 
-function kindIcon(kind: WorkKind): string {
-	return ({ movie: 'ti ti-movie', series: 'ti ti-device-tv', anime: 'ti ti-sparkles', animation: 'ti ti-mood-smile' })[kind];
-}
-
-function catalogueLink(filters: { genre?: string; kind?: WorkKind | ''; } = {}): string {
-	const params = new URLSearchParams();
-	if (filters.kind) params.set('kind', filters.kind);
-	if (filters.genre) params.set('genre', filters.genre);
-	const query = params.toString();
-	return query ? `/?${query}` : '/';
-}
-
 function releaseLabel(release: ZalipReleaseEvent): string {
 	const season = release.season.seasonNumber === 0 ? 'Спецэпизод' : `Сезон ${release.season.seasonNumber}`;
 	return `${season} · серия ${release.episode.episodeNumber}`;
 }
 
-function showSortMenu(event: MouseEvent): void {
-	void os.popupMenu([
-		{ type: 'label', text: i18n.ts.zalip.catalogueSort },
-		{
-			text: i18n.ts.zalip.catalogueSortYear,
-			icon: 'ti ti-calendar',
-			active: sort.value === 'year',
-			action: () => { sort.value = 'year'; },
-		},
-		{
-			text: i18n.ts.zalip.catalogueSortTitle,
-			icon: 'ti ti-sort-a-z',
-			active: sort.value === 'title',
-			action: () => { sort.value = 'title'; },
-		},
-	], event.currentTarget ?? event.target, { align: 'left', width: 260 });
-}
-
-async function loadCatalogue(): Promise<void> {
-	pending.value = true;
-	loadError.value = false;
-	releaseEventsLoaded.value = false;
+async function loadHome(): Promise<void> {
 	try {
 		works.value = await misskeyApiZalip<ZalipWork[]>('zalip/works/list', {
-			limit: 20,
-			...(activeGenre.value ? { genre: activeGenre.value } : {}),
-			...(activeKind.value ? { kind: activeKind.value } : {}),
+			limit: 12,
 		});
-		try {
-			catalogueGenres.value = await misskeyApiZalip<string[]>('zalip/genres/list');
-		} catch {
-			// Keep the last successful facet list if a transient facet request fails.
-		}
-		try {
-			releaseEvents.value = await misskeyApiZalip<ZalipReleaseEvent[]>('zalip/releases/list', { limit: 12 });
-			releaseEventsLoaded.value = true;
-		} catch {
-			releaseEvents.value = [];
-		}
 	} catch {
-		loadError.value = true;
+		works.value = [];
+	}
+
+	try {
+		releaseEvents.value = await misskeyApiZalip<ZalipReleaseEvent[]>('zalip/releases/list', { limit: 12 });
+	} catch {
+		releaseEvents.value = [];
 	} finally {
-		pending.value = false;
+		releaseEventsLoaded.value = true;
 	}
 }
 
@@ -251,10 +148,9 @@ function openSearch(): void {
 	openZalipSearch('catalogue', searchQuery.value.trim());
 }
 
-watch([activeGenre, activeKind], () => {
-	searchQuery.value = '';
-	void loadCatalogue();
-}, { immediate: true });
+onMounted(() => {
+	void loadHome();
+});
 
 definePage(() => ({
 	title: 'Zalip',

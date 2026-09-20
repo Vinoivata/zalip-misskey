@@ -13,7 +13,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</header>
 
 			<div v-if="pending" :class="$style.empty"><i class="ti ti-loader-2 ti-spin"></i> Загружаем обновления…</div>
-			<div v-else-if="events.length === 0" :class="$style.empty"><i class="ti ti-bell-off"></i><strong>Пока нет новых серий</strong><span>На странице тайтла включите «Следить за сериями», чтобы его будущие обновления появились здесь.</span><MkA to="/" :class="$style.start">Открыть каталог</MkA></div>
+				<div v-else-if="events.length === 0" :class="$style.empty"><i class="ti ti-bell-off"></i><strong>Пока нет новых серий</strong><span>На странице тайтла включите «Следить за сериями», чтобы его будущие обновления появились здесь.</span><MkA to="/catalog" :class="$style.start">Открыть каталог</MkA></div>
 			<div v-else :class="$style.list">
 				<MkA v-for="event in events" :key="event.id" :to="`/zalip/${event.work.slug}`" :class="$style.event">
 					<img v-if="event.work.posterPath" :src="tmdbImage(event.work.posterPath)" :alt="event.work.title" loading="lazy">

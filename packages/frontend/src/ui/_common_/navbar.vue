@@ -22,6 +22,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkA v-tooltip.noDelay.right="navbarItemDef.zalip.title" :class="$style.item" :activeClass="$style.active" to="/" exact>
 				<i :class="$style.itemIcon" class="ti ti-movie ti-fw" style="view-transition-name: navbar-homeIcon;"></i><span :class="$style.itemText">{{ navbarItemDef.zalip.title }}</span>
 			</MkA>
+			<MkA v-tooltip.noDelay.right="navbarItemDef.catalogue.title" :class="$style.item" :activeClass="$style.active" to="/catalog">
+				<i :class="[$style.itemIcon, navbarItemDef.catalogue.icon]" class="ti-fw"></i><span :class="$style.itemText">{{ navbarItemDef.catalogue.title }}</span>
+			</MkA>
 			<button v-tooltip.noDelay.right="i18n.ts.zalip.searchTitle" type="button" class="_button" :class="$style.item" @click="openSearch">
 				<i :class="$style.itemIcon" class="ti ti-search ti-fw"></i><span :class="$style.itemText">{{ i18n.ts.zalip.search }}</span>
 			</button>

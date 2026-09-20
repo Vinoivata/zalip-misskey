@@ -65,6 +65,15 @@ export type PackedZalipWork = {
 	trailerYoutubeKey: string | null;
 };
 
+/** Public catalogue facets. Every provided facet narrows the result set. */
+export type ZalipPublishedCatalogueFilters = {
+	genres?: string[];
+	kinds?: ZalipWorkKind[];
+	query?: string;
+	yearFrom?: number;
+	yearTo?: number;
+};
+
 export type PackedZalipLibraryEntry = {
 	status: ZalipLibraryStatus;
 	episodesWatched: number;
@@ -177,13 +186,18 @@ export class ZalipCatalogService {
 		};
 	}
 
-	public async listPublished(limit: number, genre?: string, kind?: ZalipWorkKind): Promise<PackedZalipWork[]> {
-		const normalizedGenre = genre?.trim();
-		if (normalizedGenre != null && normalizedGenre.length === 0) return [];
-		if (kind != null && !zalipWorkKinds.includes(kind)) return [];
+	public async listPublished(limit: number, filters: ZalipPublishedCatalogueFilters = {}): Promise<PackedZalipWork[]> {
+		const genres = Array.from(new Set((filters.genres ?? []).map(genre => genre.trim()).filter(genre => genre.length > 0)));
+		const kinds = Array.from(new Set(filters.kinds ?? []));
+		const normalizedQuery = filters.query?.trim() ?? '';
+		const yearFrom = filters.yearFrom;
+		const yearTo = filters.yearTo;
+
+		if (genres.length > 12 || kinds.length > zalipWorkKinds.length || kinds.some(kind => !zalipWorkKinds.includes(kind))) return [];
+		if (normalizedQuery.length > 100 || (yearFrom != null && yearTo != null && yearFrom > yearTo)) return [];
 
 		let works: MiZalipWork[];
-		if (normalizedGenre == null && kind == null) {
+		if (genres.length === 0 && kinds.length === 0 && normalizedQuery === '' && yearFrom == null && yearTo == null) {
 			works = await this.db.getRepository(MiZalipWork).find({
 				where: { publicationState: 'published' },
 				order: { publishedAt: 'DESC', createdAt: 'DESC' },
@@ -192,8 +206,14 @@ export class ZalipCatalogService {
 		} else {
 			const query = this.db.getRepository(MiZalipWork).createQueryBuilder('work')
 				.where('work.publicationState = :publicationState', { publicationState: 'published' });
-			if (normalizedGenre != null) query.andWhere('work.genres @> CAST(:genre AS jsonb)', { genre: JSON.stringify([normalizedGenre]) });
-			if (kind != null) query.andWhere('work.kind = :kind', { kind });
+			if (genres.length > 0) query.andWhere('work.genres @> CAST(:genres AS jsonb)', { genres: JSON.stringify(genres) });
+			if (kinds.length > 0) query.andWhere('work.kind IN (:...kinds)', { kinds });
+			if (normalizedQuery !== '') {
+				const pattern = `%${normalizedQuery.replace(/[\\%_]/g, '\\$&')}%`;
+				query.andWhere('(work.title ILIKE :pattern ESCAPE \'\\\' OR work.originalTitle ILIKE :pattern ESCAPE \'\\\')', { pattern });
+			}
+			if (yearFrom != null) query.andWhere('work.releaseYear >= :yearFrom', { yearFrom });
+			if (yearTo != null) query.andWhere('work.releaseYear <= :yearTo', { yearTo });
 			works = await query
 				.orderBy('work.publishedAt', 'DESC')
 				.addOrderBy('work.createdAt', 'DESC')

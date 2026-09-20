@@ -219,12 +219,14 @@ describe('ZalipCatalogService', () => {
 			{} as never,
 		);
 
-		await expect(service.listPublished(12, '  Драма  ', 'series')).resolves.toEqual([expect.objectContaining({
+		await expect(service.listPublished(12, { genres: ['  Драма  ', 'Криминал'], kinds: ['series'], query: 'Example', yearFrom: 2020, yearTo: 2030 })).resolves.toEqual([expect.objectContaining({
 			id: 'work-1',
 			genres: ['Драма'],
 		})]);
-		expect(query.andWhere).toHaveBeenCalledWith('work.genres @> CAST(:genre AS jsonb)', { genre: '["Драма"]' });
-		expect(query.andWhere).toHaveBeenCalledWith('work.kind = :kind', { kind: 'series' });
+		expect(query.andWhere).toHaveBeenCalledWith('work.genres @> CAST(:genres AS jsonb)', { genres: '["Драма","Криминал"]' });
+		expect(query.andWhere).toHaveBeenCalledWith('work.kind IN (:...kinds)', { kinds: ['series'] });
+		expect(query.andWhere).toHaveBeenCalledWith('work.releaseYear >= :yearFrom', { yearFrom: 2020 });
+		expect(query.andWhere).toHaveBeenCalledWith('work.releaseYear <= :yearTo', { yearTo: 2030 });
 		expect(query.take).toHaveBeenCalledWith(12);
 	});
 

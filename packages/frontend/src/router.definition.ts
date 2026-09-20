@@ -18,6 +18,7 @@ export const page = (loader: AsyncComponentLoader) => defineAsyncComponent({
 });
 
 const PageZalipHome = page(() => import('@/pages/zalip/index.vue'));
+const PageZalipCatalogue = page(() => import('@/pages/zalip/catalogue.vue'));
 
 function chatPage(...args: Parameters<typeof page>) {
 	return $i?.policies.chatAvailability !== 'unavailable' ? page(...args) : page(() => import('@/pages/not-found.vue'));
@@ -26,11 +27,19 @@ function chatPage(...args: Parameters<typeof page>) {
 export const ROUTE_DEF = [{
 	name: 'index',
 	path: '/',
-	query: {
-		genre: 'genre',
-		kind: 'kind',
-	},
 	component: PageZalipHome,
+}, {
+	path: '/catalog',
+	query: {
+		genres: 'genres',
+		types: 'types',
+		q: 'query',
+		yearFrom: 'yearFrom',
+		yearTo: 'yearTo',
+		sort: 'sort',
+		filters: 'filters',
+	},
+	component: PageZalipCatalogue,
 }, {
 	path: '/timeline',
 	component: PageTimeline,

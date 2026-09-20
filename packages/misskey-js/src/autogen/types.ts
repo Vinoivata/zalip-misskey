@@ -39419,8 +39419,13 @@ export interface operations {
                     /** @default 20 */
                     limit?: number;
                     genre?: string;
+                    genres?: string[];
                     /** @enum {string} */
                     kind?: 'movie' | 'series' | 'anime' | 'animation';
+                    kinds?: ('movie' | 'series' | 'anime' | 'animation')[];
+                    query?: string;
+                    yearFrom?: number;
+                    yearTo?: number;
                 };
             };
         };

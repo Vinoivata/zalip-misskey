@@ -128,6 +128,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</article>
 		</div>
 	</div>
+	<ZalipRatingDialog v-if="ratingDialogOpen" :initialRating="personalRating ?? 0" @save="savePersonalRating" @later="closeRatingDialog" @closed="closeRatingDialog"/>
 </PageWithHeader>
 </template>
 
@@ -138,6 +139,7 @@ import { i18n } from '@/i18n.js';
 import * as os from '@/os.js';
 import { definePage } from '@/page.js';
 import ZalipDiscussionPanel from '@/components/ZalipDiscussionPanel.vue';
+import ZalipRatingDialog from '@/components/ZalipRatingDialog.vue';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { pleaseLogin } from '@/utility/please-login.js';
 
@@ -226,6 +228,7 @@ const episodes = ref<ZalipEpisode[]>([]);
 const episodesPending = ref(false);
 const episodeRequestId = ref(0);
 const selectedEpisodeId = ref<string | null>(null);
+const ratingDialogOpen = ref(false);
 const selectedEpisode = computed(() => episodes.value.find(episode => episode.id === selectedEpisodeId.value) ?? null);
 
 const activeAllohaIframe = computed(() => {
@@ -292,7 +295,7 @@ function episodeLabel(episode: ZalipEpisode): string {
 }
 
 function genreLink(genre: string): string {
-	return `/?genre=${encodeURIComponent(genre)}`;
+	return `/catalog?genres=${encodeURIComponent(genre)}`;
 }
 
 function episodeMeta(episode: ZalipEpisode): string {
@@ -594,20 +597,17 @@ async function choosePersonalRating(): Promise<void> {
 		return;
 	}
 	if (saving.value) return;
-	const { canceled, result } = await os.select({
-		title: i18n.ts.zalip.ratingTitle,
-		default: personalRating.value ?? 0,
-		items: [
-			{ value: 0, label: i18n.ts.zalip.ratingClear },
-			...Array.from({ length: 10 }, (_, index) => {
-				const rating = index + 1;
-				return { value: rating, label: i18n.tsx.zalip.ratingValue({ rating: rating.toString() }) };
-			}),
-		],
-	});
-	if (canceled || result == null) return;
+	ratingDialogOpen.value = true;
+}
+
+function closeRatingDialog(): void {
+	ratingDialogOpen.value = false;
+}
+
+async function savePersonalRating(rating: number): Promise<void> {
+	if (saving.value) return;
 	const previousRating = personalRating.value;
-	personalRating.value = result === 0 ? null : result;
+	personalRating.value = rating;
 	try {
 		await updateLibrary({ personalRating: personalRating.value });
 	} catch {

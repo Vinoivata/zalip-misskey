@@ -12,7 +12,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<p :class="$style.eyebrow"><i class="ti ti-bookmark"></i> МОЯ БИБЛИОТЕКА</p>
 						<h1>Сохранённое</h1>
 					</div>
-					<MkA to="/" :class="$style.browse"><i class="ti ti-search"></i> Найти тайтл</MkA>
+					<MkA to="/catalog" :class="$style.browse"><i class="ti ti-search"></i> Найти тайтл</MkA>
 				</div>
 
 				<div v-if="pending" :class="$style.empty"><i class="ti ti-loader-2 ti-spin"></i> Загружаем библиотеку…</div>
@@ -20,7 +20,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<i class="ti ti-bookmark-off"></i>
 					<strong>Здесь пока пусто</strong>
 					<span>Добавляйте фильмы, сериалы и аниме — это сохранится в вашем обычном аккаунте Misskey.</span>
-					<MkA to="/" :class="$style.start">Перейти к каталогу</MkA>
+					<MkA to="/catalog" :class="$style.start">Перейти к каталогу</MkA>
 				</div>
 				<template v-else>
 					<section :class="$style.summary" aria-label="Статистика библиотеки">

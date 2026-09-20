@@ -5,9 +5,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div ref="rootEl" :class="$style.root">
-	<MkA :class="$style.item" :activeClass="$style.active" :aria-label="navbarItemDef.zalip.title" :title="navbarItemDef.zalip.title" to="/" exact>
+	<MkA :class="$style.item" :activeClass="$style.active" :aria-label="navbarItemDef.catalogue.title" :title="navbarItemDef.catalogue.title" to="/catalog">
 		<div :class="$style.itemInner">
-			<i :class="$style.itemIcon" class="ti ti-movie"></i><span :class="$style.itemText">{{ navbarItemDef.zalip.title }}</span>
+			<i :class="[$style.itemIcon, navbarItemDef.catalogue.icon]"></i><span :class="$style.itemText">{{ navbarItemDef.catalogue.title }}</span>
 		</div>
 	</MkA>
 

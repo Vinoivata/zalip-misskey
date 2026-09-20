@@ -48,8 +48,15 @@ export const paramDef = {
 	type: 'object',
 	properties: {
 		limit: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
+		/** @deprecated Use genres for one or more genre facets. */
 		genre: { type: 'string', minLength: 1, maxLength: 80 },
+		genres: { type: 'array', minItems: 1, maxItems: 12, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 80 } },
+		/** @deprecated Use kinds for one or more content formats. */
 		kind: { type: 'string', enum: zalipWorkKinds },
+		kinds: { type: 'array', minItems: 1, maxItems: zalipWorkKinds.length, uniqueItems: true, items: { type: 'string', enum: zalipWorkKinds } },
+		query: { type: 'string', minLength: 2, maxLength: 100 },
+		yearFrom: { type: 'integer', minimum: 1888, maximum: 2200 },
+		yearTo: { type: 'integer', minimum: 1888, maximum: 2200 },
 	},
 	required: [],
 } as const;
@@ -60,7 +67,13 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		private zalipCatalogService: ZalipCatalogService,
 	) {
 		super(meta, paramDef, async (ps) => {
-			return await this.zalipCatalogService.listPublished(ps.limit, ps.genre, ps.kind);
+			return await this.zalipCatalogService.listPublished(ps.limit, {
+				genres: [...(ps.genre ? [ps.genre] : []), ...(ps.genres ?? [])],
+				kinds: [...(ps.kind ? [ps.kind] : []), ...(ps.kinds ?? [])],
+				query: ps.query,
+				yearFrom: ps.yearFrom,
+				yearTo: ps.yearTo,
+			});
 		});
 	}
 }

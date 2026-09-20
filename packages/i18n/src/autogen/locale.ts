@@ -1661,6 +1661,58 @@ export interface Locale extends ILocale {
          * Без оценки
          */
         "ratingClear": string;
+        /**
+         * Оцени тайтл
+         */
+        "ratingDialogTitle": string;
+        /**
+         * Оценю потом
+         */
+        "ratingLater": string;
+        /**
+         * Оценить
+         */
+        "ratingSubmit": string;
+        /**
+         * Ужасно
+         */
+        "ratingAwful": string;
+        /**
+         * Плохо
+         */
+        "ratingBad": string;
+        /**
+         * Бездарность
+         */
+        "ratingTerrible": string;
+        /**
+         * Слабо
+         */
+        "ratingWeak": string;
+        /**
+         * Терпимо
+         */
+        "ratingTolerable": string;
+        /**
+         * Неплохо
+         */
+        "ratingNotBad": string;
+        /**
+         * Хорошо
+         */
+        "ratingGood": string;
+        /**
+         * Очень хорошо
+         */
+        "ratingVeryGood": string;
+        /**
+         * Отлично
+         */
+        "ratingExcellent": string;
+        /**
+         * Шедевр
+         */
+        "ratingMasterpiece": string;
     };
     /**
      * ホーム
