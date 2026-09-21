@@ -1657,11 +1657,16 @@ definePage(() => ({
 }
 
 .heroContent {
-	grid-template-columns: 176px minmax(0, 1fr);
+	grid-template-columns: 232px minmax(0, 1fr);
+	grid-template-rows: auto 1fr;
 	align-items: start;
 	gap: 24px;
 	min-height: 0;
 	padding: 24px;
+}
+
+.sidebar {
+	grid-row: 1 / span 2;
 }
 
 .poster {
@@ -1718,7 +1723,8 @@ definePage(() => ({
 }
 
 .description {
-	margin-top: 14px;
+	align-self: start;
+	margin-top: 0;
 	font-size: 0.86rem;
 	line-height: 1.55;
 }
@@ -1747,7 +1753,7 @@ definePage(() => ({
 	.page { padding: 12px 0 34px; }
 	.hero { border-radius: 0; }
 	.heroContent { display: grid; grid-template-columns: 108px minmax(0, 1fr); gap: 14px; padding: 18px var(--zalip-container-offset); }
-	.sidebar { display: block; }
+	.sidebar { display: block; grid-row: auto; }
 	.sidebarActions { grid-template-columns: 1fr; }
 	.watchButton, .sideButton { min-height: 36px; padding: 6px; font-size: 0.7rem; }
 	.quickActions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
