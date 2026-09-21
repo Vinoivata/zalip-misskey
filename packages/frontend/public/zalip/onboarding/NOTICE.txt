@@ -1,0 +1,6 @@
+The five onboarding WebP images in this directory were supplied to the Zalip
+project owner as part of the saved Ongaku reference pages and were added to
+this project at the owner's explicit request and authorization.
+
+Source reference: https://ongaku.one/
+Imported for the Zalip interface adaptation on 2026-09-21.

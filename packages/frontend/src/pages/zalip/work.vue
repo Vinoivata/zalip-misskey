@@ -85,7 +85,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<div :class="$style.seasonPicker"><span>Сезон</span><div><button v-for="season in work.seasons" :key="season.id" type="button" class="_button" :class="[$style.seasonPill, { [$style.selectedSeasonPill]: selectedSeasonNumber === season.seasonNumber }]" @click="selectSeason(season)">{{ season.seasonNumber === 0 ? 'Спец.' : season.seasonNumber }}</button></div></div>
 							<p v-if="episodesPending" :class="$style.episodeRailState"><i class="ti ti-loader-2 ti-spin"></i> Загружаем эпизоды…</p>
 							<p v-else-if="episodes.length === 0" :class="$style.episodeRailState">Список серий пока готовится редактором.</p>
-							<div v-else :class="$style.episodeRail" aria-label="Серии выбранного сезона">
+							<div v-else :class="$style.episodeRail" aria-label="Серии выбранного сезона" @pointerdown="episodeDrag.onPointerDown" @pointermove="episodeDrag.onPointerMove" @pointerup="episodeDrag.onPointerUp" @pointercancel="episodeDrag.onPointerCancel" @click.capture="episodeDrag.onClickCapture">
 								<button v-for="episode in episodes" :key="episode.id" type="button" class="_button" :class="[$style.episodeTile, { [$style.selectedEpisodeTile]: selectedEpisode?.id === episode.id }]" :aria-pressed="selectedEpisode?.id === episode.id" @click="selectEpisode(episode)">
 									<img v-if="episode.stillPath" :src="tmdbGalleryImage(episode.stillPath)" :alt="`Кадр: ${episodeLabel(episode)}`" loading="lazy">
 									<span v-else :class="$style.episodeTileFallback"><i class="ti ti-device-tv"></i></span>
@@ -140,6 +140,7 @@ import * as os from '@/os.js';
 import { definePage } from '@/page.js';
 import ZalipDiscussionPanel from '@/components/ZalipDiscussionPanel.vue';
 import ZalipRatingDialog from '@/components/ZalipRatingDialog.vue';
+import { useZalipHorizontalDrag } from '@/composables/use-zalip-horizontal-drag.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { pleaseLogin } from '@/utility/please-login.js';
 
@@ -229,6 +230,7 @@ const episodesPending = ref(false);
 const episodeRequestId = ref(0);
 const selectedEpisodeId = ref<string | null>(null);
 const ratingDialogOpen = ref(false);
+const episodeDrag = useZalipHorizontalDrag();
 const selectedEpisode = computed(() => episodes.value.find(episode => episode.id === selectedEpisodeId.value) ?? null);
 
 const activeAllohaIframe = computed(() => {
@@ -802,6 +804,10 @@ definePage(() => ({
 	scroll-margin-top: 72px;
 }
 
+.titleContent {
+	min-width: 0;
+}
+
 .kind {
 	margin: 5px 0 8px;
 	font-size: 0.78rem;
@@ -1155,6 +1161,18 @@ definePage(() => ({
 	overflow-x: auto;
 	padding-bottom: 2px;
 	scroll-snap-type: x proximity;
+	scrollbar-width: none;
+	cursor: grab;
+}
+
+.episodeRail::-webkit-scrollbar {
+	display: none;
+}
+
+.episodeRail[data-dragging='true'] {
+	scroll-snap-type: none;
+	cursor: grabbing;
+	user-select: none;
 }
 
 .episodeTile {

@@ -6,6 +6,7 @@
 	base: 'dark',
 	props: {
 		accent: '#9b6dff',
+		zalipOnboardingBg: '#323131',
 		accentedBg: ':alpha<0.17<@accent',
 		focus: ':alpha<0.36<@accent',
 		bg: '#0f0f0f',

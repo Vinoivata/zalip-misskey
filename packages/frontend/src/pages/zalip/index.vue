@@ -7,36 +7,47 @@ SPDX-License-Identifier: AGPL-3.0-only
 <PageWithHeader hideHeader>
 	<div class="_spacer" style="--MI_SPACER-w: 1180px;">
 		<div :class="$style.page">
-			<section :class="$style.hero">
-				<div>
-					<p :class="$style.eyebrow"><i class="ti ti-sparkles"></i> {{ i18n.ts.zalip.homeWelcomeEyebrow }}</p>
-					<h1>{{ i18n.ts.zalip.homeHeading }}</h1>
-					<p :class="$style.lead">{{ i18n.ts.zalip.homeDescription }}</p>
-					<div :class="$style.actions">
-						<MkA to="/catalog" :class="$style.primaryAction"><i class="ti ti-layout-grid"></i> Каталог</MkA>
-						<MkA to="/timeline" :class="$style.primaryAction"><i class="ti ti-news"></i> Открыть ленту</MkA>
-						<MkA to="/library" :class="$style.secondaryAction"><i class="ti ti-bookmark"></i> Моя библиотека</MkA>
-						<MkA v-if="iAmAdmin" to="/zalip/editor" :class="$style.secondaryAction"><i class="ti ti-pencil"></i> Редактор</MkA>
+			<section
+				:class="$style.onboarding"
+				aria-roledescription="carousel"
+				:aria-label="i18n.ts.zalip.onboardingLabel"
+				@mouseenter="pauseOnboardingForHover"
+				@mouseleave="resumeOnboardingAfterHover"
+				@focusin="pauseOnboardingForFocus"
+				@focusout="resumeOnboardingAfterFocus"
+				@pointerdown="beginOnboardingSwipe"
+				@pointermove="moveOnboardingSwipe"
+				@pointerup="endOnboardingSwipe"
+				@pointercancel="cancelOnboardingSwipe"
+			>
+				<div :class="$style.onboardingSlide" role="group" aria-roledescription="slide" :aria-label="i18n.tsx.zalip.onboardingSlideCounter({ current: (activeOnboardingIndex + 1).toString(), total: onboardingSlides.length.toString() })" :aria-live="onboardingPaused ? 'polite' : 'off'">
+					<div :class="$style.onboardingCopy">
+						<p :class="$style.onboardingEyebrow"><i :class="activeOnboarding.icon"></i> {{ i18n.ts.zalip.onboardingLabel }}</p>
+						<h1>{{ activeOnboarding.title }}</h1>
+						<MkA :to="activeOnboarding.to" :class="$style.onboardingAction">{{ activeOnboarding.action }}</MkA>
 					</div>
-					<form :class="$style.search" @submit.prevent="openSearch">
-						<i class="ti ti-search"></i>
-						<input v-model.trim="searchQuery" class="_input" type="search" minlength="2" maxlength="100" placeholder="Поиск фильмов, сериалов и аниме" aria-label="Поиск по каталогу">
-						<button v-if="searchQuery" type="button" class="_button" aria-label="Сбросить поиск" @click="searchQuery = ''"><i class="ti ti-x"></i></button>
-						<button type="submit" class="_button"><span>Найти</span></button>
-					</form>
+					<div :class="$style.onboardingArtwork">
+						<img :key="activeOnboarding.image" :src="activeOnboarding.image" alt="" draggable="false">
+					</div>
 				</div>
-				<div :class="$style.orb" aria-hidden="true">
-					<img v-if="showcaseItems[0]?.work.posterPath" :src="tmdbImage(showcaseItems[0].work.posterPath)" alt="">
-					<span v-else>Z</span>
+				<button type="button" class="_button" :class="$style.onboardingPlayback" :aria-label="onboardingPaused ? i18n.ts.zalip.onboardingResume : i18n.ts.zalip.onboardingPause" :aria-pressed="onboardingPaused" @click="toggleOnboardingAutoplay"><i :class="onboardingPaused ? 'ti ti-player-play-filled' : 'ti ti-player-pause-filled'"></i></button>
+				<button type="button" class="_button" :class="[$style.onboardingArrow, $style.onboardingArrowPrevious]" :aria-label="i18n.ts.zalip.onboardingPrevious" @click="showPreviousOnboarding"><i class="ti ti-chevron-left"></i></button>
+				<button type="button" class="_button" :class="[$style.onboardingArrow, $style.onboardingArrowNext]" :aria-label="i18n.ts.zalip.onboardingNext" @click="showNextOnboarding"><i class="ti ti-chevron-right"></i></button>
+				<div :class="$style.onboardingDots" role="group" :aria-label="i18n.ts.zalip.onboardingDots">
+					<button v-for="(_slide, index) in onboardingSlides" :key="index" type="button" class="_button" :class="{ [$style.onboardingDotActive]: index === activeOnboardingIndex }" :aria-label="i18n.tsx.zalip.onboardingDot({ number: (index + 1).toString() })" :aria-current="index === activeOnboardingIndex ? 'true' : undefined" @click="selectOnboarding(index)"></button>
 				</div>
 			</section>
 
 			<section v-if="showcaseItems.length" :class="$style.releases">
 				<div :class="$style.sectionHeader">
 					<div><p :class="$style.eyebrow">{{ showcaseEyebrow }}</p><h2>{{ showcaseTitle }}</h2></div>
-					<span :class="$style.count">{{ showcaseItems.length }} {{ isEpisodeShowcase ? i18n.ts.zalip.updatesLabel : i18n.ts.zalip.titlesLabel }}</span>
+					<div :class="$style.releaseControls">
+						<span :class="$style.count">{{ showcaseItems.length }} {{ isEpisodeShowcase ? i18n.ts.zalip.updatesLabel : i18n.ts.zalip.titlesLabel }}</span>
+						<button type="button" class="_button" :aria-label="i18n.ts.zalip.releaseRailPrevious" @click="scrollReleaseRail(-1)"><i class="ti ti-chevron-left"></i></button>
+						<button type="button" class="_button" :aria-label="i18n.ts.zalip.releaseRailNext" @click="scrollReleaseRail(1)"><i class="ti ti-chevron-right"></i></button>
+					</div>
 				</div>
-				<div :class="$style.releaseRail" role="list" :aria-label="showcaseTitle">
+				<div ref="releaseRail" :class="$style.releaseRail" role="list" :aria-label="showcaseTitle" @pointerdown="releaseDrag.onPointerDown" @pointermove="releaseDrag.onPointerMove" @pointerup="releaseDrag.onPointerUp" @pointercancel="releaseDrag.onPointerCancel" @click.capture="releaseDrag.onClickCapture">
 					<div v-for="item in showcaseItems" :key="item.id" :class="$style.releaseListItem" role="listitem">
 						<MkA :to="`/zalip/${item.work.slug}`" :class="$style.releaseCard">
 							<div :class="$style.releasePoster">
@@ -56,12 +67,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { definePage } from '@/page.js';
 import { i18n } from '@/i18n.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
-import { iAmAdmin } from '@/i.js';
-import { openZalipSearch } from '@/utility/zalip-search.js';
+import { useZalipHorizontalDrag } from '@/composables/use-zalip-horizontal-drag.js';
 
 type ZalipWork = {
 	id: string;
@@ -93,10 +103,57 @@ type ZalipShowcaseItem = {
 };
 
 type WorkKind = ZalipWork['kind'];
+
+const onboardingSlides = [
+	{
+		title: i18n.ts.zalip.onboardingLibraryTitle,
+		image: '/zalip/onboarding/1.webp',
+		icon: 'ti ti-bookmark',
+		to: '/library',
+		action: i18n.ts.zalip.onboardingLibraryAction,
+	},
+	{
+		title: i18n.ts.zalip.onboardingFriendsTitle,
+		image: '/zalip/onboarding/2.webp',
+		icon: 'ti ti-users',
+		to: '/timeline',
+		action: i18n.ts.zalip.onboardingFriendsAction,
+	},
+	{
+		title: i18n.ts.zalip.onboardingPostsTitle,
+		image: '/zalip/onboarding/3.webp',
+		icon: 'ti ti-pencil-plus',
+		to: '/timeline',
+		action: i18n.ts.zalip.onboardingPostsAction,
+	},
+	{
+		title: i18n.ts.zalip.onboardingDiscussionsTitle,
+		image: '/zalip/onboarding/4.webp',
+		icon: 'ti ti-messages',
+		to: '/timeline',
+		action: i18n.ts.zalip.onboardingDiscussionsAction,
+	},
+	{
+		title: i18n.ts.zalip.onboardingDiscoverTitle,
+		image: '/zalip/onboarding/5.webp',
+		icon: 'ti ti-search',
+		to: '/catalog',
+		action: i18n.ts.zalip.onboardingDiscoverAction,
+	},
+] as const;
+
 const works = ref<ZalipWork[]>([]);
 const releaseEvents = ref<ZalipReleaseEvent[]>([]);
 const releaseEventsLoaded = ref(false);
-const searchQuery = ref('');
+const activeOnboardingIndex = ref(0);
+const onboardingPaused = ref(false);
+const activeOnboarding = computed(() => onboardingSlides[activeOnboardingIndex.value]!);
+const releaseRail = ref<HTMLElement | null>(null);
+const releaseDrag = useZalipHorizontalDrag();
+let onboardingTimer: number | null = null;
+let onboardingSwipe: { pointerId: number; startX: number; startY: number } | null = null;
+let onboardingHovered = false;
+let onboardingFocused = false;
 const isEpisodeShowcase = computed(() => releaseEvents.value.length > 0);
 const showcaseItems = computed<ZalipShowcaseItem[]>(() => {
 	if (releaseEvents.value.length > 0) return releaseEvents.value.map(release => ({
@@ -148,13 +205,103 @@ async function loadHome(): Promise<void> {
 	}
 }
 
-function openSearch(): void {
-	openZalipSearch('catalogue', searchQuery.value.trim());
+function selectOnboarding(index: number): void {
+	activeOnboardingIndex.value = index;
+	startOnboardingAutoplay();
+}
+
+function showOnboarding(step: number): void {
+	activeOnboardingIndex.value = (activeOnboardingIndex.value + step + onboardingSlides.length) % onboardingSlides.length;
+}
+
+function showPreviousOnboarding(): void {
+	showOnboarding(-1);
+	startOnboardingAutoplay();
+}
+
+function showNextOnboarding(): void {
+	showOnboarding(1);
+	startOnboardingAutoplay();
+}
+
+function stopOnboardingAutoplay(): void {
+	if (onboardingTimer != null) window.clearInterval(onboardingTimer);
+	onboardingTimer = null;
+}
+
+function startOnboardingAutoplay(): void {
+	stopOnboardingAutoplay();
+	if (onboardingPaused.value || onboardingHovered || onboardingFocused || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+	onboardingTimer = window.setInterval(() => showOnboarding(1), 6500);
+}
+
+function pauseOnboardingForHover(): void {
+	onboardingHovered = true;
+	stopOnboardingAutoplay();
+}
+
+function resumeOnboardingAfterHover(): void {
+	onboardingHovered = false;
+	startOnboardingAutoplay();
+}
+
+function pauseOnboardingForFocus(): void {
+	onboardingFocused = true;
+	stopOnboardingAutoplay();
+}
+
+function resumeOnboardingAfterFocus(event: FocusEvent): void {
+	const section = event.currentTarget;
+	if (section instanceof HTMLElement && event.relatedTarget instanceof Node && section.contains(event.relatedTarget)) return;
+	onboardingFocused = false;
+	startOnboardingAutoplay();
+}
+
+function toggleOnboardingAutoplay(): void {
+	onboardingPaused.value = !onboardingPaused.value;
+	if (onboardingPaused.value) stopOnboardingAutoplay();
+	else startOnboardingAutoplay();
+}
+
+function beginOnboardingSwipe(event: PointerEvent): void {
+	if (event.button !== 0 || (event.target instanceof Element && event.target.closest('a, button'))) return;
+	onboardingSwipe = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY };
+	(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+	stopOnboardingAutoplay();
+}
+
+function moveOnboardingSwipe(event: PointerEvent): void {
+	if (onboardingSwipe == null || onboardingSwipe.pointerId !== event.pointerId) return;
+	const deltaX = Math.abs(event.clientX - onboardingSwipe.startX);
+	const deltaY = Math.abs(event.clientY - onboardingSwipe.startY);
+	if (deltaX > 8 && deltaX > deltaY) event.preventDefault();
+}
+
+function endOnboardingSwipe(event: PointerEvent): void {
+	if (onboardingSwipe == null || onboardingSwipe.pointerId !== event.pointerId) return;
+	const deltaX = event.clientX - onboardingSwipe.startX;
+	const deltaY = event.clientY - onboardingSwipe.startY;
+	if (Math.abs(deltaX) > 48 && Math.abs(deltaX) > Math.abs(deltaY)) showOnboarding(deltaX < 0 ? 1 : -1);
+	onboardingSwipe = null;
+	startOnboardingAutoplay();
+}
+
+function cancelOnboardingSwipe(): void {
+	onboardingSwipe = null;
+	startOnboardingAutoplay();
+}
+
+function scrollReleaseRail(direction: -1 | 1): void {
+	if (releaseRail.value == null) return;
+	releaseRail.value.scrollBy({ left: direction * Math.max(280, releaseRail.value.clientWidth * 0.72), behavior: 'smooth' });
 }
 
 onMounted(() => {
 	void loadHome();
+	startOnboardingAutoplay();
 });
+
+onBeforeUnmount(stopOnboardingAutoplay);
 
 definePage(() => ({
 	title: 'Zalip',
@@ -165,20 +312,6 @@ definePage(() => ({
 <style lang="scss" module>
 .page {
 	padding: 24px var(--MI-margin) 52px;
-}
-
-.hero {
-	position: relative;
-	overflow: hidden;
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) 180px;
-	gap: 24px;
-	padding: 36px;
-	border: 1px solid color-mix(in srgb, var(--MI_THEME-accent) 30%, var(--MI_THEME-divider));
-	border-radius: 24px;
-	background:
-		radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--MI_THEME-accent) 28%, transparent), transparent 48%),
-		var(--MI_THEME-panel);
 }
 
 .eyebrow {
@@ -192,101 +325,152 @@ definePage(() => ({
 	color: var(--MI_THEME-accent);
 }
 
-.hero h1 {
-	margin: 0;
-	font-size: clamp(2rem, 6vw, 3.7rem);
-	line-height: 1.04;
-	letter-spacing: -0.04em;
+.onboarding {
+	position: relative;
+	overflow: hidden;
+	min-height: 360px;
+	border-radius: var(--zalip-radius-big);
+	background: var(--MI_THEME-zalipOnboardingBg, var(--MI_THEME-panel));
+	touch-action: pan-y;
 }
 
-.hero h1 em {
-	font-style: normal;
-	color: var(--MI_THEME-accent);
+.onboardingSlide {
+	display: grid;
+	grid-template-columns: minmax(0, 0.86fr) minmax(340px, 1.14fr);
+	min-height: 360px;
 }
 
-.lead {
-	max-width: 590px;
-	margin: 18px 0 0;
-	line-height: 1.6;
-	color: var(--MI_THEME-fgTransparentWeak);
-}
-
-.actions {
+.onboardingCopy {
+	position: relative;
+	z-index: 1;
 	display: flex;
-	flex-wrap: wrap;
-	gap: 10px;
-	margin-top: 24px;
+	flex-direction: column;
+	align-items: flex-start;
+	justify-content: center;
+	padding: 44px 22px 50px 36px;
 }
 
-.search {
+.onboardingEyebrow {
 	display: flex;
 	align-items: center;
-	gap: 8px;
-	max-width: 640px;
-	margin-top: 24px;
-	padding: 6px 7px 6px 14px;
-	border: 1px solid var(--MI_THEME-divider);
-	border-radius: 999px;
-	background: color-mix(in srgb, var(--MI_THEME-bg) 35%, var(--MI_THEME-panel));
-	color: var(--MI_THEME-fgTransparentWeak);
+	gap: 7px;
+	margin: 0 0 12px;
+	color: var(--MI_THEME-accent);
+	font-size: 0.76rem;
+	font-weight: 800;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
 }
 
-.search input {
-	min-width: 0;
-	flex: 1;
-	padding: 7px 0;
-	border: 0;
-	background: transparent;
+.onboardingCopy h1 {
+	max-width: 470px;
+	margin: 0;
+	font-size: clamp(1.5rem, 3vw, 2.2rem);
+	line-height: 1.16;
+	letter-spacing: -0.025em;
 }
 
-.search button {
+.onboardingAction {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	min-height: 34px;
-	padding: 0 11px;
-	border-radius: 999px;
-	background: var(--MI_THEME-panelHighlight);
-	color: var(--MI_THEME-fg);
-	font-weight: 700;
-}
-
-.search button:last-child {
-	background: var(--MI_THEME-accent);
-	color: var(--MI_THEME-fgOnAccent);
-}
-
-.primaryAction, .secondaryAction {
-	display: inline-flex;
-	align-items: center;
-	gap: 8px;
-	padding: 10px 14px;
-	border-radius: 999px;
-	font-weight: 700;
+	min-width: 168px;
+	min-height: 46px;
+	margin-top: 24px;
+	padding: 0 22px;
+	border-radius: var(--zalip-radius);
+	background: var(--MI_THEME-fg);
+	color: var(--MI_THEME-bg);
+	font-weight: 800;
 	text-decoration: none;
 }
 
-.primaryAction {
+.onboardingAction:hover,
+.onboardingAction:focus-visible {
 	background: var(--MI_THEME-accent);
 	color: var(--MI_THEME-fgOnAccent);
+	text-decoration: none;
 }
 
-.secondaryAction {
-	background: var(--MI_THEME-panelHighlight);
+.onboardingArtwork {
+	display: flex;
+	align-items: flex-end;
+	justify-content: center;
+	min-width: 0;
+	padding: 16px 24px 0 0;
+}
+
+.onboardingArtwork img {
+	display: block;
+	width: 100%;
+	max-height: 344px;
+	object-fit: contain;
+	object-position: center bottom;
+	user-select: none;
+}
+
+.onboardingArrow {
+	position: absolute;
+	z-index: 2;
+	top: 50%;
+	display: grid;
+	place-items: center;
+	width: 38px;
+	height: 38px;
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--MI_THEME-bg) 84%, transparent);
+	box-shadow: 0 4px 16px color-mix(in srgb, var(--MI_THEME-shadow) 28%, transparent);
+	color: var(--MI_THEME-fg);
+	transform: translateY(-50%);
+}
+
+.onboardingArrowPrevious { left: 10px; }
+.onboardingArrowNext { right: 10px; }
+
+.onboardingPlayback {
+	position: absolute;
+	z-index: 3;
+	top: 12px;
+	right: 12px;
+	display: grid;
+	place-items: center;
+	width: 34px;
+	height: 34px;
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--MI_THEME-bg) 84%, transparent);
 	color: var(--MI_THEME-fg);
 }
 
-.orb {
-	align-self: center;
+.onboardingDots {
+	position: absolute;
+	z-index: 2;
+	bottom: 16px;
+	left: 36px;
+	display: flex;
+	align-items: center;
+	gap: 0;
+}
+
+.onboardingDots button {
 	display: grid;
 	place-items: center;
-	width: 150px;
-	aspect-ratio: 1;
-	border-radius: 50%;
-	background: linear-gradient(145deg, color-mix(in srgb, var(--MI_THEME-accent) 78%, white), var(--MI_THEME-accent));
-	box-shadow: 0 22px 52px color-mix(in srgb, var(--MI_THEME-accent) 35%, transparent);
-	color: var(--MI_THEME-fgOnAccent);
-	font-size: 3rem;
+	width: 24px;
+	height: 24px;
+	background: transparent;
+}
+
+.onboardingDots button::before {
+	width: 7px;
+	height: 7px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--MI_THEME-fg) 28%, transparent);
+	transition: width 0.18s ease, background 0.18s ease;
+	content: '';
+}
+
+.onboardingDots .onboardingDotActive::before {
+	width: 20px;
+	background: var(--MI_THEME-accent);
 }
 
 .catalogue {
@@ -313,6 +497,28 @@ definePage(() => ({
 .count {
 	color: var(--MI_THEME-fgTransparentWeak);
 	font-size: 0.85rem;
+}
+
+.releaseControls {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+}
+
+.releaseControls button {
+	display: grid;
+	place-items: center;
+	width: 34px;
+	height: 34px;
+	border-radius: var(--zalip-radius);
+	background: var(--MI_THEME-panelHighlight);
+	color: var(--MI_THEME-fg);
+}
+
+.releaseControls button:hover,
+.releaseControls button:focus-visible {
+	background: var(--MI_THEME-accent);
+	color: var(--MI_THEME-fgOnAccent);
 }
 
 .catalogueMeta {
@@ -480,10 +686,21 @@ definePage(() => ({
 	gap: 12px;
 	overflow-x: auto;
 	overflow-y: hidden;
-	padding: 1px 1px 10px;
+	padding: 1px;
 	scroll-padding-inline: 1px;
 	scroll-snap-type: x proximity;
-	scrollbar-color: color-mix(in srgb, var(--MI_THEME-accent) 55%, transparent) transparent;
+	scrollbar-width: none;
+	cursor: grab;
+}
+
+.releaseRail::-webkit-scrollbar {
+	display: none;
+}
+
+.releaseRail[data-dragging='true'] {
+	scroll-snap-type: none;
+	cursor: grabbing;
+	user-select: none;
 }
 
 .releaseListItem {
@@ -655,17 +872,56 @@ definePage(() => ({
 		padding-top: 12px;
 	}
 
-	.hero {
+	.onboarding {
+		min-height: 540px;
+	}
+
+	.onboardingSlide {
 		grid-template-columns: 1fr;
-		padding: 28px 22px;
+		grid-template-rows: auto minmax(270px, 1fr);
+		min-height: 540px;
 	}
 
-	.search {
-		margin-top: 20px;
+	.onboardingCopy {
+		position: static;
+		padding: 24px 22px 12px;
 	}
 
-	.orb {
-		display: none;
+	.onboardingCopy h1 {
+		font-size: 1.35rem;
+		line-height: 1.25;
+	}
+
+	.onboardingAction {
+		position: absolute;
+		right: 18px;
+		bottom: 16px;
+		left: 18px;
+		min-height: 48px;
+		margin: 0;
+	}
+
+	.onboardingArtwork {
+		align-items: center;
+		padding: 0 20px 72px;
+	}
+
+	.onboardingArtwork img {
+		max-height: 310px;
+	}
+
+	.onboardingArrow {
+		top: auto;
+		bottom: 75px;
+		width: 34px;
+		height: 34px;
+		transform: none;
+	}
+
+	.onboardingDots {
+		bottom: 72px;
+		left: 50%;
+		transform: translateX(-50%);
 	}
 
 	.grid {
@@ -680,6 +936,10 @@ definePage(() => ({
 
 	.releaseListItem {
 		flex-basis: 142px;
+	}
+
+	.releaseControls .count {
+		display: none;
 	}
 
 	.catalogueControls {
@@ -701,60 +961,6 @@ definePage(() => ({
 	max-width: 960px;
 	margin: 0 auto;
 	padding: 22px var(--MI-margin) 64px;
-}
-
-.hero {
-	grid-template-columns: minmax(0, 1fr) 132px;
-	min-height: 250px;
-	align-items: center;
-	padding: 28px 30px;
-	border-color: var(--MI_THEME-divider);
-	border-radius: var(--zalip-radius-big);
-	background: var(--MI_THEME-panel);
-}
-
-.hero h1 {
-	font-size: clamp(1.75rem, 4vw, 2.65rem);
-	line-height: 1.08;
-}
-
-.lead {
-	margin-top: 12px;
-	font-size: 0.92rem;
-}
-
-.actions {
-	margin-top: 18px;
-}
-
-.search {
-	margin-top: 18px;
-	border-radius: var(--zalip-radius);
-	background: var(--MI_THEME-bg);
-}
-
-.orb {
-	width: 132px;
-	height: 196px;
-	align-self: end;
-	overflow: hidden;
-	border-radius: var(--zalip-radius);
-	background: var(--MI_THEME-panelHighlight);
-	box-shadow: none;
-}
-
-.orb img {
-	display: block;
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-}
-
-.orb span {
-	font-size: 3.8rem;
-	font-weight: 950;
-	letter-spacing: -0.12em;
-	color: var(--MI_THEME-accent);
 }
 
 .releases {
@@ -789,8 +995,6 @@ definePage(() => ({
 
 @media (max-width: 767px) {
 	.page { padding: 14px var(--MI-margin) 36px; }
-	.hero { grid-template-columns: 1fr; padding: 22px 18px; }
-	.orb { display: none; }
 	.releaseListItem { flex-basis: 138px; }
 }
 </style>

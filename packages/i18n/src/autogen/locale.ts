@@ -1290,6 +1290,86 @@ export interface Locale extends ILocale {
          */
         "homeDescription": string;
         /**
+         * Возможности Zalip
+         */
+        "onboardingLabel": string;
+        /**
+         * {current} из {total}
+         */
+        "onboardingSlideCounter": ParameterizedString<"current" | "total">;
+        /**
+         * Предыдущий слайд
+         */
+        "onboardingPrevious": string;
+        /**
+         * Следующий слайд
+         */
+        "onboardingNext": string;
+        /**
+         * Выбор слайда
+         */
+        "onboardingDots": string;
+        /**
+         * Слайд {number}
+         */
+        "onboardingDot": ParameterizedString<"number">;
+        /**
+         * Приостановить слайдер
+         */
+        "onboardingPause": string;
+        /**
+         * Продолжить слайдер
+         */
+        "onboardingResume": string;
+        /**
+         * Ведите списки фильмов, сериалов и аниме: отмечайте, что смотрите или планируете
+         */
+        "onboardingLibraryTitle": string;
+        /**
+         * Начать
+         */
+        "onboardingLibraryAction": string;
+        /**
+         * Будьте в курсе, что смотрят друзья, какие оценки ставят и отзывы пишут
+         */
+        "onboardingFriendsTitle": string;
+        /**
+         * Открыть ленту
+         */
+        "onboardingFriendsAction": string;
+        /**
+         * Публикуйте записи, делитесь впечатлениями, мемами и артами с другими пользователями
+         */
+        "onboardingPostsTitle": string;
+        /**
+         * Создать запись
+         */
+        "onboardingPostsAction": string;
+        /**
+         * Вступайте в обсуждения — отвечайте и комментируйте чужие посты
+         */
+        "onboardingDiscussionsTitle": string;
+        /**
+         * К обсуждениям
+         */
+        "onboardingDiscussionsAction": string;
+        /**
+         * Открывайте для себя новые тайтлы с удобным поиском
+         */
+        "onboardingDiscoverTitle": string;
+        /**
+         * Открыть каталог
+         */
+        "onboardingDiscoverAction": string;
+        /**
+         * Прокрутить назад
+         */
+        "releaseRailPrevious": string;
+        /**
+         * Прокрутить вперёд
+         */
+        "releaseRailNext": string;
+        /**
          * Смотреть
          */
         "watchTitle": string;

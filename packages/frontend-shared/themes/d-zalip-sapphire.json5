@@ -5,7 +5,8 @@
 	desc: 'Контрастная ночная тема Zalip с холодным синим акцентом.',
 	base: 'dark',
 	props: {
-		accent: '#4f7dff',
+		accent: '#0179ff',
+		zalipOnboardingBg: '#323131',
 		accentedBg: ':alpha<0.17<@accent',
 		focus: ':alpha<0.36<@accent',
 		bg: '#0f0f0f',

@@ -5,7 +5,8 @@
 	desc: 'Светлая тема Zalip с чистыми поверхностями и синим акцентом.',
 	base: 'light',
 	props: {
-		accent: '#3d68e8',
+		accent: '#0179ff',
+		zalipOnboardingBg: '#c2e7ff',
 		accentedBg: ':alpha<0.13<@accent',
 		focus: ':alpha<0.28<@accent',
 		bg: '#f0f0f0',

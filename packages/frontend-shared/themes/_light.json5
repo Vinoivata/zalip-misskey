@@ -10,6 +10,7 @@
 
 	props: {
 		accent: '#86b300',
+		zalipOnboardingBg: '@panel',
 		accentedBg: ':alpha<0.15<@accent',
 		love: '#dd2e44',
 		focus: ':alpha<0.3<@accent',
