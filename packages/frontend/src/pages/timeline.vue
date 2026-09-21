@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <PageWithHeader v-model:tab="src" :actions="headerActions" :tabs="$i ? headerTabs : headerTabsWhenNotLogin" :swipable="true" :displayMyAvatar="true" :canOmitTitle="true">
-	<div class="_spacer" style="--MI_SPACER-w: 800px;">
+	<div class="_spacer" style="--MI_SPACER-w: 640px;">
 		<MkTip v-if="isBasicTimeline(src)" :k="`tl.${src}`" style="margin-bottom: var(--MI-margin);">
 			{{ i18n.ts._timelineDescription[src] }}
 		</MkTip>
@@ -285,16 +285,16 @@ definePage(() => ({
 
 .postForm {
 	border: 1px solid var(--MI_THEME-divider);
-	border-radius: 20px;
+	border-radius: var(--zalip-radius-big);
 	background: var(--MI_THEME-panel);
 	box-shadow: none;
 }
 
 .tl {
-	background: var(--MI_THEME-panel);
-	border: 1px solid var(--MI_THEME-divider);
-	border-radius: 20px;
-	overflow: clip;
+	background: transparent;
+	border: 0;
+	border-radius: 0;
+	overflow: visible;
 }
 
 @media (max-width: 600px) {

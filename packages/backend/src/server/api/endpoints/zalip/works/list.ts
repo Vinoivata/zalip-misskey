@@ -6,7 +6,7 @@
 import { Injectable } from '@nestjs/common';
 import { zalipWorkKinds } from '@/models/ZalipWork.js';
 import { Endpoint } from '@/server/api/endpoint-base.js';
-import { ZalipCatalogService } from '@/core/ZalipCatalogService.js';
+import { zalipCatalogueGenreLimit, ZalipCatalogService } from '@/core/ZalipCatalogService.js';
 
 const workSchema = {
 	type: 'object',
@@ -50,7 +50,7 @@ export const paramDef = {
 		limit: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
 		/** @deprecated Use genres for one or more genre facets. */
 		genre: { type: 'string', minLength: 1, maxLength: 80 },
-		genres: { type: 'array', minItems: 1, maxItems: 12, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 80 } },
+		genres: { type: 'array', minItems: 1, maxItems: zalipCatalogueGenreLimit, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 80 } },
 		/** @deprecated Use kinds for one or more content formats. */
 		kind: { type: 'string', enum: zalipWorkKinds },
 		kinds: { type: 'array', minItems: 1, maxItems: zalipWorkKinds.length, uniqueItems: true, items: { type: 'string', enum: zalipWorkKinds } },
@@ -68,7 +68,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 	) {
 		super(meta, paramDef, async (ps) => {
 			return await this.zalipCatalogService.listPublished(ps.limit, {
-				genres: [...(ps.genre ? [ps.genre] : []), ...(ps.genres ?? [])],
+				genres: Array.from(new Set([...(ps.genre ? [ps.genre] : []), ...(ps.genres ?? [])])).slice(0, zalipCatalogueGenreLimit),
 				kinds: [...(ps.kind ? [ps.kind] : []), ...(ps.kinds ?? [])],
 				query: ps.query,
 				yearFrom: ps.yearFrom,

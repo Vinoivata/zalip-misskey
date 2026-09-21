@@ -7,8 +7,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 <div ref="rootEl" :class="reversed ? '_pageScrollableReversed' : '_pageScrollable'">
 	<MkStickyContainer>
 		<template #header>
-			<MkPageHeader v-if="prefer.s.showPageTabBarBottom && (props.tabs?.length ?? 0) > 0" v-bind="pageHeaderPropsWithoutTabs"/>
-			<MkPageHeader v-else v-model:tab="tab" v-bind="pageHeaderProps"/>
+			<MkPageHeader v-if="!props.hideHeader && prefer.s.showPageTabBarBottom && (props.tabs?.length ?? 0) > 0" v-bind="pageHeaderPropsWithoutTabs"/>
+			<MkPageHeader v-else-if="!props.hideHeader" v-model:tab="tab" v-bind="pageHeaderProps"/>
 		</template>
 		<div :class="$style.body">
 			<MkSwiper v-if="prefer.s.enableHorizontalSwipe && swipable && (props.tabs?.length ?? 1) > 1" v-model:tab="tab" :class="$style.swiper" :tabs="props.tabs ?? []">
@@ -39,18 +39,20 @@ import MkTabs from '@/components/MkTabs.vue';
 const props = withDefaults(defineProps<PageHeaderProps & {
 	reversed?: boolean;
 	swipable?: boolean;
+	hideHeader?: boolean;
 }>(), {
 	reversed: false,
 	swipable: true,
+	hideHeader: false,
 });
 
 const pageHeaderProps = computed(() => {
-	const { reversed, tab, ...rest } = props;
+	const { reversed, tab, hideHeader, ...rest } = props;
 	return rest;
 });
 
 const pageHeaderPropsWithoutTabs = computed(() => {
-	const { reversed, tabs, ...rest } = props;
+	const { reversed, tabs, hideHeader, ...rest } = props;
 	return rest;
 });
 

@@ -4,14 +4,18 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<PageWithHeader>
+<PageWithHeader hideHeader>
 	<div class="_spacer" style="--MI_SPACER-w: 1320px;">
 		<main :class="$style.page">
 			<header :class="$style.heading">
 				<div>
-					<p :class="$style.eyebrow"><i class="ti ti-layout-grid"></i> ZALIP CATALOGUE</p>
-					<h1>Каталог кино</h1>
-					<p>Фильмы, сериалы и анимация — с фильтрами, которые можно комбинировать.</p>
+					<p :class="$style.eyebrow"><i class="ti ti-layout-grid"></i> {{ i18n.ts.zalip.catalogueEyebrow }}</p>
+					<h1>{{ i18n.ts.zalip.catalogueHeading }}</h1>
+					<p>{{ i18n.ts.zalip.catalogueDescription }}</p>
+					<div :class="$style.categoryTabs" role="group" :aria-label="i18n.ts.zalip.catalogueKinds">
+						<button type="button" class="_button" :class="{ [$style.categoryActive]: selectedKinds.length === 0 }" :aria-pressed="selectedKinds.length === 0" @click="selectCategory()">{{ i18n.ts.zalip.catalogueAllKinds }}</button>
+						<button v-for="kind in kinds" :key="kind" type="button" class="_button" :class="{ [$style.categoryActive]: selectedKinds.length === 1 && selectedKinds[0] === kind }" :aria-pressed="selectedKinds.length === 1 && selectedKinds[0] === kind" @click="selectCategory(kind)">{{ kindLabel(kind) }}</button>
+					</div>
 				</div>
 				<form :class="$style.search" @submit.prevent="applySearch">
 					<i class="ti ti-search"></i>
@@ -46,11 +50,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</section>
 
 					<section :class="$style.filterSection">
-						<div :class="$style.filterLabel"><span>Жанры</span><small>{{ selectedGenres.length }}/12</small></div>
+						<div :class="$style.filterLabel"><span>Жанры</span><small>{{ selectedGenres.length }}/24</small></div>
 						<label :class="$style.genreSearch"><i class="ti ti-search"></i><input v-model.trim="genreSearch" class="_input" type="search" placeholder="Найти жанр"></label>
 						<div v-if="genresPending" :class="$style.genreLoading"><i class="ti ti-loader-2 ti-spin"></i> Загружаем жанры</div>
 						<div v-else :class="$style.genreOptions" role="list">
-							<button v-for="genre in displayedGenres" :key="genre" type="button" class="_button" :class="[$style.genreOption, { [$style.optionActive]: selectedGenres.includes(genre) }]" :aria-pressed="selectedGenres.includes(genre)" :disabled="!selectedGenres.includes(genre) && selectedGenres.length >= 12" @click="toggleGenre(genre)"><i :class="selectedGenres.includes(genre) ? 'ti ti-check' : 'ti ti-plus'"></i>{{ genre }}</button>
+							<button v-for="genre in displayedGenres" :key="genre" type="button" class="_button" :class="[$style.genreOption, { [$style.optionActive]: selectedGenres.includes(genre) }]" :aria-pressed="selectedGenres.includes(genre)" :disabled="!selectedGenres.includes(genre) && selectedGenres.length >= 24" @click="toggleGenre(genre)"><i :class="selectedGenres.includes(genre) ? 'ti ti-check' : 'ti ti-plus'"></i>{{ genre }}</button>
 						</div>
 						<button v-if="shouldOfferMoreGenres" type="button" class="_button" :class="$style.moreGenres" @click="showAllGenres = !showAllGenres">{{ showAllGenres ? 'Свернуть' : `Показать ещё ${matchingGenres.length - DISPLAYED_GENRES}` }}<i :class="showAllGenres ? 'ti ti-chevron-up' : 'ti ti-chevron-down'"></i></button>
 					</section>
@@ -95,6 +99,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script lang="ts" setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import { definePage } from '@/page.js';
+import { i18n } from '@/i18n.js';
 import { useRouter } from '@/router.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 
@@ -157,7 +162,7 @@ const genreSearch = ref('');
 const showAllGenres = ref(false);
 let latestRequest = 0;
 
-const selectedGenres = computed(() => parseList(props.genres, 12));
+const selectedGenres = computed(() => parseList(props.genres, 24));
 const selectedKinds = computed(() => parseList(props.types, kinds.length).filter((kind): kind is WorkKind => kinds.includes(kind as WorkKind)));
 const query = computed(() => props.query.trim());
 const yearFrom = computed(() => parseYear(props.yearFrom));
@@ -238,9 +243,13 @@ function toggleKind(kind: WorkKind): void {
 	navigate({ types: next.join(',') });
 }
 
+function selectCategory(kind?: WorkKind): void {
+	navigate({ types: kind ?? '' });
+}
+
 function toggleGenre(genre: string): void {
 	const selected = selectedGenres.value;
-	if (!selected.includes(genre) && selected.length >= 12) return;
+	if (!selected.includes(genre) && selected.length >= 24) return;
 	const next = selected.includes(genre) ? selected.filter(item => item !== genre) : [...selected, genre];
 	navigate({ genres: next.join(',') });
 }
@@ -415,5 +424,243 @@ definePage(() => ({ title: 'Каталог', icon: 'ti ti-layout-grid' }));
 	.search input::placeholder { font-size: 0.76rem; }
 	.toolbar h2 { font-size: 1.18rem; }
 	.openFilters span { display: none; }
+}
+
+/* Ongaku catalogue geometry and control density. */
+.page {
+	max-width: 1328px;
+	margin: 0 auto;
+	padding: 30px var(--zalip-container-offset) 56px;
+}
+
+.heading {
+	display: block;
+	margin-bottom: 24px;
+}
+
+.heading > div {
+	max-width: var(--zalip-content-max-width);
+}
+
+.heading h1 {
+	font-size: 2rem;
+	letter-spacing: -0.025em;
+}
+
+.heading p:not(.eyebrow) {
+	margin-top: 6px;
+	font-size: 0.86rem;
+}
+
+.categoryTabs {
+	display: flex;
+	gap: 8px;
+	margin-top: 18px;
+	overflow-x: auto;
+	padding-bottom: 2px;
+}
+
+.categoryTabs button {
+	flex: 0 0 auto;
+	height: 32px;
+	padding: 0 15px;
+	border: 1px solid transparent;
+	border-radius: 16px;
+	background: var(--MI_THEME-panelHighlight);
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.8rem;
+	font-weight: 650;
+}
+
+.categoryTabs .categoryActive {
+	border-color: var(--MI_THEME-fg);
+	color: var(--MI_THEME-fg);
+}
+
+.heading .search {
+	max-width: var(--zalip-content-max-width);
+	margin-top: 18px;
+	border-radius: var(--zalip-radius);
+}
+
+.catalogueLayout {
+	grid-template-columns: minmax(0, var(--zalip-content-max-width)) var(--zalip-aside-width);
+	grid-template-areas: "results filters";
+	gap: 24px;
+	justify-content: center;
+}
+
+.results { grid-area: results; }
+.filters { grid-area: filters; }
+
+.filters {
+	top: 16px;
+	padding: 18px 16px;
+	border: 0;
+	border-radius: var(--zalip-radius-big);
+	background: var(--MI_THEME-panel);
+}
+
+.filtersHeading {
+	padding-bottom: 14px;
+	border-bottom: 0;
+}
+
+.filtersHeading p {
+	display: none;
+}
+
+.filtersHeading strong {
+	font-size: 1.12rem;
+}
+
+.filterSection {
+	padding: 16px 0;
+	border-top: 1px solid var(--MI_THEME-divider);
+	border-bottom: 0;
+}
+
+.filterLabel {
+	margin-bottom: 12px;
+	font-size: 0.9rem;
+}
+
+.kindGrid, .genreOptions {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 2px;
+}
+
+.kindOption, .genreOption {
+	justify-content: flex-start;
+	min-height: 36px;
+	padding: 5px 7px;
+	border: 0;
+	border-radius: var(--zalip-radius-small);
+	background: transparent;
+	color: var(--MI_THEME-fg);
+	font-size: 0.82rem;
+}
+
+.kindOption > i, .genreOption > i {
+	display: grid;
+	place-items: center;
+	width: 22px;
+	height: 22px;
+	border-radius: 6px;
+	background: var(--MI_THEME-panelHighlight);
+	color: transparent;
+	font-size: 0.72rem;
+}
+
+.kindOption.optionActive, .genreOption.optionActive {
+	background: var(--MI_THEME-panelHighlight);
+	color: var(--MI_THEME-fg);
+}
+
+.kindOption.optionActive > i, .genreOption.optionActive > i {
+	background: var(--MI_THEME-accent);
+	color: var(--MI_THEME-fgOnAccent);
+}
+
+.genreSearch, .yearRange input {
+	background: var(--MI_THEME-panelHighlight);
+}
+
+.genreSearch {
+	height: 38px;
+	box-sizing: border-box;
+	border-radius: var(--zalip-radius);
+}
+
+.toolbar {
+	min-height: 42px;
+	margin-bottom: 14px;
+}
+
+.toolbar .eyebrow {
+	display: none;
+}
+
+.toolbar h2 {
+	font-size: 1.25rem;
+}
+
+.sort {
+	height: 38px;
+	box-sizing: border-box;
+	border: 0;
+	border-radius: var(--zalip-radius);
+	background: var(--MI_THEME-panelHighlight);
+}
+
+.grid {
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 20px 16px;
+}
+
+.poster {
+	border-radius: var(--zalip-radius-small);
+	background: var(--MI_THEME-panelHighlight);
+}
+
+.cardKind {
+	right: auto;
+	bottom: 6px;
+	left: 6px;
+	border-radius: 12px;
+	background: color-mix(in srgb, var(--MI_THEME-bg) 88%, transparent);
+}
+
+.cardBody {
+	padding: 7px 0 0;
+}
+
+.cardBody p {
+	display: none;
+}
+
+.cardBody h3 {
+	margin-top: 0;
+	font-size: 0.86rem;
+	font-weight: 650;
+}
+
+.cardBody > span, .cardGenres {
+	display: none;
+}
+
+@media (max-width: 1180px) {
+	.catalogueLayout {
+		grid-template-columns: minmax(0, 1fr) 300px;
+	}
+}
+
+@media (max-width: 980px) {
+	.catalogueLayout { display: block; }
+	.filters { position: fixed; z-index: 2000; inset: 0; display: none; overflow: auto; border-radius: 0; }
+	.filtersOpen { display: block; }
+	.closeFilters, .openFilters { display: inline-flex; }
+	.grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@media (max-width: 767px) {
+	.page { padding: 18px var(--zalip-container-offset) 40px; }
+	.heading h1 { font-size: 1.55rem; }
+	.heading p:not(.eyebrow) { display: none; }
+	.heading .search { display: none; }
+	.categoryTabs { margin-right: calc(var(--zalip-container-offset) * -1); padding-right: var(--zalip-container-offset); }
+	.toolbar { align-items: center; }
+	.grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px 10px; }
+	.poster { border-radius: 8px; }
+	.cardBody h3 { font-size: 0.78rem; }
+}
+
+@media (max-width: 420px) {
+	.grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap-inline: 8px; }
+	.toolbar h2 { display: none; }
+	.toolbarActions { width: 100%; justify-content: space-between; }
+	.sort { flex: 1; }
+	.cardKind { padding: 3px 5px; font-size: 0.58rem; }
 }
 </style>

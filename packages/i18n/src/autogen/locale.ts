@@ -1274,6 +1274,22 @@ export interface Locale extends ILocale {
          */
         "brand": string;
         /**
+         * Поиск по каталогу, постам и профилям
+         */
+        "siteSearchPlaceholder": string;
+        /**
+         * ДОБРО ПОЖАЛОВАТЬ В ZALIP
+         */
+        "homeWelcomeEyebrow": string;
+        /**
+         * Твои истории — в одном месте.
+         */
+        "homeHeading": string;
+        /**
+         * Смотри фильмы и сериалы, собирай библиотеку, ставь оценки и обсуждай эпизоды в живой ленте сообщества.
+         */
+        "homeDescription": string;
+        /**
          * Смотреть
          */
         "watchTitle": string;
@@ -1550,6 +1566,18 @@ export interface Locale extends ILocale {
          */
         "catalogueAllKinds": string;
         /**
+         * БИБЛИОТЕКА ZALIP
+         */
+        "catalogueEyebrow": string;
+        /**
+         * Каталог тайтлов
+         */
+        "catalogueHeading": string;
+        /**
+         * Фильмы, сериалы, аниме и анимация — в одной настраиваемой выдаче.
+         */
+        "catalogueDescription": string;
+        /**
          * В этом разделе пока нет тайтлов
          */
         "catalogueFilteredEmptyTitle": string;
@@ -1645,6 +1673,14 @@ export interface Locale extends ILocale {
          * ESC — Закрыть
          */
         "searchCloseHint": string;
+        /**
+         * Популярные разделы
+         */
+        "searchPopularSections": string;
+        /**
+         * Выберите, где искать, или начните вводить название.
+         */
+        "searchPopularDescription": string;
         /**
          * Оценка
          */

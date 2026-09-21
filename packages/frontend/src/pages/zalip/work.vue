@@ -4,7 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<PageWithHeader>
+<PageWithHeader hideHeader>
 	<div class="_spacer" style="--MI_SPACER-w: 1180px;">
 		<div :class="$style.page">
 			<div v-if="pending" :class="$style.state"><i class="ti ti-loader-2 ti-spin"></i> Загружаем тайтл…</div>
@@ -39,11 +39,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 									<h1>{{ work.title }}</h1>
 									<p v-if="work.originalTitle" :class="$style.original">{{ work.originalTitle }}</p>
 									<div v-if="work.genres.length" :class="$style.genres" aria-label="Жанры"><MkA v-for="genre in work.genres" :key="genre" :to="genreLink(genre)">{{ genre }}</MkA></div>
-									<p v-if="work.description" :class="$style.description">{{ work.description }}</p>
-									<p v-else :class="$style.description">Описание появится после редакторской проверки.</p>
 								</div>
 							</div>
 						</div>
+						<p v-if="work.description" :class="$style.description">{{ work.description }}</p>
+						<p v-else :class="$style.description">Описание появится после редакторской проверки.</p>
 					</div>
 				</section>
 				<div :class="$style.content">
@@ -850,6 +850,7 @@ definePage(() => ({
 }
 
 .description {
+	grid-column: 2;
 	max-width: 800px;
 	margin: 18px 0 0;
 	white-space: pre-line;
@@ -1625,5 +1626,134 @@ definePage(() => ({
 		min-width: 36px;
 		min-height: 36px;
 	}
+}
+
+/* Ongaku title-card layout: compact facts first, media and discussion below. */
+.page {
+	max-width: var(--zalip-content-max-width);
+	margin: 0 auto;
+	padding: 24px var(--zalip-container-offset) 56px;
+}
+
+.work {
+	gap: 16px;
+}
+
+.hero {
+	min-height: 0;
+	border: 0;
+	border-radius: var(--zalip-radius-big);
+	background: var(--MI_THEME-panel);
+}
+
+.heroBackground {
+	opacity: 0.16;
+	filter: blur(12px);
+	transform: scale(1.08);
+}
+
+.hero::after {
+	background: linear-gradient(90deg, var(--MI_THEME-panel) 0%, color-mix(in srgb, var(--MI_THEME-panel) 92%, transparent) 50%, color-mix(in srgb, var(--MI_THEME-panel) 78%, transparent) 100%);
+}
+
+.heroContent {
+	grid-template-columns: 176px minmax(0, 1fr);
+	align-items: start;
+	gap: 24px;
+	min-height: 0;
+	padding: 24px;
+}
+
+.poster {
+	border: 0;
+	border-radius: var(--zalip-radius-small);
+}
+
+.sidebarActions {
+	gap: 6px;
+	margin-top: 10px;
+}
+
+.watchButton, .sideButton {
+	min-height: 36px;
+	border-radius: var(--zalip-radius);
+	font-size: 0.78rem;
+}
+
+.quickActions {
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	margin-top: 6px;
+}
+
+.quickAction, .quickAction:last-child:nth-child(odd) {
+	grid-column: auto;
+	min-height: 34px;
+	border: 0;
+	background: var(--MI_THEME-panelHighlight);
+}
+
+.quickAction span {
+	display: none;
+}
+
+.info h1 {
+	font-size: clamp(1.65rem, 4vw, 2.45rem);
+	line-height: 1.12;
+}
+
+.kind {
+	margin-top: 2px;
+}
+
+.genres {
+	margin-top: 10px;
+}
+
+.genres a {
+	padding: 4px 8px;
+	border: 0;
+	border-radius: 14px;
+	background: var(--MI_THEME-panelHighlight);
+	font-size: 0.72rem;
+}
+
+.description {
+	margin-top: 14px;
+	font-size: 0.86rem;
+	line-height: 1.55;
+}
+
+.player {
+	margin-top: 0;
+	border: 0;
+	border-radius: var(--zalip-radius-big);
+}
+
+.playerTabs {
+	min-height: 48px;
+	padding: 0 12px;
+}
+
+.playerTab, .playerTabActive {
+	min-height: 36px;
+	border-radius: var(--zalip-radius);
+}
+
+.gallery, .seasons {
+	margin-top: 20px;
+}
+
+@media (max-width: 767px) {
+	.page { padding: 12px 0 34px; }
+	.hero { border-radius: 0; }
+	.heroContent { display: grid; grid-template-columns: 108px minmax(0, 1fr); gap: 14px; padding: 18px var(--zalip-container-offset); }
+	.sidebar { display: block; }
+	.sidebarActions { grid-template-columns: 1fr; }
+	.watchButton, .sideButton { min-height: 36px; padding: 6px; font-size: 0.7rem; }
+	.quickActions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	.info h1 { font-size: 1.45rem; }
+	.description { grid-column: 1 / -1; }
+	.content { padding: 0 var(--zalip-container-offset); }
+	.player { margin-inline: calc(var(--zalip-container-offset) * -1); border-radius: 0; }
 }
 </style>

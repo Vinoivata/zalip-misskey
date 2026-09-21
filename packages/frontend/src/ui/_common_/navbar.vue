@@ -124,15 +124,15 @@ const emit = defineEmits<{
 	(ev: 'widgetButtonClick'): void;
 }>();
 
-const forceIconOnly = ref(!props.asDrawer && window.innerWidth <= 1279);
+const forceIconOnly = ref(!props.asDrawer && window.innerWidth <= 767);
 const iconOnly = computed(() => {
-	return !props.asDrawer && (forceIconOnly.value || (store.r.menuDisplay.value === 'sideIcon'));
+	return !props.asDrawer && forceIconOnly.value;
 });
 
 const primaryMenu = computed(() => prefer.r.menu.value.filter(isZalipConfigurableNavigationItem));
 
 function calcViewState() {
-	forceIconOnly.value = window.innerWidth <= 1279;
+	forceIconOnly.value = window.innerWidth <= 767;
 }
 
 window.addEventListener('resize', calcViewState);
@@ -185,7 +185,7 @@ function openSearch(): void {
 
 <style lang="scss" module>
 .root {
-	--nav-width: 250px;
+	--nav-width: 220px;
 	--nav-icon-only-width: 80px;
 	--nav-bg-transparent: color(from var(--MI_THEME-navBg) srgb r g b / 0.5);
 
@@ -194,6 +194,104 @@ function openSearch(): void {
 	flex: 0 0 var(--nav-width);
 	width: var(--nav-width);
 	box-sizing: border-box;
+}
+
+/* Zalip navigation shell: compact, readable and deliberately content-first. */
+.root:not(.iconOnly) {
+	.top {
+		--top-height: 64px;
+		height: var(--top-height);
+		padding: 0 12px;
+	}
+
+	.brand {
+		width: 100%;
+		padding-left: 10px;
+	}
+
+	.brandMark {
+		display: none;
+	}
+
+	.brandName {
+		display: inline;
+		margin: 0;
+		font-size: 1.55rem;
+		font-weight: 950;
+		letter-spacing: -0.08em;
+		text-transform: lowercase;
+	}
+
+	.realtimeMode, .widget {
+		width: 40px;
+	}
+
+	.middle {
+		padding: 8px 10px;
+	}
+
+	.item {
+		min-height: 44px;
+		padding: 0 12px;
+		border-radius: 10px;
+		line-height: 44px;
+		font-size: 0.9rem;
+		font-weight: 680;
+
+		&:hover, &.active, &:focus {
+			background: var(--MI_THEME-panelHighlight);
+
+			&::before {
+				display: none;
+			}
+		}
+
+		&.active {
+			background: color-mix(in srgb, var(--MI_THEME-accent) 16%, var(--MI_THEME-panel));
+			color: var(--MI_THEME-accent);
+		}
+	}
+
+	.itemIcon {
+		width: 26px;
+		margin-right: 8px;
+		font-size: 1.05rem;
+	}
+
+	.divider {
+		margin: 10px 6px;
+	}
+
+	.bottom {
+		padding: 10px;
+		background: var(--MI_THEME-navBg);
+	}
+
+	.post {
+		height: 44px;
+		border-radius: 10px;
+		background: var(--MI_THEME-accent);
+		text-align: center;
+
+		&::before {
+			display: none;
+		}
+	}
+
+	.postIcon {
+		margin: 0 7px 0 0;
+		width: auto;
+	}
+
+	.account {
+		margin-top: 8px;
+		padding: 8px;
+		border-radius: 10px;
+	}
+}
+
+.subButtons {
+	display: none;
 }
 
 .body {
@@ -863,4 +961,27 @@ function openSearch(): void {
 		left: var(--nav-icon-only-width);
 	}
 }
+
+/* Final full-width desktop navigation treatment. */
+.root:not(.iconOnly) {
+	.top { --top-height: 64px; height: var(--top-height); padding: 0 12px; }
+	.brand { justify-content: flex-start; width: 100%; padding-left: 10px; }
+	.brandMark { display: none; }
+	.brandName { display: inline; margin: 0; font-size: 1.55rem; font-weight: 950; letter-spacing: -0.08em; text-transform: lowercase; }
+	.realtimeMode, .widget { width: 40px; }
+	.middle { padding: 8px 10px; }
+	.item { min-height: 44px; padding: 0 12px; border-radius: 10px; line-height: 44px; font-size: 0.9rem; font-weight: 680; }
+	.item:hover, .item.active, .item:focus { background: var(--MI_THEME-panelHighlight); color: var(--MI_THEME-fg); }
+	.item:hover::before, .item.active::before, .item:focus::before { display: none; }
+	.item.active { background: color-mix(in srgb, var(--MI_THEME-accent) 16%, var(--MI_THEME-panel)); color: var(--MI_THEME-accent); }
+	.itemIcon { width: 26px; margin-right: 8px; font-size: 1.05rem; }
+	.divider { margin: 10px 6px; }
+	.bottom { padding: 10px; background: var(--MI_THEME-navBg); }
+	.post { height: 44px; border-radius: 10px; background: var(--MI_THEME-accent); text-align: center; }
+	.post::before { display: none; }
+	.postIcon { margin: 0 7px 0 0; width: auto; }
+	.account { margin-top: 8px; padding: 8px; border-radius: 10px; }
+}
+
+.subButtons { display: none; }
 </style>

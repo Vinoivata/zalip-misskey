@@ -8,12 +8,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<template #header><i class="ti ti-sparkles"></i> {{ i18n.ts.zalip.searchTitle }}</template>
 
 	<div :class="$style.root">
-		<div :class="$style.intro">
-			<p :class="$style.eyebrow">{{ i18n.ts.zalip.searchEyebrow }}</p>
-			<h1>{{ i18n.ts.zalip.searchHeading }}</h1>
-			<p>{{ i18n.ts.zalip.searchDescription }}</p>
-		</div>
-
 		<label :class="$style.searchField">
 			<i class="ti ti-search"></i>
 			<input ref="searchInput" v-model="query" type="search" :placeholder="i18n.ts.zalip.searchPlaceholder" autocomplete="off" :aria-label="i18n.ts.zalip.searchPlaceholder">
@@ -28,10 +22,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 		<div :class="$style.content" aria-live="polite">
 			<div v-if="query.trim().length < 2" :class="$style.discovery">
-				<div :class="$style.discoveryMark"><i class="ti ti-sparkles"></i></div>
 				<div>
-					<h2>{{ i18n.ts.zalip.searchStartTitle }}</h2>
-					<p>{{ i18n.ts.zalip.searchStartDescription }}</p>
+					<h2>{{ i18n.ts.zalip.searchPopularSections }}</h2>
+					<p>{{ i18n.ts.zalip.searchPopularDescription }}</p>
 				</div>
 				<div :class="$style.discoveryTabs">
 					<button v-for="tab in quickTabs" :key="tab.id" type="button" class="_button" :class="$style.discoveryTab" @click="activeTab = tab.id">
@@ -248,9 +241,8 @@ onBeforeUnmount(() => {
 	display: flex;
 	min-height: 100%;
 	flex-direction: column;
-	background:
-		radial-gradient(circle at 88% -20%, color-mix(in srgb, var(--search-accent) 26%, transparent), transparent 42%),
-		linear-gradient(145deg, var(--MI_THEME-bg), var(--MI_THEME-panel));
+	padding-top: 16px;
+	background: var(--MI_THEME-panel);
 }
 
 .intro {
@@ -283,20 +275,19 @@ onBeforeUnmount(() => {
 	gap: 10px;
 	margin: 0 var(--root-margin);
 	padding: 0 14px;
-	border: 1px solid color-mix(in srgb, var(--search-accent) 42%, var(--MI_THEME-divider));
-	border-radius: 16px;
-	background: color-mix(in srgb, var(--MI_THEME-panelHighlight) 80%, var(--MI_THEME-bg));
-	box-shadow: 0 10px 28px color-mix(in srgb, var(--search-accent) 13%, transparent);
-	color: var(--search-accent);
+	border: 0;
+	border-radius: var(--zalip-radius);
+	background: var(--MI_THEME-panelHighlight);
+	box-shadow: none;
+	color: var(--MI_THEME-fgTransparentWeak);
 
 	&:focus-within {
-		border-color: var(--search-accent);
-		box-shadow: 0 0 0 3px color-mix(in srgb, var(--search-accent) 22%, transparent), 0 12px 32px color-mix(in srgb, var(--search-accent) 16%, transparent);
+		outline: 2px solid color-mix(in srgb, var(--MI_THEME-fg) 20%, transparent);
 	}
 
 	input {
 		width: 100%;
-		padding: 14px 0;
+		padding: 11px 0;
 		border: 0;
 		outline: 0;
 		background: transparent;
@@ -326,7 +317,7 @@ onBeforeUnmount(() => {
 
 .tabs {
 	display: flex;
-	gap: 7px;
+	gap: 2px;
 	padding: 14px var(--root-margin) 12px;
 	overflow-x: auto;
 	border-bottom: 1px solid var(--MI_THEME-divider);
@@ -340,11 +331,11 @@ onBeforeUnmount(() => {
 .tab {
 	display: inline-flex;
 	align-items: center;
-	gap: 7px;
+	gap: 6px;
 	flex: 0 0 auto;
-	padding: 8px 11px;
+	padding: 7px 12px;
 	border: 1px solid transparent;
-	border-radius: 999px;
+	border-radius: var(--zalip-radius);
 	color: var(--MI_THEME-fgTransparent);
 	font-size: 0.84rem;
 	font-weight: 700;
@@ -356,10 +347,10 @@ onBeforeUnmount(() => {
 }
 
 .tabActive {
-	border-color: color-mix(in srgb, var(--search-accent) 72%, var(--MI_THEME-divider));
-	background: color-mix(in srgb, var(--search-accent) 17%, var(--MI_THEME-panel));
-	color: var(--search-accent);
-	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--search-accent) 12%, transparent);
+	border-color: var(--MI_THEME-fg);
+	background: transparent;
+	color: var(--MI_THEME-fg);
+	box-shadow: none;
 }
 
 .content {
@@ -402,19 +393,6 @@ onBeforeUnmount(() => {
 	}
 }
 
-.discoveryMark {
-	display: grid;
-	width: 54px;
-	height: 54px;
-	place-items: center;
-	border: 1px solid color-mix(in srgb, var(--search-accent) 55%, var(--MI_THEME-divider));
-	border-radius: 18px;
-	background: color-mix(in srgb, var(--search-accent) 20%, var(--MI_THEME-panel));
-	box-shadow: 0 10px 24px color-mix(in srgb, var(--search-accent) 18%, transparent);
-	color: var(--search-accent);
-	font-size: 1.4rem;
-}
-
 .discoveryTabs {
 	display: flex;
 	flex-wrap: wrap;
@@ -428,9 +406,9 @@ onBeforeUnmount(() => {
 	align-items: center;
 	gap: 7px;
 	padding: 9px 12px;
-	border: 1px solid var(--MI_THEME-divider);
-	border-radius: 11px;
-	background: var(--MI_THEME-panel);
+	border: 0;
+	border-radius: var(--zalip-radius-small);
+	background: var(--MI_THEME-panelHighlight);
 	color: var(--MI_THEME-fg);
 	font-size: 0.82rem;
 	font-weight: 700;
@@ -444,7 +422,7 @@ onBeforeUnmount(() => {
 
 .results {
 	display: grid;
-	gap: 7px;
+	gap: 0;
 	padding: 12px var(--root-margin) 18px;
 }
 
@@ -456,20 +434,19 @@ onBeforeUnmount(() => {
 	gap: 12px;
 	align-items: center;
 	padding: 9px;
-	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 88%, transparent);
-	border-radius: 15px;
-	background: color-mix(in srgb, var(--MI_THEME-panel) 92%, transparent);
+	border: 0;
+	border-radius: var(--zalip-radius-small);
+	background: transparent;
 	color: var(--MI_THEME-fg);
 	text-decoration: none;
 	transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 
 	&:hover,
 	&:focus-visible {
-		border-color: color-mix(in srgb, var(--search-accent) 60%, var(--MI_THEME-divider));
-		background: color-mix(in srgb, var(--search-accent) 10%, var(--MI_THEME-panel));
+		background: var(--MI_THEME-panelHighlight);
 		color: var(--MI_THEME-fg);
 		text-decoration: none;
-		transform: translateY(-1px);
+		transform: none;
 	}
 }
 

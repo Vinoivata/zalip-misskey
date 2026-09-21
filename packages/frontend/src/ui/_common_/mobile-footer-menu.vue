@@ -23,12 +23,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</MkA>
 
-	<MkA :class="$style.item" :activeClass="$style.active" :aria-label="navbarItemDef.updates.title" :title="navbarItemDef.updates.title" to="/updates">
-		<div :class="$style.itemInner">
-			<i :class="[$style.itemIcon, navbarItemDef.updates.icon]"></i><span :class="$style.itemText">{{ navbarItemDef.updates.title }}</span>
-		</div>
-	</MkA>
-
 	<MkA :class="$style.item" :activeClass="$style.active" :aria-label="navbarItemDef.notifications.title" :title="navbarItemDef.notifications.title" to="/my/notifications">
 		<div :class="$style.itemInner">
 			<i :class="[$style.itemIcon, navbarItemDef.notifications.icon]"></i><span :class="$style.itemText">{{ navbarItemDef.notifications.title }}</span>
@@ -72,6 +66,7 @@ function openMoreMenu(event: PointerEvent): void {
 
 	void os.popupMenu([
 		{ text: i18n.ts.zalip.search, icon: 'ti ti-search', action: () => openZalipSearch() },
+		{ type: 'link', text: navbarItemDef.updates.title, icon: navbarItemDef.updates.icon, to: '/updates' },
 		{ type: 'divider' },
 		...accountItems,
 		{ type: 'link', text: i18n.ts.settings, icon: 'ti ti-settings', to: '/settings' },
@@ -96,15 +91,16 @@ watch(rootEl, () => {
 <style lang="scss" module>
 .root {
 	position: relative;
-	z-index: 1;
-	padding-bottom: env(safe-area-inset-bottom, 0px);
+	z-index: 1200;
+	padding: 4px max(8px, env(safe-area-inset-left, 0px)) env(safe-area-inset-bottom, 0px) max(8px, env(safe-area-inset-right, 0px));
 	display: grid;
-	grid-template-columns: repeat(6, minmax(0, 1fr));
+	grid-template-columns: repeat(5, minmax(0, 1fr));
 	width: 100%;
 	box-sizing: border-box;
 	background: var(--MI_THEME-navBg);
 	color: var(--MI_THEME-navFg);
-	border-top: solid 0.5px var(--MI_THEME-divider);
+	border-top: solid 1px var(--MI_THEME-divider);
+	box-shadow: 0 -10px 30px color-mix(in srgb, black 12%, transparent);
 }
 
 .item {
@@ -112,25 +108,15 @@ watch(rootEl, () => {
 	align-items: stretch;
 	justify-content: center;
 	min-width: 0;
-	min-height: 56px;
-	padding: 6px 0;
+	min-height: 54px;
+	padding: 4px 0;
 	color: inherit;
 	text-decoration: none;
-
-	&:first-child {
-		padding-left: 12px;
-	}
-
-	&:last-child {
-		padding-right: 12px;
-	}
 
 	&.active {
 		color: var(--MI_THEME-accent);
 
-		.itemInner {
-			background: var(--MI_THEME-accentedBg);
-		}
+		.itemInner { background: var(--MI_THEME-accentedBg); }
 	}
 }
 
@@ -141,9 +127,9 @@ watch(rootEl, () => {
 	gap: 4px;
 	padding: 5px 0;
 	width: 100%;
-	max-width: 42px;
+	max-width: 64px;
 	margin: auto;
-	border-radius: 100%;
+	border-radius: 10px;
 
 	&:hover {
 		background: var(--MI_THEME-panelHighlight);

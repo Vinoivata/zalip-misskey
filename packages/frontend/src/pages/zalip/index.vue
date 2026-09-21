@@ -4,14 +4,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<PageWithHeader>
+<PageWithHeader hideHeader>
 	<div class="_spacer" style="--MI_SPACER-w: 1180px;">
 		<div :class="$style.page">
 			<section :class="$style.hero">
 				<div>
-					<p :class="$style.eyebrow"><i class="ti ti-movie"></i> ZALIP CINEMA</p>
-					<h1>Смотри. <em>Обсуждай.</em><br>Сохраняй истории.</h1>
-					<p :class="$style.lead">Кино, сериалы и аниме живут в том же пространстве, что и ваша лента, профиль и уведомления.</p>
+					<p :class="$style.eyebrow"><i class="ti ti-sparkles"></i> {{ i18n.ts.zalip.homeWelcomeEyebrow }}</p>
+					<h1>{{ i18n.ts.zalip.homeHeading }}</h1>
+					<p :class="$style.lead">{{ i18n.ts.zalip.homeDescription }}</p>
 					<div :class="$style.actions">
 						<MkA to="/catalog" :class="$style.primaryAction"><i class="ti ti-layout-grid"></i> Каталог</MkA>
 						<MkA to="/timeline" :class="$style.primaryAction"><i class="ti ti-news"></i> Открыть ленту</MkA>
@@ -25,7 +25,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<button type="submit" class="_button"><span>Найти</span></button>
 					</form>
 				</div>
-				<div :class="$style.orb" aria-hidden="true"><i class="ti ti-player-play-filled"></i></div>
+				<div :class="$style.orb" aria-hidden="true">
+					<img v-if="showcaseItems[0]?.work.posterPath" :src="tmdbImage(showcaseItems[0].work.posterPath)" alt="">
+					<span v-else>Z</span>
+				</div>
 			</section>
 
 			<section v-if="showcaseItems.length" :class="$style.releases">
@@ -46,6 +49,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</div>
 				</div>
 			</section>
+
 		</div>
 	</div>
 </PageWithHeader>
@@ -603,7 +607,7 @@ definePage(() => ({
 
 .card {
 	overflow: hidden;
-	border-radius: 16px;
+	border-radius: var(--zalip-radius-big);
 	background: var(--MI_THEME-panel);
 	text-decoration: none;
 	color: var(--MI_THEME-fg);
@@ -690,5 +694,103 @@ definePage(() => ({
 	.sortControl {
 		align-self: flex-start;
 	}
+}
+
+/* Ongaku-inspired discovery shell, rebuilt with Zalip data and controls. */
+.page {
+	max-width: 960px;
+	margin: 0 auto;
+	padding: 22px var(--MI-margin) 64px;
+}
+
+.hero {
+	grid-template-columns: minmax(0, 1fr) 132px;
+	min-height: 250px;
+	align-items: center;
+	padding: 28px 30px;
+	border-color: var(--MI_THEME-divider);
+	border-radius: var(--zalip-radius-big);
+	background: var(--MI_THEME-panel);
+}
+
+.hero h1 {
+	font-size: clamp(1.75rem, 4vw, 2.65rem);
+	line-height: 1.08;
+}
+
+.lead {
+	margin-top: 12px;
+	font-size: 0.92rem;
+}
+
+.actions {
+	margin-top: 18px;
+}
+
+.search {
+	margin-top: 18px;
+	border-radius: var(--zalip-radius);
+	background: var(--MI_THEME-bg);
+}
+
+.orb {
+	width: 132px;
+	height: 196px;
+	align-self: end;
+	overflow: hidden;
+	border-radius: var(--zalip-radius);
+	background: var(--MI_THEME-panelHighlight);
+	box-shadow: none;
+}
+
+.orb img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.orb span {
+	font-size: 3.8rem;
+	font-weight: 950;
+	letter-spacing: -0.12em;
+	color: var(--MI_THEME-accent);
+}
+
+.releases {
+	margin-top: 30px;
+}
+
+.sectionHeader h2 {
+	font-size: 1.35rem;
+}
+
+.releaseRail {
+	gap: 12px;
+}
+
+.releaseListItem {
+	flex-basis: 158px;
+}
+
+.releaseCard {
+	border: 0;
+	border-radius: var(--zalip-radius);
+	background: transparent;
+}
+
+.releasePoster {
+	border-radius: var(--zalip-radius);
+}
+
+.releaseBody {
+	padding: 8px 2px 2px;
+}
+
+@media (max-width: 767px) {
+	.page { padding: 14px var(--MI-margin) 36px; }
+	.hero { grid-template-columns: 1fr; padding: 22px 18px; }
+	.orb { display: none; }
+	.releaseListItem { flex-basis: 138px; }
 }
 </style>

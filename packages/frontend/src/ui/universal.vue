@@ -18,6 +18,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<XAnnouncements v-if="$i"/>
 				<XStatusBars :class="$style.statusbars"/>
 			</div>
+			<ZalipSiteHeader/>
 			<StackingRouterView v-if="prefer.s['experimental.stackingRouterView']" :class="$style.content"/>
 			<RouterView v-else :class="$style.content"/>
 			<XMobileFooterMenu v-if="isMobile" ref="navFooter"/>
@@ -44,6 +45,7 @@ import XReloadSuggestion from '@/ui/_common_/ReloadSuggestion.vue';
 import XThemePreviewing from '@/ui/_common_/ThemePreviewing.vue';
 import XTitlebar from '@/ui/_common_/titlebar.vue';
 import XSidebar from '@/ui/_common_/navbar.vue';
+import ZalipSiteHeader from '@/components/ZalipSiteHeader.vue';
 import { isPreviewMode as isThemePreviewMode } from '@/theme.js';
 import * as os from '@/os.js';
 import { i18n } from '@/i18n.js';
@@ -63,15 +65,16 @@ const XAnnouncements = defineAsyncComponent(() => import('@/ui/_common_/announce
 
 const isRoot = computed(() => mainRouter.currentRoute.value.name === 'index');
 
-const DESKTOP_THRESHOLD = 1100;
-const MOBILE_THRESHOLD = 500;
+const DESKTOP_THRESHOLD = 1440;
+const MOBILE_THRESHOLD = 767;
 
 // デスクトップでウィンドウを狭くしたときモバイルUIが表示されて欲しいことはあるので deviceKind === 'desktop' の判定は行わない
-const showWidgetsSide = window.innerWidth >= DESKTOP_THRESHOLD;
+const showWidgetsSide = ref(window.innerWidth >= DESKTOP_THRESHOLD);
 
 const isMobile = ref(deviceKind === 'smartphone' || window.innerWidth <= MOBILE_THRESHOLD);
 window.addEventListener('resize', () => {
 	isMobile.value = deviceKind === 'smartphone' || window.innerWidth <= MOBILE_THRESHOLD;
+	showWidgetsSide.value = window.innerWidth >= DESKTOP_THRESHOLD;
 });
 
 const pageMetadata = ref<null | PageMetadata>(null);
@@ -125,15 +128,30 @@ function onContextmenu(ev: PointerEvent) {
 </script>
 
 <style lang="scss" module>
-$widgets-hide-threshold: 1090px;
+$widgets-hide-threshold: 1439px;
 
 .root {
+	--zalip-content-max-width: 960px;
+	--zalip-content-small-max-width: 640px;
+	--zalip-container-offset: 24px;
+	--zalip-nav-width: 220px;
+	--zalip-aside-width: 344px;
+	--zalip-radius: 10px;
+	--zalip-radius-big: 16px;
+	--zalip-radius-small: 6px;
+
 	height: 100dvh;
 	overflow: clip;
 	contain: strict;
 	display: flex;
 	flex-direction: column;
 	background: var(--MI_THEME-navBg);
+}
+
+@media (max-width: 767px) {
+	.root {
+		--zalip-container-offset: 16px;
+	}
 }
 
 .nonTitlebarArea {
@@ -172,12 +190,12 @@ $widgets-hide-threshold: 1090px;
 }
 
 .widgets {
-	width: 350px;
+	width: 344px;
 	height: 100%;
 	box-sizing: border-box;
 	overflow: auto;
 	padding: var(--MI-margin) var(--MI-margin) calc(var(--MI-margin) + env(safe-area-inset-bottom, 0px));
-	border-left: solid 0.5px var(--MI_THEME-divider);
+	border-left: solid 1px var(--MI_THEME-divider);
 	background: var(--MI_THEME-bg);
 
 	@media (max-width: $widgets-hide-threshold) {

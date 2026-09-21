@@ -467,12 +467,17 @@ defineExpose({
 }
 
 .notes {
+	display: grid;
+	gap: 12px;
 	container-type: inline-size;
-	background: var(--MI_THEME-panel);
+	background: transparent;
 }
 
 .note:not(:empty) {
-	border-bottom: solid 0.5px var(--MI_THEME-divider);
+	overflow: hidden;
+	border: 0;
+	border-radius: var(--zalip-radius-big, 16px);
+	background: var(--MI_THEME-panel);
 }
 
 .new {
@@ -577,5 +582,15 @@ defineExpose({
 	box-sizing: border-box;
 	padding: 16px;
 	background: var(--MI_THEME-panel);
+}
+
+@media (max-width: 767px) {
+	.notes {
+		gap: 8px;
+	}
+
+	.note:not(:empty) {
+		border-radius: 0;
+	}
 }
 </style>

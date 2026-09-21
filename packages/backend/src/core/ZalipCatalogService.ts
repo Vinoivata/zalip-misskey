@@ -32,6 +32,8 @@ import { MiZalipSharedNote } from '@/models/ZalipSharedNote.js';
 import { NotificationService } from '@/core/NotificationService.js';
 import { MemorySingleCache } from '@/misc/cache.js';
 
+export const zalipCatalogueGenreLimit = 24;
+
 type ZalipEpisodeReleaseNotificationPayload = {
 	workId: MiZalipWork['id'];
 	workSlug: string;
@@ -193,7 +195,7 @@ export class ZalipCatalogService {
 		const yearFrom = filters.yearFrom;
 		const yearTo = filters.yearTo;
 
-		if (genres.length > 12 || kinds.length > zalipWorkKinds.length || kinds.some(kind => !zalipWorkKinds.includes(kind))) return [];
+		if (genres.length > zalipCatalogueGenreLimit || kinds.length > zalipWorkKinds.length || kinds.some(kind => !zalipWorkKinds.includes(kind))) return [];
 		if (normalizedQuery.length > 100 || (yearFrom != null && yearTo != null && yearFrom > yearTo)) return [];
 
 		let works: MiZalipWork[];

@@ -230,6 +230,30 @@ describe('ZalipCatalogService', () => {
 		expect(query.take).toHaveBeenCalledWith(12);
 	});
 
+	it('accepts up to 24 catalogue genres and rejects a larger set', async () => {
+		const query = {
+			where: vi.fn().mockReturnThis(),
+			andWhere: vi.fn().mockReturnThis(),
+			orderBy: vi.fn().mockReturnThis(),
+			addOrderBy: vi.fn().mockReturnThis(),
+			take: vi.fn().mockReturnThis(),
+			getMany: vi.fn().mockResolvedValue([]),
+		};
+		const worksRepository = { createQueryBuilder: vi.fn().mockReturnValue(query) };
+		const service = new ZalipCatalogService({
+			getRepository: (model: unknown) => {
+				if (model === MiZalipWork) return worksRepository;
+				throw new Error('Unexpected repository');
+			},
+		} as never, {} as never, {} as never, {} as never);
+		const genres = Array.from({ length: 24 }, (_, index) => `Жанр ${index + 1}`);
+
+		await expect(service.listPublished(12, { genres })).resolves.toEqual([]);
+		expect(query.andWhere).toHaveBeenCalledWith('work.genres @> CAST(:genres AS jsonb)', { genres: JSON.stringify(genres) });
+		await expect(service.listPublished(12, { genres: [...genres, 'Лишний жанр'] })).resolves.toEqual([]);
+		expect(worksRepository.createQueryBuilder).toHaveBeenCalledTimes(1);
+	});
+
 	it('limits a title search to the requested catalogue kind', async () => {
 		const query = {
 			where: vi.fn().mockReturnThis(),
