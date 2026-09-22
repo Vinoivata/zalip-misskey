@@ -41,7 +41,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { ref, useTemplateRef, watch } from 'vue';
 import { $i } from '@/i.js';
 import { navbarItemDef } from '@/navbar.js';
 import { i18n } from '@/i18n.js';
@@ -50,10 +49,6 @@ import * as os from '@/os.js';
 import type { MenuItem } from '@/types/menu.js';
 import { getZalipAppearanceMenu } from '@/utility/zalip-theme.js';
 import { openZalipSearch } from '@/utility/zalip-search.js';
-
-const rootEl = useTemplateRef('rootEl');
-
-const rootElHeight = ref(0);
 
 function signIn(): void {
 	void pleaseLogin();
@@ -65,27 +60,20 @@ function openMoreMenu(event: PointerEvent): void {
 		: [{ text: i18n.ts.login, icon: 'ti ti-login', action: () => signIn() }];
 
 	void os.popupMenu([
+		{ type: 'link', text: i18n.ts.home, icon: 'ti ti-home', to: '/' },
 		{ text: i18n.ts.zalip.search, icon: 'ti ti-search', action: () => openZalipSearch() },
 		{ type: 'link', text: navbarItemDef.updates.title, icon: navbarItemDef.updates.icon, to: '/updates' },
 		{ type: 'divider' },
 		...accountItems,
-		{ type: 'link', text: i18n.ts.settings, icon: 'ti ti-settings', to: '/settings' },
+		...($i ? [
+			{ type: 'link' as const, text: i18n.ts.settings, icon: 'ti ti-settings', to: '/settings' },
+			{ type: 'link' as const, text: i18n.ts.widgets, icon: 'ti ti-layout', to: '/my/widgets' },
+		] : []),
 		{ type: 'divider' },
 		...getZalipAppearanceMenu(),
 	], event.currentTarget ?? event.target, { align: 'right', width: 280 });
 }
 
-watch(rootEl, () => {
-	if (rootEl.value) {
-		rootElHeight.value = rootEl.value.offsetHeight;
-		window.document.body.style.setProperty('--MI-minBottomSpacing', 'var(--MI-minBottomSpacingMobile)');
-	} else {
-		rootElHeight.value = 0;
-		window.document.body.style.setProperty('--MI-minBottomSpacing', '0px');
-	}
-}, {
-	immediate: true,
-});
 </script>
 
 <style lang="scss" module>
@@ -141,13 +129,13 @@ watch(rootEl, () => {
 }
 
 .itemIcon {
-	font-size: 17px;
+	font-size: 22px;
 }
 
 .itemText {
 	max-width: 100%;
 	overflow: hidden;
-	font-size: 0.6rem;
+	font-size: 10px;
 	font-weight: 650;
 	line-height: 1.1;
 	text-align: center;
@@ -157,9 +145,8 @@ watch(rootEl, () => {
 
 .itemIndicator {
 	position: absolute;
-	bottom: -4px;
-	left: 0;
-	right: 0;
+	top: 0;
+	right: 2px;
 	color: var(--MI_THEME-indicator);
 	font-size: 10px;
 	pointer-events: none;
@@ -180,12 +167,9 @@ watch(rootEl, () => {
 	}
 
 	.itemInner {
-		max-width: 44px;
+		max-width: 70px;
 		padding: 7px 0;
 	}
 
-	.itemText {
-		display: none;
-	}
 }
 </style>

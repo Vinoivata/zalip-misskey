@@ -16,6 +16,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</div>
 
 				<div v-if="pending" :class="$style.empty"><i class="ti ti-loader-2 ti-spin"></i> Загружаем библиотеку…</div>
+				<div v-else-if="loadError"><p role="alert">{{ i18n.ts.zalip.libraryLoadFailed }}</p><MkError @retry="loadLibrary"/></div>
 				<div v-else-if="entries.length === 0" :class="$style.empty">
 					<i class="ti ti-bookmark-off"></i>
 					<strong>Здесь пока пусто</strong>
@@ -56,6 +57,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed, onMounted, ref } from 'vue';
 import { definePage } from '@/page.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
+import { i18n } from '@/i18n.js';
 
 type WorkKind = 'movie' | 'series' | 'anime' | 'animation';
 type LibraryStatus = 'watching' | 'planned' | 'completed' | 'on_hold' | 'dropped';
@@ -79,6 +81,7 @@ type LibraryEntry = {
 
 const entries = ref<LibraryEntry[]>([]);
 const pending = ref(true);
+const loadError = ref(false);
 const activeFilter = ref<LibraryFilter>('all');
 const filters: LibraryFilter[] = ['all', 'watching', 'planned', 'completed', 'on_hold', 'dropped'];
 const filteredEntries = computed(() => activeFilter.value === 'all' ? entries.value : entries.value.filter(entry => entry.status === activeFilter.value));
@@ -111,13 +114,19 @@ function statusLabel(status: LibraryStatus): string {
 	})[status];
 }
 
-onMounted(async () => {
+async function loadLibrary(): Promise<void> {
+	pending.value = true;
+	loadError.value = false;
 	try {
 		entries.value = await misskeyApiZalip<LibraryEntry[]>('zalip/library/list');
+	} catch {
+		loadError.value = true;
 	} finally {
 		pending.value = false;
 	}
-});
+}
+
+onMounted(loadLibrary);
 
 definePage(() => ({
 	title: 'Библиотека',

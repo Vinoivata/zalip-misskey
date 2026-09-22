@@ -228,7 +228,7 @@ async function composeNotification(data: PushNotificationDataMap[keyof PushNotif
 						body: data.body.seasonNumber != null && data.body.episodeNumber != null
 							? `${data.body.workTitle}: сезон ${data.body.seasonNumber}, серия ${data.body.episodeNumber} теперь доступна в Alloha.`
 							: `${data.body.workTitle} теперь доступен в Alloha.`,
-						badge: iconUrl('device-tv'),
+						badge: iconUrl('bell'),
 						tag: `zalip-alloha:${data.body.workId}:${data.body.seasonNumber ?? 'movie'}:${data.body.episodeNumber ?? 'movie'}`,
 						data,
 					}];

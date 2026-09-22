@@ -34,7 +34,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 							</div>
 							<span v-if="$i && $i.id != user.id && user.isFollowed" class="followed">{{ i18n.ts.followsYou }}</span>
 							<div class="actions">
-								<button class="menu _button" @click="menu"><i class="ti ti-dots"></i></button>
+								<MkA v-if="$i?.id === user.id" to="/settings/profile" :class="$style.editProfile"><i class="ti ti-pencil"></i>{{ i18n.ts.editProfile }}</MkA>
+								<button class="menu _button" :aria-label="i18n.ts.more" @click="menu"><i class="ti ti-dots"></i></button>
 								<MkFollowButton v-if="$i?.id != user.id" v-model:user="user" :inline="true" :transparent="false" :full="true" class="koudoku"/>
 							</div>
 						</div>
@@ -764,6 +765,19 @@ onDeactivated(disposeBannerParallaxResizeObserver);
 </style>
 
 <style lang="scss" module>
+.editProfile {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 44px;
+	padding: 0 14px;
+	border-radius: var(--zalip-radius);
+	background: var(--MI_THEME-panel);
+	color: var(--MI_THEME-fg);
+	text-decoration: none;
+	font-weight: 700;
+}
+
 .tl {
 	background: var(--MI_THEME-bg);
 	border-radius: var(--MI-radius);

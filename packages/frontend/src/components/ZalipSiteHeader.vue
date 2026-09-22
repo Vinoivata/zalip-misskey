@@ -8,12 +8,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<MkA to="/" :class="$style.mobileBrand" :aria-label="i18n.ts.zalip.brand">zalip</MkA>
 	<button type="button" class="_button" :class="$style.search" @click="openSearch">
 		<i class="ti ti-search"></i>
-		<span>{{ i18n.ts.zalip.siteSearchPlaceholder }}</span>
+		<span :class="$style.searchDesktop">{{ i18n.ts.zalip.siteSearchPlaceholder }}</span>
+		<span :class="$style.searchMobile">{{ i18n.ts.zalip.search }}</span>
 		<kbd>Ctrl K</kbd>
 	</button>
 	<button type="button" class="_button" :class="$style.iconButton" :aria-label="i18n.ts.zalip.appearanceTitle" @click="openAppearance">
 		<i class="ti ti-sun-moon"></i>
 	</button>
+	<button v-if="$i == null" type="button" class="_button" :class="$style.signup" @click="openZalipSignup"><span>{{ i18n.ts.signup }}</span></button>
 	<button v-if="$i == null" type="button" class="_button" :class="$style.login" :aria-label="i18n.ts.login" @click="signIn">
 		<i class="ti ti-login-2"></i><span>{{ i18n.ts.login }}</span>
 	</button>
@@ -31,6 +33,7 @@ import * as os from '@/os.js';
 import { getZalipAppearanceMenu } from '@/utility/zalip-theme.js';
 import { openZalipSearch } from '@/utility/zalip-search.js';
 import { pleaseLogin } from '@/utility/please-login.js';
+import { openZalipSignup } from '@/utility/zalip-signup.js';
 
 function openSearch(): void {
 	openZalipSearch();
@@ -55,7 +58,7 @@ async function openAccount(ev: PointerEvent): Promise<void> {
 	position: relative;
 	z-index: 1200;
 	display: grid;
-	grid-template-columns: minmax(260px, 620px) auto auto;
+	grid-template-columns: minmax(0, 620px) auto auto auto;
 	align-items: center;
 	justify-content: center;
 	gap: 10px;
@@ -81,7 +84,7 @@ async function openAccount(ev: PointerEvent): Promise<void> {
 	align-items: center;
 	gap: 10px;
 	min-width: 0;
-	height: 40px;
+	height: 44px;
 	padding: 0 12px;
 	border: 1px solid var(--MI_THEME-divider);
 	border-radius: var(--zalip-radius);
@@ -97,6 +100,8 @@ async function openAccount(ev: PointerEvent): Promise<void> {
 	white-space: nowrap;
 }
 
+.search > .searchMobile { display: none; }
+
 .search kbd {
 	padding: 3px 6px;
 	border: 1px solid var(--MI_THEME-divider);
@@ -107,16 +112,16 @@ async function openAccount(ev: PointerEvent): Promise<void> {
 	font-size: 0.68rem;
 }
 
-.iconButton, .account, .login {
+.iconButton, .account, .login, .signup {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
 	gap: 7px;
-	height: 40px;
+	height: 44px;
 	padding: 0 11px;
 	border-radius: var(--zalip-radius);
 	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.82rem;
+	font-size: 0.95rem;
 	font-weight: 700;
 	text-decoration: none;
 }
@@ -137,6 +142,8 @@ async function openAccount(ev: PointerEvent): Promise<void> {
 	color: var(--MI_THEME-fgOnAccent);
 }
 
+.signup { background: var(--MI_THEME-panelHighlight); color: var(--MI_THEME-fg); }
+
 .account {
 	max-width: 160px;
 }
@@ -154,7 +161,7 @@ async function openAccount(ev: PointerEvent): Promise<void> {
 
 @media (max-width: 980px) {
 	.root {
-		grid-template-columns: minmax(220px, 620px) auto auto;
+		grid-template-columns: minmax(0, 620px) auto auto auto;
 		justify-content: stretch;
 	}
 }
@@ -172,27 +179,20 @@ async function openAccount(ev: PointerEvent): Promise<void> {
 	}
 
 	.search {
-		height: 38px;
-		justify-content: center;
+		height: 44px;
 	}
 
-	.search > span {
-		font-size: 0;
-	}
+	.search > .searchMobile { display: block; font-size: 0.95rem; }
 
-	.search > span::after {
-		content: "";
-		font-size: 0.8rem;
-	}
-
-	.search kbd, .iconButton, .account > span, .login > span {
+	.searchDesktop, .search kbd, .iconButton, .account > span, .signup {
 		display: none;
 	}
 
 	.account, .login {
-		width: 38px;
-		height: 38px;
-		padding: 0;
+		min-width: 44px;
+		height: 44px;
+		padding: 0 10px;
 	}
+	.login i { display: none; }
 }
 </style>

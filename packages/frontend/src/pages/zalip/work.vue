@@ -28,7 +28,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<div :class="$style.quickActions" role="group" :aria-label="i18n.ts.zalip.workActions">
 								<button type="button" class="_button" :class="[$style.quickAction, { [$style.quickActionActive]: isFavorite }]" :aria-label="i18n.ts.zalip.favoriteTitle" :aria-pressed="isFavorite" :disabled="saving" @click="toggleFavorite"><i :class="isFavorite ? 'ti ti-star-filled' : 'ti ti-star'"></i><span>{{ i18n.ts.zalip.favoriteTitle }}</span></button>
 								<button v-if="work.seasons.length" type="button" class="_button" :class="[$style.quickAction, { [$style.quickActionActive]: releaseSubscribed }]" :aria-label="i18n.ts.zalip.releaseSubscriptionTitle" :aria-pressed="releaseSubscribed" :disabled="saving" @click="toggleReleaseSubscription"><i :class="releaseSubscribed ? 'ti ti-bell-filled' : 'ti ti-bell'"></i><span>{{ i18n.ts.zalip.releaseSubscriptionTitle }}</span></button>
-								<button type="button" class="_button" :class="[$style.quickAction, { [$style.quickActionActive]: personalRating != null }]" :aria-label="i18n.ts.zalip.ratingTitle" :disabled="saving" @click="choosePersonalRating"><i :class="personalRating == null ? 'ti ti-star' : 'ti ti-star-filled'"></i><span>{{ ratingLabel }}</span></button>
+								<button type="button" class="_button" :class="[$style.quickAction, $style.ratingAction, { [$style.quickActionActive]: personalRating != null }]" :aria-label="i18n.ts.zalip.ratingTitle" :disabled="saving" @click="choosePersonalRating"><i :class="personalRating == null ? 'ti ti-star' : 'ti ti-star-filled'"></i><span>{{ ratingLabel }}</span></button>
 								<button type="button" class="_button" :class="$style.quickAction" :aria-label="i18n.ts.zalip.shareTitle" @click="shareWork"><i class="ti ti-share-3"></i><span>{{ i18n.ts.zalip.shareTitle }}</span></button>
 							</div>
 						</aside>
@@ -128,7 +128,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</article>
 		</div>
 	</div>
-	<ZalipRatingDialog v-if="ratingDialogOpen" :initialRating="personalRating ?? 0" @save="savePersonalRating" @later="closeRatingDialog" @closed="closeRatingDialog"/>
+	<ZalipRatingDialog v-if="ratingDialogOpen" :initialRating="personalRating ?? 0" :saving="saving" :error="ratingError" @save="savePersonalRating" @later="closeRatingDialog" @closed="closeRatingDialog"/>
 </PageWithHeader>
 </template>
 
@@ -230,6 +230,7 @@ const episodesPending = ref(false);
 const episodeRequestId = ref(0);
 const selectedEpisodeId = ref<string | null>(null);
 const ratingDialogOpen = ref(false);
+const ratingError = ref<string | null>(null);
 const episodeDrag = useZalipHorizontalDrag();
 const selectedEpisode = computed(() => episodes.value.find(episode => episode.id === selectedEpisodeId.value) ?? null);
 
@@ -600,6 +601,7 @@ async function choosePersonalRating(): Promise<void> {
 	}
 	if (saving.value) return;
 	ratingDialogOpen.value = true;
+	ratingError.value = null;
 }
 
 function closeRatingDialog(): void {
@@ -608,13 +610,12 @@ function closeRatingDialog(): void {
 
 async function savePersonalRating(rating: number): Promise<void> {
 	if (saving.value) return;
-	const previousRating = personalRating.value;
-	personalRating.value = rating;
+	ratingError.value = null;
 	try {
-		await updateLibrary({ personalRating: personalRating.value });
+		await updateLibrary({ personalRating: rating });
+		closeRatingDialog();
 	} catch {
-		personalRating.value = previousRating;
-		os.toast(i18n.ts.zalip.libraryUpdateFailed);
+		ratingError.value = i18n.ts.zalip.libraryUpdateFailed;
 	}
 }
 
@@ -1665,13 +1666,11 @@ definePage(() => ({
 }
 
 .heroBackground {
-	opacity: 0.16;
-	filter: blur(12px);
-	transform: scale(1.08);
+	opacity: 0.5;
 }
 
 .hero::after {
-	background: linear-gradient(90deg, var(--MI_THEME-panel) 0%, color-mix(in srgb, var(--MI_THEME-panel) 92%, transparent) 50%, color-mix(in srgb, var(--MI_THEME-panel) 78%, transparent) 100%);
+	background: linear-gradient(0deg, var(--MI_THEME-panel), color-mix(in srgb, var(--MI_THEME-panel) 70%, transparent) 65%, color-mix(in srgb, var(--MI_THEME-panel) 40%, transparent));
 }
 
 .heroContent {
@@ -1698,25 +1697,29 @@ definePage(() => ({
 }
 
 .watchButton, .sideButton {
-	min-height: 36px;
+	min-height: 44px;
 	border-radius: var(--zalip-radius);
-	font-size: 0.78rem;
+	font-size: 1rem;
 }
 
 .quickActions {
-	grid-template-columns: repeat(4, minmax(0, 1fr));
+	grid-template-columns: repeat(2, minmax(0, 1fr));
 	margin-top: 6px;
 }
 
 .quickAction, .quickAction:last-child:nth-child(odd) {
 	grid-column: auto;
-	min-height: 34px;
+	min-height: 44px;
 	border: 0;
 	background: var(--MI_THEME-panelHighlight);
 }
 
 .quickAction span {
 	display: none;
+}
+
+.quickAction.ratingAction span {
+	display: inline;
 }
 
 .info h1 {
@@ -1733,17 +1736,17 @@ definePage(() => ({
 }
 
 .genres a {
-	padding: 4px 8px;
+	padding: 8px 10px;
 	border: 0;
 	border-radius: 14px;
 	background: var(--MI_THEME-panelHighlight);
-	font-size: 0.72rem;
+	font-size: 0.9rem;
 }
 
 .description {
 	align-self: start;
 	margin-top: 0;
-	font-size: 0.86rem;
+	font-size: 1rem;
 	line-height: 1.55;
 }
 
@@ -1768,16 +1771,24 @@ definePage(() => ({
 }
 
 @media (max-width: 767px) {
-	.page { padding: 12px 0 34px; }
+	.page { padding: 0 0 34px; }
 	.hero { border-radius: 0; }
-	.heroContent { display: grid; grid-template-columns: 108px minmax(0, 1fr); gap: 14px; padding: 18px var(--zalip-container-offset); }
-	.sidebar { display: block; grid-row: auto; }
-	.sidebarActions { grid-template-columns: 1fr; }
-	.watchButton, .sideButton { min-height: 36px; padding: 6px; font-size: 0.7rem; }
-	.quickActions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-	.info h1 { font-size: 1.45rem; }
-	.description { grid-column: 1 / -1; }
+	.heroBackground { height: 440px; opacity: 0.75; }
+	.hero::after { background: linear-gradient(0deg, var(--MI_THEME-panel) calc(100% - 440px), color-mix(in srgb, var(--MI_THEME-panel) 32%, transparent)); }
+	.heroContent { display: flex; flex-direction: column; align-items: stretch; gap: 24px; padding: 32px var(--zalip-container-offset) 24px; }
+	.sidebar { display: flex; flex-direction: column; align-self: stretch; gap: 0; }
+	.poster { width: min(78vw, 320px); align-self: center; border-radius: var(--zalip-radius-big); box-shadow: 0 12px 40px var(--MI_THEME-shadow); }
+	.sidebarActions { grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 20px; }
+	.watchButton { grid-column: 1 / -1; }
+	.watchButton, .sideButton { min-height: 48px; padding: 10px 12px; font-size: 1rem; }
+	.quickActions { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+	.quickAction { min-height: 44px; font-size: 0.9rem; }
+	.quickAction span { display: inline; }
+	.info h1 { font-size: clamp(1.8rem, 7vw, 2.4rem); line-height: 1.18; overflow-wrap: anywhere; }
+	.description { margin: 0; font-size: 1rem; line-height: 1.65; }
 	.content { padding: 0 var(--zalip-container-offset); }
 	.player { margin-inline: calc(var(--zalip-container-offset) * -1); border-radius: 0; }
+	.playerTab, .playerTabActive { min-height: 44px; font-size: 1rem; gap: 8px; padding-inline: 14px; }
+	.playerTab > span, .playerTabActive > span { display: inline; }
 }
 </style>

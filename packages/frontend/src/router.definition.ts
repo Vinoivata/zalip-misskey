@@ -52,6 +52,10 @@ export const ROUTE_DEF = [{
 	component: page(() => import('@/pages/zalip/updates.vue')),
 	loginRequired: true,
 }, {
+	path: '/my/widgets',
+	component: page(() => import('@/pages/zalip/widgets.vue')),
+	loginRequired: true,
+}, {
 	path: '/zalip/editor',
 	component: page(() => import('@/pages/zalip/editor.vue')),
 	loginRequired: true,

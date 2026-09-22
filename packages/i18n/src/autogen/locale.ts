@@ -1270,6 +1270,38 @@ export interface Locale extends ILocale {
     "start": string;
     "zalip": {
         /**
+         * Новое в сообществе
+         */
+        "communityFeed": string;
+        /**
+         * Мои подписки
+         */
+        "followingFeed": string;
+        /**
+         * Поделиться впечатлениями
+         */
+        "writePost": string;
+        /**
+         * Что посмотреть
+         */
+        "discoverTitles": string;
+        /**
+         * Мой Zalip
+         */
+        "mySpace": string;
+        /**
+         * Добавляйте и переставляйте виджеты. Эти же блоки показываются в правой колонке на компьютере.
+         */
+        "widgetsHint": string;
+        /**
+         * Не удалось загрузить подписки. Попробуйте ещё раз.
+         */
+        "subscriptionsLoadFailed": string;
+        /**
+         * Не удалось загрузить библиотеку. Попробуйте ещё раз.
+         */
+        "libraryLoadFailed": string;
+        /**
          * Zalip
          */
         "brand": string;

@@ -7,6 +7,14 @@
  */
 
 :root {
+	--zalip-content-max-width: 960px;
+	--zalip-content-small-max-width: 640px;
+	--zalip-container-offset: 24px;
+	--zalip-nav-width: 220px;
+	--zalip-aside-width: 320px;
+	--zalip-radius: 10px;
+	--zalip-radius-big: 16px;
+	--zalip-radius-small: 6px;
 	--MI-radius: 12px;
 	--MI-marginFull: 16px;
 	--MI-marginHalf: 10px;
@@ -19,6 +27,9 @@
 
 	@media (max-width: 500px) {
 		--MI-margin: var(--MI-marginHalf);
+	}
+	@media (max-width: 767px) {
+		--zalip-container-offset: 16px;
 	}
 }
 

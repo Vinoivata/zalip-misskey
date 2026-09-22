@@ -31,8 +31,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</div>
 				</div>
 				<button type="button" class="_button" :class="$style.onboardingPlayback" :aria-label="onboardingPaused ? i18n.ts.zalip.onboardingResume : i18n.ts.zalip.onboardingPause" :aria-pressed="onboardingPaused" @click="toggleOnboardingAutoplay"><i :class="onboardingPaused ? 'ti ti-player-play-filled' : 'ti ti-player-pause-filled'"></i></button>
-				<button type="button" class="_button" :class="[$style.onboardingArrow, $style.onboardingArrowPrevious]" :aria-label="i18n.ts.zalip.onboardingPrevious" @click="showPreviousOnboarding"><i class="ti ti-chevron-left"></i></button>
-				<button type="button" class="_button" :class="[$style.onboardingArrow, $style.onboardingArrowNext]" :aria-label="i18n.ts.zalip.onboardingNext" @click="showNextOnboarding"><i class="ti ti-chevron-right"></i></button>
 				<div :class="$style.onboardingDots" role="group" :aria-label="i18n.ts.zalip.onboardingDots">
 					<button v-for="(_slide, index) in onboardingSlides" :key="index" type="button" class="_button" :class="{ [$style.onboardingDotActive]: index === activeOnboardingIndex }" :aria-label="i18n.tsx.zalip.onboardingDot({ number: (index + 1).toString() })" :aria-current="index === activeOnboardingIndex ? 'true' : undefined" @click="selectOnboarding(index)"></button>
 				</div>
@@ -43,11 +41,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<div><p :class="$style.eyebrow">{{ showcaseEyebrow }}</p><h2>{{ showcaseTitle }}</h2></div>
 					<div :class="$style.releaseControls">
 						<span :class="$style.count">{{ showcaseItems.length }} {{ isEpisodeShowcase ? i18n.ts.zalip.updatesLabel : i18n.ts.zalip.titlesLabel }}</span>
-						<button type="button" class="_button" :aria-label="i18n.ts.zalip.releaseRailPrevious" @click="scrollReleaseRail(-1)"><i class="ti ti-chevron-left"></i></button>
-						<button type="button" class="_button" :aria-label="i18n.ts.zalip.releaseRailNext" @click="scrollReleaseRail(1)"><i class="ti ti-chevron-right"></i></button>
 					</div>
 				</div>
-				<div ref="releaseRail" :class="$style.releaseRail" role="list" :aria-label="showcaseTitle" @pointerdown="releaseDrag.onPointerDown" @pointermove="releaseDrag.onPointerMove" @pointerup="releaseDrag.onPointerUp" @pointercancel="releaseDrag.onPointerCancel" @click.capture="releaseDrag.onClickCapture">
+				<div :class="$style.releaseRail" role="list" :aria-label="showcaseTitle" @pointerdown="releaseDrag.onPointerDown" @pointermove="releaseDrag.onPointerMove" @pointerup="releaseDrag.onPointerUp" @pointercancel="releaseDrag.onPointerCancel" @click.capture="releaseDrag.onClickCapture">
 					<div v-for="item in showcaseItems" :key="item.id" :class="$style.releaseListItem" role="listitem">
 						<MkA :to="`/zalip/${item.work.slug}`" :class="$style.releaseCard">
 							<div :class="$style.releasePoster">
@@ -61,6 +57,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</div>
 			</section>
 
+			<section v-if="homeTimeline" :class="$style.feed">
+				<div :class="$style.feedTabs" role="group" :aria-label="i18n.ts.timeline">
+					<button v-if="publicTimeline" type="button" class="_button" :class="{ [$style.feedTabActive]: !followingFeed }" :aria-pressed="!followingFeed" @click="followingFeed = false">{{ i18n.ts.zalip.communityFeed }}</button>
+					<button v-if="$i" type="button" class="_button" :class="{ [$style.feedTabActive]: homeTimeline === 'home' }" :aria-pressed="homeTimeline === 'home'" @click="followingFeed = true">{{ i18n.ts.zalip.followingFeed }}</button>
+				</div>
+				<button type="button" class="_button" :class="$style.compose" @click="writePost"><i class="ti ti-pencil-plus"></i>{{ i18n.ts.zalip.writePost }}</button>
+				<MkStreamingNotesTimeline :key="homeTimeline" :src="homeTimeline" :withReplies="false" :withRenotes="true"/>
+			</section>
 		</div>
 	</div>
 </PageWithHeader>
@@ -72,6 +76,11 @@ import { definePage } from '@/page.js';
 import { i18n } from '@/i18n.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { useZalipHorizontalDrag } from '@/composables/use-zalip-horizontal-drag.js';
+import MkStreamingNotesTimeline from '@/components/MkStreamingNotesTimeline.vue';
+import { $i } from '@/i.js';
+import { isAvailableBasicTimeline } from '@/timelines.js';
+import { pleaseLogin } from '@/utility/please-login.js';
+import * as os from '@/os.js';
 
 type ZalipWork = {
 	id: string;
@@ -148,8 +157,16 @@ const releaseEventsLoaded = ref(false);
 const activeOnboardingIndex = ref(0);
 const onboardingPaused = ref(false);
 const activeOnboarding = computed(() => onboardingSlides[activeOnboardingIndex.value]!);
-const releaseRail = ref<HTMLElement | null>(null);
 const releaseDrag = useZalipHorizontalDrag();
+const followingFeed = ref(false);
+const publicTimeline = computed(() => isAvailableBasicTimeline('local') ? 'local' : isAvailableBasicTimeline('global') ? 'global' : null);
+const homeTimeline = computed(() => $i && (followingFeed.value || !publicTimeline.value) ? 'home' : publicTimeline.value);
+
+async function writePost(): Promise<void> {
+	if (!await pleaseLogin()) return;
+	void os.post();
+}
+
 let onboardingTimer: number | null = null;
 let onboardingSwipe: { pointerId: number; startX: number; startY: number } | null = null;
 let onboardingHovered = false;
@@ -212,16 +229,6 @@ function selectOnboarding(index: number): void {
 
 function showOnboarding(step: number): void {
 	activeOnboardingIndex.value = (activeOnboardingIndex.value + step + onboardingSlides.length) % onboardingSlides.length;
-}
-
-function showPreviousOnboarding(): void {
-	showOnboarding(-1);
-	startOnboardingAutoplay();
-}
-
-function showNextOnboarding(): void {
-	showOnboarding(1);
-	startOnboardingAutoplay();
 }
 
 function stopOnboardingAutoplay(): void {
@@ -291,11 +298,6 @@ function cancelOnboardingSwipe(): void {
 	startOnboardingAutoplay();
 }
 
-function scrollReleaseRail(direction: -1 | 1): void {
-	if (releaseRail.value == null) return;
-	releaseRail.value.scrollBy({ left: direction * Math.max(280, releaseRail.value.clientWidth * 0.72), behavior: 'smooth' });
-}
-
 onMounted(() => {
 	void loadHome();
 	startOnboardingAutoplay();
@@ -336,7 +338,7 @@ definePage(() => ({
 
 .onboardingSlide {
 	display: grid;
-	grid-template-columns: minmax(0, 0.86fr) minmax(340px, 1.14fr);
+	grid-template-columns: minmax(0, 0.86fr) minmax(0, 1.14fr);
 	min-height: 360px;
 }
 
@@ -408,24 +410,6 @@ definePage(() => ({
 	object-position: center bottom;
 	user-select: none;
 }
-
-.onboardingArrow {
-	position: absolute;
-	z-index: 2;
-	top: 50%;
-	display: grid;
-	place-items: center;
-	width: 38px;
-	height: 38px;
-	border-radius: 50%;
-	background: color-mix(in srgb, var(--MI_THEME-bg) 84%, transparent);
-	box-shadow: 0 4px 16px color-mix(in srgb, var(--MI_THEME-shadow) 28%, transparent);
-	color: var(--MI_THEME-fg);
-	transform: translateY(-50%);
-}
-
-.onboardingArrowPrevious { left: 10px; }
-.onboardingArrowNext { right: 10px; }
 
 .onboardingPlayback {
 	position: absolute;
@@ -503,22 +487,6 @@ definePage(() => ({
 	display: flex;
 	align-items: center;
 	gap: 7px;
-}
-
-.releaseControls button {
-	display: grid;
-	place-items: center;
-	width: 34px;
-	height: 34px;
-	border-radius: var(--zalip-radius);
-	background: var(--MI_THEME-panelHighlight);
-	color: var(--MI_THEME-fg);
-}
-
-.releaseControls button:hover,
-.releaseControls button:focus-visible {
-	background: var(--MI_THEME-accent);
-	color: var(--MI_THEME-fgOnAccent);
 }
 
 .catalogueMeta {
@@ -683,6 +651,7 @@ definePage(() => ({
 
 .releaseRail {
 	display: flex;
+	user-select: none;
 	gap: 12px;
 	overflow-x: auto;
 	overflow-y: hidden;
@@ -803,8 +772,12 @@ definePage(() => ({
 }
 
 .releaseBody strong {
-	font-size: 0.86rem;
+	font-size: 1rem;
 	line-height: 1.25;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	white-space: normal;
 }
 
 .releaseBody span {
@@ -867,7 +840,7 @@ definePage(() => ({
 	line-height: 1.25;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 767px) {
 	.page {
 		padding-top: 12px;
 	}
@@ -908,14 +881,6 @@ definePage(() => ({
 
 	.onboardingArtwork img {
 		max-height: 310px;
-	}
-
-	.onboardingArrow {
-		top: auto;
-		bottom: 75px;
-		width: 34px;
-		height: 34px;
-		transform: none;
 	}
 
 	.onboardingDots {
@@ -997,4 +962,18 @@ definePage(() => ({
 	.page { padding: 14px var(--MI-margin) 36px; }
 	.releaseListItem { flex-basis: 138px; }
 }
+
+.feed {
+	margin: 32px auto 0;
+	max-width: 720px;
+	overflow: hidden;
+	border-radius: var(--zalip-radius-big);
+	background: var(--MI_THEME-panel);
+}
+
+.feedTabs { display: flex; gap: 8px; padding: 12px; border-bottom: 1px solid var(--MI_THEME-divider); }
+.feedTabs button { min-height: 44px; padding: 8px 14px; border-radius: var(--zalip-radius); font-weight: 700; }
+.feedTabActive { background: var(--MI_THEME-panelHighlight); color: var(--MI_THEME-accent); }
+.compose { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; padding: 16px 24px; color: var(--MI_THEME-fgTransparentWeak); border-bottom: 1px solid var(--MI_THEME-divider); text-align: left; }
+.compose i { font-size: 24px; }
 </style>

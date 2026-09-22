@@ -5,6 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div>
+	<XDiscovery/>
 	<XWidgets
 		:edit="editMode"
 		:widgets="widgets"
@@ -20,16 +21,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 </div>
 </template>
 
-<script lang="ts">
-import { computed, ref } from 'vue';
-const editMode = ref(false);
-</script>
-
 <script lang="ts" setup>
+import { computed, ref } from 'vue';
+import XDiscovery from './zalip-discovery-widgets.vue';
 import type { DefaultStoredWidget, Widget } from '@/components/MkWidgets.vue';
 import XWidgets from '@/components/MkWidgets.vue';
 import { i18n } from '@/i18n.js';
 import { prefer } from '@/preferences.js';
+
+const editMode = ref(false);
 
 const props = withDefaults(defineProps<{
 	// null = 全てのウィジェットを表示

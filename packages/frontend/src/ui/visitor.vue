@@ -14,13 +14,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 		<XMobileFooterMenu v-if="isMobile"/>
 	</div>
+	<aside v-if="showWidgetsSide && !pageMetadata?.needWideArea" :class="$style.widgets"><XDiscovery/></aside>
 </div>
 <XCommon/>
 </template>
 
 <script lang="ts" setup>
-import { computed, provide, ref } from 'vue';
+import { computed, onBeforeUnmount, provide, ref } from 'vue';
 import { instanceName } from '@@/js/config.js';
+import XDiscovery from './_common_/zalip-discovery-widgets.vue';
 import XCommon from './_common_/common.vue';
 import type { PageMetadata } from '@/page.js';
 import ZalipSiteHeader from '@/components/ZalipSiteHeader.vue';
@@ -51,22 +53,19 @@ provideMetadataReceiver((metadataGetter) => {
 provideReactiveMetadata(pageMetadata);
 
 const isMobile = ref(deviceKind === 'smartphone' || window.innerWidth <= MOBILE_THRESHOLD);
-window.addEventListener('resize', () => {
+const showWidgetsSide = ref(window.innerWidth >= 1440);
+
+function updateViewport(): void {
 	isMobile.value = deviceKind === 'smartphone' || window.innerWidth <= MOBILE_THRESHOLD;
-}, { passive: true });
+	showWidgetsSide.value = window.innerWidth >= 1440;
+}
+
+window.addEventListener('resize', updateViewport, { passive: true });
+onBeforeUnmount(() => window.removeEventListener('resize', updateViewport));
 </script>
 
 <style lang="scss" module>
 .root {
-	--zalip-content-max-width: 960px;
-	--zalip-content-small-max-width: 640px;
-	--zalip-container-offset: 24px;
-	--zalip-nav-width: 220px;
-	--zalip-aside-width: 344px;
-	--zalip-radius: 10px;
-	--zalip-radius-big: 16px;
-	--zalip-radius-small: 6px;
-
 	display: flex;
 	height: 100dvh;
 	overflow: clip;
@@ -91,6 +90,15 @@ window.addEventListener('resize', () => {
 	min-height: 0;
 	overflow-y: auto;
 	overflow-x: clip;
+	background: var(--MI_THEME-bg);
+}
+
+.widgets {
+	flex: 0 0 var(--zalip-aside-width);
+	box-sizing: border-box;
+	padding: 24px 16px;
+	overflow-y: auto;
+	border-left: 1px solid var(--MI_THEME-divider);
 	background: var(--MI_THEME-bg);
 }
 

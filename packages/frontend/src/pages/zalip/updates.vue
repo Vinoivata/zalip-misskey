@@ -13,6 +13,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</header>
 
 			<div v-if="pending" :class="$style.empty"><i class="ti ti-loader-2 ti-spin"></i> Загружаем обновления…</div>
+			<div v-else-if="loadError"><p role="alert">{{ i18n.ts.zalip.subscriptionsLoadFailed }}</p><MkError @retry="loadUpdates"/></div>
 				<div v-else-if="events.length === 0" :class="$style.empty"><i class="ti ti-bell-off"></i><strong>Пока нет новых серий</strong><span>На странице тайтла включите «Следить за сериями», чтобы его будущие обновления появились здесь.</span><MkA to="/catalog" :class="$style.start">Открыть каталог</MkA></div>
 			<div v-else :class="$style.list">
 				<MkA v-for="event in events" :key="event.id" :to="`/zalip/${event.work.slug}`" :class="$style.event">
@@ -29,6 +30,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { onMounted, ref } from 'vue';
 import { definePage } from '@/page.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
+import { i18n } from '@/i18n.js';
 
 type ReleaseEvent = {
 	id: string;
@@ -40,6 +42,7 @@ type ReleaseEvent = {
 
 const events = ref<ReleaseEvent[]>([]);
 const pending = ref(true);
+const loadError = ref(false);
 
 function tmdbImage(path: string): string {
 	return `https://image.tmdb.org/t/p/w500${path}`;
@@ -53,13 +56,19 @@ function dateLabel(createdAt: string): string {
 	return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(createdAt));
 }
 
-onMounted(async () => {
+async function loadUpdates(): Promise<void> {
+	pending.value = true;
+	loadError.value = false;
 	try {
 		events.value = await misskeyApiZalip<ReleaseEvent[]>('zalip/releases/subscribed', { limit: 50 });
+	} catch {
+		loadError.value = true;
 	} finally {
 		pending.value = false;
 	}
-});
+}
+
+onMounted(loadUpdates);
 
 definePage(() => ({ title: 'Подписки', icon: 'ti ti-bell' }));
 </script>

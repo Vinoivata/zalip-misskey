@@ -5,13 +5,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <MkModal ref="modal" :preferType="'dialog'" :zPriority="'high'" @click="dismiss" @closed="emit('closed')" @esc="dismiss">
-	<section :class="$style.root" role="dialog" aria-modal="true" :aria-labelledby="titleId">
+	<section :class="$style.root" :style="{ '--rating-color': ratingColor }" role="dialog" aria-modal="true" :aria-labelledby="titleId">
 		<header :class="$style.header">
 			<h2 :id="titleId">{{ ratingDialogTitle }}</h2>
-			<button type="button" class="_button" :class="$style.close" :aria-label="i18n.ts.close" @click="dismiss"><i class="ti ti-x"></i></button>
+			<button type="button" class="_button" :class="$style.close" :disabled="saving" :aria-label="i18n.ts.close" @click="dismiss"><i class="ti ti-x"></i></button>
 		</header>
 
-		<div :class="$style.score" :style="{ '--rating-color': ratingColor }">
+		<div :class="$style.score" aria-live="polite" aria-atomic="true">
 			<strong :class="$style.number">{{ displayedRating }}</strong>
 			<p v-if="ratingDescription" :class="$style.description">{{ ratingDescription }}</p>
 			<span v-else :class="$style.descriptionPlaceholder" aria-hidden="true"></span>
@@ -25,20 +25,22 @@ SPDX-License-Identifier: AGPL-3.0-only
 				class="_button"
 				:class="[$style.star, { [$style.starSelected]: rating <= displayedRating }]"
 				:aria-pressed="selectedRating === rating"
+				:disabled="saving"
 				:aria-label="i18n.tsx.zalip.ratingValue({ rating: rating.toString() })"
 				@click="selectRating(rating)"
 				@focus="previewRating = rating"
 				@blur="previewRating = null"
 				@mouseenter="previewRating = rating"
 			>
-				<span aria-hidden="true">✦</span>
+				<i class="ti ti-star-filled" aria-hidden="true"></i>
 			</button>
 		</div>
 
 		<footer :class="$style.actions">
-			<button type="button" class="_button" :class="$style.later" @click="later">{{ ratingLater }}</button>
-			<button type="button" class="_button" :class="$style.submit" :disabled="selectedRating === 0" @click="save">{{ ratingSubmit }}</button>
+			<button type="button" class="_button" :class="$style.later" :disabled="saving" @click="later">{{ ratingLater }}</button>
+			<button type="button" class="_button" :class="$style.submit" :disabled="selectedRating === 0 || saving" @click="save"><i v-if="saving" class="ti ti-loader-2 ti-spin"></i>{{ ratingSubmit }}</button>
 		</footer>
+		<p v-if="error" :class="$style.error" role="alert">{{ error }}</p>
 	</section>
 </MkModal>
 </template>
@@ -50,8 +52,12 @@ import { i18n } from '@/i18n.js';
 
 const props = withDefaults(defineProps<{
 	initialRating?: number;
+	saving?: boolean;
+	error?: string | null;
 }>(), {
 	initialRating: 0,
+	saving: false,
+	error: null,
 });
 
 const emit = defineEmits<{
@@ -86,20 +92,22 @@ const ratingDescription = computed(() => ratingDescriptions[displayedRating.valu
 const ratingColor = computed(() => {
 	if (displayedRating.value <= 0) return 'var(--MI_THEME-fgTransparentWeak)';
 	if (displayedRating.value <= 3) return 'var(--MI_THEME-error)';
-	if (displayedRating.value <= 5) return 'var(--MI_THEME-warn)';
+	if (displayedRating.value <= 6) return 'var(--MI_THEME-fg)';
 	return 'var(--MI_THEME-success)';
 });
 
 watch(() => props.initialRating, (rating) => {
-	selectedRating.value = Math.min(10, Math.max(0, rating));
+	selectedRating.value = Number.isFinite(rating) ? Math.min(10, Math.max(0, Math.round(rating))) : 0;
 }, { immediate: true });
 
 function selectRating(rating: number): void {
+	if (props.saving) return;
 	selectedRating.value = rating;
 	previewRating.value = null;
 }
 
 function dismiss(): void {
+	if (props.saving) return;
 	modal.value?.close();
 }
 
@@ -109,9 +117,8 @@ function later(): void {
 }
 
 function save(): void {
-	if (selectedRating.value === 0) return;
+	if (selectedRating.value === 0 || props.saving) return;
 	emit('save', selectedRating.value);
-	dismiss();
 }
 </script>
 
@@ -122,7 +129,9 @@ function save(): void {
 	padding: 24px;
 	border-radius: 24px;
 	background: var(--MI_THEME-panel);
-	box-shadow: 0 24px 70px rgb(0 0 0 / 42%);
+	max-height: calc(100dvh - 24px);
+	overflow-y: auto;
+	box-shadow: 0 24px 70px var(--MI_THEME-shadow);
 }
 
 .header {
@@ -151,10 +160,12 @@ function save(): void {
 }
 
 .score {
-	display: grid;
-	justify-items: center;
-	min-height: 165px;
-	padding-top: 21px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	min-height: 154px;
+	padding-block: 12px;
 	color: var(--rating-color);
 	text-align: center;
 }
@@ -177,24 +188,24 @@ function save(): void {
 .stars {
 	display: grid;
 	grid-template-columns: repeat(10, minmax(0, 1fr));
-	gap: 4px;
-	margin: 2px -4px 26px;
+	gap: 0;
+	margin: 0 0 24px;
 }
 
 .star {
 	display: grid;
 	place-items: center;
 	min-width: 0;
+	min-height: 44px;
 	padding: 2px 0;
 	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: clamp(1.9rem, 5vw, 2.65rem);
+	font-size: clamp(18px, 5.7vw, 36px);
 	line-height: 1;
 	transition: color 0.15s ease, transform 0.15s ease;
 }
 
-.star span {
+.star i {
 	display: block;
-	transform: scaleX(0.88);
 }
 
 .star:hover, .star:focus-visible {
@@ -240,15 +251,13 @@ function save(): void {
 	cursor: default;
 }
 
+.error { color: var(--MI_THEME-error); margin: 14px 0 0; text-align: center; }
+
 @media (max-width: 480px) {
 	.root { width: min(100vw - 24px, 600px); padding: 20px 18px 18px; border-radius: 22px; }
 	.close { width: 50px; height: 50px; border-radius: 15px; }
-	.score { min-height: 150px; }
-	.stars { gap: 1px; margin-right: -2px; margin-left: -2px; }
+	.score { min-height: 142px; }
 	.actions button { min-height: 52px; border-radius: 15px; font-size: 0.93rem; }
 }
 
-@media (max-width: 360px) {
-	.stars { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px 8px; }
-}
 </style>

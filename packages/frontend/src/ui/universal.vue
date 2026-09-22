@@ -34,7 +34,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { defineAsyncComponent, provide, onMounted, computed, ref } from 'vue';
+import { defineAsyncComponent, provide, onBeforeUnmount, computed, ref } from 'vue';
 import { instanceName } from '@@/js/config.js';
 import { isLink } from '@@/js/is-link.js';
 import XCommon from './_common_/common.vue';
@@ -72,10 +72,14 @@ const MOBILE_THRESHOLD = 767;
 const showWidgetsSide = ref(window.innerWidth >= DESKTOP_THRESHOLD);
 
 const isMobile = ref(deviceKind === 'smartphone' || window.innerWidth <= MOBILE_THRESHOLD);
-window.addEventListener('resize', () => {
+
+function updateViewport(): void {
 	isMobile.value = deviceKind === 'smartphone' || window.innerWidth <= MOBILE_THRESHOLD;
 	showWidgetsSide.value = window.innerWidth >= DESKTOP_THRESHOLD;
-});
+}
+
+window.addEventListener('resize', updateViewport, { passive: true });
+onBeforeUnmount(() => window.removeEventListener('resize', updateViewport));
 
 const pageMetadata = ref<null | PageMetadata>(null);
 const widgetsShowing = ref(false);
@@ -131,15 +135,6 @@ function onContextmenu(ev: PointerEvent) {
 $widgets-hide-threshold: 1439px;
 
 .root {
-	--zalip-content-max-width: 960px;
-	--zalip-content-small-max-width: 640px;
-	--zalip-container-offset: 24px;
-	--zalip-nav-width: 220px;
-	--zalip-aside-width: 344px;
-	--zalip-radius: 10px;
-	--zalip-radius-big: 16px;
-	--zalip-radius-small: 6px;
-
 	height: 100dvh;
 	overflow: clip;
 	contain: strict;
@@ -190,7 +185,8 @@ $widgets-hide-threshold: 1439px;
 }
 
 .widgets {
-	width: 344px;
+	flex: 0 0 var(--zalip-aside-width);
+	width: var(--zalip-aside-width);
 	height: 100%;
 	box-sizing: border-box;
 	overflow: auto;

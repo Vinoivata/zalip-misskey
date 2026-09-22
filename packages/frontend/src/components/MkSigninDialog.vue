@@ -8,15 +8,17 @@ SPDX-License-Identifier: AGPL-3.0-only
 	ref="modal"
 	:preferType="'dialog'"
 	@click="onClose"
+	@esc="onClose"
 	@closed="emit('closed')"
 >
 	<div :class="$style.root">
 		<div :class="$style.header">
 			<div :class="$style.headerText"><i class="ti ti-login-2"></i> {{ i18n.ts.login }}</div>
-			<button :class="$style.closeButton" class="_button" @click="onClose"><i class="ti ti-x"></i></button>
+			<button type="button" :class="$style.closeButton" class="_button" :aria-label="i18n.ts.close" @click="onClose"><i class="ti ti-x"></i></button>
 		</div>
 		<div :class="$style.content">
 			<MkSignin :autoSet="autoSet" :message="message" :openOnRemote="openOnRemote" :initialUsername="initialUsername" @login="onLogin"/>
+			<button v-if="autoSet" type="button" class="_button" :class="$style.signup" @click="signUp"><i class="ti ti-user-plus"></i> {{ i18n.ts.signup }}</button>
 		</div>
 	</div>
 </MkModal>
@@ -29,6 +31,7 @@ import type { OpenOnRemoteOptions } from '@/utility/please-login.js';
 import MkSignin from '@/components/MkSignin.vue';
 import MkModal from '@/components/MkModal.vue';
 import { i18n } from '@/i18n.js';
+import { openZalipSignup } from '@/utility/zalip-signup.js';
 
 withDefaults(defineProps<{
 	autoSet?: boolean;
@@ -50,6 +53,11 @@ const emit = defineEmits<{
 
 const modal = useTemplateRef('modal');
 
+function signUp(): void {
+	modal.value?.close();
+	void openZalipSignup();
+}
+
 function onClose() {
 	emit('cancelled');
 	if (modal.value) modal.value.close();
@@ -66,13 +74,11 @@ function onLogin(res: Misskey.entities.SigninFlowResponse & { finished: true }) 
 	overflow: auto;
 	margin: auto;
 	position: relative;
-	width: 100%;
-	max-width: 400px;
-	height: 100%;
-	max-height: 450px;
+	width: min(440px, calc(100vw - 24px));
+	max-height: calc(100dvh - 32px);
 	box-sizing: border-box;
 	background: var(--MI_THEME-panel);
-	border-radius: var(--MI-radius);
+	border-radius: var(--zalip-radius-big);
 }
 
 .header {
@@ -103,7 +109,17 @@ function onLogin(res: Misskey.entities.SigninFlowResponse & { finished: true }) 
 }
 
 .content {
-	padding: 32px;
+	padding: 24px;
 	box-sizing: border-box;
+}
+
+.signup {
+	display: block;
+	width: 100%;
+	min-height: 48px;
+	margin-top: 24px;
+	border-radius: var(--zalip-radius);
+	background: var(--MI_THEME-panelHighlight);
+	font-weight: 700;
 }
 </style>

@@ -32,6 +32,7 @@ import { misskeyApi } from '@/utility/misskey-api.js';
 import { definePage } from '@/page.js';
 import { i18n } from '@/i18n.js';
 import { $i } from '@/i.js';
+import { mainRouter } from '@/router.js';
 import { serverContext, assertServerContext } from '@/server-context.js';
 
 const XHome = defineAsyncComponent(() => import('./home.vue'));
@@ -73,6 +74,7 @@ function fetchUser(): void {
 	}
 
 	user.value = null;
+	error.value = null;
 	misskeyApi('users/show', {
 		username,
 		host,
@@ -87,7 +89,11 @@ watch(() => props.acct, fetchUser, {
 	immediate: true,
 });
 
-const headerActions = computed(() => []);
+const headerActions = computed(() => $i?.id === user.value?.id ? [{
+	icon: 'ti ti-bookmark',
+	text: i18n.ts.zalip.mySpace,
+	handler: () => mainRouter.push('/library'),
+}] : []);
 
 const headerTabs = computed(() => user.value ? [{
 	key: 'home',
