@@ -185,7 +185,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</footer>
 		</article>
 		<div :class="$style.tabs">
-			<button class="_button" :class="[$style.tab, { [$style.tabActive]: tab === 'replies' }]" @click="openComments()"><i class="ti ti-message-circle"></i> Комментарии<span v-if="appearNote.repliesCount > 0" :class="$style.tabCount">{{ number(appearNote.repliesCount) }}</span></button>
+			<button class="_button" :class="[$style.tab, { [$style.tabActive]: tab === 'replies' }]" @click="openComments()"><i class="ti ti-message-circle"></i> {{ i18n.ts.zalip.comments }}<span v-if="appearNote.repliesCount > 0" :class="$style.tabCount">{{ number(appearNote.repliesCount) }}</span></button>
 			<button class="_button" :class="[$style.tab, { [$style.tabActive]: tab === 'renotes' }]" @click="tab = 'renotes'"><i class="ti ti-repeat"></i> {{ i18n.ts.renotes }}</button>
 			<button class="_button" :class="[$style.tab, { [$style.tabActive]: tab === 'reactions' }]" @click="tab = 'reactions'"><i class="ti ti-icons"></i> {{ i18n.ts.reactions }}</button>
 		</div>
@@ -782,6 +782,12 @@ const keymap = {
 @container (max-width: 500px) {
 	.root {
 		font-size: max(1em, 15px);
+	}
+	.tab {
+		padding-inline: 4px;
+		font-size: 12px;
+		white-space: nowrap;
+		> i { display: block; margin-bottom: 4px; font-size: 18px; }
 	}
 }
 
