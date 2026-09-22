@@ -787,7 +787,7 @@ const keymap = {
 		padding-inline: 4px;
 		font-size: 12px;
 		white-space: nowrap;
-		> i { display: block; margin-bottom: 4px; font-size: 18px; }
+		> i { display: block; margin: 0 auto 4px; font-size: 18px; }
 	}
 }
 
