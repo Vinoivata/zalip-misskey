@@ -716,6 +716,10 @@ definePage(() => ({
 	pointer-events: none;
 }
 
+:global(html[data-color-scheme='light']) .releasePoster::after {
+	display: none;
+}
+
 .releasePoster img {
 	width: 100%;
 	height: 100%;
@@ -746,6 +750,11 @@ definePage(() => ({
 	flex: 0 0 auto;
 	color: var(--MI_THEME-accent);
 	font-size: 0.78rem;
+}
+
+:global(html[data-color-scheme='light']) .releaseBadge {
+	background: var(--MI_THEME-panel);
+	backdrop-filter: none;
 }
 
 .releaseBadgeText {

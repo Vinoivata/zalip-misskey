@@ -395,8 +395,10 @@ const keymap = {
 	contain: content;
 	transition: background 0.16s ease;
 
-	&:hover > .article {
-		background: color(from var(--MI_THEME-panelHighlight) srgb r g b / 0.42);
+	@media (hover: hover) and (pointer: fine) {
+		&:hover > .article {
+			background: color-mix(in srgb, var(--MI_THEME-panelHighlight) 60%, transparent);
+		}
 	}
 
 	&:focus-visible {

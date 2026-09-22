@@ -26,7 +26,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 								<button type="button" class="_button" :class="$style.sideButton" @click="focusDiscussion"><i class="ti ti-messages"></i><span>{{ i18n.ts.zalip.discussTitle }}</span></button>
 							</div>
 							<div :class="$style.quickActions" role="group" :aria-label="i18n.ts.zalip.workActions">
-								<button type="button" class="_button" :class="[$style.quickAction, { [$style.quickActionActive]: isFavorite }]" :aria-label="i18n.ts.zalip.favoriteTitle" :aria-pressed="isFavorite" :disabled="saving" @click="toggleFavorite"><i :class="isFavorite ? 'ti ti-star-filled' : 'ti ti-star'"></i><span>{{ i18n.ts.zalip.favoriteTitle }}</span></button>
+								<button type="button" class="_button" :class="[$style.quickAction, { [$style.quickActionActive]: isFavorite }]" :aria-label="i18n.ts.zalip.favoriteTitle" :aria-pressed="isFavorite" :disabled="saving" @click="toggleFavorite"><i :class="isFavorite ? 'ti ti-heart-filled' : 'ti ti-heart'"></i><span>{{ i18n.ts.zalip.favoriteTitle }}</span></button>
 								<button v-if="work.seasons.length" type="button" class="_button" :class="[$style.quickAction, { [$style.quickActionActive]: releaseSubscribed }]" :aria-label="i18n.ts.zalip.releaseSubscriptionTitle" :aria-pressed="releaseSubscribed" :disabled="saving" @click="toggleReleaseSubscription"><i :class="releaseSubscribed ? 'ti ti-bell-filled' : 'ti ti-bell'"></i><span>{{ i18n.ts.zalip.releaseSubscriptionTitle }}</span></button>
 								<button type="button" class="_button" :class="[$style.quickAction, $style.ratingAction, { [$style.quickActionActive]: personalRating != null }]" :aria-label="i18n.ts.zalip.ratingTitle" :disabled="saving" @click="choosePersonalRating"><i :class="personalRating == null ? 'ti ti-star' : 'ti ti-star-filled'"></i><span>{{ ratingLabel }}</span></button>
 								<button type="button" class="_button" :class="$style.quickAction" :aria-label="i18n.ts.zalip.shareTitle" @click="shareWork"><i class="ti ti-share-3"></i><span>{{ i18n.ts.zalip.shareTitle }}</span></button>
@@ -530,7 +530,7 @@ async function showLibraryMenu(event: MouseEvent): Promise<void> {
 		{
 			text: i18n.ts.zalip.favoriteTitle,
 			caption: i18n.ts.zalip.favoriteCaption,
-			icon: isFavorite.value ? 'ti ti-star-filled' : 'ti ti-star',
+			icon: isFavorite.value ? 'ti ti-heart-filled' : 'ti ti-heart',
 			active: isFavorite.value,
 			action: () => void toggleFavorite(),
 		},
@@ -1778,15 +1778,43 @@ definePage(() => ({
 	.poster { width: min(78vw, 320px); align-self: center; border-radius: var(--zalip-radius-big); box-shadow: 0 12px 40px var(--MI_THEME-shadow); }
 	.sidebarActions { grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 20px; }
 	.watchButton { grid-column: 1 / -1; }
-	.watchButton, .sideButton { min-height: 48px; padding: 10px 12px; font-size: 1rem; }
+	.watchButton, .sideButton { min-height: 50px; padding: 12px; gap: 10px; font-size: max(16px, 1rem); font-weight: 650; line-height: 1.25; }
+	.watchButton i, .sideButton i { flex: 0 0 auto; font-size: 20px; }
 	.quickActions { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
-	.quickAction { min-height: 44px; font-size: 0.9rem; }
+	.quickAction { min-height: 46px; padding: 10px 8px; gap: 8px; font-size: max(14px, 0.9rem); font-weight: 550; line-height: 1.3; white-space: normal; }
+	.quickAction:not(.quickActionActive) { color: var(--MI_THEME-fg); }
+	.quickAction i { flex: 0 0 auto; font-size: 20px; }
 	.quickAction span { display: inline; }
-	.info h1 { font-size: clamp(1.8rem, 7vw, 2.4rem); line-height: 1.18; overflow-wrap: anywhere; }
-	.description { margin: 0; font-size: 1rem; line-height: 1.65; }
+	.kind { margin: 0 0 10px; color: var(--MI_THEME-fgTransparentWeak); font-size: max(14px, 0.9rem); font-weight: 500; letter-spacing: normal; }
+	.info h1 { font-size: clamp(28px, 7vw, 2.4rem); line-height: 1.2; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+	.original { margin-top: 8px; font-size: max(16px, 1rem); line-height: 1.4; }
+	.genres { margin-top: 16px; gap: 8px; }
+	.genres a { min-height: 40px; box-sizing: border-box; padding: 9px 12px; color: var(--MI_THEME-fg); font-size: max(14px, 0.9rem); font-weight: 500; line-height: 1.4; }
+	.description { margin: 0; font-size: max(16px, 1rem); line-height: 1.65; color: var(--MI_THEME-fg); }
 	.content { padding: 0 var(--zalip-container-offset); }
 	.player { margin-inline: calc(var(--zalip-container-offset) * -1); border-radius: 0; }
-	.playerTab, .playerTabActive { min-height: 44px; font-size: 1rem; gap: 8px; padding-inline: 14px; }
+	.playerTabs { gap: 8px; padding: 8px var(--zalip-container-offset); }
+	.playerTab, .playerTabActive { min-height: 46px; font-size: max(16px, 1rem); gap: 8px; padding-inline: 14px; }
+	.playerTab i { font-size: 20px; }
 	.playerTab > span, .playerTabActive > span { display: inline; }
+	.playerState, .playerUnavailable { font-size: max(15px, 1rem); line-height: 1.6; }
+	.playerEpisodes { padding: 16px var(--zalip-container-offset); }
+	.seasonPicker { gap: 12px; font-size: max(15px, 1rem); }
+	.seasonPicker > span { font-size: inherit; }
+	.seasonPill { min-width: 44px; min-height: 44px; font-size: max(15px, 1rem); }
+	.episodeNav { min-width: 44px; min-height: 44px; font-size: 20px; }
+	.nowPlaying strong, .translation select { font-size: max(14px, 0.9rem); }
+	.nowPlaying span, .providerNotice { font-size: max(12px, 0.8rem); line-height: 1.5; }
+	.episodeTile { flex-basis: 140px; grid-template-rows: 79px auto auto; gap: 7px; }
+	.episodeTile > img, .episodeTileFallback { height: 79px; }
+	.episodeTile strong { font-size: max(14px, 0.9rem); }
+	.episodeTile small { font-size: max(13px, 0.85rem); line-height: 1.35; }
+	.episodeGuideContent { gap: 10px; padding: 18px; }
+	.episodeGuideContent h2, .gallery h2 { font-size: max(20px, 1.25rem); line-height: 1.3; }
+	.episodeGuideContent > p { font-size: max(16px, 1rem); line-height: 1.6; color: var(--MI_THEME-fg); }
+	.episodeGuideContent > p:first-child, .episodeGuideContent > span { font-size: max(13px, 0.85rem); color: var(--MI_THEME-fgTransparentWeak); }
+	.episodeDiscussButton, .scopeButton, .openDiscussion { min-height: 44px; box-sizing: border-box; font-size: max(14px, 0.9rem); line-height: 1.4; }
+	.episodeDiscussButton i, .scopeButton i, .openDiscussion i { flex: 0 0 auto; font-size: 20px; }
+	.discussionArea { font-size: max(16px, 1rem); }
 }
 </style>
