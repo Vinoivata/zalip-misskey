@@ -22,28 +22,72 @@ function createReply() {
 }
 
 /** APIサービスの依存関係を最小限の仮実装へ差し替えます。 */
-function createService() {
+function createService(options: { userId?: string; rootUserId?: string | null; canSearchUsers?: boolean; isAdministrator?: boolean } = {}) {
 	const authenticateService = {
-		authenticate: vi.fn().mockResolvedValue([null, null]),
+		authenticate: vi.fn().mockResolvedValue([options.userId ? { id: options.userId } : null, null]),
 	};
 	const telemetryService = {
 		startSpan: vi.fn((_name: string, callback: () => unknown) => callback()),
 		captureMessage: vi.fn(),
 	};
 	const apiLoggerService = { logger: new Logger('api') };
+	const roleService = {
+		getUserRoles: vi.fn().mockResolvedValue(options.isAdministrator ? [{ isAdministrator: true }] : []),
+		getUserPolicies: vi.fn().mockResolvedValue({ canSearchUsers: options.canSearchUsers ?? true }),
+	};
 
 	const service = new ApiCallService(
-		{} as never,
+		{ rootUserId: options.rootUserId === undefined ? 'root' : options.rootUserId } as never,
 		{} as never,
 		{} as never,
 		authenticateService as never,
 		{} as never,
-		{} as never,
+		roleService as never,
 		apiLoggerService as never,
 		telemetryService as never,
 	);
-	return { service, telemetryService };
+	return { service, telemetryService, roleService };
 }
+
+describe('ApiCallService optional authentication role policies', () => {
+	test.each([
+		{ label: 'guest allowed', canSearchUsers: true, allowed: true },
+		{ label: 'guest denied', canSearchUsers: false, allowed: false },
+		{ label: 'guest denied with no root configured', rootUserId: null, canSearchUsers: false, allowed: false },
+		{ label: 'member allowed', userId: 'member', canSearchUsers: true, allowed: true },
+		{ label: 'member denied', userId: 'member', canSearchUsers: false, allowed: false },
+		{ label: 'administrator bypass', userId: 'admin', isAdministrator: true, canSearchUsers: false, allowed: true },
+		{ label: 'root bypass', userId: 'root', canSearchUsers: false, allowed: true },
+	])('$label', async (options) => {
+		const { service, roleService } = createService(options);
+		const endpoint = {
+			name: 'users/search',
+			meta: { requireCredential: false, requiredRolePolicy: 'canSearchUsers' },
+			params: {},
+			exec: vi.fn().mockResolvedValue([]),
+		};
+		const reply = createReply();
+		try {
+			await service.handleRequest(endpoint as never, {
+				method: 'POST', body: { query: 'test' }, query: {}, headers: {}, ip: '127.0.0.1',
+			} as never, reply as never);
+			if (options.allowed) {
+				expect(endpoint.exec).toHaveBeenCalledOnce();
+				expect(reply.send).toHaveBeenCalledWith([]);
+			} else {
+				expect(endpoint.exec).not.toHaveBeenCalled();
+				expect(reply.code).toHaveBeenCalledWith(403);
+				expect(reply.send).toHaveBeenCalledWith({ error: expect.objectContaining({ code: 'ROLE_PERMISSION_DENIED' }) });
+			}
+			if (!options.userId) {
+				expect(roleService.getUserRoles).not.toHaveBeenCalled();
+				expect(roleService.getUserPolicies).toHaveBeenCalledWith(null);
+			}
+		} finally {
+			service.dispose();
+		}
+	});
+});
 
 describe('ApiCallService structured error logging', () => {
 	test('redacts API credentials and serializes the endpoint error', async () => {
