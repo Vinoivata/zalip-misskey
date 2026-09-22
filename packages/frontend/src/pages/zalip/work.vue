@@ -1161,7 +1161,7 @@ definePage(() => ({
 	gap: 10px;
 	overflow-x: auto;
 	padding-bottom: 2px;
-	scroll-snap-type: x proximity;
+	scroll-snap-type: none;
 	scrollbar-width: none;
 	cursor: grab;
 }
@@ -1171,7 +1171,6 @@ definePage(() => ({
 }
 
 .episodeRail[data-dragging='true'] {
-	scroll-snap-type: none;
 	cursor: grabbing;
 	user-select: none;
 }
@@ -1188,7 +1187,6 @@ definePage(() => ({
 	background: transparent;
 	color: var(--MI_THEME-fg);
 	text-align: left;
-	scroll-snap-align: start;
 }
 
 .episodeTile > img, .episodeTileFallback {

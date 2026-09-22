@@ -656,8 +656,7 @@ definePage(() => ({
 	overflow-x: auto;
 	overflow-y: hidden;
 	padding: 1px;
-	scroll-padding-inline: 1px;
-	scroll-snap-type: x proximity;
+	scroll-snap-type: none;
 	scrollbar-width: none;
 	cursor: grab;
 }
@@ -667,14 +666,12 @@ definePage(() => ({
 }
 
 .releaseRail[data-dragging='true'] {
-	scroll-snap-type: none;
 	cursor: grabbing;
 	user-select: none;
 }
 
 .releaseListItem {
 	flex: 0 0 clamp(145px, 16.5vw, 184px);
-	scroll-snap-align: start;
 }
 
 .releaseCard {
