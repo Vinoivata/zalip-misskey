@@ -468,9 +468,11 @@ defineExpose({
 
 .notes {
 	display: grid;
+	grid-template-columns: minmax(0, 1fr);
 	gap: 12px;
 	container-type: inline-size;
 	background: transparent;
+	> * { min-width: 0; }
 }
 
 .note:not(:empty) {
