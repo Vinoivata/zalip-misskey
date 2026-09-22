@@ -1776,7 +1776,7 @@ definePage(() => ({
 	.heroBackground { height: 440px; opacity: 0.75; }
 	.hero::after { background: linear-gradient(0deg, var(--MI_THEME-panel) calc(100% - 440px), color-mix(in srgb, var(--MI_THEME-panel) 32%, transparent)); }
 	.heroContent { display: flex; flex-direction: column; align-items: stretch; gap: 24px; padding: 32px var(--zalip-container-offset) 24px; }
-	.sidebar { display: flex; flex-direction: column; align-self: stretch; gap: 0; }
+	.sidebar { display: flex; flex-direction: column; align-items: stretch; align-self: stretch; gap: 0; }
 	.poster { width: min(78vw, 320px); align-self: center; border-radius: var(--zalip-radius-big); box-shadow: 0 12px 40px var(--MI_THEME-shadow); }
 	.sidebarActions { grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 20px; }
 	.watchButton { grid-column: 1 / -1; }
