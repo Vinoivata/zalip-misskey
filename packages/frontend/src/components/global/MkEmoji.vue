@@ -70,6 +70,7 @@ function unmute() {
 
 function onClick(ev: PointerEvent) {
 	if (props.menu) {
+		ev.stopPropagation();
 		const menuItems: MenuItem[] = [];
 
 		menuItems.push({

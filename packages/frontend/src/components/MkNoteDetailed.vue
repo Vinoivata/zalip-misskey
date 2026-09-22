@@ -75,6 +75,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</div>
 					<MkInstanceTicker v-if="showTicker" :host="appearNote.user.host" :instance="appearNote.user.instance"/>
 				</div>
+				<button ref="menuButton" type="button" class="_button" :class="$style.menuButton" :aria-label="i18n.ts.more" @click="showMenu()"><i class="ti ti-dots" aria-hidden="true"></i></button>
 			</header>
 			<div :class="$style.noteContent">
 				<p v-if="appearNote.cw != null" :class="$style.cw">
@@ -153,7 +154,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					:myReaction="$appearNote.myReaction"
 					:noteId="appearNote.id"
 				/>
-				<button v-tooltip="'Комментарии'" class="_button" :class="$style.noteFooterButton" aria-label="Открыть комментарии" @click="openComments()">
+				<button v-tooltip="i18n.ts.zalip.comments" class="_button" :class="$style.noteFooterButton" :aria-label="i18n.ts.zalip.comments" @click="openComments()">
 					<i class="ti ti-message-circle"></i>
 					<p v-if="appearNote.repliesCount > 0" :class="$style.noteFooterButtonCount">{{ number(appearNote.repliesCount) }}</p>
 				</button>
@@ -162,26 +163,24 @@ SPDX-License-Identifier: AGPL-3.0-only
 					ref="renoteButton"
 					class="_button"
 					:class="$style.noteFooterButton"
-					@mousedown.prevent="renote()"
+					:aria-label="i18n.ts.renote"
+					@click="renote()"
 				>
 					<i class="ti ti-repeat"></i>
 					<p v-if="appearNote.renoteCount > 0" :class="$style.noteFooterButtonCount">{{ number(appearNote.renoteCount) }}</p>
 				</button>
-				<button v-else class="_button" :class="$style.noteFooterButton" disabled>
+				<button v-else class="_button" :class="$style.noteFooterButton" :aria-label="i18n.ts.renote" disabled>
 					<i class="ti ti-ban"></i>
 				</button>
-				<button ref="reactButton" :class="$style.noteFooterButton" class="_button" @click="toggleReact()">
+				<button ref="reactButton" :class="$style.noteFooterButton" class="_button" :aria-label="i18n.ts.reaction" :aria-pressed="$appearNote.myReaction != null" @click="toggleReact()">
 					<i v-if="appearNote.reactionAcceptance === 'likeOnly' && $appearNote.myReaction != null" class="ti ti-heart-filled" style="color: var(--MI_THEME-love);"></i>
 					<i v-else-if="$appearNote.myReaction != null" class="ti ti-minus" style="color: var(--MI_THEME-accent);"></i>
 					<i v-else-if="appearNote.reactionAcceptance === 'likeOnly'" class="ti ti-heart"></i>
-					<i v-else class="ti ti-plus"></i>
+					<i v-else class="ti ti-mood-plus"></i>
 					<p v-if="(appearNote.reactionAcceptance === 'likeOnly' || prefer.s.showReactionsCount) && $appearNote.reactionCount > 0" :class="$style.noteFooterButtonCount">{{ number($appearNote.reactionCount) }}</p>
 				</button>
-				<button v-if="prefer.s.showClipButtonInNoteFooter" ref="clipButton" class="_button" :class="$style.noteFooterButton" @mousedown.prevent="clip()">
+				<button v-if="prefer.s.showClipButtonInNoteFooter" ref="clipButton" class="_button" :class="$style.noteFooterButton" :aria-label="i18n.ts.clip" @click="clip()">
 					<i class="ti ti-paperclip"></i>
-				</button>
-				<button ref="menuButton" class="_button" :class="$style.noteFooterButton" @mousedown.prevent="showMenu()">
-					<i class="ti ti-dots"></i>
 				</button>
 			</footer>
 		</article>
@@ -435,6 +434,7 @@ const keymap = {
 <style lang="scss" module>
 .root {
 	position: relative;
+	font-size: max(1em, 15px);
 	transition: box-shadow 0.1s ease;
 	overflow: clip;
 	contain: content;
@@ -515,8 +515,8 @@ const keymap = {
 }
 
 .note {
-	padding: 32px;
-	font-size: 1.2em;
+	padding: 24px;
+	font-size: 16px;
 
 	&:hover > .main > .footer > .button {
 		opacity: 1;
@@ -533,17 +533,18 @@ const keymap = {
 .noteHeaderAvatar {
 	display: block;
 	flex-shrink: 0;
-	width: 58px;
-	height: 58px;
+	width: 44px;
+	height: 44px;
 }
 
 .noteHeaderBody {
 	flex: 1;
+	min-width: 0;
 	display: flex;
 	flex-direction: column;
 	justify-content: center;
-	padding-left: 16px;
-	font-size: 0.95em;
+	padding-left: 12px;
+	font-size: 14px;
 }
 
 .noteHeaderName {
@@ -574,6 +575,8 @@ const keymap = {
 	margin-right: 0.5em;
 	line-height: 1.3;
 	word-wrap: anywhere;
+	font-size: 13px;
+	color: var(--MI_THEME-fgTransparentWeak);
 }
 
 .noteHeaderBadgeRoles {
@@ -592,7 +595,12 @@ const keymap = {
 .noteContent {
 	container-type: inline-size;
 	overflow-wrap: break-word;
+	line-height: 1.6;
 }
+
+.menuButton { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; border-radius: 50%; font-size: 20px; color: var(--MI_THEME-fgTransparentWeak); }
+.menuButton:hover { background: var(--MI_THEME-panelHighlight); }
+.menuButton:focus-visible { outline: 2px solid var(--MI_THEME-focus); }
 
 .cw {
 	cursor: default;
@@ -643,27 +651,37 @@ const keymap = {
 .noteFooterInfo {
 	margin: 16px 0;
 	opacity: 0.7;
-	font-size: 0.9em;
+	font-size: 12px;
 }
 
 .noteFooterButton {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 44px;
+	min-height: 44px;
 	margin: 0;
-	padding: 8px;
-	opacity: 0.7;
+	padding: 0 12px;
+	color: var(--MI_THEME-fgTransparentWeak);
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: 999px;
+	font-size: 20px;
 
 	&:not(:last-child) {
-		margin-right: 28px;
+		margin-right: 8px;
 	}
 
 	&:hover {
 		color: var(--MI_THEME-fgHighlighted);
+		background: var(--MI_THEME-panelHighlight);
 	}
+	&:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; }
 }
 
 .noteFooterButtonCount {
 	display: inline;
 	margin: 0 0 0 8px;
-	opacity: 0.7;
+	font-size: 13px;
 
 	&.reacted {
 		color: var(--MI_THEME-accent);
@@ -685,6 +703,8 @@ const keymap = {
 	padding: 12px 8px;
 	border-top: solid 2px transparent;
 	border-bottom: solid 2px transparent;
+	min-height: 48px;
+	font-size: 13px;
 }
 
 .tabActive {
@@ -705,7 +725,7 @@ const keymap = {
 	align-items: center;
 	justify-content: space-between;
 	margin: 0;
-	padding: 18px 32px 10px;
+	padding: 16px 24px 10px;
 	border-bottom: solid 0.5px var(--MI_THEME-divider);
 }
 
@@ -720,6 +740,8 @@ const keymap = {
 }
 
 .refreshComments {
+	min-width: 44px;
+	min-height: 44px;
 	padding: 6px;
 	border-radius: 7px;
 	color: color(from var(--MI_THEME-fg) srgb r g b / 0.7);
@@ -759,7 +781,7 @@ const keymap = {
 
 @container (max-width: 500px) {
 	.root {
-		font-size: 0.9em;
+		font-size: max(1em, 15px);
 	}
 }
 
@@ -773,8 +795,8 @@ const keymap = {
 	}
 
 	.noteHeaderAvatar {
-		width: 50px;
-		height: 50px;
+		width: 42px;
+		height: 42px;
 	}
 
 	.commentsHeader {
@@ -789,24 +811,24 @@ const keymap = {
 @container (max-width: 350px) {
 	.noteFooterButton {
 		&:not(:last-child) {
-			margin-right: 18px;
+			margin-right: 6px;
 		}
 	}
 }
 
 @container (max-width: 300px) {
 	.root {
-		font-size: 0.825em;
+		font-size: max(1em, 15px);
 	}
 
 	.noteHeaderAvatar {
-		width: 50px;
-		height: 50px;
+		width: 42px;
+		height: 42px;
 	}
 
 	.noteFooterButton {
 		&:not(:last-child) {
-			margin-right: 12px;
+			margin-right: 4px;
 		}
 	}
 }

@@ -4,18 +4,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<header :class="$style.root">
-	<div v-if="mock" :class="$style.name">
-		<MkUserName :user="note.user"/>
+<header :class="[$style.root, { [$style.stacked]: stacked }]">
+	<div :class="$style.identity">
+		<div v-if="mock" :class="$style.name">
+			<MkUserName :user="note.user"/>
+		</div>
+		<MkA v-else v-user-preview="note.user.id" :class="$style.name" :to="userPage(note.user)">
+			<MkUserName :user="note.user"/>
+		</MkA>
+		<div v-if="note.user.isBot" :class="$style.isBot">bot</div>
+		<div v-if="note.user.badgeRoles" :class="$style.badgeRoles">
+			<img v-for="(role, i) in note.user.badgeRoles" :key="i" v-tooltip="role.name" :class="$style.badgeRole" :src="role.iconUrl!"/>
+		</div>
 	</div>
-	<MkA v-else v-user-preview="note.user.id" :class="$style.name" :to="userPage(note.user)">
-		<MkUserName :user="note.user"/>
-	</MkA>
-	<div v-if="note.user.isBot" :class="$style.isBot">bot</div>
 	<div :class="$style.username"><MkAcct :user="note.user"/></div>
-	<div v-if="note.user.badgeRoles" :class="$style.badgeRoles">
-		<img v-for="(role, i) in note.user.badgeRoles" :key="i" v-tooltip="role.name" :class="$style.badgeRole" :src="role.iconUrl!"/>
-	</div>
 	<div :class="$style.info">
 		<div v-if="mock">
 			<MkTime :time="note.createdAt" colored/>
@@ -44,6 +46,7 @@ import { DI } from '@/di.js';
 
 defineProps<{
 	note: Misskey.entities.Note;
+	stacked?: boolean;
 }>();
 
 const mock = inject(DI.mock, false);
@@ -55,6 +58,21 @@ const mock = inject(DI.mock, false);
 	align-items: baseline;
 	white-space: nowrap;
 	font-size: 0.95em;
+}
+
+.identity { display: flex; align-items: baseline; min-width: 0; }
+
+.stacked {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 3px 8px;
+	font-size: 14px;
+	line-height: 1.4;
+	.identity { grid-column: 1; grid-row: 1; }
+	.username { grid-column: 1 / -1; grid-row: 2; font-size: 13px; margin: 0; }
+	.info { grid-column: 2; grid-row: 1; font-size: 12px; }
+	.info::before { display: none; }
+	.name { margin: 0; }
 }
 
 .name {

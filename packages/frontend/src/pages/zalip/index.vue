@@ -62,7 +62,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<button v-if="publicTimeline" type="button" class="_button" :class="{ [$style.feedTabActive]: !followingFeed }" :aria-pressed="!followingFeed" @click="followingFeed = false">{{ i18n.ts.zalip.communityFeed }}</button>
 					<button v-if="$i" type="button" class="_button" :class="{ [$style.feedTabActive]: homeTimeline === 'home' }" :aria-pressed="homeTimeline === 'home'" @click="followingFeed = true">{{ i18n.ts.zalip.followingFeed }}</button>
 				</div>
-				<button type="button" class="_button" :class="$style.compose" @click="writePost"><i class="ti ti-pencil-plus"></i>{{ i18n.ts.zalip.writePost }}</button>
+				<button type="button" class="_button" :class="$style.compose" @click="writePost">
+					<MkAvatar v-if="$i" :user="$i" :class="$style.composeAvatar"/>
+					<i v-else class="ti ti-user-circle" aria-hidden="true"></i>
+					<span :class="$style.composeField">{{ i18n.ts.zalip.writePost }}<i class="ti ti-pencil-plus" aria-hidden="true"></i></span>
+				</button>
 				<MkStreamingNotesTimeline :key="homeTimeline" :src="homeTimeline" :withReplies="false" :withRenotes="true"/>
 			</section>
 		</div>
@@ -977,9 +981,14 @@ definePage(() => ({
 	background: var(--MI_THEME-panel);
 }
 
-.feedTabs { display: flex; gap: 8px; padding: 12px; border-bottom: 1px solid var(--MI_THEME-divider); }
-.feedTabs button { min-height: 44px; padding: 8px 14px; border-radius: var(--zalip-radius); font-weight: 700; }
-.feedTabActive { background: var(--MI_THEME-panelHighlight); color: var(--MI_THEME-accent); }
-.compose { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; padding: 16px 24px; color: var(--MI_THEME-fgTransparentWeak); border-bottom: 1px solid var(--MI_THEME-divider); text-align: left; }
-.compose i { font-size: 24px; }
+.feedTabs { display: flex; gap: 4px; padding: 6px 16px 0; border-bottom: 1px solid var(--MI_THEME-divider); }
+.feedTabs button { position: relative; flex: 1; min-width: 0; min-height: 50px; padding: 8px 6px 12px; font-size: 14px; font-weight: 600; color: var(--MI_THEME-fgTransparentWeak); }
+.feedTabs .feedTabActive { color: var(--MI_THEME-fg); }
+.feedTabActive::after { content: ''; position: absolute; height: 3px; bottom: -1px; left: 12%; right: 12%; border-radius: 3px; background: var(--MI_THEME-accent); }
+.compose { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 84px; padding: 16px; color: var(--MI_THEME-fgTransparentWeak); border-bottom: 1px solid var(--MI_THEME-divider); text-align: left; }
+.compose > i { font-size: 38px; }
+.composeAvatar { width: 40px; height: 40px; flex: 0 0 40px; pointer-events: none; }
+.composeField { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 8px 14px; box-sizing: border-box; border-radius: var(--zalip-radius); background: color-mix(in srgb, var(--MI_THEME-bg) 45%, var(--MI_THEME-panel)); font-size: 14px; }
+.composeField i { font-size: 21px; flex-shrink: 0; }
+.compose:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: -3px; }
 </style>

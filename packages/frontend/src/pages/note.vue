@@ -5,19 +5,19 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <PageWithHeader :actions="headerActions" :tabs="headerTabs">
-	<div class="_spacer" style="--MI_SPACER-w: 800px;">
+	<div class="_spacer" style="--MI_SPACER-w: 720px;">
 		<Transition :name="prefer.s.animation ? 'fade' : ''" mode="out-in">
 			<div v-if="note">
 				<div v-if="showNext" class="_margin">
 					<MkNotesTimeline direction="up" :withControl="false" :pullToRefresh="false" class="" :paginator="showNext === 'channel' ? nextChannelPaginator : nextUserPaginator" :noGap="true" :forceDisableInfiniteScroll="true" />
 				</div>
 
-				<div class="_margin">
-					<div v-if="!showNext" class="_buttons" :class="$style.loadNext">
+				<div :class="$style.thread">
+					<div v-if="!showNext && initialTab !== 'replies'" class="_buttons" :class="$style.loadNext">
 						<MkButton v-if="note.channelId" rounded :class="$style.loadButton" @click="showNext = 'channel'"><i class="ti ti-chevron-up"></i> <i class="ti ti-device-tv"></i></MkButton>
 						<MkButton rounded :class="$style.loadButton" @click="showNext = 'user'"><i class="ti ti-chevron-up"></i> <i class="ti ti-user"></i></MkButton>
 					</div>
-					<div class="_margin _gaps_s">
+					<div class="_gaps_s">
 						<MkRemoteCaution v-if="note.user.host != null" :href="note.url ?? note.uri"/>
 						<MkNoteDetailed :key="note.id" v-model:note="note" :initialTab="initialTab" :class="$style.note"/>
 					</div>
@@ -27,7 +27,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<MkClipPreview v-for="item in clips" :key="item.id" :clip="item"/>
 						</div>
 					</div>
-					<div v-if="!showPrev" class="_buttons" :class="$style.loadPrev">
+					<div v-if="!showPrev && initialTab !== 'replies'" class="_buttons" :class="$style.loadPrev">
 						<MkButton v-if="note.channelId" rounded :class="$style.loadButton" @click="showPrev = 'channel'"><i class="ti ti-chevron-down"></i> <i class="ti ti-device-tv"></i></MkButton>
 						<MkButton rounded :class="$style.loadButton" @click="showPrev = 'user'"><i class="ti ti-chevron-down"></i> <i class="ti ti-user"></i></MkButton>
 					</div>
@@ -206,7 +206,15 @@ definePage(() => ({
 }
 
 .note {
-	border-radius: var(--MI-radius);
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: var(--zalip-radius-big);
 	background: var(--MI_THEME-panel);
+}
+
+.thread { min-width: 0; }
+
+@media (max-width: 600px) {
+	.thread { margin-inline: calc(-1 * var(--MI-margin)); }
+	.note { border-radius: 0; border-inline: 0; }
 }
 </style>

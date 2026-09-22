@@ -10,6 +10,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 	v-hotkey="keymap"
 	:class="[$style.root, { [$style.showActionsOnlyHover]: prefer.s.showNoteActionsOnlyHover, [$style.skipRender]: prefer.s.skipNoteRender }]"
 	tabindex="0"
+	@keydown.enter.self.prevent="openComments()"
+	@keydown.space.self.prevent="openComments()"
 >
 	<MkNoteSub v-if="appearNote.replyId && !renoteCollapsed" :note="appearNote?.reply ?? null" :class="$style.replyTo"/>
 	<div v-if="pinned" :class="$style.tip"><i class="ti ti-pin"></i> {{ i18n.ts.pinnedNote }}</div>
@@ -45,13 +47,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<MkAvatar :class="$style.collapsedRenoteTargetAvatar" :user="appearNote.user" link preview/>
 		<Mfm :text="getNoteSummary(appearNote)" :plain="true" :nowrap="true" :author="appearNote.user" :nyaize="'respect'" :class="$style.collapsedRenoteTargetText" @click="renoteCollapsed = false"/>
 	</div>
-	<article v-else :class="$style.article" @contextmenu.stop="onContextmenu">
+	<article v-else :class="$style.article" @pointerdown="startPostPointer" @click="openPost" @dblclick="postNavigation.cancel" @contextmenu.stop="postNavigation.cancel(); onContextmenu($event)">
 		<div v-if="appearNote.channel" :class="$style.colorBar" :style="{ background: appearNote.channel.color }"></div>
 		<MkAvatar :class="[$style.avatar, prefer.s.useStickyIcons ? $style.useSticky : null]" :user="appearNote.user" :link="!mock" :preview="!mock"/>
 		<div :class="$style.main">
-			<MkNoteHeader :note="appearNote" :mini="true"/>
-			<MkInstanceTicker v-if="showTicker" :host="appearNote.user.host" :instance="appearNote.user.instance"/>
-			<div style="container-type: inline-size;">
+			<div :class="$style.headerRow">
+				<MkNoteHeader :note="appearNote" stacked :class="$style.noteHeader"/>
+				<button ref="menuButton" type="button" :class="$style.menuButton" class="_button" :aria-label="i18n.ts.more" @click="showMenu()"><i class="ti ti-dots" aria-hidden="true"></i></button>
+			</div>
+			<MkInstanceTicker v-if="showTicker" :class="$style.instanceTicker" :host="appearNote.user.host" :instance="appearNote.user.instance"/>
+			<div :class="$style.body" style="container-type: inline-size;">
 				<p v-if="appearNote.cw != null" :class="$style.cw">
 					<Mfm
 						v-if="appearNote.cw != ''"
@@ -87,11 +92,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 						</div>
 					</div>
 					<ZalipShareCard v-if="appearNote.zalipShare" :share="appearNote.zalipShare"/>
-					<div v-if="appearNote.files && appearNote.files.length > 0" style="margin-top: 8px;">
+					<div v-if="appearNote.files && appearNote.files.length > 0" data-zalip-post-interactive style="margin-top: 8px;">
 						<MkMediaList ref="galleryEl" :mediaList="appearNote.files"/>
 					</div>
 					<MkPoll
 						v-if="appearNote.poll"
+						data-zalip-post-interactive
 						:noteId="appearNote.id"
 						:multiple="appearNote.poll.multiple"
 						:expiresAt="appearNote.poll.expiresAt"
@@ -100,10 +106,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 						:emojiUrls="appearNote.emojis"
 						:class="$style.poll"
 					/>
-					<div v-if="isEnabledUrlPreview">
+					<div v-if="isEnabledUrlPreview" data-zalip-post-interactive>
 						<MkUrlPreview v-for="url in urls" :key="url" :url="url" :compact="true" :detail="false" :class="$style.urlPreview"/>
 					</div>
-					<div v-if="appearNote.renoteId" :class="$style.quote"><MkNoteSimple :note="appearNote?.renote ?? null" :class="$style.quoteNote"/></div>
+					<div v-if="appearNote.renoteId" data-zalip-post-interactive :class="$style.quote"><MkNoteSimple :note="appearNote?.renote ?? null" :class="$style.quoteNote"/></div>
 					<button v-if="isLong && collapsed" :class="$style.collapsed" class="_button" @click="collapsed = false">
 						<span :class="$style.collapsedLabel">{{ i18n.ts.showMore }}</span>
 					</button>
@@ -115,7 +121,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</div>
 			<MkReactionsViewer
 				v-if="appearNote.reactionAcceptance !== 'likeOnly'"
-				style="margin-top: 6px;"
+				:class="$style.reactions"
 				:reactions="$appearNote.reactions"
 				:reactionEmojis="$appearNote.reactionEmojis"
 				:myReaction="$appearNote.myReaction"
@@ -128,8 +134,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</template>
 			</MkReactionsViewer>
 			<footer :class="$style.footer">
-				<button v-tooltip="'Комментарии'" :class="$style.footerButton" class="_button" aria-label="Открыть комментарии" @click="openComments()">
-					<i class="ti ti-message-circle"></i>
+				<button ref="reactButton" type="button" :class="[$style.footerButton, { [$style.reacted]: $appearNote.myReaction != null }]" class="_button" :aria-label="i18n.ts.reaction" :aria-pressed="$appearNote.myReaction != null" @click="handleToggleReact()">
+					<i :class="appearNote.reactionAcceptance === 'likeOnly' ? ($appearNote.myReaction != null ? 'ti ti-heart-filled' : 'ti ti-heart') : 'ti ti-mood-plus'" aria-hidden="true"></i>
+					<span :class="$style.actionLabel">{{ i18n.ts.reaction }}</span>
+					<span v-if="$appearNote.reactionCount > 0 && (appearNote.reactionAcceptance === 'likeOnly' || prefer.s.showReactionsCount)" :class="$style.footerButtonCount">{{ number($appearNote.reactionCount) }}</span>
+				</button>
+				<button v-tooltip="i18n.ts.zalip.comments" type="button" :class="$style.footerButton" class="_button" :aria-label="i18n.ts.zalip.comments" @click="openComments()">
+					<i class="ti ti-message-circle" aria-hidden="true"></i>
+					<span :class="$style.actionLabel">{{ i18n.ts.zalip.comments }}</span>
 					<p v-if="appearNote.repliesCount > 0" :class="$style.footerButtonCount">{{ number(appearNote.repliesCount) }}</p>
 				</button>
 				<button
@@ -137,26 +149,18 @@ SPDX-License-Identifier: AGPL-3.0-only
 					ref="renoteButton"
 					:class="$style.footerButton"
 					class="_button"
-					@mousedown.prevent="renote()"
+					type="button"
+					:aria-label="i18n.ts.renote"
+					@click="renote()"
 				>
 					<i class="ti ti-repeat"></i>
 					<p v-if="appearNote.renoteCount > 0" :class="$style.footerButtonCount">{{ number(appearNote.renoteCount) }}</p>
 				</button>
-				<button v-else :class="$style.footerButton" class="_button" disabled>
+				<button v-else :class="$style.footerButton" class="_button" :aria-label="i18n.ts.renote" disabled>
 					<i class="ti ti-ban"></i>
 				</button>
-				<button ref="reactButton" :class="$style.footerButton" class="_button" @click="handleToggleReact()">
-					<i v-if="appearNote.reactionAcceptance === 'likeOnly' && $appearNote.myReaction != null" class="ti ti-heart-filled" style="color: var(--MI_THEME-love);"></i>
-					<i v-else-if="$appearNote.myReaction != null" class="ti ti-minus" style="color: var(--MI_THEME-accent);"></i>
-					<i v-else-if="appearNote.reactionAcceptance === 'likeOnly'" class="ti ti-heart"></i>
-					<i v-else class="ti ti-plus"></i>
-					<p v-if="(appearNote.reactionAcceptance === 'likeOnly' || prefer.s.showReactionsCount) && $appearNote.reactionCount > 0" :class="$style.footerButtonCount">{{ number($appearNote.reactionCount) }}</p>
-				</button>
-				<button v-if="prefer.s.showClipButtonInNoteFooter" ref="clipButton" :class="$style.footerButton" class="_button" @mousedown.prevent="clip()">
+				<button v-if="prefer.s.showClipButtonInNoteFooter" ref="clipButton" type="button" :class="$style.footerButton" class="_button" :aria-label="i18n.ts.clip" @click="clip()">
 					<i class="ti ti-paperclip"></i>
-				</button>
-				<button ref="menuButton" :class="$style.footerButton" class="_button" @mousedown.prevent="showMenu()">
-					<i class="ti ti-dots"></i>
 				</button>
 			</footer>
 		</div>
@@ -197,7 +201,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { inject, ref, useTemplateRef, provide, computed } from 'vue';
+import { inject, ref, useTemplateRef, provide, computed, onBeforeUnmount } from 'vue';
 import type { Ref } from 'vue';
 import * as Misskey from 'misskey-js';
 import { useNote } from '@/composables/use-note.js';
@@ -210,6 +214,7 @@ import { focusPrev, focusNext } from '@/utility/focus.js';
 import number from '@/filters/number.js';
 import { DI } from '@/di.js';
 import { useRouter } from '@/router.js';
+import { createZalipPostNavigation } from '@/utility/zalip-post-navigation.js';
 import type { Keymap } from '@/utility/hotkey.js';
 
 // コンポーネント外部の依存関係
@@ -330,7 +335,23 @@ function emitUpdReaction(emoji: string, delta: number) {
 	}
 }
 
+let postPointerStart: { x: number; y: number } | undefined;
+const postNavigation = createZalipPostNavigation(openComments);
+onBeforeUnmount(postNavigation.cancel);
+
+function startPostPointer(event: PointerEvent): void {
+	postNavigation.cancel();
+	postPointerStart = { x: event.clientX, y: event.clientY };
+}
+
+function openPost(event: MouseEvent): void {
+	if (event.currentTarget instanceof HTMLElement) postNavigation.click(event, event.currentTarget, postPointerStart);
+	postPointerStart = undefined;
+}
+
 function openComments(): void {
+	postNavigation.cancel();
+	if (props.mock) return;
 	router.push('/notes/:noteId/:initialTab?', {
 		params: { noteId: appearNote.id, initialTab: 'replies' },
 	});
@@ -363,7 +384,7 @@ const keymap = {
 		if (renoteCollapsed.value) return;
 		galleryEl.value?.openGallery();
 	},
-	'v|enter': () => {
+	'v': () => {
 		if (renoteCollapsed.value) {
 			renoteCollapsed.value = false;
 		} else if (appearNote.cw != null) {
@@ -390,7 +411,8 @@ const keymap = {
 <style lang="scss" module>
 .root {
 	position: relative;
-	font-size: 1.05em;
+	font-size: max(1em, 15px);
+	border-bottom: 1px solid var(--MI_THEME-divider);
 	overflow: clip;
 	contain: content;
 	transition: background 0.16s ease;
@@ -454,7 +476,7 @@ const keymap = {
 		}
 	}
 
-	&.showActionsOnlyHover:hover {
+	&.showActionsOnlyHover:hover, &.showActionsOnlyHover:focus-within {
 		.footer {
 			visibility: visible;
 		}
@@ -570,9 +592,10 @@ const keymap = {
 
 .article {
 	position: relative;
+	cursor: pointer;
 	display: flex;
-	padding: 20px 24px 14px;
-	border-radius: 12px;
+	padding: 20px 22px 14px;
+	border-radius: 0;
 	transition: background 0.16s ease;
 }
 
@@ -590,8 +613,8 @@ const keymap = {
 	flex-shrink: 0;
 	display: block !important;
 	margin: 0 12px 0 0;
-	width: 48px;
-	height: 48px;
+	width: 42px;
+	height: 42px;
 	border-radius: 50%;
 
 	&.useSticky {
@@ -604,6 +627,31 @@ const keymap = {
 .main {
 	flex: 1;
 	min-width: 0;
+}
+
+.headerRow {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	min-width: 0;
+	margin-bottom: 10px;
+}
+
+.noteHeader { flex: 1; min-width: 0; }
+.body { min-width: 0; }
+.reactions { margin-top: 10px; }
+.menuButton {
+	display: grid;
+	place-items: center;
+	flex: 0 0 36px;
+	width: 36px;
+	height: 36px;
+	margin-top: -4px;
+	border-radius: 50%;
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 20px;
+	&:hover { background: var(--MI_THEME-panelHighlight); }
+	&:focus-visible { outline: 2px solid var(--MI_THEME-focus); }
 }
 
 .cw {
@@ -662,8 +710,7 @@ const keymap = {
 
 .text {
 	overflow-wrap: break-word;
-	padding-top: 3px;
-	line-height: 1.48;
+	line-height: 1.6;
 }
 
 .replyIcon {
@@ -705,21 +752,26 @@ const keymap = {
 .footer {
 	display: flex;
 	align-items: center;
-	gap: 7px;
-	margin: 7px 0 -4px -7px;
+	gap: 8px;
+	flex-wrap: wrap;
+	margin: 12px 0 0;
 }
 
 .footerButton {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	min-width: 36px;
-	height: 36px;
+	gap: 6px;
+	min-width: 44px;
+	min-height: 44px;
 	margin: 0;
-	padding: 0 9px;
+	padding: 0 12px;
+	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 70%, transparent);
 	border-radius: 999px;
 	color: color-mix(in srgb, var(--MI_THEME-panel), var(--MI_THEME-fg) 70%); // opacityなど不透明度で表現するとレンダリングパフォーマンスに影響するので通常の色の混合で代用
 	transition: color 0.16s ease, background 0.16s ease;
+	> i { font-size: 20px; }
+	&.reacted { color: var(--MI_THEME-accent); background: var(--MI_THEME-accentedBg); }
 
 	&:hover {
 		background: var(--MI_THEME-panelHighlight);
@@ -732,37 +784,41 @@ const keymap = {
 	}
 }
 
+.actionLabel { font-size: 13px; font-weight: 500; }
+
 .footerButtonCount {
 	display: inline;
-	margin: 0 0 0 6px;
-	font-size: 0.82em;
+	margin: 0;
+	font-size: 13px;
 	font-variant-numeric: tabular-nums;
 }
 
 @container (max-width: 580px) {
-	.root {
-		font-size: 0.95em;
-	}
-
 	.renote {
 		padding: 12px 22px 0;
 	}
 
 	.article {
-		padding: 20px 22px;
+		display: grid;
+		grid-template-columns: 42px minmax(0, 1fr);
+		column-gap: 12px;
+		padding: 18px 16px;
 	}
-
+	.main { display: contents; }
+	.headerRow { grid-column: 2; margin-bottom: 14px; }
+	.body, .reactions, .footer { grid-column: 1 / -1; }
+	.instanceTicker { grid-column: 2; }
 	.avatar {
-		width: 46px;
-		height: 46px;
+		margin: 0;
+		width: 42px;
+		height: 42px;
+		&.useSticky { position: relative !important; top: auto; }
 	}
+	.menuButton { flex-basis: 44px; width: 44px; height: 44px; }
+	.root.showActionsOnlyHover .footer { position: relative; visibility: visible; top: auto; right: auto; background: transparent; box-shadow: none; }
 }
 
 @container (max-width: 500px) {
-	.root {
-		font-size: 0.9em;
-	}
-
 	.renote {
 		padding: 10px 18px 0;
 	}
@@ -772,7 +828,7 @@ const keymap = {
 	}
 
 	.footer {
-		margin-bottom: -8px;
+		margin-bottom: 0;
 	}
 }
 
@@ -797,14 +853,16 @@ const keymap = {
 
 @container (max-width: 450px) {
 	.avatar {
-		margin: 0 10px 0 0;
+		margin: 0;
 		width: 42px;
 		height: 42px;
 
-		&.useSticky {
-			top: calc(14px + var(--MI-stickyTop, 0px));
-		}
 	}
+}
+
+@container (max-width: 380px) {
+	.actionLabel { display: none; }
+	.footer { gap: 10px; }
 }
 
 @container (max-width: 350px) {
@@ -818,8 +876,8 @@ const keymap = {
 
 @container (max-width: 300px) {
 	.avatar {
-		width: 44px;
-		height: 44px;
+		width: 42px;
+		height: 42px;
 	}
 
 }

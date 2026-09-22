@@ -12,7 +12,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div v-if="note.channel" :class="$style.colorBar" :style="{ background: note.channel.color }"></div>
 		<MkAvatar :class="$style.avatar" :user="note.user" link preview/>
 		<div :class="$style.body">
-			<MkNoteHeader :class="$style.header" :note="note" :mini="true"/>
+			<MkNoteHeader :class="$style.header" :note="note" :stacked="detail"/>
 			<div>
 				<p v-if="note.cw != null" :class="$style.cw">
 					<Mfm v-if="note.cw != ''" style="margin-right: 8px;" :text="note.cw" :author="note.user" :nyaize="'respect'"/>
@@ -21,7 +21,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<div v-show="note.cw == null || showContent">
 					<MkSubNoteContent :class="$style.text" :note="note"/>
 				</div>
-				<button v-if="detail" type="button" class="_button" :class="$style.replyButton" @click="replyToComment"><i class="ti ti-message-circle"></i> Ответить</button>
+				<button v-if="detail" type="button" class="_button" :class="$style.replyButton" @click="replyToComment"><i class="ti ti-message-circle" aria-hidden="true"></i> {{ i18n.ts.reply }}</button>
 			</div>
 		</div>
 	</div>
@@ -91,8 +91,8 @@ if (props.detail && props.note) {
 
 <style lang="scss" module>
 .root {
-	padding: 16px 32px;
-	font-size: 0.9em;
+	padding: 16px 24px;
+	font-size: max(1em, 14px);
 	position: relative;
 
 	&.children {
@@ -130,7 +130,7 @@ if (props.detail && props.note) {
 }
 
 .header {
-	margin-bottom: 2px;
+	margin-bottom: 8px;
 }
 
 .cw {
@@ -144,6 +144,7 @@ if (props.detail && props.note) {
 .text {
 	margin: 0;
 	padding: 0;
+	line-height: 1.6;
 }
 
 .replyButton {
@@ -151,8 +152,10 @@ if (props.detail && props.note) {
 	align-items: center;
 	gap: 4px;
 	margin: 7px 0 0;
-	padding: 3px 0;
-	font-size: 0.84em;
+	padding: 0 8px;
+	min-height: 44px;
+	border-radius: var(--zalip-radius);
+	font-size: 13px;
 	color: color(from var(--MI_THEME-fg) srgb r g b / 0.65);
 }
 

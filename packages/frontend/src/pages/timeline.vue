@@ -5,11 +5,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <PageWithHeader v-model:tab="src" :actions="headerActions" :tabs="$i ? headerTabs : headerTabsWhenNotLogin" :swipable="true" :displayMyAvatar="true" :canOmitTitle="true">
-	<div class="_spacer" style="--MI_SPACER-w: 640px;">
+	<div class="_spacer" style="--MI_SPACER-w: 720px;">
 		<MkTip v-if="isBasicTimeline(src)" :k="`tl.${src}`" style="margin-bottom: var(--MI-margin);">
 			{{ i18n.ts._timelineDescription[src] }}
 		</MkTip>
-		<MkPostForm v-if="$i != null && (prefer.r.showFixedPostForm.value || deviceKind !== 'desktop')" :class="$style.postForm" class="_panel" fixed style="margin-bottom: var(--MI-margin);"/>
+		<MkPostForm v-if="$i != null && prefer.r.showFixedPostForm.value" :class="$style.postForm" class="_panel" fixed style="margin-bottom: var(--MI-margin);"/>
+		<button v-else-if="$i" type="button" class="_button" :class="$style.compose" @click="os.post()">
+			<MkAvatar :user="$i" :class="$style.composeAvatar"/>
+			<span :class="$style.composeField">{{ i18n.ts.zalip.writePost }}<i class="ti ti-pencil-plus" aria-hidden="true"></i></span>
+		</button>
 		<MkStreamingNotesTimeline
 			ref="tlComponent"
 			:key="src + withRenotes + withReplies + onlyFiles + withSensitive"
@@ -291,11 +295,17 @@ definePage(() => ({
 }
 
 .tl {
-	background: transparent;
-	border: 0;
-	border-radius: 0;
-	overflow: visible;
+	background: var(--MI_THEME-panel);
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: var(--zalip-radius-big);
+	overflow: clip;
 }
+
+.compose { display: flex; align-items: center; gap: 12px; width: 100%; padding: 16px; margin-bottom: var(--MI-margin); border: 1px solid var(--MI_THEME-divider); border-radius: var(--zalip-radius-big); background: var(--MI_THEME-panel); color: var(--MI_THEME-fgTransparentWeak); text-align: left; }
+.composeAvatar { width: 40px; height: 40px; flex: 0 0 40px; pointer-events: none; }
+.composeField { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 8px 14px; box-sizing: border-box; border-radius: var(--zalip-radius); background: color-mix(in srgb, var(--MI_THEME-bg) 45%, var(--MI_THEME-panel)); font-size: 14px; }
+.composeField i { font-size: 21px; flex-shrink: 0; }
+.compose:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; }
 
 @media (max-width: 600px) {
 	.postForm, .tl {
