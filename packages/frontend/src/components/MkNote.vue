@@ -411,6 +411,7 @@ const keymap = {
 <style lang="scss" module>
 .root {
 	position: relative;
+	min-width: 0;
 	font-size: max(1em, 15px);
 	border-bottom: 1px solid var(--MI_THEME-divider);
 	overflow: clip;
