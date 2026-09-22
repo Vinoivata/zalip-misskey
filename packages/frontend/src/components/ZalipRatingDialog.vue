@@ -125,6 +125,8 @@ function save(): void {
 <style lang="scss" module>
 .root {
 	width: min(600px, calc(100vw - 32px));
+	max-width: 100%;
+	margin: auto;
 	box-sizing: border-box;
 	padding: 24px;
 	border-radius: 24px;

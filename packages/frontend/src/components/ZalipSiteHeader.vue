@@ -20,7 +20,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<i class="ti ti-login-2"></i><span>{{ i18n.ts.login }}</span>
 	</button>
 	<button v-else type="button" class="_button" :class="$style.account" :aria-label="`Аккаунт @${$i.username}`" @click="openAccount">
-		<MkAvatar :user="$i" :class="$style.avatar"/><span>@{{ $i.username }}</span>
+		<MkAvatar :user="$i" :class="$style.avatar"/><span :class="$style.accountName">@{{ $i.username }}</span>
 	</button>
 </header>
 </template>
@@ -148,7 +148,7 @@ async function openAccount(ev: PointerEvent): Promise<void> {
 	max-width: 160px;
 }
 
-.account > span {
+.accountName {
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
@@ -184,7 +184,7 @@ async function openAccount(ev: PointerEvent): Promise<void> {
 
 	.search > .searchMobile { display: block; font-size: 0.95rem; }
 
-	.searchDesktop, .search kbd, .iconButton, .account > span, .signup {
+	.searchDesktop, .search kbd, .iconButton, .accountName, .signup {
 		display: none;
 	}
 
