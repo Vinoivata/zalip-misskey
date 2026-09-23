@@ -4,56 +4,77 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<PageWithHeader v-model:tab="src" :actions="headerActions" :tabs="$i ? headerTabs : headerTabsWhenNotLogin" :swipable="true" :displayMyAvatar="true" :canOmitTitle="true">
-	<div class="_spacer" style="--MI_SPACER-w: 720px;">
-		<section :class="$style.lead">
-			<div>
-				<p :class="$style.eyebrow"><i class="ti ti-sparkles"></i> {{ i18n.ts.zalip.feedEyebrow }}</p>
-				<h1>{{ i18n.ts.zalip.feedHeading }}</h1>
-				<p>{{ i18n.ts.zalip.feedDescription }}</p>
-			</div>
-			<span v-if="isBasicTimeline(src)" :class="$style.scope"><i class="ti ti-waves-electricity"></i>{{ src === 'home' ? i18n.ts.zalip.feedScopeFollowing : i18n.ts.zalip.feedScopeCommunity }}</span>
-		</section>
-		<MkPostForm v-if="$i != null && prefer.r.showFixedPostForm.value" :class="$style.postForm" class="_panel" fixed style="margin-bottom: var(--MI-margin);"/>
-		<button v-else-if="$i" type="button" class="_button" :class="$style.compose" @click="os.post()">
-			<MkAvatar :user="$i" :class="$style.composeAvatar"/>
-			<span :class="$style.composeField">{{ i18n.ts.zalip.writePost }}<i class="ti ti-pencil-plus" aria-hidden="true"></i></span>
-		</button>
-		<MkStreamingNotesTimeline
-			ref="tlComponent"
-			:key="src + withRenotes + withReplies + onlyFiles + withSensitive"
-			:class="$style.tl"
-			:src="(src.split(':')[0] as (BasicTimelineType | 'list'))"
-			:list="src.split(':')[1]"
-			:withRenotes="withRenotes"
-			:withReplies="withReplies"
-			:withSensitive="withSensitive"
-			:onlyFiles="onlyFiles"
-			:sound="true"
-		/>
+<PageWithHeader hideHeader>
+	<div class="_spacer" style="--MI_SPACER-w: 1360px;">
+		<main :class="$style.feedShell">
+			<section :class="$style.feedColumn" aria-label="Лента">
+				<header :class="$style.feedHead">
+					<div :class="$style.modeRail" role="tablist" aria-label="Режим ленты">
+						<button v-for="mode in feedModes" :key="mode.key" type="button" class="_button" :class="[$style.mode, { [$style.modeActive]: src === mode.key }]" role="tab" :aria-selected="src === mode.key" @click="src = mode.key">
+							<i :class="mode.icon"></i><span>{{ mode.title }}</span>
+						</button>
+					</div>
+					<div :class="$style.headActions">
+						<button type="button" class="_button" :class="$style.headAction" :aria-label="i18n.ts.zalip.feedSearch" @click="openSearch"><i class="ti ti-search"></i></button>
+						<button type="button" class="_button" :class="$style.headAction" :aria-label="i18n.ts.zalip.feedSettings" @click="openFeedSettings"><i class="ti ti-adjustments-horizontal"></i></button>
+					</div>
+				</header>
+
+				<div :class="$style.discoveryRail" aria-label="Быстрые действия">
+					<button type="button" class="_button" :class="$style.createStory" @click="writePost">
+						<span :class="$style.createStoryCircle"><i class="ti ti-plus"></i></span>
+						<span>{{ i18n.ts.zalip.feedQuickPost }}</span>
+					</button>
+					<button type="button" class="_button" :class="$style.discoveryChip" @click="openLists"><i class="ti ti-list"></i>{{ i18n.ts.lists }}</button>
+					<button type="button" class="_button" :class="$style.discoveryChip" @click="openAntennas"><i class="ti ti-antenna"></i>{{ i18n.ts.antennas }}</button>
+					<button type="button" class="_button" :class="$style.discoveryChip" @click="openChannels"><i class="ti ti-device-tv"></i>{{ i18n.ts.channel }}</button>
+				</div>
+
+				<section :class="$style.composer" aria-label="Новая запись">
+					<button type="button" class="_button" :class="$style.composerInput" @click="writePost">
+						<MkAvatar v-if="$i" :user="$i" :class="$style.composeAvatar"/>
+						<span v-else :class="$style.composerAnonymous"><i class="ti ti-user"></i></span>
+						<span>{{ i18n.ts.zalip.feedComposePlaceholder }}</span>
+					</button>
+					<button type="button" class="_button" :class="$style.publish" @click="writePost">{{ i18n.ts.zalip.feedPublish }}</button>
+				</section>
+
+				<div :class="$style.feedLabel"><i class="ti ti-pin-filled"></i>{{ isBasicTimeline(src) ? (src === 'home' ? i18n.ts.zalip.feedScopeFollowing : i18n.ts.zalip.feedScopeCommunity) : i18n.ts.zalip.feedHeading }}</div>
+				<MkStreamingNotesTimeline
+					ref="tlComponent"
+					:key="src + withRenotes + withReplies + onlyFiles + withSensitive"
+					:class="$style.tl"
+					:src="(src.split(':')[0] as (BasicTimelineType | 'list'))"
+					:list="src.split(':')[1]"
+					:withRenotes="withRenotes"
+					:withReplies="withReplies"
+					:withSensitive="withSensitive"
+					:onlyFiles="onlyFiles"
+					:sound="true"
+				/>
+			</section>
+		</main>
 	</div>
 </PageWithHeader>
 </template>
 
 <script lang="ts" setup>
-import { computed, provide, useTemplateRef, ref, onMounted, onActivated } from 'vue';
-import type { Tab } from '@/components/global/MkPageHeader.tabs.vue';
+import { computed, useTemplateRef, ref, onMounted, onActivated } from 'vue';
 import type { MenuItem } from '@/types/menu.js';
 import type { BasicTimelineType } from '@/timelines.js';
-import type { PageHeaderItem } from '@/types/page-header.js';
 import MkStreamingNotesTimeline from '@/components/MkStreamingNotesTimeline.vue';
-import MkPostForm from '@/components/MkPostForm.vue';
 import * as os from '@/os.js';
 import { store } from '@/store.js';
 import { i18n } from '@/i18n.js';
 import { $i } from '@/i.js';
 import { definePage } from '@/page.js';
 import { antennasCache, userListsCache, favoritedChannelsCache } from '@/cache.js';
-import { deviceKind } from '@/utility/device-kind.js';
 import { deepMerge } from '@/utility/merge.js';
 import { miLocalStorage } from '@/local-storage.js';
 import { availableBasicTimelines, isAvailableBasicTimeline, isBasicTimeline, basicTimelineIconClass } from '@/timelines.js';
 import { prefer } from '@/preferences.js';
+import { pleaseLogin } from '@/utility/please-login.js';
+import { openZalipSearch } from '@/utility/zalip-search.js';
 
 const tlComponent = useTemplateRef('tlComponent');
 
@@ -82,7 +103,16 @@ const withSensitive = computed<boolean>({
 	set: (x) => saveTlFilter('withSensitive', x),
 });
 
-const showFixedPostForm = prefer.model('showFixedPostForm');
+const feedModes = computed(() => availableBasicTimelines().map(timeline => ({
+	key: timeline,
+	icon: basicTimelineIconClass(timeline),
+	title: ({
+		local: i18n.ts.zalip.feedForYou,
+		home: i18n.ts.zalip.followingFeed,
+		social: i18n.ts.zalip.feedFriends,
+		global: i18n.ts.zalip.feedAll,
+	})[timeline],
+})));
 
 async function chooseList(ev: PointerEvent): Promise<void> {
 	const lists = await userListsCache.fetch();
@@ -169,6 +199,54 @@ function saveTlFilter(key: keyof typeof store.s.tl.filter, newValue: boolean) {
 	}
 }
 
+async function writePost(): Promise<void> {
+	if (!await pleaseLogin()) return;
+	void os.post();
+}
+
+function openSearch(): void {
+	openZalipSearch();
+}
+
+function openLists(event: PointerEvent): void {
+	void chooseList(event);
+}
+
+function openAntennas(event: PointerEvent): void {
+	void chooseAntenna(event);
+}
+
+function openChannels(event: PointerEvent): void {
+	void chooseChannel(event);
+}
+
+function openFeedSettings(event: PointerEvent): void {
+	const menuItems: MenuItem[] = [{
+		type: 'switch',
+		icon: 'ti ti-repeat',
+		text: i18n.ts.showRenotes,
+		ref: withRenotes,
+	}, {
+		type: 'switch',
+		icon: 'ti ti-eye-exclamation',
+		text: i18n.ts.withSensitive,
+		ref: withSensitive,
+	}, {
+		type: 'switch',
+		icon: 'ti ti-photo',
+		text: i18n.ts.fileAttachedOnly,
+		ref: onlyFiles,
+	}, {
+		type: 'divider',
+	}, {
+		icon: 'ti ti-refresh',
+		text: i18n.ts.reload,
+		action: () => tlComponent.value?.reloadTimeline(),
+	}];
+
+	os.popupMenu(menuItems, event.currentTarget ?? event.target, { align: 'right', width: 272 });
+}
+
 function switchTlIfNeeded() {
 	if (isBasicTimeline(src.value) && !isAvailableBasicTimeline(src.value)) {
 		src.value = availableBasicTimelines()[0];
@@ -182,90 +260,6 @@ onActivated(() => {
 	switchTlIfNeeded();
 });
 
-const headerActions = computed<PageHeaderItem[]>(() => {
-	const items: PageHeaderItem[] = [{
-		icon: 'ti ti-dots',
-		text: i18n.ts.options,
-		handler: (ev) => {
-			const menuItems: MenuItem[] = [];
-
-			menuItems.push({
-				type: 'switch',
-				icon: 'ti ti-repeat',
-				text: i18n.ts.showRenotes,
-				ref: withRenotes,
-			});
-
-			menuItems.push({
-				type: 'switch',
-				icon: 'ti ti-eye-exclamation',
-				text: i18n.ts.withSensitive,
-				ref: withSensitive,
-			}, {
-				type: 'switch',
-				icon: 'ti ti-photo',
-				text: i18n.ts.fileAttachedOnly,
-				ref: onlyFiles,
-				disabled: false,
-			}, {
-				type: 'divider',
-			}, {
-				type: 'switch',
-				text: i18n.ts.showFixedPostForm,
-				ref: showFixedPostForm,
-			});
-
-			os.popupMenu(menuItems, ev.currentTarget ?? ev.target);
-		},
-	}];
-
-	if (deviceKind === 'desktop') {
-		items.unshift({
-			icon: 'ti ti-refresh',
-			text: i18n.ts.reload,
-			handler: () => {
-				tlComponent.value?.reloadTimeline();
-			},
-		});
-	}
-
-	return items;
-});
-
-const headerTabs = computed(() => [...(prefer.r.pinnedUserLists.value.map(l => ({
-	key: 'list:' + l.id,
-	title: l.name,
-	icon: 'ti ti-star',
-	iconOnly: true,
-}))), ...availableBasicTimelines().map(tl => ({
-	key: tl,
-	title: i18n.ts._timelines[tl],
-	icon: basicTimelineIconClass(tl),
-	iconOnly: true,
-})), {
-	icon: 'ti ti-list',
-	title: i18n.ts.lists,
-	iconOnly: true,
-	onClick: chooseList,
-}, {
-	icon: 'ti ti-antenna',
-	title: i18n.ts.antennas,
-	iconOnly: true,
-	onClick: chooseAntenna,
-}, {
-	icon: 'ti ti-device-tv',
-	title: i18n.ts.channel,
-	iconOnly: true,
-	onClick: chooseChannel,
-}] as Tab[]);
-
-const headerTabsWhenNotLogin = computed(() => [...availableBasicTimelines().map(tl => ({
-	key: tl,
-	title: i18n.ts._timelines[tl],
-	icon: basicTimelineIconClass(tl),
-	iconOnly: true,
-}))] as Tab[]);
-
 definePage(() => ({
 	title: i18n.ts.timeline,
 	icon: isBasicTimeline(src.value) ? basicTimelineIconClass(src.value) : 'ti ti-home',
@@ -273,114 +267,231 @@ definePage(() => ({
 </script>
 
 <style lang="scss" module>
-.lead {
-	display: flex;
-	align-items: end;
-	justify-content: space-between;
-	gap: 16px;
-	margin: 4px 0 20px;
-	padding: 8px 2px 0;
+.feedShell {
+	padding: 22px var(--MI-margin) 68px;
 }
 
-.eyebrow {
+.feedColumn {
+	width: min(100%, 840px);
+	margin: 0 auto;
+	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 82%, transparent);
+	border-radius: 26px;
+	background: color-mix(in srgb, var(--MI_THEME-panel) 94%, transparent);
+	overflow: clip;
+	box-shadow: 0 20px 54px color-mix(in srgb, var(--MI_THEME-shadow) 12%, transparent);
+}
+
+.feedHead {
+	position: sticky;
+	top: var(--MI-stickyTop, 0px);
+	z-index: 20;
 	display: flex;
 	align-items: center;
-	gap: 7px;
-	margin: 0 0 8px;
-	color: var(--MI_THEME-accent);
-	font-size: 0.72rem;
-	font-weight: 800;
-	letter-spacing: 0.1em;
+	justify-content: space-between;
+	gap: 10px;
+	min-height: 68px;
+	padding: 9px 14px 8px 18px;
+	border-bottom: 1px solid var(--MI_THEME-divider);
+	background: color-mix(in srgb, var(--MI_THEME-panel) 88%, transparent);
+	backdrop-filter: blur(20px) saturate(1.1);
 }
 
-.lead h1 {
-	margin: 0;
-	font-size: clamp(1.55rem, 4vw, 2rem);
-	letter-spacing: -0.02em;
+.modeRail {
+	display: flex;
+	align-items: center;
+	gap: 3px;
+	min-width: 0;
+	overflow-x: auto;
+	scrollbar-width: none;
 }
 
-.lead p:not(.eyebrow) {
-	max-width: 480px;
-	margin: 8px 0 0;
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.88rem;
-	line-height: 1.45;
-}
+.modeRail::-webkit-scrollbar { display: none; }
 
-.scope {
+.mode {
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
+	gap: 7px;
 	flex: 0 0 auto;
-	padding: 8px 11px;
-	border: 1px solid var(--MI_THEME-divider);
+	min-height: 40px;
+	padding: 0 11px;
 	border-radius: 999px;
-	background: var(--MI_THEME-panel);
 	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.74rem;
+	font-size: 0.87rem;
+	font-weight: 800;
+	white-space: nowrap;
+	transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+.mode i { font-size: 1.05rem; }
+
+.mode:hover { color: var(--MI_THEME-fg); background: color-mix(in srgb, var(--MI_THEME-fg) 7%, transparent); }
+.mode:active { transform: scale(0.96); }
+
+.modeActive {
+	background: color-mix(in srgb, var(--MI_THEME-fg) 12%, transparent);
+	color: var(--MI_THEME-fg);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--MI_THEME-fg) 5%, transparent);
+}
+
+.headActions { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+
+.headAction {
+	display: grid;
+	place-items: center;
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 1.16rem;
+}
+
+.headAction:hover { color: var(--MI_THEME-fg); background: color-mix(in srgb, var(--MI_THEME-fg) 8%, transparent); }
+
+.discoveryRail {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-height: 118px;
+	overflow-x: auto;
+	padding: 15px 20px;
+	border-bottom: 1px solid var(--MI_THEME-divider);
+	scrollbar-width: none;
+}
+
+.discoveryRail::-webkit-scrollbar { display: none; }
+
+.createStory {
+	display: grid;
+	justify-items: center;
+	gap: 7px;
+	flex: 0 0 74px;
+	padding: 0;
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.67rem;
 	font-weight: 700;
+	line-height: 1.15;
 }
 
-.new {
-	position: sticky;
-	top: calc(var(--MI-stickyTop, 0px) + 16px);
-	z-index: 1000;
-	width: 100%;
-	margin: calc(-0.675em - 8px) 0;
-
-	&:first-child {
-		margin-top: calc(-0.675em - 8px - var(--MI-margin));
-	}
+.createStoryCircle {
+	display: grid;
+	place-items: center;
+	width: 64px;
+	height: 64px;
+	border: 1px dashed color-mix(in srgb, var(--MI_THEME-fg) 22%, transparent);
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--MI_THEME-bg) 36%, transparent);
+	font-size: 1.5rem;
+	transition: border-color .16s ease, background .16s ease, transform .16s ease;
 }
 
-.newButton {
-	display: block;
-	margin: var(--MI-margin) auto 0 auto;
-	padding: 8px 16px;
-	border-radius: 32px;
+.createStory:hover .createStoryCircle { border-color: var(--MI_THEME-accent); background: var(--MI_THEME-accentedBg); color: var(--MI_THEME-accent); transform: translateY(-2px); }
+
+.discoveryChip {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	flex: 0 0 auto;
+	padding: 10px 13px;
+	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 74%, transparent);
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--MI_THEME-bg) 32%, transparent);
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: .78rem;
+	font-weight: 750;
 }
 
-.postForm {
-	border: 1px solid var(--MI_THEME-divider);
-	border-radius: var(--zalip-radius-big);
-	background: var(--MI_THEME-panel);
-	box-shadow: none;
+.discoveryChip:hover { border-color: color-mix(in srgb, var(--MI_THEME-accent) 46%, var(--MI_THEME-divider)); color: var(--MI_THEME-fg); }
+.discoveryChip i { color: var(--MI_THEME-accent); font-size: 1rem; }
+
+.composer {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-height: 76px;
+	padding: 12px 18px;
+	border-bottom: 1px solid var(--MI_THEME-divider);
 }
+
+.composerInput {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-width: 0;
+	flex: 1;
+	padding: 0;
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: .95rem;
+	text-align: left;
+}
+
+.composeAvatar, .composerAnonymous {
+	display: grid;
+	place-items: center;
+	flex: 0 0 42px;
+	width: 42px;
+	height: 42px;
+	border-radius: 50%;
+}
+
+.composerAnonymous { background: var(--MI_THEME-panelHighlight); color: var(--MI_THEME-fgTransparentWeak); font-size: 1.25rem; }
+
+.composerInput:hover { color: var(--MI_THEME-fg); }
+
+.publish {
+	flex: 0 0 auto;
+	min-width: 88px;
+	min-height: 40px;
+	padding: 0 16px;
+	border-radius: 999px;
+	background: var(--MI_THEME-fg);
+	color: var(--MI_THEME-bg);
+	font-size: .85rem;
+	font-weight: 850;
+	transition: transform .16s ease, background .16s ease;
+}
+
+.publish:hover { background: var(--MI_THEME-accent); color: var(--MI_THEME-fgOnAccent); }
+.publish:active { transform: scale(.96); }
+
+.feedLabel {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	margin: 16px 18px 10px;
+	padding: 7px 11px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--MI_THEME-fg) 5%, transparent);
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: .73rem;
+	font-weight: 750;
+}
+
+.feedLabel i { font-size: .83rem; }
 
 .tl {
-	background: var(--MI_THEME-panel);
-	border: 1px solid var(--MI_THEME-divider);
-	border-radius: var(--zalip-radius-big);
-	overflow: clip;
+	border-top: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 74%, transparent);
+	background: transparent;
 }
-
-.compose { display: flex; align-items: center; gap: 12px; width: 100%; padding: 16px; margin-bottom: var(--MI-margin); border: 1px solid var(--MI_THEME-divider); border-radius: var(--zalip-radius-big); background: var(--MI_THEME-panel); color: var(--MI_THEME-fgTransparentWeak); text-align: left; }
-.composeAvatar { width: 40px; height: 40px; flex: 0 0 40px; pointer-events: none; }
-.composeField { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 8px 14px; box-sizing: border-box; border-radius: var(--zalip-radius); background: color-mix(in srgb, var(--MI_THEME-bg) 45%, var(--MI_THEME-panel)); font-size: 14px; }
-.composeField i { font-size: 21px; flex-shrink: 0; }
-.compose:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; }
 
 @media (max-width: 1099px) {
-	.lead {
-		margin-inline: auto;
-		max-width: 720px;
-	}
-
-	.tl, .postForm, .compose {
-		max-width: 720px;
-		margin-right: auto;
-		margin-left: auto;
-	}
+	.feedShell { padding-top: 12px; }
+	.feedColumn { width: min(100%, 760px); }
 }
 
-@media (max-width: 600px) {
-	.lead { align-items: start; margin-top: 0; }
-	.lead p:not(.eyebrow), .scope { display: none; }
-	.postForm, .tl {
-		margin-inline: calc(var(--MI-margin) * -1);
-		border-right: 0;
-		border-left: 0;
-		border-radius: 0;
-	}
+@media (max-width: 767px) {
+	.feedShell { padding: 0 0 34px; }
+	.feedColumn { width: 100%; border-right: 0; border-left: 0; border-radius: 0; box-shadow: none; }
+	.feedHead { min-height: 58px; padding: 7px 10px 7px 12px; }
+	.mode { min-height: 38px; padding: 0 10px; font-size: .79rem; }
+	.mode i { font-size: .98rem; }
+	.headAction { width: 36px; height: 36px; font-size: 1.08rem; }
+	.discoveryRail { min-height: 103px; padding: 13px 15px; }
+	.createStory { flex-basis: 66px; }
+	.createStoryCircle { width: 56px; height: 56px; font-size: 1.3rem; }
+	.discoveryChip { padding: 9px 11px; }
+	.composer { min-height: 70px; padding: 10px 14px; gap: 9px; }
+	.composeAvatar, .composerAnonymous { flex-basis: 38px; width: 38px; height: 38px; }
+	.publish { min-width: auto; padding: 0 13px; min-height: 38px; }
+	.feedLabel { margin: 13px 14px 8px; }
 }
 </style>

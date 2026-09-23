@@ -5,6 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <header :class="$style.root">
+	<button type="button" class="_button" :class="$style.mobileCreate" :aria-label="i18n.ts.zalip.feedQuickPost" @click="writePost"><i class="ti ti-plus"></i></button>
 	<MkA to="/" :class="$style.mobileBrand" :aria-label="i18n.ts.zalip.brand">zalip</MkA>
 	<button type="button" class="_button" :class="$style.search" @click="openSearch">
 		<i class="ti ti-search"></i>
@@ -47,6 +48,11 @@ function signIn(): void {
 	void pleaseLogin();
 }
 
+async function writePost(): Promise<void> {
+	if (!await pleaseLogin()) return;
+	void os.post();
+}
+
 async function openAccount(ev: PointerEvent): Promise<void> {
 	const items = await getAccountMenu({ withExtraOperation: true });
 	void os.popupMenu(items, ev.currentTarget ?? ev.target, { align: 'right' });
@@ -78,6 +84,8 @@ async function openAccount(ev: PointerEvent): Promise<void> {
 	letter-spacing: -0.08em;
 	text-decoration: none;
 }
+
+.mobileCreate { display: none; }
 
 .search {
 	display: flex;
@@ -168,31 +176,38 @@ async function openAccount(ev: PointerEvent): Promise<void> {
 
 @media (max-width: 1099px) {
 	.root {
-		grid-template-columns: auto minmax(0, 1fr) auto;
-		gap: 8px;
+		grid-template-columns: 40px minmax(0, 1fr) 40px 40px;
+		gap: 6px;
 		min-height: 52px;
 		padding: 6px 10px;
 	}
 
-	.mobileBrand {
-		display: block;
-	}
+	.mobileCreate { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: var(--MI_THEME-fgTransparent); font-size: 1.38rem; }
+	.mobileCreate:hover { background: var(--MI_THEME-panelHighlight); color: var(--MI_THEME-fg); }
+
+	.mobileBrand { display: block; justify-self: center; font-size: 1.55rem; letter-spacing: -0.11em; }
 
 	.search {
-		height: 44px;
+		grid-column: 4;
+		display: grid;
+		place-items: center;
+		width: 40px;
+		height: 40px;
+		padding: 0;
+		border: 0;
+		border-radius: 50%;
+		background: transparent;
+		font-size: 1.38rem;
 	}
 
-	.search > .searchMobile { display: block; font-size: 0.95rem; }
+	.search > .searchMobile { display: none; }
 
-	.searchDesktop, .search kbd, .iconButton, .accountName, .signup {
+	.searchDesktop, .search kbd, .accountName, .signup {
 		display: none;
 	}
 
-	.account, .login {
-		min-width: 44px;
-		height: 44px;
-		padding: 0 10px;
-	}
-	.login i { display: none; }
+	.iconButton { display: grid; grid-column: 3; place-items: center; width: 40px; height: 40px; padding: 0; border-radius: 50%; }
+
+	.account, .login { display: none; }
 }
 </style>

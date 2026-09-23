@@ -8,7 +8,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div class="_spacer" style="--MI_SPACER-w: 1180px;">
 		<div :class="$style.page">
 			<section
-				:class="[$style.onboarding, { [$style.onboardingFeatured]: activeOnboarding.backdropPath }]"
+				:class="[$style.onboarding, { [$style.onboardingFeatured]: activeOnboarding.backdropPath || activeOnboarding.posterPath }]"
 				aria-roledescription="carousel"
 				:aria-label="i18n.ts.zalip.onboardingLabel"
 				@mouseenter="pauseOnboardingForHover"
@@ -20,7 +20,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				@pointerup="endOnboardingSwipe"
 				@pointercancel="cancelOnboardingSwipe"
 			>
-					<div v-if="activeOnboarding.backdropPath" :class="$style.onboardingBackdrop" :style="{ backgroundImage: `url(${tmdbImage(activeOnboarding.backdropPath)})` }"></div>
+					<div v-if="activeOnboarding.backdropPath || activeOnboarding.posterPath" :class="$style.onboardingBackdrop" :style="{ backgroundImage: `url(${tmdbImage(activeOnboarding.backdropPath || activeOnboarding.posterPath || '')})` }"></div>
 					<div :class="$style.onboardingShade"></div>
 				<div :class="$style.onboardingSlide" role="group" aria-roledescription="slide" :aria-label="i18n.tsx.zalip.onboardingSlideCounter({ current: (activeOnboardingIndex + 1).toString(), total: onboardingSlides.length.toString() })" :aria-live="onboardingPaused ? 'polite' : 'off'">
 					<div :class="$style.onboardingCopy">
@@ -432,6 +432,11 @@ definePage(() => ({
 	background: linear-gradient(90deg, color-mix(in srgb, var(--MI_THEME-bg) 98%, transparent) 0%, color-mix(in srgb, var(--MI_THEME-bg) 88%, transparent) 38%, color-mix(in srgb, var(--MI_THEME-bg) 24%, transparent) 100%), linear-gradient(0deg, color-mix(in srgb, var(--MI_THEME-bg) 80%, transparent), transparent 55%);
 }
 
+/* A film still stays cinematic even while the rest of Zalip uses the light theme. */
+.onboardingFeatured .onboardingShade {
+	background: linear-gradient(90deg, rgb(4 6 11 / 0.94) 0%, rgb(4 6 11 / 0.84) 35%, rgb(4 6 11 / 0.22) 100%), linear-gradient(0deg, rgb(4 6 11 / 0.82), transparent 58%);
+}
+
 .onboardingSlide {
 	position: relative;
 	z-index: 1;
@@ -453,7 +458,14 @@ definePage(() => ({
 
 .onboardingFeatured .onboardingCopy {
 	padding-right: 34px;
+	color: #f7f8fb;
 }
+
+.onboardingFeatured .onboardingEyebrow { color: #d7dcff; }
+.onboardingFeatured .onboardingOriginalTitle,
+.onboardingFeatured .onboardingDescription { color: rgb(247 248 251 / 0.76); }
+.onboardingFeatured .onboardingMeta span { border-color: rgb(255 255 255 / 0.2); background: rgb(3 5 9 / 0.46); color: #f7f8fb; }
+.onboardingFeatured .onboardingMeta span:first-child { border-color: rgb(255 255 255 / 0.38); color: #fff; }
 
 .onboardingEyebrow {
 	display: flex;
@@ -558,6 +570,12 @@ definePage(() => ({
 	font-weight: 800;
 	text-decoration: none;
 	box-shadow: 0 8px 20px color-mix(in srgb, var(--MI_THEME-bg) 30%, transparent);
+}
+
+.onboardingFeatured .onboardingAction {
+	border-color: rgb(255 255 255 / 0.2);
+	background: #f8f9fb;
+	color: #11131a;
 }
 
 .onboardingAction:hover,
@@ -1080,6 +1098,43 @@ definePage(() => ({
 		width: min(236px, 64%);
 		max-height: 320px;
 	}
+
+	/* On phones the premiere is one complete frame, not a small poster surrounded by UI. */
+	.onboardingFeatured {
+		min-height: min(720px, calc(100dvh - 118px));
+		border-radius: 0 0 28px 28px;
+	}
+
+	.onboardingFeatured .onboardingSlide {
+		display: block;
+		min-height: min(720px, calc(100dvh - 118px));
+	}
+
+	.onboardingFeatured .onboardingCopy {
+		position: absolute;
+		right: 0;
+		bottom: 0;
+		left: 0;
+		align-items: center;
+		padding: 82px 25px 78px;
+		text-align: center;
+	}
+
+	.onboardingFeatured .onboardingEyebrow { justify-content: center; margin-bottom: 9px; }
+	.onboardingFeatured .onboardingMeta { justify-content: center; margin-bottom: 12px; }
+	.onboardingFeatured .onboardingCopy h1 { max-width: 340px; font-size: clamp(2rem, 9vw, 2.65rem); }
+	.onboardingFeatured .onboardingOriginalTitle { max-width: 100%; }
+	.onboardingFeatured .onboardingDescription { max-width: 360px; margin-top: 10px; -webkit-line-clamp: 2; }
+	.onboardingFeatured .onboardingArtwork { display: none; }
+
+	.onboardingFeatured .onboardingAction {
+		position: static;
+		min-width: min(260px, 82vw);
+		margin-top: 20px;
+		padding: 0 22px;
+	}
+
+	.onboardingFeatured .onboardingDots { bottom: 20px; }
 
 	.onboardingDots {
 		bottom: 70px;

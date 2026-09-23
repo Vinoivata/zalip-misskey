@@ -1494,6 +1494,38 @@ export interface Locale extends ILocale {
          */
         "feedScopeFollowing": string;
         /**
+         * Для вас
+         */
+        "feedForYou": string;
+        /**
+         * Друзья
+         */
+        "feedFriends": string;
+        /**
+         * Весь мир
+         */
+        "feedAll": string;
+        /**
+         * Настроить ленту
+         */
+        "feedSettings": string;
+        /**
+         * Искать
+         */
+        "feedSearch": string;
+        /**
+         * Что нового?
+         */
+        "feedComposePlaceholder": string;
+        /**
+         * Опубликовать
+         */
+        "feedPublish": string;
+        /**
+         * Новая запись
+         */
+        "feedQuickPost": string;
+        /**
          * МОЁ ПРОСТРАНСТВО
          */
         "libraryEyebrow": string;

@@ -5,6 +5,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div ref="rootEl" :class="$style.root">
+	<MkA :class="$style.item" :activeClass="$style.active" :aria-label="i18n.ts.home" :title="i18n.ts.home" to="/">
+		<div :class="$style.itemInner">
+			<i :class="$style.itemIcon" class="ti ti-home-2"></i><span :class="$style.itemText">{{ i18n.ts.home }}</span>
+		</div>
+	</MkA>
+
 	<MkA :class="$style.item" :activeClass="$style.active" :aria-label="navbarItemDef.catalogue.title" :title="navbarItemDef.catalogue.title" to="/catalog">
 		<div :class="$style.itemInner">
 			<i :class="[$style.itemIcon, navbarItemDef.catalogue.icon]"></i><span :class="$style.itemText">{{ navbarItemDef.catalogue.title }}</span>
@@ -23,18 +29,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</MkA>
 
-	<MkA :class="$style.item" :activeClass="$style.active" :aria-label="navbarItemDef.notifications.title" :title="navbarItemDef.notifications.title" to="/my/notifications">
+	<button type="button" class="_button" :class="[$style.item, $style.accountItem]" :aria-label="i18n.ts.zalip.more" :title="i18n.ts.zalip.more" @click="openMoreMenu">
 		<div :class="$style.itemInner">
-			<i :class="[$style.itemIcon, navbarItemDef.notifications.icon]"></i><span :class="$style.itemText">{{ navbarItemDef.notifications.title }}</span>
+			<MkAvatar v-if="$i" :user="$i" :class="$style.profileAvatar"/>
+			<i v-else :class="$style.itemIcon" class="ti ti-menu-2"></i><span :class="$style.itemText">{{ i18n.ts.zalip.more }}</span>
 			<span v-if="$i?.hasUnreadNotification" :class="$style.itemIndicator" class="_blink">
 				<span class="_indicateCounter" :class="$style.itemIndicateValueIcon">{{ $i.unreadNotificationsCount > 99 ? '99+' : $i.unreadNotificationsCount }}</span>
 			</span>
-		</div>
-	</MkA>
-
-	<button type="button" class="_button" :class="$style.item" :aria-label="i18n.ts.zalip.more" :title="i18n.ts.zalip.more" @click="openMoreMenu">
-		<div :class="$style.itemInner">
-			<i :class="$style.itemIcon" class="ti ti-menu-2"></i><span :class="$style.itemText">{{ i18n.ts.zalip.more }}</span>
 		</div>
 	</button>
 </div>
@@ -60,6 +61,7 @@ function openMoreMenu(event: PointerEvent): void {
 		: [{ text: i18n.ts.login, icon: 'ti ti-login', action: () => signIn() }];
 
 	void os.popupMenu([
+		...($i ? [{ type: 'link' as const, text: navbarItemDef.notifications.title, icon: navbarItemDef.notifications.icon, to: '/my/notifications' }] : []),
 		{ type: 'link', text: i18n.ts.home, icon: 'ti ti-home', to: '/' },
 		{ text: i18n.ts.zalip.search, icon: 'ti ti-search', action: () => openZalipSearch() },
 		{ type: 'link', text: navbarItemDef.updates.title, icon: navbarItemDef.updates.icon, to: '/updates' },
@@ -89,10 +91,10 @@ function openMoreMenu(event: PointerEvent): void {
 	box-sizing: border-box;
 	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 60%, transparent);
 	border-radius: 999px;
-	background: color-mix(in srgb, var(--MI_THEME-navBg) 80%, transparent);
+	background: color-mix(in srgb, var(--MI_THEME-navBg) 70%, #050507);
 	color: var(--MI_THEME-navFg);
-	box-shadow: 0 12px 36px color-mix(in srgb, var(--MI_THEME-shadow) 38%, transparent), inset 0 1px color-mix(in srgb, var(--MI_THEME-fg) 8%, transparent);
-	backdrop-filter: blur(22px) saturate(1.25);
+	box-shadow: 0 16px 44px color-mix(in srgb, var(--MI_THEME-shadow) 56%, transparent), 0 0 0 1px color-mix(in srgb, var(--MI_THEME-fg) 7%, transparent), inset 0 1px color-mix(in srgb, var(--MI_THEME-fg) 16%, transparent);
+	backdrop-filter: blur(28px) saturate(1.3);
 }
 
 .item {
@@ -106,12 +108,12 @@ function openMoreMenu(event: PointerEvent): void {
 	text-decoration: none;
 
 	&.active {
-		color: var(--MI_THEME-accent);
+		color: var(--MI_THEME-fg);
 
 		.itemInner {
-			background: var(--MI_THEME-accent);
-			color: var(--MI_THEME-fgOnAccent);
-			box-shadow: 0 4px 14px color-mix(in srgb, var(--MI_THEME-accent) 36%, transparent);
+			background: color-mix(in srgb, var(--MI_THEME-fg) 17%, transparent);
+			color: var(--MI_THEME-fg);
+			box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--MI_THEME-fg) 8%, transparent);
 		}
 	}
 }
@@ -124,7 +126,7 @@ function openMoreMenu(event: PointerEvent): void {
 	height: 46px;
 	margin: auto;
 	border-radius: 50%;
-	transition: transform 0.16s ease, background 0.16s ease, color 0.16s ease;
+	transition: transform 0.16s ease, background 0.16s ease, color 0.16s ease, box-shadow .16s ease;
 
 	&:hover {
 		background: color-mix(in srgb, var(--MI_THEME-panelHighlight) 85%, transparent);
@@ -136,8 +138,19 @@ function openMoreMenu(event: PointerEvent): void {
 }
 
 .itemIcon {
-	font-size: 24px;
+	font-size: 23px;
 }
+
+.accountItem .itemInner {
+	background: color-mix(in srgb, var(--MI_THEME-accent) 76%, #1f5920);
+	color: var(--MI_THEME-fgOnAccent);
+	box-shadow: 0 5px 16px color-mix(in srgb, var(--MI_THEME-accent) 30%, transparent);
+}
+
+.accountItem .itemInner:hover { background: var(--MI_THEME-accent); }
+.accountItem.active .itemInner { background: color-mix(in srgb, var(--MI_THEME-accent) 88%, #1f5920); color: var(--MI_THEME-fgOnAccent); }
+
+.profileAvatar { width: 38px; height: 38px; border-radius: 50%; }
 
 .itemText {
 	display: none;
@@ -145,8 +158,8 @@ function openMoreMenu(event: PointerEvent): void {
 
 .itemIndicator {
 	position: absolute;
-	top: 1px;
-	right: 0;
+	top: -1px;
+	right: -1px;
 	color: var(--MI_THEME-indicator);
 	font-size: 10px;
 	pointer-events: none;
