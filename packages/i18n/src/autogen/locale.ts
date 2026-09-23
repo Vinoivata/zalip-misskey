@@ -1446,6 +1446,342 @@ export interface Locale extends ILocale {
          */
         "titlesLabel": string;
         /**
+         * ГЛАВНАЯ ПРЕМЬЕРА
+         */
+        "heroFeatured": string;
+        /**
+         * Подробнее
+         */
+        "heroDetails": string;
+        /**
+         * Открывайте кино, сохраняйте любимое и обсуждайте просмотренное с людьми, которым это тоже важно.
+         */
+        "heroFallbackDescription": string;
+        /**
+         * Спецэпизод
+         */
+        "releaseSpecial": string;
+        /**
+         * Сезон {number}
+         */
+        "releaseSeason": ParameterizedString<"number">;
+        /**
+         * серия {number}
+         */
+        "releaseEpisode": ParameterizedString<"number">;
+        /**
+         * СООБЩЕСТВО ZALIP
+         */
+        "feedEyebrow": string;
+        /**
+         * Лента впечатлений
+         */
+        "feedHeading": string;
+        /**
+         * Оценки, находки и разговоры о том, что смотрят люди рядом.
+         */
+        "feedDescription": string;
+        /**
+         * Новое от сообщества
+         */
+        "feedScopeCommunity": string;
+        /**
+         * Только от ваших подписок
+         */
+        "feedScopeFollowing": string;
+        /**
+         * МОЁ ПРОСТРАНСТВО
+         */
+        "libraryEyebrow": string;
+        /**
+         * Закладки и просмотренное
+         */
+        "libraryHeading": string;
+        /**
+         * Ваши фильмы, сериалы и аниме — с прогрессом, оценками и подписками на новые серии.
+         */
+        "libraryDescription": string;
+        /**
+         * Найти тайтл
+         */
+        "libraryBrowse": string;
+        /**
+         * Загружаем библиотеку…
+         */
+        "libraryLoading": string;
+        /**
+         * Здесь пока пусто
+         */
+        "libraryEmptyTitle": string;
+        /**
+         * Добавляйте фильмы, сериалы и аниме — они сохранятся в вашем аккаунте.
+         */
+        "libraryEmptyDescription": string;
+        /**
+         * Перейти к каталогу
+         */
+        "libraryGoToCatalogue": string;
+        /**
+         * Статистика библиотеки
+         */
+        "libraryStats": string;
+        /**
+         * В библиотеке
+         */
+        "libraryTotal": string;
+        /**
+         * В избранном
+         */
+        "libraryFavorites": string;
+        /**
+         * Средняя оценка
+         */
+        "libraryAverageRating": string;
+        /**
+         * Статус библиотеки
+         */
+        "libraryStatus": string;
+        /**
+         * Все
+         */
+        "libraryAll": string;
+        /**
+         * Искать в сохранённом
+         */
+        "librarySearch": string;
+        /**
+         * Сортировать
+         */
+        "librarySort": string;
+        /**
+         * Сначала добавленные
+         */
+        "librarySortRecent": string;
+        /**
+         * По названию
+         */
+        "librarySortTitle": string;
+        /**
+         * По моей оценке
+         */
+        "librarySortRating": string;
+        /**
+         * Продолжить просмотр
+         */
+        "libraryContinue": string;
+        /**
+         * В этой категории пока нет тайтлов.
+         */
+        "libraryEmptyFilter": string;
+        /**
+         * Личная оценка
+         */
+        "libraryPersonalRating": string;
+        /**
+         * Отслеживаются новые серии
+         */
+        "libraryReleaseSubscribed": string;
+        /**
+         * В избранном
+         */
+        "libraryFavorite": string;
+        /**
+         * {count} эп.
+         */
+        "libraryEpisodesWatched": ParameterizedString<"count">;
+        /**
+         * Название на русском или оригинальном языке
+         */
+        "catalogueSearchPlaceholder": string;
+        /**
+         * Поиск по каталогу
+         */
+        "catalogueSearchLabel": string;
+        /**
+         * Очистить поиск
+         */
+        "catalogueClearSearch": string;
+        /**
+         * Найти
+         */
+        "catalogueSubmitSearch": string;
+        /**
+         * Фильтры каталога
+         */
+        "catalogueFiltersLabel": string;
+        /**
+         * ФИЛЬТРЫ
+         */
+        "catalogueFilters": string;
+        /**
+         * Уточнить выдачу
+         */
+        "catalogueRefine": string;
+        /**
+         * Сбросить
+         */
+        "catalogueReset": string;
+        /**
+         * Закрыть фильтры
+         */
+        "catalogueCloseFilters": string;
+        /**
+         * {count} выбрано
+         */
+        "catalogueSelected": ParameterizedString<"count">;
+        /**
+         * Все типы
+         */
+        "catalogueAllTypes": string;
+        /**
+         * Год выпуска
+         */
+        "catalogueYear": string;
+        /**
+         * Можно задать диапазон
+         */
+        "catalogueYearHint": string;
+        /**
+         * От
+         */
+        "catalogueFrom": string;
+        /**
+         * До
+         */
+        "catalogueTo": string;
+        /**
+         * Применить
+         */
+        "catalogueApply": string;
+        /**
+         * Найти жанр
+         */
+        "catalogueGenreSearch": string;
+        /**
+         * Загружаем жанры
+         */
+        "catalogueGenresLoading": string;
+        /**
+         * Показать ещё {count}
+         */
+        "catalogueShowMore": ParameterizedString<"count">;
+        /**
+         * Свернуть
+         */
+        "catalogueCollapse": string;
+        /**
+         * Выбранные фильтры
+         */
+        "catalogueActiveFilters": string;
+        /**
+         * Загружаем тайтлы
+         */
+        "catalogueLoading": string;
+        /**
+         * Собираем подборку…
+         */
+        "catalogueLoadingCollection": string;
+        /**
+         * Не удалось загрузить каталог
+         */
+        "catalogueLoadFailed": string;
+        /**
+         * Попробовать ещё раз
+         */
+        "catalogueRetry": string;
+        /**
+         * По этим условиям ничего не найдено
+         */
+        "catalogueNoResults": string;
+        /**
+         * Ослабьте один из фильтров или сбросьте параметры.
+         */
+        "catalogueNoResultsDescription": string;
+        /**
+         * Сбросить фильтры
+         */
+        "catalogueResetFilters": string;
+        /**
+         * Год не указан
+         */
+        "catalogueUnknownYear": string;
+        /**
+         * Показано {shown} из первых {total} доступных тайтлов
+         */
+        "catalogueResultCount": ParameterizedString<"shown" | "total">;
+        /**
+         * Сначала новые
+         */
+        "catalogueSortNewest": string;
+        /**
+         * Год: новые
+         */
+        "catalogueSortYearDesc": string;
+        /**
+         * Год: старые
+         */
+        "catalogueSortYearAsc": string;
+        /**
+         * Фильмы
+         */
+        "catalogueKindMovie": string;
+        /**
+         * Сериалы
+         */
+        "catalogueKindSeries": string;
+        /**
+         * Аниме
+         */
+        "catalogueKindAnime": string;
+        /**
+         * Анимация
+         */
+        "catalogueKindAnimation": string;
+        /**
+         * тайтл
+         */
+        "catalogueTitleOne": string;
+        /**
+         * тайтла
+         */
+        "catalogueTitleFew": string;
+        /**
+         * тайтлов
+         */
+        "catalogueTitleMany": string;
+        /**
+         * ПОДПИСКИ
+         */
+        "updatesEyebrow": string;
+        /**
+         * Новые серии
+         */
+        "updatesHeading": string;
+        /**
+         * Здесь появляются обновления только по тайтлам, за которыми вы следите.
+         */
+        "updatesDescription": string;
+        /**
+         * Библиотека
+         */
+        "updatesLibrary": string;
+        /**
+         * Загружаем обновления…
+         */
+        "updatesLoading": string;
+        /**
+         * Пока нет новых серий
+         */
+        "updatesEmptyTitle": string;
+        /**
+         * На странице тайтла включите «Следить за сериями», чтобы его будущие обновления появились здесь.
+         */
+        "updatesEmptyDescription": string;
+        /**
+         * Открыть каталог
+         */
+        "updatesOpenCatalogue": string;
+        /**
          * Обсудить
          */
         "discussTitle": string;

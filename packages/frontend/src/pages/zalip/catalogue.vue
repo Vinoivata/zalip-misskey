@@ -19,76 +19,76 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</div>
 				<form :class="$style.search" @submit.prevent="applySearch">
 					<i class="ti ti-search"></i>
-					<input v-model.trim="queryInput" class="_input" type="search" minlength="2" maxlength="100" placeholder="Название на русском или оригинальном языке" aria-label="Поиск по каталогу">
-					<button v-if="queryInput" type="button" class="_button" aria-label="Очистить поиск" @click="clearSearch"><i class="ti ti-x"></i></button>
-					<button type="submit" class="_button">Найти</button>
+					<input v-model.trim="queryInput" class="_input" type="search" minlength="2" maxlength="100" :placeholder="i18n.ts.zalip.catalogueSearchPlaceholder" :aria-label="i18n.ts.zalip.catalogueSearchLabel">
+					<button v-if="queryInput" type="button" class="_button" :aria-label="i18n.ts.zalip.catalogueClearSearch" @click="clearSearch"><i class="ti ti-x"></i></button>
+					<button type="submit" class="_button">{{ i18n.ts.zalip.catalogueSubmitSearch }}</button>
 				</form>
 			</header>
 
 			<div :class="$style.catalogueLayout">
-				<aside :class="[$style.filters, { [$style.filtersOpen]: filtersOpen }]" aria-label="Фильтры каталога">
+				<aside :class="[$style.filters, { [$style.filtersOpen]: filtersOpen }]" :aria-label="i18n.ts.zalip.catalogueFiltersLabel">
 					<div :class="$style.filtersHeading">
-						<div><p>ФИЛЬТРЫ</p><strong>Уточнить выдачу</strong></div>
-						<button v-if="activeFilterCount" type="button" class="_button" :class="$style.reset" @click="resetFilters"><i class="ti ti-refresh"></i><span>Сбросить</span></button>
-						<button type="button" class="_button" :class="$style.closeFilters" aria-label="Закрыть фильтры" @click="closeFilters"><i class="ti ti-x"></i></button>
+						<div><p>{{ i18n.ts.zalip.catalogueFilters }}</p><strong>{{ i18n.ts.zalip.catalogueRefine }}</strong></div>
+						<button v-if="activeFilterCount" type="button" class="_button" :class="$style.reset" @click="resetFilters"><i class="ti ti-refresh"></i><span>{{ i18n.ts.zalip.catalogueReset }}</span></button>
+						<button type="button" class="_button" :class="$style.closeFilters" :aria-label="i18n.ts.zalip.catalogueCloseFilters" @click="closeFilters"><i class="ti ti-x"></i></button>
 					</div>
 
 					<section :class="$style.filterSection">
-						<div :class="$style.filterLabel"><span>Тип контента</span><small>{{ selectedKinds.length ? `${selectedKinds.length} выбрано` : 'Все типы' }}</small></div>
+						<div :class="$style.filterLabel"><span>{{ i18n.ts.zalip.catalogueKinds }}</span><small>{{ selectedKinds.length ? i18n.tsx.zalip.catalogueSelected({ count: selectedKinds.length.toString() }) : i18n.ts.zalip.catalogueAllTypes }}</small></div>
 						<div :class="$style.kindGrid">
 							<button v-for="kind in kinds" :key="kind" type="button" class="_button" :class="[$style.kindOption, { [$style.optionActive]: selectedKinds.includes(kind) }]" :aria-pressed="selectedKinds.includes(kind)" @click="toggleKind(kind)"><i :class="kindIcon(kind)"></i>{{ kindLabel(kind) }}</button>
 						</div>
 					</section>
 
 					<section :class="$style.filterSection">
-						<div :class="$style.filterLabel"><span>Год выпуска</span><small>Можно задать диапазон</small></div>
+						<div :class="$style.filterLabel"><span>{{ i18n.ts.zalip.catalogueYear }}</span><small>{{ i18n.ts.zalip.catalogueYearHint }}</small></div>
 						<form :class="$style.yearRange" @submit.prevent="applyYears">
-							<label><span>От</span><input v-model="yearFromInput" class="_input" type="number" min="1888" max="2200" inputmode="numeric"></label>
-							<label><span>До</span><input v-model="yearToInput" class="_input" type="number" min="1888" max="2200" inputmode="numeric"></label>
-							<button type="submit" class="_button" :class="$style.applyYears">Применить</button>
+							<label><span>{{ i18n.ts.zalip.catalogueFrom }}</span><input v-model="yearFromInput" class="_input" type="number" min="1888" max="2200" inputmode="numeric"></label>
+							<label><span>{{ i18n.ts.zalip.catalogueTo }}</span><input v-model="yearToInput" class="_input" type="number" min="1888" max="2200" inputmode="numeric"></label>
+							<button type="submit" class="_button" :class="$style.applyYears">{{ i18n.ts.zalip.catalogueApply }}</button>
 						</form>
 					</section>
 
 					<section :class="$style.filterSection">
-						<div :class="$style.filterLabel"><span>Жанры</span><small>{{ selectedGenres.length }}/24</small></div>
-						<label :class="$style.genreSearch"><i class="ti ti-search"></i><input v-model.trim="genreSearch" class="_input" type="search" placeholder="Найти жанр"></label>
-						<div v-if="genresPending" :class="$style.genreLoading"><i class="ti ti-loader-2 ti-spin"></i> Загружаем жанры</div>
+						<div :class="$style.filterLabel"><span>{{ i18n.ts.zalip.catalogueGenres }}</span><small>{{ selectedGenres.length }}/{{ MAX_SELECTED_GENRES }}</small></div>
+						<label :class="$style.genreSearch"><i class="ti ti-search"></i><input v-model.trim="genreSearch" class="_input" type="search" :placeholder="i18n.ts.zalip.catalogueGenreSearch"></label>
+						<div v-if="genresPending" :class="$style.genreLoading"><i class="ti ti-loader-2 ti-spin"></i> {{ i18n.ts.zalip.catalogueGenresLoading }}</div>
 						<div v-else :class="$style.genreOptions" role="list">
-							<button v-for="genre in displayedGenres" :key="genre" type="button" class="_button" :class="[$style.genreOption, { [$style.optionActive]: selectedGenres.includes(genre) }]" :aria-pressed="selectedGenres.includes(genre)" :disabled="!selectedGenres.includes(genre) && selectedGenres.length >= 24" @click="toggleGenre(genre)"><i :class="selectedGenres.includes(genre) ? 'ti ti-check' : 'ti ti-plus'"></i>{{ genre }}</button>
+							<button v-for="genre in displayedGenres" :key="genre" type="button" class="_button" :class="[$style.genreOption, { [$style.optionActive]: selectedGenres.includes(genre) }]" :aria-pressed="selectedGenres.includes(genre)" :disabled="!selectedGenres.includes(genre) && selectedGenres.length >= MAX_SELECTED_GENRES" @click="toggleGenre(genre)"><i :class="selectedGenres.includes(genre) ? 'ti ti-check' : 'ti ti-plus'"></i>{{ genre }}</button>
 						</div>
-						<button v-if="shouldOfferMoreGenres" type="button" class="_button" :class="$style.moreGenres" @click="showAllGenres = !showAllGenres">{{ showAllGenres ? 'Свернуть' : `Показать ещё ${matchingGenres.length - DISPLAYED_GENRES}` }}<i :class="showAllGenres ? 'ti ti-chevron-up' : 'ti ti-chevron-down'"></i></button>
+						<button v-if="shouldOfferMoreGenres" type="button" class="_button" :class="$style.moreGenres" @click="showAllGenres = !showAllGenres">{{ showAllGenres ? i18n.ts.zalip.catalogueCollapse : i18n.tsx.zalip.catalogueShowMore({ count: (matchingGenres.length - DISPLAYED_GENRES).toString() }) }}<i :class="showAllGenres ? 'ti ti-chevron-up' : 'ti ti-chevron-down'"></i></button>
 					</section>
 				</aside>
 
 				<section :class="$style.results" aria-live="polite">
 					<div :class="$style.toolbar">
 						<div>
-							<p :class="$style.eyebrow">КАТАЛОГ</p>
+							<p :class="$style.eyebrow">{{ i18n.ts.zalip.catalogueEyebrow }}</p>
 							<h2>{{ resultHeading }}</h2>
 						</div>
 						<div :class="$style.toolbarActions">
-							<label :class="$style.sort"><i class="ti ti-arrows-sort"></i><span>Сортировка</span><select v-model="sortInput" class="_input" aria-label="Сортировка каталога" @change="applySort"><option value="newest">Сначала новые</option><option value="year-desc">Год: новые</option><option value="year-asc">Год: старые</option><option value="title">По названию</option></select></label>
-							<button type="button" class="_button" :class="$style.openFilters" @click="filtersOpen = true"><i class="ti ti-adjustments-horizontal"></i><span>Фильтры</span><b v-if="activeFilterCount">{{ activeFilterCount }}</b></button>
+							<label :class="$style.sort"><i class="ti ti-arrows-sort"></i><span>{{ i18n.ts.zalip.catalogueSort }}</span><select v-model="sortInput" class="_input" :aria-label="i18n.ts.zalip.catalogueSort" @change="applySort"><option value="newest">{{ i18n.ts.zalip.catalogueSortNewest }}</option><option value="year-desc">{{ i18n.ts.zalip.catalogueSortYearDesc }}</option><option value="year-asc">{{ i18n.ts.zalip.catalogueSortYearAsc }}</option><option value="title">{{ i18n.ts.zalip.catalogueSortTitle }}</option></select></label>
+							<button type="button" class="_button" :class="$style.openFilters" @click="filtersOpen = true"><i class="ti ti-adjustments-horizontal"></i><span>{{ i18n.ts.zalip.catalogueFilters }}</span><b v-if="activeFilterCount">{{ activeFilterCount }}</b></button>
 						</div>
 					</div>
 
-					<div v-if="activeFilterCount" :class="$style.activeFilters" aria-label="Выбранные фильтры">
+					<div v-if="activeFilterCount" :class="$style.activeFilters" :aria-label="i18n.ts.zalip.catalogueActiveFilters">
 						<button v-for="kind in selectedKinds" :key="kind" type="button" class="_button" @click="toggleKind(kind)"><i :class="kindIcon(kind)"></i>{{ kindLabel(kind) }}<i class="ti ti-x"></i></button>
 						<button v-for="genre in selectedGenres" :key="genre" type="button" class="_button" @click="toggleGenre(genre)"><i class="ti ti-tag"></i>{{ genre }}<i class="ti ti-x"></i></button>
 						<button v-if="yearFrom || yearTo" type="button" class="_button" @click="navigate({ yearFrom: '', yearTo: '' })"><i class="ti ti-calendar"></i>{{ yearFrom || '…' }}—{{ yearTo || '…' }}<i class="ti ti-x"></i></button>
 						<button v-if="query" type="button" class="_button" @click="clearSearch"><i class="ti ti-search"></i> «{{ query }}»<i class="ti ti-x"></i></button>
 					</div>
 
-					<div v-if="pending" :class="$style.empty"><i class="ti ti-loader-2 ti-spin"></i> Собираем подборку…</div>
-					<div v-else-if="loadError" :class="$style.empty"><i class="ti ti-alert-circle"></i><strong>Не удалось загрузить каталог</strong><button type="button" class="_button" @click="loadWorks">Попробовать ещё раз</button></div>
-					<div v-else-if="sortedWorks.length === 0" :class="$style.empty"><i class="ti ti-filter-off"></i><strong>По этим условиям ничего не найдено</strong><span>Ослабьте один из фильтров или сбросьте параметры.</span><button type="button" class="_button" @click="resetFilters">Сбросить фильтры</button></div>
+					<div v-if="pending" :class="$style.empty"><i class="ti ti-loader-2 ti-spin"></i> {{ i18n.ts.zalip.catalogueLoadingCollection }}</div>
+					<div v-else-if="loadError" :class="$style.empty"><i class="ti ti-alert-circle"></i><strong>{{ i18n.ts.zalip.catalogueLoadFailed }}</strong><button type="button" class="_button" @click="loadWorks">{{ i18n.ts.zalip.catalogueRetry }}</button></div>
+					<div v-else-if="sortedWorks.length === 0" :class="$style.empty"><i class="ti ti-filter-off"></i><strong>{{ i18n.ts.zalip.catalogueNoResults }}</strong><span>{{ i18n.ts.zalip.catalogueNoResultsDescription }}</span><button type="button" class="_button" @click="resetFilters">{{ i18n.ts.zalip.catalogueResetFilters }}</button></div>
 					<div v-else :class="$style.grid">
 						<MkA v-for="work in sortedWorks" :key="work.id" :to="`/zalip/${work.slug}`" :class="$style.card">
 							<div :class="$style.poster"><img v-if="work.posterPath" :src="tmdbImage(work.posterPath)" :alt="work.title" loading="lazy"><i v-else class="ti ti-movie"></i><span :class="$style.cardKind"><i :class="kindIcon(work.kind)"></i>{{ kindLabel(work.kind) }}</span></div>
-							<div :class="$style.cardBody"><p>{{ work.releaseYear ?? 'Год не указан' }}</p><h3>{{ work.title }}</h3><span v-if="work.originalTitle">{{ work.originalTitle }}</span><div v-if="work.genres.length" :class="$style.cardGenres"><span v-for="genre in work.genres.slice(0, 2)" :key="genre">{{ genre }}</span></div></div>
+							<div :class="$style.cardBody"><p>{{ work.releaseYear ?? i18n.ts.zalip.catalogueUnknownYear }}</p><h3>{{ work.title }}</h3><span v-if="work.originalTitle">{{ work.originalTitle }}</span><div v-if="work.genres.length" :class="$style.cardGenres"><span v-for="genre in work.genres.slice(0, 2)" :key="genre">{{ genre }}</span></div></div>
 						</MkA>
 					</div>
-					<p v-if="!pending && !loadError" :class="$style.resultCount">Показано {{ sortedWorks.length }} из первых 50 доступных тайтлов</p>
+					<p v-if="!pending && !loadError" :class="$style.resultCount">{{ i18n.tsx.zalip.catalogueResultCount({ shown: sortedWorks.length.toString(), total: '50' }) }}</p>
 				</section>
 			</div>
 		</main>
@@ -127,7 +127,8 @@ type ZalipWork = {
 	genres: string[];
 };
 
-const DISPLAYED_GENRES = 18;
+const DISPLAYED_GENRES = 24;
+const MAX_SELECTED_GENRES = 40;
 const kinds: WorkKind[] = ['movie', 'series', 'anime', 'animation'];
 const props = withDefaults(defineProps<{
 	genres?: string;
@@ -162,7 +163,7 @@ const genreSearch = ref('');
 const showAllGenres = ref(false);
 let latestRequest = 0;
 
-const selectedGenres = computed(() => parseList(props.genres, 24));
+const selectedGenres = computed(() => parseList(props.genres, MAX_SELECTED_GENRES));
 const selectedKinds = computed(() => parseList(props.types, kinds.length).filter((kind): kind is WorkKind => kinds.includes(kind as WorkKind)));
 const query = computed(() => props.query.trim());
 const yearFrom = computed(() => parseYear(props.yearFrom));
@@ -171,7 +172,7 @@ const activeFilterCount = computed(() => selectedGenres.value.length + selectedK
 const matchingGenres = computed(() => genreOptions.value.filter(genre => genre.toLocaleLowerCase('ru').includes(genreSearch.value.toLocaleLowerCase('ru'))));
 const displayedGenres = computed(() => showAllGenres.value || genreSearch.value ? matchingGenres.value : matchingGenres.value.slice(0, DISPLAYED_GENRES));
 const shouldOfferMoreGenres = computed(() => !genreSearch.value && matchingGenres.value.length > DISPLAYED_GENRES);
-const resultHeading = computed(() => pending.value ? 'Загружаем тайтлы' : `${sortedWorks.value.length} ${pluralTitles(sortedWorks.value.length)}`);
+const resultHeading = computed(() => pending.value ? i18n.ts.zalip.catalogueLoading : `${sortedWorks.value.length} ${pluralTitles(sortedWorks.value.length)}`);
 const sortedWorks = computed(() => {
 	const sorted = [...works.value];
 	if (props.sort === 'title') return sorted.sort((left, right) => left.title.localeCompare(right.title, 'ru'));
@@ -192,9 +193,9 @@ function parseYear(value: string): number | undefined {
 function pluralTitles(count: number): string {
 	const last = count % 10;
 	const lastTwo = count % 100;
-	if (last === 1 && lastTwo !== 11) return 'тайтл';
-	if (last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14)) return 'тайтла';
-	return 'тайтлов';
+	if (last === 1 && lastTwo !== 11) return i18n.ts.zalip.catalogueTitleOne;
+	if (last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14)) return i18n.ts.zalip.catalogueTitleFew;
+	return i18n.ts.zalip.catalogueTitleMany;
 }
 
 function tmdbImage(path: string): string {
@@ -202,7 +203,7 @@ function tmdbImage(path: string): string {
 }
 
 function kindLabel(kind: WorkKind): string {
-	return ({ movie: 'Фильмы', series: 'Сериалы', anime: 'Аниме', animation: 'Анимация' })[kind];
+	return ({ movie: i18n.ts.zalip.catalogueKindMovie, series: i18n.ts.zalip.catalogueKindSeries, anime: i18n.ts.zalip.catalogueKindAnime, animation: i18n.ts.zalip.catalogueKindAnimation })[kind];
 }
 
 function kindIcon(kind: WorkKind): string {
@@ -249,7 +250,7 @@ function selectCategory(kind?: WorkKind): void {
 
 function toggleGenre(genre: string): void {
 	const selected = selectedGenres.value;
-	if (!selected.includes(genre) && selected.length >= 24) return;
+	if (!selected.includes(genre) && selected.length >= MAX_SELECTED_GENRES) return;
 	const next = selected.includes(genre) ? selected.filter(item => item !== genre) : [...selected, genre];
 	navigate({ genres: next.join(',') });
 }

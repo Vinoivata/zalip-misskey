@@ -8,7 +8,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div class="_spacer" style="--MI_SPACER-w: 1180px;">
 		<div :class="$style.page">
 			<section
-				:class="$style.onboarding"
+				:class="[$style.onboarding, { [$style.onboardingFeatured]: activeOnboarding.backdropPath }]"
 				aria-roledescription="carousel"
 				:aria-label="i18n.ts.zalip.onboardingLabel"
 				@mouseenter="pauseOnboardingForHover"
@@ -20,14 +20,18 @@ SPDX-License-Identifier: AGPL-3.0-only
 				@pointerup="endOnboardingSwipe"
 				@pointercancel="cancelOnboardingSwipe"
 			>
+					<div v-if="activeOnboarding.backdropPath" :class="$style.onboardingBackdrop" :style="{ backgroundImage: `url(${tmdbImage(activeOnboarding.backdropPath)})` }"></div>
+					<div :class="$style.onboardingShade"></div>
 				<div :class="$style.onboardingSlide" role="group" aria-roledescription="slide" :aria-label="i18n.tsx.zalip.onboardingSlideCounter({ current: (activeOnboardingIndex + 1).toString(), total: onboardingSlides.length.toString() })" :aria-live="onboardingPaused ? 'polite' : 'off'">
 					<div :class="$style.onboardingCopy">
-						<p :class="$style.onboardingEyebrow"><i :class="activeOnboarding.icon"></i> {{ i18n.ts.zalip.onboardingLabel }}</p>
+						<p :class="$style.onboardingEyebrow"><i :class="activeOnboarding.icon"></i> {{ activeOnboarding.eyebrow }}</p>
 						<h1>{{ activeOnboarding.title }}</h1>
+						<p v-if="activeOnboarding.description" :class="$style.onboardingDescription">{{ activeOnboarding.description }}</p>
 						<MkA :to="activeOnboarding.to" :class="$style.onboardingAction">{{ activeOnboarding.action }}</MkA>
 					</div>
 					<div :class="$style.onboardingArtwork">
-						<img :key="activeOnboarding.image" :src="activeOnboarding.image" alt="" draggable="false">
+						<img v-if="activeOnboarding.posterPath" :key="activeOnboarding.posterPath" :src="tmdbImage(activeOnboarding.posterPath)" :alt="activeOnboarding.title" draggable="false">
+						<img v-else-if="activeOnboarding.image" :key="activeOnboarding.image" :src="activeOnboarding.image" alt="" draggable="false">
 					</div>
 				</div>
 				<button type="button" class="_button" :class="$style.onboardingPlayback" :aria-label="onboardingPaused ? i18n.ts.zalip.onboardingResume : i18n.ts.zalip.onboardingPause" :aria-pressed="onboardingPaused" @click="toggleOnboardingAutoplay"><i :class="onboardingPaused ? 'ti ti-player-play-filled' : 'ti ti-player-pause-filled'"></i></button>
@@ -75,7 +79,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { definePage } from '@/page.js';
 import { i18n } from '@/i18n.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
@@ -115,13 +119,27 @@ type ZalipShowcaseItem = {
 	subtitle: string;
 };
 
+type ZalipHeroSlide = {
+	title: string;
+	eyebrow: string;
+	action: string;
+	to: string;
+	icon: string;
+	description?: string | null;
+	image?: string;
+	posterPath?: string | null;
+	backdropPath?: string | null;
+};
+
 type WorkKind = ZalipWork['kind'];
 
-const onboardingSlides = [
+const onboardingFallbackSlides: ZalipHeroSlide[] = [
 	{
 		title: i18n.ts.zalip.onboardingLibraryTitle,
 		image: '/vite/zalip/onboarding/1.webp',
 		icon: 'ti ti-bookmark',
+		eyebrow: i18n.ts.zalip.onboardingLabel,
+		description: i18n.ts.zalip.heroFallbackDescription,
 		to: '/library',
 		action: i18n.ts.zalip.onboardingLibraryAction,
 	},
@@ -129,6 +147,8 @@ const onboardingSlides = [
 		title: i18n.ts.zalip.onboardingFriendsTitle,
 		image: '/vite/zalip/onboarding/2.webp',
 		icon: 'ti ti-users',
+		eyebrow: i18n.ts.zalip.onboardingLabel,
+		description: i18n.ts.zalip.heroFallbackDescription,
 		to: '/timeline',
 		action: i18n.ts.zalip.onboardingFriendsAction,
 	},
@@ -136,6 +156,8 @@ const onboardingSlides = [
 		title: i18n.ts.zalip.onboardingPostsTitle,
 		image: '/vite/zalip/onboarding/3.webp',
 		icon: 'ti ti-pencil-plus',
+		eyebrow: i18n.ts.zalip.onboardingLabel,
+		description: i18n.ts.zalip.heroFallbackDescription,
 		to: '/timeline',
 		action: i18n.ts.zalip.onboardingPostsAction,
 	},
@@ -143,6 +165,8 @@ const onboardingSlides = [
 		title: i18n.ts.zalip.onboardingDiscussionsTitle,
 		image: '/vite/zalip/onboarding/4.webp',
 		icon: 'ti ti-messages',
+		eyebrow: i18n.ts.zalip.onboardingLabel,
+		description: i18n.ts.zalip.heroFallbackDescription,
 		to: '/timeline',
 		action: i18n.ts.zalip.onboardingDiscussionsAction,
 	},
@@ -150,6 +174,8 @@ const onboardingSlides = [
 		title: i18n.ts.zalip.onboardingDiscoverTitle,
 		image: '/vite/zalip/onboarding/5.webp',
 		icon: 'ti ti-search',
+		eyebrow: i18n.ts.zalip.onboardingLabel,
+		description: i18n.ts.zalip.heroFallbackDescription,
 		to: '/catalog',
 		action: i18n.ts.zalip.onboardingDiscoverAction,
 	},
@@ -160,11 +186,29 @@ const releaseEvents = ref<ZalipReleaseEvent[]>([]);
 const releaseEventsLoaded = ref(false);
 const activeOnboardingIndex = ref(0);
 const onboardingPaused = ref(false);
-const activeOnboarding = computed(() => onboardingSlides[activeOnboardingIndex.value]!);
+const onboardingSlides = computed<ZalipHeroSlide[]>(() => {
+	const featured = works.value.filter(work => work.backdropPath || work.posterPath).slice(0, 5);
+	if (featured.length === 0) return onboardingFallbackSlides;
+	return featured.map(work => ({
+		title: work.title,
+		eyebrow: i18n.ts.zalip.heroFeatured,
+		description: work.description || work.originalTitle || i18n.ts.zalip.heroFallbackDescription,
+		action: i18n.ts.zalip.heroDetails,
+		to: `/zalip/${work.slug}`,
+		icon: kindIcon(work.kind),
+		posterPath: work.posterPath,
+		backdropPath: work.backdropPath,
+	}));
+});
+const activeOnboarding = computed(() => onboardingSlides.value[activeOnboardingIndex.value] ?? onboardingFallbackSlides[0]!);
 const releaseDrag = useZalipHorizontalDrag();
 const followingFeed = ref(false);
 const publicTimeline = computed(() => isAvailableBasicTimeline('local') ? 'local' : isAvailableBasicTimeline('global') ? 'global' : null);
 const homeTimeline = computed(() => $i && (followingFeed.value || !publicTimeline.value) ? 'home' : publicTimeline.value);
+
+watch(() => onboardingSlides.value.length, (length) => {
+	if (activeOnboardingIndex.value >= length) activeOnboardingIndex.value = 0;
+});
 
 async function writePost(): Promise<void> {
 	if (!await pleaseLogin()) return;
@@ -203,9 +247,13 @@ function kindLabel(kind: WorkKind): string {
 	return ({ movie: i18n.ts.zalip.searchMovies, series: i18n.ts.zalip.searchSeries, anime: i18n.ts.zalip.searchAnime, animation: i18n.ts.zalip.searchAnimation })[kind];
 }
 
+function kindIcon(kind: WorkKind): string {
+	return ({ movie: 'ti ti-movie', series: 'ti ti-device-tv', anime: 'ti ti-sparkles', animation: 'ti ti-mood-smile' })[kind];
+}
+
 function releaseLabel(release: ZalipReleaseEvent): string {
-	const season = release.season.seasonNumber === 0 ? 'Спецэпизод' : `Сезон ${release.season.seasonNumber}`;
-	return `${season} · серия ${release.episode.episodeNumber}`;
+	const season = release.season.seasonNumber === 0 ? i18n.ts.zalip.releaseSpecial : i18n.tsx.zalip.releaseSeason({ number: release.season.seasonNumber.toString() });
+	return `${season} · ${i18n.tsx.zalip.releaseEpisode({ number: release.episode.episodeNumber.toString() })}`;
 }
 
 async function loadHome(): Promise<void> {
@@ -232,7 +280,7 @@ function selectOnboarding(index: number): void {
 }
 
 function showOnboarding(step: number): void {
-	activeOnboardingIndex.value = (activeOnboardingIndex.value + step + onboardingSlides.length) % onboardingSlides.length;
+	activeOnboardingIndex.value = (activeOnboardingIndex.value + step + onboardingSlides.value.length) % onboardingSlides.value.length;
 }
 
 function stopOnboardingAutoplay(): void {
@@ -340,7 +388,30 @@ definePage(() => ({
 	touch-action: pan-y;
 }
 
+.onboardingFeatured {
+	background: var(--MI_THEME-bg);
+}
+
+.onboardingBackdrop, .onboardingShade {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+}
+
+.onboardingBackdrop {
+	background-position: center;
+	background-size: cover;
+	filter: saturate(1.05);
+	transform: scale(1.02);
+}
+
+.onboardingShade {
+	background: linear-gradient(90deg, color-mix(in srgb, var(--MI_THEME-bg) 96%, transparent) 0%, color-mix(in srgb, var(--MI_THEME-bg) 76%, transparent) 45%, color-mix(in srgb, var(--MI_THEME-bg) 22%, transparent) 100%), linear-gradient(0deg, color-mix(in srgb, var(--MI_THEME-bg) 72%, transparent), transparent 48%);
+}
+
 .onboardingSlide {
+	position: relative;
+	z-index: 1;
 	display: grid;
 	grid-template-columns: minmax(0, 0.86fr) minmax(0, 1.14fr);
 	min-height: 360px;
@@ -354,6 +425,10 @@ definePage(() => ({
 	align-items: flex-start;
 	justify-content: center;
 	padding: 44px 22px 50px 36px;
+}
+
+.onboardingFeatured .onboardingCopy {
+	padding-right: 42px;
 }
 
 .onboardingEyebrow {
@@ -374,6 +449,18 @@ definePage(() => ({
 	font-size: clamp(1.5rem, 3vw, 2.2rem);
 	line-height: 1.16;
 	letter-spacing: -0.025em;
+}
+
+.onboardingDescription {
+	max-width: 510px;
+	margin: 13px 0 0;
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.94rem;
+	line-height: 1.45;
+	-webkit-line-clamp: 3;
+	-webkit-box-orient: vertical;
+	display: -webkit-box;
+	overflow: hidden;
 }
 
 .onboardingAction {
@@ -413,6 +500,15 @@ definePage(() => ({
 	object-fit: contain;
 	object-position: center bottom;
 	user-select: none;
+}
+
+.onboardingFeatured .onboardingArtwork img {
+	width: min(250px, 78%);
+	max-height: 338px;
+	border: 1px solid color-mix(in srgb, var(--MI_THEME-fg) 16%, transparent);
+	border-radius: calc(var(--zalip-radius-big) - 2px);
+	box-shadow: 0 20px 42px color-mix(in srgb, var(--MI_THEME-bg) 60%, transparent);
+	object-fit: cover;
 }
 
 .onboardingPlayback {

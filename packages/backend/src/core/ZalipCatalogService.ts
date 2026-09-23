@@ -32,7 +32,9 @@ import { MiZalipSharedNote } from '@/models/ZalipSharedNote.js';
 import { NotificationService } from '@/core/NotificationService.js';
 import { MemorySingleCache } from '@/misc/cache.js';
 
-export const zalipCatalogueGenreLimit = 24;
+// A wide multi-select makes it possible to build genuinely narrow cinema shelves
+// without turning the filter into an arbitrary UI-only limit.
+export const zalipCatalogueGenreLimit = 40;
 
 type ZalipEpisodeReleaseNotificationPayload = {
 	workId: MiZalipWork['id'];

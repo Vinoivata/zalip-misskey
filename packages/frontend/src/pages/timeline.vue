@@ -6,9 +6,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <PageWithHeader v-model:tab="src" :actions="headerActions" :tabs="$i ? headerTabs : headerTabsWhenNotLogin" :swipable="true" :displayMyAvatar="true" :canOmitTitle="true">
 	<div class="_spacer" style="--MI_SPACER-w: 720px;">
-		<MkTip v-if="isBasicTimeline(src)" :k="`tl.${src}`" style="margin-bottom: var(--MI-margin);">
-			{{ i18n.ts._timelineDescription[src] }}
-		</MkTip>
+		<section :class="$style.lead">
+			<div>
+				<p :class="$style.eyebrow"><i class="ti ti-sparkles"></i> {{ i18n.ts.zalip.feedEyebrow }}</p>
+				<h1>{{ i18n.ts.zalip.feedHeading }}</h1>
+				<p>{{ i18n.ts.zalip.feedDescription }}</p>
+			</div>
+			<span v-if="isBasicTimeline(src)" :class="$style.scope"><i class="ti ti-waves-electricity"></i>{{ src === 'home' ? i18n.ts.zalip.feedScopeFollowing : i18n.ts.zalip.feedScopeCommunity }}</span>
+		</section>
 		<MkPostForm v-if="$i != null && prefer.r.showFixedPostForm.value" :class="$style.postForm" class="_panel" fixed style="margin-bottom: var(--MI-margin);"/>
 		<button v-else-if="$i" type="button" class="_button" :class="$style.compose" @click="os.post()">
 			<MkAvatar :user="$i" :class="$style.composeAvatar"/>
@@ -268,6 +273,54 @@ definePage(() => ({
 </script>
 
 <style lang="scss" module>
+.lead {
+	display: flex;
+	align-items: end;
+	justify-content: space-between;
+	gap: 16px;
+	margin: 4px 0 20px;
+	padding: 8px 2px 0;
+}
+
+.eyebrow {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	margin: 0 0 8px;
+	color: var(--MI_THEME-accent);
+	font-size: 0.72rem;
+	font-weight: 800;
+	letter-spacing: 0.1em;
+}
+
+.lead h1 {
+	margin: 0;
+	font-size: clamp(1.55rem, 4vw, 2rem);
+	letter-spacing: -0.02em;
+}
+
+.lead p:not(.eyebrow) {
+	max-width: 480px;
+	margin: 8px 0 0;
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.88rem;
+	line-height: 1.45;
+}
+
+.scope {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	flex: 0 0 auto;
+	padding: 8px 11px;
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: 999px;
+	background: var(--MI_THEME-panel);
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.74rem;
+	font-weight: 700;
+}
+
 .new {
 	position: sticky;
 	top: calc(var(--MI-stickyTop, 0px) + 16px);
@@ -308,6 +361,8 @@ definePage(() => ({
 .compose:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; }
 
 @media (max-width: 600px) {
+	.lead { align-items: start; margin-top: 0; }
+	.lead p:not(.eyebrow), .scope { display: none; }
 	.postForm, .tl {
 		margin-inline: calc(var(--MI-margin) * -1);
 		border-right: 0;

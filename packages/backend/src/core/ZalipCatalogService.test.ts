@@ -230,7 +230,7 @@ describe('ZalipCatalogService', () => {
 		expect(query.take).toHaveBeenCalledWith(12);
 	});
 
-	it('accepts up to 24 catalogue genres and rejects a larger set', async () => {
+	it('accepts up to 40 catalogue genres and rejects a larger set', async () => {
 		const query = {
 			where: vi.fn().mockReturnThis(),
 			andWhere: vi.fn().mockReturnThis(),
@@ -246,7 +246,7 @@ describe('ZalipCatalogService', () => {
 				throw new Error('Unexpected repository');
 			},
 		} as never, {} as never, {} as never, {} as never);
-		const genres = Array.from({ length: 24 }, (_, index) => `Жанр ${index + 1}`);
+		const genres = Array.from({ length: 40 }, (_, index) => `Жанр ${index + 1}`);
 
 		await expect(service.listPublished(12, { genres })).resolves.toEqual([]);
 		expect(query.andWhere).toHaveBeenCalledWith('work.genres @> CAST(:genres AS jsonb)', { genres: JSON.stringify(genres) });

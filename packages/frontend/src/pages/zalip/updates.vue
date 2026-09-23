@@ -8,13 +8,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div class="_spacer" style="--MI_SPACER-w: 880px;">
 		<div :class="$style.page">
 			<header :class="$style.heading">
-				<div><p :class="$style.eyebrow"><i class="ti ti-bell"></i> ПОДПИСКИ</p><h1>Новые серии</h1><p>Здесь появляются обновления только по тайтлам, за которыми вы следите.</p></div>
-				<MkA to="/library" :class="$style.library"><i class="ti ti-bookmark"></i> Библиотека</MkA>
+				<div><p :class="$style.eyebrow"><i class="ti ti-bell"></i> {{ i18n.ts.zalip.updatesEyebrow }}</p><h1>{{ i18n.ts.zalip.updatesHeading }}</h1><p>{{ i18n.ts.zalip.updatesDescription }}</p></div>
+				<MkA to="/library" :class="$style.library"><i class="ti ti-bookmark"></i> {{ i18n.ts.zalip.updatesLibrary }}</MkA>
 			</header>
 
-			<div v-if="pending" :class="$style.empty"><i class="ti ti-loader-2 ti-spin"></i> Загружаем обновления…</div>
+			<div v-if="pending" :class="$style.empty"><i class="ti ti-loader-2 ti-spin"></i> {{ i18n.ts.zalip.updatesLoading }}</div>
 			<div v-else-if="loadError"><p role="alert">{{ i18n.ts.zalip.subscriptionsLoadFailed }}</p><MkError @retry="loadUpdates"/></div>
-				<div v-else-if="events.length === 0" :class="$style.empty"><i class="ti ti-bell-off"></i><strong>Пока нет новых серий</strong><span>На странице тайтла включите «Следить за сериями», чтобы его будущие обновления появились здесь.</span><MkA to="/catalog" :class="$style.start">Открыть каталог</MkA></div>
+				<div v-else-if="events.length === 0" :class="$style.empty"><i class="ti ti-bell-off"></i><strong>{{ i18n.ts.zalip.updatesEmptyTitle }}</strong><span>{{ i18n.ts.zalip.updatesEmptyDescription }}</span><MkA to="/catalog" :class="$style.start">{{ i18n.ts.zalip.updatesOpenCatalogue }}</MkA></div>
 			<div v-else :class="$style.list">
 				<MkA v-for="event in events" :key="event.id" :to="`/zalip/${event.work.slug}`" :class="$style.event">
 					<img v-if="event.work.posterPath" :src="tmdbImage(event.work.posterPath)" :alt="event.work.title" loading="lazy">
@@ -49,7 +49,8 @@ function tmdbImage(path: string): string {
 }
 
 function releaseLabel(event: ReleaseEvent): string {
-	return `${event.season.seasonNumber === 0 ? 'Спецэпизод' : `Сезон ${event.season.seasonNumber}`} · серия ${event.episode.episodeNumber}: ${event.episode.title}`;
+	const season = event.season.seasonNumber === 0 ? i18n.ts.zalip.releaseSpecial : i18n.tsx.zalip.releaseSeason({ number: event.season.seasonNumber.toString() });
+	return `${season} · ${i18n.tsx.zalip.releaseEpisode({ number: event.episode.episodeNumber.toString() })}: ${event.episode.title}`;
 }
 
 function dateLabel(createdAt: string): string {
@@ -70,7 +71,7 @@ async function loadUpdates(): Promise<void> {
 
 onMounted(loadUpdates);
 
-definePage(() => ({ title: 'Подписки', icon: 'ti ti-bell' }));
+definePage(() => ({ title: i18n.ts.zalip.updatesHeading, icon: 'ti ti-bell' }));
 </script>
 
 <style lang="scss" module>

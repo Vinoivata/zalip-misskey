@@ -80,15 +80,19 @@ function openMoreMenu(event: PointerEvent): void {
 .root {
 	position: relative;
 	z-index: 1200;
-	padding: 4px max(8px, env(safe-area-inset-left, 0px)) env(safe-area-inset-bottom, 0px) max(8px, env(safe-area-inset-right, 0px));
+	align-self: center;
+	margin: 0 10px max(10px, env(safe-area-inset-bottom, 0px));
+	padding: 4px max(7px, env(safe-area-inset-left, 0px)) 5px max(7px, env(safe-area-inset-right, 0px));
 	display: grid;
 	grid-template-columns: repeat(5, minmax(0, 1fr));
-	width: 100%;
+	width: min(calc(100% - 20px), 560px);
 	box-sizing: border-box;
-	background: var(--MI_THEME-navBg);
+	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 76%, transparent);
+	border-radius: 28px;
+	background: color-mix(in srgb, var(--MI_THEME-navBg) 88%, transparent);
 	color: var(--MI_THEME-navFg);
-	border-top: solid 1px var(--MI_THEME-divider);
-	box-shadow: 0 -10px 30px color-mix(in srgb, black 12%, transparent);
+	box-shadow: 0 12px 30px color-mix(in srgb, var(--MI_THEME-shadow) 24%, transparent);
+	backdrop-filter: blur(18px) saturate(1.2);
 }
 
 .item {
@@ -117,7 +121,7 @@ function openMoreMenu(event: PointerEvent): void {
 	width: 100%;
 	max-width: 64px;
 	margin: auto;
-	border-radius: 10px;
+	border-radius: 15px;
 
 	&:hover {
 		background: var(--MI_THEME-panelHighlight);
@@ -159,6 +163,8 @@ function openMoreMenu(event: PointerEvent): void {
 
 @media (max-width: 400px) {
 	.root {
+		width: calc(100% - 14px);
+		margin-inline: 7px;
 		padding-inline: 2px;
 	}
 
