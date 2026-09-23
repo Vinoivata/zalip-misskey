@@ -413,14 +413,14 @@ const keymap = {
 	position: relative;
 	min-width: 0;
 	font-size: max(1em, 15px);
-	border-bottom: 1px solid var(--MI_THEME-divider);
+	border-bottom: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 84%, transparent);
 	overflow: clip;
 	contain: content;
 	transition: background 0.16s ease;
 
 	@media (hover: hover) and (pointer: fine) {
 		&:hover > .article {
-			background: color-mix(in srgb, var(--MI_THEME-panelHighlight) 60%, transparent);
+			background: color-mix(in srgb, var(--MI_THEME-panelHighlight) 36%, transparent);
 		}
 	}
 
@@ -595,7 +595,7 @@ const keymap = {
 	position: relative;
 	cursor: pointer;
 	display: flex;
-	padding: 20px 22px 14px;
+	padding: 18px 20px 12px;
 	border-radius: 0;
 	transition: background 0.16s ease;
 }
@@ -635,12 +635,12 @@ const keymap = {
 	align-items: flex-start;
 	gap: 8px;
 	min-width: 0;
-	margin-bottom: 10px;
+	margin-bottom: 8px;
 }
 
 .noteHeader { flex: 1; min-width: 0; }
 .body { min-width: 0; }
-.reactions { margin-top: 10px; }
+.reactions { margin-top: 8px; }
 .menuButton {
 	display: grid;
 	place-items: center;
@@ -711,7 +711,7 @@ const keymap = {
 
 .text {
 	overflow-wrap: break-word;
-	line-height: 1.6;
+	line-height: 1.55;
 }
 
 .replyIcon {
@@ -753,29 +753,29 @@ const keymap = {
 .footer {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: 4px;
 	flex-wrap: wrap;
-	margin: 12px 0 0;
+	margin: 10px 0 0;
 }
 
 .footerButton {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	gap: 6px;
-	min-width: 44px;
-	min-height: 44px;
+	gap: 5px;
+	min-width: 38px;
+	min-height: 38px;
 	margin: 0;
-	padding: 0 12px;
-	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 70%, transparent);
-	border-radius: 999px;
-	color: color-mix(in srgb, var(--MI_THEME-panel), var(--MI_THEME-fg) 70%); // opacityなど不透明度で表現するとレンダリングパフォーマンスに影響するので通常の色の混合で代用
+	padding: 0 8px;
+	border: 1px solid transparent;
+	border-radius: 10px;
+	color: color-mix(in srgb, var(--MI_THEME-fg) 62%, transparent); // opacityなど不透明度で表現するとレンダリングパフォーマンスに影響するので通常の色の混合で代用
 	transition: color 0.16s ease, background 0.16s ease;
-	> i { font-size: 20px; }
-	&.reacted { color: var(--MI_THEME-accent); background: var(--MI_THEME-accentedBg); }
+	> i { font-size: 19px; }
+	&.reacted { color: var(--MI_THEME-accent); background: color-mix(in srgb, var(--MI_THEME-accentedBg) 66%, transparent); }
 
 	&:hover {
-		background: var(--MI_THEME-panelHighlight);
+		background: color-mix(in srgb, var(--MI_THEME-panelHighlight) 80%, transparent);
 		color: var(--MI_THEME-accent);
 	}
 
@@ -785,13 +785,28 @@ const keymap = {
 	}
 }
 
-.actionLabel { font-size: 13px; font-weight: 500; }
+.actionLabel { font-size: 12px; font-weight: 550; }
 
 .footerButtonCount {
 	display: inline;
 	margin: 0;
 	font-size: 13px;
 	font-variant-numeric: tabular-nums;
+}
+
+// A tablet has a wide enough timeline to miss the container breakpoint below,
+// but it cannot reveal hover-only controls.  Keep the social actions directly
+// reachable on any touch surface.
+@media (hover: none), (pointer: coarse) {
+	.root.showActionsOnlyHover .footer {
+		visibility: visible;
+		position: relative;
+		top: auto;
+		right: auto;
+		padding: 0;
+		background: transparent;
+		box-shadow: none;
+	}
 }
 
 @container (max-width: 580px) {
@@ -803,7 +818,7 @@ const keymap = {
 		display: grid;
 		grid-template-columns: 42px minmax(0, 1fr);
 		column-gap: 12px;
-		padding: 18px 16px;
+		padding: 16px;
 	}
 	.main { display: contents; }
 	.headerRow { grid-column: 2; margin-bottom: 14px; }
@@ -830,6 +845,7 @@ const keymap = {
 
 	.footer {
 		margin-bottom: 0;
+		gap: 6px;
 	}
 }
 

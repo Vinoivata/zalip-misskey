@@ -360,6 +360,19 @@ definePage(() => ({
 .composeField i { font-size: 21px; flex-shrink: 0; }
 .compose:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; }
 
+@media (max-width: 1099px) {
+	.lead {
+		margin-inline: auto;
+		max-width: 720px;
+	}
+
+	.tl, .postForm, .compose {
+		max-width: 720px;
+		margin-right: auto;
+		margin-left: auto;
+	}
+}
+
 @media (max-width: 600px) {
 	.lead { align-items: start; margin-top: 0; }
 	.lead p:not(.eyebrow), .scope { display: none; }

@@ -63,15 +63,16 @@ const mock = inject(DI.mock, false);
 .identity { display: flex; align-items: baseline; min-width: 0; }
 
 .stacked {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) auto;
-	gap: 3px 8px;
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 2px 6px;
 	font-size: 14px;
 	line-height: 1.4;
-	.identity { grid-column: 1; grid-row: 1; }
-	.username { grid-column: 1 / -1; grid-row: 2; font-size: 13px; margin: 0; }
-	.info { grid-column: 2; grid-row: 1; font-size: 12px; }
-	.info::before { display: none; }
+	.identity { min-width: 0; }
+	.username { margin: 0; font-size: 13px; }
+	.info { margin: 0; font-size: 12px; }
+	.info::before { margin-right: 0; content: '·'; }
 	.name { margin: 0; }
 }
 

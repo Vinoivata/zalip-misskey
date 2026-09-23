@@ -34,7 +34,7 @@ import XMobileFooterMenu from '@/ui/_common_/mobile-footer-menu.vue';
 import { deviceKind } from '@/utility/device-kind.js';
 
 const isRoot = computed(() => mainRouter.currentRoute.value.name === 'index');
-const MOBILE_THRESHOLD = 767;
+const MOBILE_THRESHOLD = 1099;
 
 const pageMetadata = ref<null | PageMetadata>(null);
 
@@ -52,12 +52,12 @@ provideMetadataReceiver((metadataGetter) => {
 });
 provideReactiveMetadata(pageMetadata);
 
-const isMobile = ref(deviceKind === 'smartphone' || window.innerWidth <= MOBILE_THRESHOLD);
-const showWidgetsSide = ref(window.innerWidth >= 1440);
+const isMobile = ref(deviceKind !== 'desktop' || window.innerWidth <= MOBILE_THRESHOLD);
+const showWidgetsSide = ref(!isMobile.value && window.innerWidth >= 1440);
 
 function updateViewport(): void {
-	isMobile.value = deviceKind === 'smartphone' || window.innerWidth <= MOBILE_THRESHOLD;
-	showWidgetsSide.value = window.innerWidth >= 1440;
+	isMobile.value = deviceKind !== 'desktop' || window.innerWidth <= MOBILE_THRESHOLD;
+	showWidgetsSide.value = !isMobile.value && window.innerWidth >= 1440;
 }
 
 window.addEventListener('resize', updateViewport, { passive: true });
@@ -102,9 +102,9 @@ onBeforeUnmount(() => window.removeEventListener('resize', updateViewport));
 	background: var(--MI_THEME-bg);
 }
 
-@media (max-width: 767px) {
+@media (max-width: 1099px) {
 	.root {
-		--zalip-container-offset: 16px;
+		--zalip-container-offset: 18px;
 	}
 }
 </style>

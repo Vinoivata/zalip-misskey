@@ -166,7 +166,7 @@ async function openAccount(ev: PointerEvent): Promise<void> {
 	}
 }
 
-@media (max-width: 767px) {
+@media (max-width: 1099px) {
 	.root {
 		grid-template-columns: auto minmax(0, 1fr) auto;
 		gap: 8px;

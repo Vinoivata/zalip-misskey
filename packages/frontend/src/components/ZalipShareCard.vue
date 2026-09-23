@@ -48,20 +48,21 @@ function posterUrl(path: string): string {
 <style lang="scss" module>
 .card {
 	display: grid;
-	grid-template-columns: 90px minmax(0, 1fr);
-	gap: 14px;
-	padding: 12px;
-	margin-top: 12px;
+	grid-template-columns: 82px minmax(0, 1fr);
+	gap: 13px;
+	padding: 10px;
+	margin-top: 10px;
 	overflow: hidden;
-	border: 1px solid var(--MI_THEME-divider);
-	border-radius: var(--zalip-radius);
-	background: color-mix(in srgb, var(--MI_THEME-bg) 38%, var(--MI_THEME-panel));
+	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 78%, transparent);
+	border-radius: 14px;
+	background: color-mix(in srgb, var(--MI_THEME-panelHighlight) 34%, var(--MI_THEME-panel));
 	color: var(--MI_THEME-fg);
 	text-decoration: none;
 	transition: border-color 0.15s ease;
 
 	&:hover {
-		border-color: color-mix(in srgb, var(--MI_THEME-accent) 24%, var(--MI_THEME-divider));
+		border-color: color-mix(in srgb, var(--MI_THEME-accent) 42%, var(--MI_THEME-divider));
+		background: color-mix(in srgb, var(--MI_THEME-panelHighlight) 64%, var(--MI_THEME-panel));
 		text-decoration: none;
 	}
 	&:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; }
@@ -95,7 +96,7 @@ function posterUrl(path: string): string {
 
 .body {
 	min-width: 0;
-	padding: 2px 0;
+	padding: 1px 2px 1px 0;
 }
 
 .meta,
@@ -116,7 +117,7 @@ function posterUrl(path: string): string {
 
 .title {
 	display: block;
-	margin-top: 4px;
+	margin-top: 3px;
 	font-size: 16px;
 	line-height: 1.3;
 	overflow-wrap: anywhere;
@@ -131,7 +132,7 @@ function posterUrl(path: string): string {
 
 .description {
 	display: -webkit-box;
-	margin-top: 8px;
+	margin-top: 6px;
 	-webkit-box-orient: vertical;
 	-webkit-line-clamp: 2;
 	overflow: hidden;
@@ -144,17 +145,17 @@ function posterUrl(path: string): string {
 	display: inline-flex;
 	align-items: center;
 	gap: 5px;
-	margin-top: 10px;
-	color: var(--MI_THEME-fgTransparentWeak);
+	margin-top: 8px;
+	color: var(--MI_THEME-accent);
 	font-size: 12px;
 	font-weight: 500;
 }
 
 @container (max-width: 360px) {
 	.card {
-		grid-template-columns: 72px minmax(0, 1fr);
-		gap: 12px;
-		padding: 10px;
+		grid-template-columns: 68px minmax(0, 1fr);
+		gap: 10px;
+		padding: 9px;
 	}
 
 	.description {

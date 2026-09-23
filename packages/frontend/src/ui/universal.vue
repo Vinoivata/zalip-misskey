@@ -4,7 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div :class="[$style.root, { '_forceShrinkSpacer': deviceKind === 'smartphone' }]">
+<div :class="[$style.root, { '_forceShrinkSpacer': isMobile }]">
 	<XTitlebar v-if="prefer.r.showTitlebar.value" style="flex-shrink: 0;"/>
 
 	<div :class="$style.nonTitlebarArea">
@@ -66,16 +66,18 @@ const XAnnouncements = defineAsyncComponent(() => import('@/ui/_common_/announce
 const isRoot = computed(() => mainRouter.currentRoute.value.name === 'index');
 
 const DESKTOP_THRESHOLD = 1440;
-const MOBILE_THRESHOLD = 767;
+// Tablets are neither a narrow desktop nor a large phone.  Give them the
+// focused, footer-navigation layout so the 220px sidebar cannot squeeze a
+// timeline into a thin strip.
+const MOBILE_THRESHOLD = 1099;
 
 // デスクトップでウィンドウを狭くしたときモバイルUIが表示されて欲しいことはあるので deviceKind === 'desktop' の判定は行わない
-const showWidgetsSide = ref(window.innerWidth >= DESKTOP_THRESHOLD);
-
-const isMobile = ref(deviceKind === 'smartphone' || window.innerWidth <= MOBILE_THRESHOLD);
+const isMobile = ref(deviceKind !== 'desktop' || window.innerWidth <= MOBILE_THRESHOLD);
+const showWidgetsSide = ref(!isMobile.value && window.innerWidth >= DESKTOP_THRESHOLD);
 
 function updateViewport(): void {
-	isMobile.value = deviceKind === 'smartphone' || window.innerWidth <= MOBILE_THRESHOLD;
-	showWidgetsSide.value = window.innerWidth >= DESKTOP_THRESHOLD;
+	isMobile.value = deviceKind !== 'desktop' || window.innerWidth <= MOBILE_THRESHOLD;
+	showWidgetsSide.value = !isMobile.value && window.innerWidth >= DESKTOP_THRESHOLD;
 }
 
 window.addEventListener('resize', updateViewport, { passive: true });
@@ -143,9 +145,9 @@ $widgets-hide-threshold: 1439px;
 	background: var(--MI_THEME-navBg);
 }
 
-@media (max-width: 767px) {
+@media (max-width: 1099px) {
 	.root {
-		--zalip-container-offset: 16px;
+		--zalip-container-offset: 18px;
 	}
 }
 

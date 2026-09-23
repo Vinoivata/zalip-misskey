@@ -81,18 +81,18 @@ function openMoreMenu(event: PointerEvent): void {
 	position: relative;
 	z-index: 1200;
 	align-self: center;
-	margin: 0 10px max(10px, env(safe-area-inset-bottom, 0px));
-	padding: 4px max(7px, env(safe-area-inset-left, 0px)) 5px max(7px, env(safe-area-inset-right, 0px));
+	margin: 0 12px max(12px, env(safe-area-inset-bottom, 0px));
+	padding: 5px max(7px, env(safe-area-inset-left, 0px)) 5px max(7px, env(safe-area-inset-right, 0px));
 	display: grid;
 	grid-template-columns: repeat(5, minmax(0, 1fr));
-	width: min(calc(100% - 20px), 560px);
+	width: min(calc(100% - 24px), 510px);
 	box-sizing: border-box;
-	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 76%, transparent);
-	border-radius: 28px;
-	background: color-mix(in srgb, var(--MI_THEME-navBg) 88%, transparent);
+	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 60%, transparent);
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--MI_THEME-navBg) 80%, transparent);
 	color: var(--MI_THEME-navFg);
-	box-shadow: 0 12px 30px color-mix(in srgb, var(--MI_THEME-shadow) 24%, transparent);
-	backdrop-filter: blur(18px) saturate(1.2);
+	box-shadow: 0 12px 36px color-mix(in srgb, var(--MI_THEME-shadow) 38%, transparent), inset 0 1px color-mix(in srgb, var(--MI_THEME-fg) 8%, transparent);
+	backdrop-filter: blur(22px) saturate(1.25);
 }
 
 .item {
@@ -100,57 +100,53 @@ function openMoreMenu(event: PointerEvent): void {
 	align-items: stretch;
 	justify-content: center;
 	min-width: 0;
-	min-height: 54px;
-	padding: 4px 0;
+	min-height: 58px;
+	padding: 5px 0;
 	color: inherit;
 	text-decoration: none;
 
 	&.active {
 		color: var(--MI_THEME-accent);
 
-		.itemInner { background: var(--MI_THEME-accentedBg); }
+		.itemInner {
+			background: var(--MI_THEME-accent);
+			color: var(--MI_THEME-fgOnAccent);
+			box-shadow: 0 4px 14px color-mix(in srgb, var(--MI_THEME-accent) 36%, transparent);
+		}
 	}
 }
 
 .itemInner {
 	position: relative;
 	display: grid;
-	justify-items: center;
-	gap: 4px;
-	padding: 5px 0;
-	width: 100%;
-	max-width: 64px;
+	place-items: center;
+	width: 46px;
+	height: 46px;
 	margin: auto;
-	border-radius: 15px;
+	border-radius: 50%;
+	transition: transform 0.16s ease, background 0.16s ease, color 0.16s ease;
 
 	&:hover {
-		background: var(--MI_THEME-panelHighlight);
+		background: color-mix(in srgb, var(--MI_THEME-panelHighlight) 85%, transparent);
 	}
 
 	&:active {
-		background: var(--MI_THEME-panelHighlight);
+		transform: scale(0.92);
 	}
 }
 
 .itemIcon {
-	font-size: 22px;
+	font-size: 24px;
 }
 
 .itemText {
-	max-width: 100%;
-	overflow: hidden;
-	font-size: 10px;
-	font-weight: 650;
-	line-height: 1.1;
-	text-align: center;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	display: none;
 }
 
 .itemIndicator {
 	position: absolute;
-	top: 0;
-	right: 2px;
+	top: 1px;
+	right: 0;
 	color: var(--MI_THEME-indicator);
 	font-size: 10px;
 	pointer-events: none;
@@ -163,18 +159,18 @@ function openMoreMenu(event: PointerEvent): void {
 
 @media (max-width: 400px) {
 	.root {
-		width: calc(100% - 14px);
-		margin-inline: 7px;
+		width: calc(100% - 20px);
+		margin-inline: 10px;
 		padding-inline: 2px;
 	}
 
 	.item {
-		min-height: 54px;
+		min-height: 56px;
 	}
 
 	.itemInner {
-		max-width: 70px;
-		padding: 7px 0;
+		width: 44px;
+		height: 44px;
 	}
 
 }

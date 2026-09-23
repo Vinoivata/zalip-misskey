@@ -92,11 +92,14 @@ defineExpose({
 	}
 
 	&:not(.noGap) {
-		background: var(--MI_THEME-bg);
+		// A social timeline reads as a continuous conversation.  Keeping a
+		// separate panel behind every note made even short messages look like
+		// dashboard widgets, especially in the dark theme.
+		background: transparent;
 
 		.note {
-			background: var(--MI_THEME-panel);
-			border-radius: var(--MI-radius);
+			background: transparent;
+			border-radius: 0;
 		}
 	}
 }
