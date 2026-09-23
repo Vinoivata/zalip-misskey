@@ -1454,6 +1454,10 @@ export interface Locale extends ILocale {
          */
         "heroDetails": string;
         /**
+         * Оценка сообщества: {rating} из 10
+         */
+        "communityRating": ParameterizedString<"rating">;
+        /**
          * Открывайте кино, сохраняйте любимое и обсуждайте просмотренное с людьми, которым это тоже важно.
          */
         "heroFallbackDescription": string;

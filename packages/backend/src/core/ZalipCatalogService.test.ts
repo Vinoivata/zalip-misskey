@@ -207,6 +207,7 @@ describe('ZalipCatalogService', () => {
 		};
 		const worksRepository = { createQueryBuilder: vi.fn().mockReturnValue(query) };
 		const dataSource = {
+			query: vi.fn().mockResolvedValue([{ workId: 'work-1', communityRating: 8.4, ratingCount: 7 }]),
 			getRepository: (model: unknown) => {
 				if (model === MiZalipWork) return worksRepository;
 				throw new Error('Unexpected repository');
@@ -222,6 +223,8 @@ describe('ZalipCatalogService', () => {
 		await expect(service.listPublished(12, { genres: ['  Драма  ', 'Криминал'], kinds: ['series'], query: 'Example', yearFrom: 2020, yearTo: 2030 })).resolves.toEqual([expect.objectContaining({
 			id: 'work-1',
 			genres: ['Драма'],
+			communityRating: 8.4,
+			ratingCount: 7,
 		})]);
 		expect(query.andWhere).toHaveBeenCalledWith('work.genres @> CAST(:genres AS jsonb)', { genres: '["Драма","Криминал"]' });
 		expect(query.andWhere).toHaveBeenCalledWith('work.kind IN (:...kinds)', { kinds: ['series'] });
@@ -278,6 +281,7 @@ describe('ZalipCatalogService', () => {
 		};
 		const worksRepository = { createQueryBuilder: vi.fn().mockReturnValue(query) };
 		const dataSource = {
+			query: vi.fn().mockResolvedValue([{ workId: 'work-2', communityRating: '7.5', ratingCount: '2' }]),
 			getRepository: (model: unknown) => {
 				if (model === MiZalipWork) return worksRepository;
 				throw new Error('Unexpected repository');
@@ -293,6 +297,8 @@ describe('ZalipCatalogService', () => {
 		await expect(service.searchPublished('  Example  ', 8, 'movie')).resolves.toEqual([expect.objectContaining({
 			id: 'work-2',
 			kind: 'movie',
+			communityRating: 7.5,
+			ratingCount: 2,
 		})]);
 		expect(query.andWhere).toHaveBeenCalledWith('work.kind = :kind', { kind: 'movie' });
 		expect(query.take).toHaveBeenCalledWith(8);

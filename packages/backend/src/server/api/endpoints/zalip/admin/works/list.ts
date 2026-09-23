@@ -26,6 +26,8 @@ const workSchema = {
 		posterPath: { type: 'string', nullable: true },
 		backdropPath: { type: 'string', nullable: true },
 		trailerYoutubeKey: { type: 'string', nullable: true },
+		communityRating: { type: 'number', nullable: true },
+		ratingCount: { type: 'integer' },
 		publicationState: { type: 'string', enum: ['draft', 'published', 'archived'] },
 		publishedAt: { type: 'string', nullable: true },
 		tmdbMediaType: { type: 'string', nullable: true, enum: ['movie', 'tv'] },
@@ -48,7 +50,7 @@ const workSchema = {
 			},
 		},
 	},
-	required: ['id', 'slug', 'kind', 'title', 'originalTitle', 'description', 'releaseYear', 'genres', 'runtimeMinutes', 'posterPath', 'backdropPath', 'trailerYoutubeKey', 'publicationState', 'publishedAt', 'tmdbMediaType', 'tmdbId', 'seasons'],
+	required: ['id', 'slug', 'kind', 'title', 'originalTitle', 'description', 'releaseYear', 'genres', 'runtimeMinutes', 'posterPath', 'backdropPath', 'trailerYoutubeKey', 'communityRating', 'ratingCount', 'publicationState', 'publishedAt', 'tmdbMediaType', 'tmdbId', 'seasons'],
 } as const;
 
 export const meta = {

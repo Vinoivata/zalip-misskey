@@ -361,6 +361,7 @@ zalip:
   titlesLabel: "тайтлов"
   heroFeatured: "ГЛАВНАЯ ПРЕМЬЕРА"
   heroDetails: "Подробнее"
+  communityRating: "Оценка сообщества: {rating} из 10"
   heroFallbackDescription: "Открывайте кино, сохраняйте любимое и обсуждайте просмотренное с людьми, которым это тоже важно."
   releaseSpecial: "Спецэпизод"
   releaseSeason: "Сезон {number}"

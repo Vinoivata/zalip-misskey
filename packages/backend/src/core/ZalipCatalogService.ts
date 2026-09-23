@@ -67,6 +67,9 @@ export type PackedZalipWork = {
 	posterPath: string | null;
 	backdropPath: string | null;
 	trailerYoutubeKey: string | null;
+	/** Rounded average of public personal ratings, without identifying voters. */
+	communityRating: number | null;
+	ratingCount: number;
 };
 
 /** Public catalogue facets. Every provided facet narrows the result set. */
@@ -173,7 +176,7 @@ export class ZalipCatalogService {
 	) {
 	}
 
-	public packWork(work: MiZalipWork): PackedZalipWork {
+	public packWork(work: MiZalipWork, rating: Pick<PackedZalipWork, 'communityRating' | 'ratingCount'> = { communityRating: null, ratingCount: 0 }): PackedZalipWork {
 		return {
 			id: work.id,
 			slug: work.slug,
@@ -187,7 +190,38 @@ export class ZalipCatalogService {
 			posterPath: work.posterPath,
 			backdropPath: work.backdropPath,
 			trailerYoutubeKey: work.trailerYoutubeKey,
+			communityRating: rating.communityRating,
+			ratingCount: rating.ratingCount,
 		};
+	}
+
+	/**
+	 * Ratings are deliberately aggregated here rather than exposing individual library entries.
+	 * One batch query keeps rails, catalogue and search from producing an N+1 query.
+	 */
+	private async getCommunityRatings(works: MiZalipWork[]): Promise<Map<string, Pick<PackedZalipWork, 'communityRating' | 'ratingCount'>>> {
+		if (works.length === 0) return new Map();
+
+		const rows = await this.db.query<Array<{
+			workId: string;
+			communityRating: string | number;
+			ratingCount: string | number;
+		}>>(
+			`SELECT "workId", ROUND(AVG("personalRating")::numeric, 1)::float8 AS "communityRating", COUNT("personalRating")::int AS "ratingCount"
+			 FROM "zalip_library_entry"
+			 WHERE "workId" = ANY($1) AND "personalRating" IS NOT NULL
+			 GROUP BY "workId"`,
+			[works.map(work => work.id)],
+		);
+		return new Map(rows.map(row => [row.workId, {
+			communityRating: Number(row.communityRating),
+			ratingCount: Number(row.ratingCount),
+		}]));
+	}
+
+	private async packWorksWithCommunityRatings(works: MiZalipWork[]): Promise<PackedZalipWork[]> {
+		const ratings = await this.getCommunityRatings(works);
+		return works.map(work => this.packWork(work, ratings.get(work.id)));
 	}
 
 	public async listPublished(limit: number, filters: ZalipPublishedCatalogueFilters = {}): Promise<PackedZalipWork[]> {
@@ -225,7 +259,7 @@ export class ZalipCatalogService {
 				.getMany();
 		}
 
-		return works.map(work => this.packWork(work));
+		return await this.packWorksWithCommunityRatings(works);
 	}
 
 	/** All normalized genre facets used by published catalogue titles, independent of paging. */
@@ -254,7 +288,7 @@ export class ZalipCatalogService {
 			.addOrderBy('work.createdAt', 'DESC')
 			.take(limit)
 			.getMany();
-		return works.map(work => this.packWork(work));
+		return await this.packWorksWithCommunityRatings(works);
 	}
 
 	public async showPublished(slug: string): Promise<PackedZalipWorkDetail | null> {
@@ -270,7 +304,7 @@ export class ZalipCatalogService {
 			order: { seasonNumber: 'ASC' },
 		});
 		return {
-			...this.packWork(work),
+			...(await this.packWorksWithCommunityRatings([work]))[0]!,
 			galleryPaths: work.galleryPaths,
 			seasons: seasons.map(season => this.packSeason(season)),
 		};
@@ -315,7 +349,7 @@ export class ZalipCatalogService {
 			.take(limit)
 			.getMany();
 
-		return this.packReleaseEvents(events);
+		return await this.packReleaseEvents(events);
 	}
 
 	/** Signed-in updates page: only events from titles the current Misskey user follows. */
@@ -331,16 +365,17 @@ export class ZalipCatalogService {
 			.orderBy('event.createdAt', 'DESC')
 			.take(limit)
 			.getMany();
-		return this.packReleaseEvents(events);
+		return await this.packReleaseEvents(events);
 	}
 
-	private packReleaseEvents(events: MiZalipReleaseEvent[]): PackedZalipReleaseEvent[] {
+	private async packReleaseEvents(events: MiZalipReleaseEvent[]): Promise<PackedZalipReleaseEvent[]> {
+		const ratings = await this.getCommunityRatings(events.flatMap(event => event.work == null ? [] : [event.work]));
 		return events.flatMap(event => {
 			if (event.work == null || event.season == null || event.episode == null) return [];
 			return [{
 				id: event.id,
 				createdAt: event.createdAt.toISOString(),
-				work: this.packWork(event.work),
+				work: this.packWork(event.work, ratings.get(event.work.id)),
 				season: { seasonNumber: event.season.seasonNumber, title: event.season.title },
 				episode: { episodeNumber: event.episode.episodeNumber, title: event.episode.title },
 			}];
@@ -355,13 +390,14 @@ export class ZalipCatalogService {
 			.orderBy('entry.updatedAt', 'DESC')
 			.getMany();
 
+		const ratings = await this.getCommunityRatings(entries.flatMap(entry => entry.work == null ? [] : [entry.work]));
 		return entries.map(entry => ({
 			status: entry.status,
 			episodesWatched: entry.episodesWatched,
 			personalRating: entry.personalRating,
 			isFavorite: entry.isFavorite,
 			isReleaseSubscribed: entry.isReleaseSubscribed,
-			work: this.packWork(entry.work!),
+			work: this.packWork(entry.work!, ratings.get(entry.work!.id)),
 		}));
 	}
 
@@ -399,13 +435,14 @@ export class ZalipCatalogService {
 		entry.updatedAt = now;
 		await repository.save(entry);
 
+		const [packedWork] = await this.packWorksWithCommunityRatings([work]);
 		return {
 			status: entry.status,
 			episodesWatched: entry.episodesWatched,
 			personalRating: entry.personalRating,
 			isFavorite: entry.isFavorite,
 			isReleaseSubscribed: entry.isReleaseSubscribed,
-			work: this.packWork(work),
+			work: packedWork!,
 		};
 	}
 
@@ -899,9 +936,9 @@ export class ZalipCatalogService {
 		});
 	}
 
-	public packAdminWork(work: MiZalipWork, seasons: MiZalipSeason[] = []): PackedZalipAdminWork {
+	public packAdminWork(work: MiZalipWork, seasons: MiZalipSeason[] = [], rating?: Pick<PackedZalipWork, 'communityRating' | 'ratingCount'>): PackedZalipAdminWork {
 		return {
-			...this.packWork(work),
+			...this.packWork(work, rating),
 			publicationState: work.publicationState,
 			publishedAt: work.publishedAt?.toISOString() ?? null,
 			tmdbMediaType: work.tmdbMediaType,
@@ -926,7 +963,8 @@ export class ZalipCatalogService {
 			seasonsByWorkId.set(season.workId, collection);
 		}
 
-		return works.map(work => this.packAdminWork(work, seasonsByWorkId.get(work.id)));
+		const ratings = await this.getCommunityRatings(works);
+		return works.map(work => this.packAdminWork(work, seasonsByWorkId.get(work.id), ratings.get(work.id)));
 	}
 
 	public async setPublicationState(
@@ -953,7 +991,8 @@ export class ZalipCatalogService {
 			await this.createDiscussion(me, work.id, null);
 		}
 
-		return this.packAdminWork(work);
+		const ratings = await this.getCommunityRatings([work]);
+		return this.packAdminWork(work, [], ratings.get(work.id));
 	}
 
 	/** Updates editor-owned descriptive metadata only; source mappings and publication state stay separate. */
@@ -976,7 +1015,8 @@ export class ZalipCatalogService {
 		work.releaseYear = input.releaseYear;
 		work.updatedAt = new Date();
 		await repository.save(work);
-		return this.packAdminWork(work);
+		const ratings = await this.getCommunityRatings([work]);
+		return this.packAdminWork(work, [], ratings.get(work.id));
 	}
 
 	/** Adds a local-only season to a draft or published catalogue work. */

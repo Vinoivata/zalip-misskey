@@ -33,6 +33,8 @@ export const meta = {
 			backdropPath: { type: 'string', nullable: true },
 			galleryPaths: { type: 'array', items: { type: 'string' } },
 			trailerYoutubeKey: { type: 'string', nullable: true },
+			communityRating: { type: 'number', nullable: true },
+			ratingCount: { type: 'integer' },
 			seasons: {
 				type: 'array',
 				items: {
@@ -51,7 +53,7 @@ export const meta = {
 				},
 			},
 		},
-		required: ['id', 'slug', 'kind', 'title', 'originalTitle', 'description', 'releaseYear', 'genres', 'runtimeMinutes', 'posterPath', 'backdropPath', 'galleryPaths', 'trailerYoutubeKey', 'seasons'],
+		required: ['id', 'slug', 'kind', 'title', 'originalTitle', 'description', 'releaseYear', 'genres', 'runtimeMinutes', 'posterPath', 'backdropPath', 'galleryPaths', 'trailerYoutubeKey', 'communityRating', 'ratingCount', 'seasons'],
 	},
 
 	errors: {

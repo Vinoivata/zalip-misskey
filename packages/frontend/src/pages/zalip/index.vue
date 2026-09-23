@@ -25,7 +25,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<div :class="$style.onboardingSlide" role="group" aria-roledescription="slide" :aria-label="i18n.tsx.zalip.onboardingSlideCounter({ current: (activeOnboardingIndex + 1).toString(), total: onboardingSlides.length.toString() })" :aria-live="onboardingPaused ? 'polite' : 'off'">
 					<div :class="$style.onboardingCopy">
 						<p :class="$style.onboardingEyebrow"><i :class="activeOnboarding.icon"></i> {{ activeOnboarding.eyebrow }}</p>
+						<div v-if="activeOnboarding.kind" :class="$style.onboardingMeta">
+							<span><i :class="kindIcon(activeOnboarding.kind)"></i>{{ kindLabel(activeOnboarding.kind) }}</span>
+							<span v-if="activeOnboarding.releaseYear">{{ activeOnboarding.releaseYear }}</span>
+							<span v-for="genre in activeOnboarding.genres?.slice(0, 2)" :key="genre">{{ genre }}</span>
+							<span v-if="activeOnboarding.communityRating != null" :class="$style.onboardingRating" :aria-label="i18n.tsx.zalip.communityRating({ rating: formatCommunityRating(activeOnboarding.communityRating) })"><i class="ti ti-star-filled"></i>{{ formatCommunityRating(activeOnboarding.communityRating) }}</span>
+						</div>
 						<h1>{{ activeOnboarding.title }}</h1>
+						<p v-if="activeOnboarding.originalTitle && activeOnboarding.originalTitle !== activeOnboarding.title" :class="$style.onboardingOriginalTitle">{{ activeOnboarding.originalTitle }}</p>
 						<p v-if="activeOnboarding.description" :class="$style.onboardingDescription">{{ activeOnboarding.description }}</p>
 						<MkA :to="activeOnboarding.to" :class="$style.onboardingAction">{{ activeOnboarding.action }}</MkA>
 					</div>
@@ -102,6 +109,8 @@ type ZalipWork = {
 	backdropPath: string | null;
 	trailerYoutubeKey: string | null;
 	genres: string[];
+	communityRating: number | null;
+	ratingCount: number;
 };
 
 type ZalipReleaseEvent = {
@@ -129,6 +138,11 @@ type ZalipHeroSlide = {
 	image?: string;
 	posterPath?: string | null;
 	backdropPath?: string | null;
+	kind?: WorkKind;
+	releaseYear?: number | null;
+	genres?: string[];
+	originalTitle?: string | null;
+	communityRating?: number | null;
 };
 
 type WorkKind = ZalipWork['kind'];
@@ -198,6 +212,11 @@ const onboardingSlides = computed<ZalipHeroSlide[]>(() => {
 		icon: kindIcon(work.kind),
 		posterPath: work.posterPath,
 		backdropPath: work.backdropPath,
+		kind: work.kind,
+		releaseYear: work.releaseYear,
+		genres: work.genres,
+		originalTitle: work.originalTitle,
+		communityRating: work.communityRating,
 	}));
 });
 const activeOnboarding = computed(() => onboardingSlides.value[activeOnboardingIndex.value] ?? onboardingFallbackSlides[0]!);
@@ -205,6 +224,10 @@ const releaseDrag = useZalipHorizontalDrag();
 const followingFeed = ref(false);
 const publicTimeline = computed(() => isAvailableBasicTimeline('local') ? 'local' : isAvailableBasicTimeline('global') ? 'global' : null);
 const homeTimeline = computed(() => $i && (followingFeed.value || !publicTimeline.value) ? 'home' : publicTimeline.value);
+
+function formatCommunityRating(rating: number): string {
+	return rating.toFixed(1).replace('.', ',');
+}
 
 watch(() => onboardingSlides.value.length, (length) => {
 	if (activeOnboardingIndex.value >= length) activeOnboardingIndex.value = 0;
@@ -382,7 +405,7 @@ definePage(() => ({
 .onboarding {
 	position: relative;
 	overflow: hidden;
-	min-height: 360px;
+	min-height: 420px;
 	border-radius: var(--zalip-radius-big);
 	background: var(--MI_THEME-zalipOnboardingBg, var(--MI_THEME-panel));
 	touch-action: pan-y;
@@ -406,15 +429,15 @@ definePage(() => ({
 }
 
 .onboardingShade {
-	background: linear-gradient(90deg, color-mix(in srgb, var(--MI_THEME-bg) 96%, transparent) 0%, color-mix(in srgb, var(--MI_THEME-bg) 76%, transparent) 45%, color-mix(in srgb, var(--MI_THEME-bg) 22%, transparent) 100%), linear-gradient(0deg, color-mix(in srgb, var(--MI_THEME-bg) 72%, transparent), transparent 48%);
+	background: linear-gradient(90deg, color-mix(in srgb, var(--MI_THEME-bg) 98%, transparent) 0%, color-mix(in srgb, var(--MI_THEME-bg) 88%, transparent) 38%, color-mix(in srgb, var(--MI_THEME-bg) 24%, transparent) 100%), linear-gradient(0deg, color-mix(in srgb, var(--MI_THEME-bg) 80%, transparent), transparent 55%);
 }
 
 .onboardingSlide {
 	position: relative;
 	z-index: 1;
 	display: grid;
-	grid-template-columns: minmax(0, 0.86fr) minmax(0, 1.14fr);
-	min-height: 360px;
+	grid-template-columns: minmax(0, 0.9fr) minmax(260px, 1.1fr);
+	min-height: 420px;
 }
 
 .onboardingCopy {
@@ -424,18 +447,19 @@ definePage(() => ({
 	flex-direction: column;
 	align-items: flex-start;
 	justify-content: center;
-	padding: 44px 22px 50px 36px;
+	min-width: 0;
+	padding: 54px 20px 56px 44px;
 }
 
 .onboardingFeatured .onboardingCopy {
-	padding-right: 42px;
+	padding-right: 34px;
 }
 
 .onboardingEyebrow {
 	display: flex;
 	align-items: center;
 	gap: 7px;
-	margin: 0 0 12px;
+	margin: 0 0 10px;
 	color: var(--MI_THEME-accent);
 	font-size: 0.76rem;
 	font-weight: 800;
@@ -443,20 +467,76 @@ definePage(() => ({
 	text-transform: uppercase;
 }
 
+.onboardingMeta {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+	margin: 0 0 14px;
+}
+
+.onboardingMeta span {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 8px;
+	border: 1px solid color-mix(in srgb, var(--MI_THEME-fg) 16%, transparent);
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--MI_THEME-bg) 44%, transparent);
+	color: var(--MI_THEME-fgTransparent);
+	font-size: 0.72rem;
+	font-weight: 700;
+	line-height: 1.25;
+	backdrop-filter: blur(8px);
+}
+
+.onboardingMeta span:first-child {
+	border-color: color-mix(in srgb, var(--MI_THEME-accent) 54%, transparent);
+	color: var(--MI_THEME-fg);
+}
+
+.onboardingMeta .onboardingRating {
+	border-color: color-mix(in srgb, var(--MI_THEME-warn) 54%, transparent);
+	background: color-mix(in srgb, var(--MI_THEME-warn) 14%, var(--MI_THEME-bg));
+	color: var(--MI_THEME-fg);
+}
+
+.onboardingMeta i {
+	color: var(--MI_THEME-accent);
+	font-size: 0.82rem;
+}
+
+.onboardingMeta .onboardingRating i {
+	color: var(--MI_THEME-warn);
+}
+
 .onboardingCopy h1 {
-	max-width: 470px;
+	max-width: 520px;
 	margin: 0;
-	font-size: clamp(1.5rem, 3vw, 2.2rem);
-	line-height: 1.16;
-	letter-spacing: -0.025em;
+	font-size: clamp(1.7rem, 3.25vw, 2.65rem);
+	line-height: 1.08;
+	letter-spacing: -0.04em;
+}
+
+.onboardingOriginalTitle {
+	max-width: min(470px, 100%);
+	margin: 8px 0 0;
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.78rem;
+	font-weight: 600;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .onboardingDescription {
 	max-width: 510px;
-	margin: 13px 0 0;
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.94rem;
-	line-height: 1.45;
+	margin: 16px 0 0;
+	color: var(--MI_THEME-fgTransparent);
+	font-size: 0.98rem;
+	line-height: 1.5;
 	-webkit-line-clamp: 3;
 	-webkit-box-orient: vertical;
 	display: -webkit-box;
@@ -467,15 +547,17 @@ definePage(() => ({
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	min-width: 168px;
-	min-height: 46px;
-	margin-top: 24px;
-	padding: 0 22px;
-	border-radius: var(--zalip-radius);
-	background: var(--MI_THEME-fg);
+	min-width: 174px;
+	min-height: 48px;
+	margin-top: 26px;
+	padding: 0 24px;
+	border: 1px solid color-mix(in srgb, var(--MI_THEME-fg) 18%, transparent);
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--MI_THEME-fg) 92%, transparent);
 	color: var(--MI_THEME-bg);
 	font-weight: 800;
 	text-decoration: none;
+	box-shadow: 0 8px 20px color-mix(in srgb, var(--MI_THEME-bg) 30%, transparent);
 }
 
 .onboardingAction:hover,
@@ -490,24 +572,24 @@ definePage(() => ({
 	align-items: flex-end;
 	justify-content: center;
 	min-width: 0;
-	padding: 16px 24px 0 0;
+	padding: 22px 34px 0 0;
 }
 
 .onboardingArtwork img {
 	display: block;
 	width: 100%;
-	max-height: 344px;
+	max-height: 396px;
 	object-fit: contain;
 	object-position: center bottom;
 	user-select: none;
 }
 
 .onboardingFeatured .onboardingArtwork img {
-	width: min(250px, 78%);
-	max-height: 338px;
-	border: 1px solid color-mix(in srgb, var(--MI_THEME-fg) 16%, transparent);
-	border-radius: calc(var(--zalip-radius-big) - 2px);
-	box-shadow: 0 20px 42px color-mix(in srgb, var(--MI_THEME-bg) 60%, transparent);
+	width: min(282px, 80%);
+	max-height: 382px;
+	border: 1px solid color-mix(in srgb, var(--MI_THEME-fg) 22%, transparent);
+	border-radius: 14px 14px 2px 2px;
+	box-shadow: 0 24px 52px color-mix(in srgb, var(--MI_THEME-bg) 66%, transparent), 0 0 0 1px color-mix(in srgb, var(--MI_THEME-bg) 40%, transparent);
 	object-fit: cover;
 }
 
@@ -528,8 +610,8 @@ definePage(() => ({
 .onboardingDots {
 	position: absolute;
 	z-index: 2;
-	bottom: 16px;
-	left: 36px;
+	bottom: 20px;
+	left: 44px;
 	display: flex;
 	align-items: center;
 	gap: 0;
@@ -952,29 +1034,34 @@ definePage(() => ({
 	}
 
 	.onboarding {
-		min-height: 540px;
+		min-height: 590px;
 	}
 
 	.onboardingSlide {
-		grid-template-columns: 1fr;
-		grid-template-rows: auto minmax(270px, 1fr);
-		min-height: 540px;
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: auto minmax(302px, 1fr);
+		min-height: 590px;
 	}
 
 	.onboardingCopy {
 		position: static;
-		padding: 24px 22px 12px;
+		padding: 28px 22px 8px;
 	}
 
 	.onboardingCopy h1 {
-		font-size: 1.35rem;
-		line-height: 1.25;
+		font-size: clamp(1.55rem, 7vw, 2rem);
+		line-height: 1.1;
 	}
+
+	.onboardingMeta { margin-bottom: 11px; }
+	.onboardingMeta span { padding: 3px 7px; font-size: 0.68rem; }
+	.onboardingOriginalTitle { margin-top: 6px; }
+	.onboardingDescription { margin-top: 11px; font-size: 0.87rem; -webkit-line-clamp: 2; }
 
 	.onboardingAction {
 		position: absolute;
 		right: 18px;
-		bottom: 16px;
+		bottom: 14px;
 		left: 18px;
 		min-height: 48px;
 		margin: 0;
@@ -982,15 +1069,20 @@ definePage(() => ({
 
 	.onboardingArtwork {
 		align-items: center;
-		padding: 0 20px 72px;
+		padding: 2px 20px 76px;
 	}
 
 	.onboardingArtwork img {
-		max-height: 310px;
+		max-height: 336px;
+	}
+
+	.onboardingFeatured .onboardingArtwork img {
+		width: min(236px, 64%);
+		max-height: 320px;
 	}
 
 	.onboardingDots {
-		bottom: 72px;
+		bottom: 70px;
 		left: 50%;
 		transform: translateX(-50%);
 	}

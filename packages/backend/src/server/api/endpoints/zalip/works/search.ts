@@ -23,8 +23,10 @@ const workSchema = {
 		posterPath: { type: 'string', nullable: true },
 		backdropPath: { type: 'string', nullable: true },
 		trailerYoutubeKey: { type: 'string', nullable: true },
+		communityRating: { type: 'number', nullable: true },
+		ratingCount: { type: 'integer' },
 	},
-	required: ['id', 'slug', 'kind', 'title', 'originalTitle', 'description', 'releaseYear', 'genres', 'runtimeMinutes', 'posterPath', 'backdropPath', 'trailerYoutubeKey'],
+	required: ['id', 'slug', 'kind', 'title', 'originalTitle', 'description', 'releaseYear', 'genres', 'runtimeMinutes', 'posterPath', 'backdropPath', 'trailerYoutubeKey', 'communityRating', 'ratingCount'],
 } as const;
 
 export const meta = {
