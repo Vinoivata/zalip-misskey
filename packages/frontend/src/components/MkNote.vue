@@ -119,30 +119,17 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</div>
 				<MkA v-if="appearNote.channel && !inChannel" :class="$style.channel" :to="`/channels/${appearNote.channel.id}`"><i class="ti ti-device-tv"></i> {{ appearNote.channel.name }}</MkA>
 			</div>
-			<MkReactionsViewer
-				v-if="appearNote.reactionAcceptance !== 'likeOnly'"
-				:class="$style.reactions"
-				:reactions="$appearNote.reactions"
-				:reactionEmojis="$appearNote.reactionEmojis"
-				:myReaction="$appearNote.myReaction"
-				:noteId="appearNote.id"
-				:maxNumber="16"
-				@mockUpdateMyReaction="emitUpdReaction"
-			>
-				<template #more>
-					<MkA :to="`/notes/${appearNote.id}/reactions`" :class="[$style.reactionOmitted]">{{ i18n.ts.more }}</MkA>
-				</template>
-			</MkReactionsViewer>
 			<footer :class="$style.footer">
 				<button ref="reactButton" type="button" :class="[$style.footerButton, { [$style.reacted]: $appearNote.myReaction != null }]" class="_button" :aria-label="i18n.ts.reaction" :aria-pressed="$appearNote.myReaction != null" @click="handleToggleReact()">
-					<i :class="appearNote.reactionAcceptance === 'likeOnly' ? ($appearNote.myReaction != null ? 'ti ti-heart-filled' : 'ti ti-heart') : 'ti ti-mood-plus'" aria-hidden="true"></i>
+					<MkReactionIcon v-if="summaryReaction" :class="$style.summaryReaction" :reaction="summaryReaction" :emojiUrl="$appearNote.reactionEmojis[summaryReaction.substring(1, summaryReaction.length - 1)]"/>
+					<MkZalipIcon v-else :name="appearNote.reactionAcceptance === 'likeOnly' ? 'heart' : 'mood'"/>
 					<span :class="$style.actionLabel">{{ i18n.ts.reaction }}</span>
-					<span v-if="$appearNote.reactionCount > 0 && (appearNote.reactionAcceptance === 'likeOnly' || prefer.s.showReactionsCount)" :class="$style.footerButtonCount">{{ number($appearNote.reactionCount) }}</span>
+					<span :class="$style.footerButtonCount">{{ number($appearNote.reactionCount) }}</span>
 				</button>
 				<button v-tooltip="i18n.ts.zalip.comments" type="button" :class="$style.footerButton" class="_button" :aria-label="i18n.ts.zalip.comments" @click="openComments()">
-					<i class="ti ti-message-circle" aria-hidden="true"></i>
+					<MkZalipIcon name="reply"/>
 					<span :class="$style.actionLabel">{{ i18n.ts.zalip.comments }}</span>
-					<p v-if="appearNote.repliesCount > 0" :class="$style.footerButtonCount">{{ number(appearNote.repliesCount) }}</p>
+					<span :class="$style.footerButtonCount">{{ number(appearNote.repliesCount) }}</span>
 				</button>
 				<button
 					v-if="canRenote"
@@ -153,12 +140,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 					:aria-label="i18n.ts.renote"
 					@click="renote()"
 				>
-					<i class="ti ti-repeat"></i>
-					<p v-if="appearNote.renoteCount > 0" :class="$style.footerButtonCount">{{ number(appearNote.renoteCount) }}</p>
+					<MkZalipIcon name="repeat"/>
+					<span :class="$style.footerButtonCount">{{ number(appearNote.renoteCount) }}</span>
 				</button>
 				<button v-else :class="$style.footerButton" class="_button" :aria-label="i18n.ts.renote" disabled>
 					<i class="ti ti-ban"></i>
 				</button>
+				<MkZalipBookmark :noteId="appearNote.id"/>
 				<button v-if="prefer.s.showClipButtonInNoteFooter" ref="clipButton" type="button" :class="$style.footerButton" class="_button" :aria-label="i18n.ts.clip" @click="clip()">
 					<i class="ti ti-paperclip"></i>
 				</button>
@@ -220,8 +208,10 @@ import type { Keymap } from '@/utility/hotkey.js';
 // コンポーネント外部の依存関係
 import MkNoteSub from '@/components/MkNoteSub.vue';
 import MkNoteHeader from '@/components/MkNoteHeader.vue';
+import MkZalipIcon from '@/components/MkZalipIcon.vue';
+import MkZalipBookmark from '@/components/MkZalipBookmark.vue';
 import MkNoteSimple from '@/components/MkNoteSimple.vue';
-import MkReactionsViewer from '@/components/MkReactionsViewer.vue';
+import MkReactionIcon from '@/components/MkReactionIcon.vue';
 import MkMediaList from '@/components/MkMediaList.vue';
 import MkCwButton from '@/components/MkCwButton.vue';
 import MkPoll from '@/components/MkPoll.vue';
@@ -310,6 +300,7 @@ const {
 
 // provide
 provide(DI.mfmEmojiReactCallback, reactViaMfmEmoji);
+const summaryReaction = computed(() => $appearNote.myReaction ?? Object.entries($appearNote.reactions).sort((a, b) => b[1] - a[1])[0]?.[0]);
 
 // MkNote固有
 const showSoftWordMutedWord = computed(() => prefer.s.showSoftWordMutedWord);
@@ -409,6 +400,8 @@ const keymap = {
 </script>
 
 <style lang="scss" module>
+.summaryReaction { width: 22px; height: 22px; font-size: 22px; object-fit: contain; }
+.instanceTicker { margin-top: 4px; }
 .root {
 	position: relative;
 	min-width: 0;
@@ -595,9 +588,19 @@ const keymap = {
 	position: relative;
 	cursor: pointer;
 	display: flex;
-	padding: 18px 20px 12px;
+	padding: 16px 16px 10px;
 	border-radius: 0;
 	transition: background 0.16s ease;
+	&::before {
+		content: '';
+		position: absolute;
+		left: 36px;
+		top: 64px;
+		bottom: 52px;
+		width: 2px;
+		background: var(--MI_THEME-divider);
+		pointer-events: none;
+	}
 }
 
 .colorBar {
@@ -635,7 +638,7 @@ const keymap = {
 	align-items: flex-start;
 	gap: 8px;
 	min-width: 0;
-	margin-bottom: 8px;
+	margin-bottom: 6px;
 }
 
 .noteHeader { flex: 1; min-width: 0; }
@@ -753,8 +756,8 @@ const keymap = {
 .footer {
 	display: flex;
 	align-items: center;
-	gap: 4px;
-	flex-wrap: wrap;
+	gap: 18px;
+	flex-wrap: nowrap;
 	margin: 10px 0 0;
 }
 
@@ -763,15 +766,16 @@ const keymap = {
 	align-items: center;
 	justify-content: center;
 	gap: 5px;
-	min-width: 38px;
-	min-height: 38px;
+	min-width: 32px;
+	min-height: 40px;
 	margin: 0;
-	padding: 0 8px;
-	border: 1px solid transparent;
+	padding: 0;
+	border: 0;
 	border-radius: 10px;
-	color: color-mix(in srgb, var(--MI_THEME-fg) 62%, transparent); // opacityなど不透明度で表現するとレンダリングパフォーマンスに影響するので通常の色の混合で代用
+	color: var(--zalip-social-muted);
 	transition: color 0.16s ease, background 0.16s ease;
 	> i { font-size: 19px; }
+	> svg { width: 22px; height: 22px; }
 	&.reacted { color: var(--MI_THEME-accent); background: color-mix(in srgb, var(--MI_THEME-accentedBg) 66%, transparent); }
 
 	&:hover {
@@ -785,7 +789,7 @@ const keymap = {
 	}
 }
 
-.actionLabel { font-size: 12px; font-weight: 550; }
+.actionLabel { display: none; }
 
 .footerButtonCount {
 	display: inline;
@@ -810,99 +814,14 @@ const keymap = {
 }
 
 @container (max-width: 580px) {
-	.renote {
-		padding: 12px 22px 0;
-	}
-
-	.article {
-		display: grid;
-		grid-template-columns: 42px minmax(0, 1fr);
-		column-gap: 12px;
-		padding: 16px;
-	}
-	.main { display: contents; }
-	.headerRow { grid-column: 2; margin-bottom: 14px; }
-	.body, .reactions, .footer { grid-column: 1 / -1; }
-	.instanceTicker { grid-column: 2; }
-	.avatar {
-		margin: 0;
-		width: 42px;
-		height: 42px;
-		&.useSticky { position: relative !important; top: auto; }
-	}
-	.menuButton { flex-basis: 44px; width: 44px; height: 44px; }
+	.article { padding: 14px 12px 8px; }
+	.article::before { left: 32px; top: 61px; }
+	.avatar { width: 40px; height: 40px; margin-right: 10px; }
+	.avatar.useSticky { position: relative !important; top: auto; }
+	.menuButton { width: 28px; height: 32px; flex-basis: 28px; }
+	.renote, .tip { padding: 10px 12px 0; font-size: 12px; }
+	.footer { gap: clamp(10px, 3.8vw, 24px); }
 	.root.showActionsOnlyHover .footer { position: relative; visibility: visible; top: auto; right: auto; background: transparent; box-shadow: none; }
-}
-
-@container (max-width: 500px) {
-	.renote {
-		padding: 10px 18px 0;
-	}
-
-	.article {
-		padding: 18px;
-	}
-
-	.footer {
-		margin-bottom: 0;
-		gap: 6px;
-	}
-}
-
-@container (max-width: 480px) {
-	.renote {
-		padding: 8px 16px 0 16px;
-	}
-
-	.tip {
-		padding: 8px 16px 0 16px;
-	}
-
-	.collapsedRenoteTarget {
-		padding: 0 16px 9px;
-		margin-top: 4px;
-	}
-
-	.article {
-		padding: 14px 16px;
-	}
-}
-
-@container (max-width: 450px) {
-	.avatar {
-		margin: 0;
-		width: 42px;
-		height: 42px;
-
-	}
-}
-
-@container (max-width: 380px) {
-	.actionLabel { display: none; }
-	.footer { gap: 10px; }
-}
-
-@container (max-width: 350px) {
-	.colorBar {
-		top: 6px;
-		left: 6px;
-		width: 4px;
-		height: calc(100% - 12px);
-	}
-}
-
-@container (max-width: 300px) {
-	.avatar {
-		width: 42px;
-		height: 42px;
-	}
-
-}
-
-@container (max-width: 250px) {
-	.quoteNote {
-		padding: 12px;
-	}
 }
 
 .muted {

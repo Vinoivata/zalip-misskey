@@ -5,27 +5,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <PageWithHeader hideHeader>
-	<div class="_spacer" style="--MI_SPACER-w: 1360px;">
+	<div>
 		<main :class="$style.feedShell">
 			<section :class="$style.feedColumn" aria-label="Лента">
 				<header :class="$style.feedHead">
 					<div :class="$style.modeRail" role="tablist" aria-label="Режим ленты">
-						<button v-for="mode in feedModes" :key="mode.key" type="button" class="_button" :class="[$style.mode, { [$style.modeActive]: src === mode.key }]" role="tab" :aria-selected="src === mode.key" @click="src = mode.key">
-							<i :class="mode.icon"></i><span>{{ mode.title }}</span>
+						<button v-for="mode in feedModes.filter(mode => mode.key !== 'global')" :key="mode.key" type="button" class="_button" :class="[$style.mode, { [$style.modeActive]: src === mode.key }]" role="tab" :aria-selected="src === mode.key" @click="src = mode.key">
+							<MkZalipIcon :name="mode.icon"/><span>{{ mode.title }}</span>
 						</button>
-					</div>
-					<div :class="$style.headActions">
-						<button type="button" class="_button" :class="$style.headAction" :aria-label="i18n.ts.zalip.feedSearch" @click="openSearch"><i class="ti ti-search"></i></button>
-						<button type="button" class="_button" :class="$style.headAction" :aria-label="i18n.ts.zalip.feedSettings" @click="openFeedSettings"><i class="ti ti-adjustments-horizontal"></i></button>
+						<MkA to="/channels" :class="$style.mode"><span aria-hidden="true">#</span><span>{{ i18n.ts.zalip.feedInterests }}</span></MkA>
+						<button v-for="mode in feedModes.filter(mode => mode.key === 'global')" :key="mode.key" type="button" class="_button" :class="[$style.mode, { [$style.modeActive]: src === mode.key }]" role="tab" :aria-selected="src === mode.key" @click="src = mode.key"><MkZalipIcon :name="mode.icon"/><span>{{ mode.title }}</span></button>
+						<MkA v-if="$i" to="/my/favorites" :class="$style.mode"><MkZalipIcon name="bookmark"/><span>{{ i18n.ts.favorites }}</span></MkA>
+						<button type="button" class="_button" :class="$style.mode" :aria-label="i18n.ts.zalip.feedSettings" @click="openFeedSettings"><MkZalipIcon name="settings"/></button>
 					</div>
 				</header>
-
-				<div :class="$style.storyRail" aria-label="Быстрые действия">
-					<button type="button" class="_button" :class="$style.createStory" @click="writePost">
-						<span :class="$style.createStoryCircle"><i class="ti ti-plus"></i></span>
-						<span>{{ i18n.ts.zalip.feedQuickPost }}</span>
-					</button>
-				</div>
 
 				<section :class="$style.composer" aria-label="Новая запись">
 					<button type="button" class="_button" :class="$style.composerInput" @click="writePost">
@@ -60,6 +53,8 @@ import { computed, useTemplateRef, ref, onMounted, onActivated } from 'vue';
 import type { MenuItem } from '@/types/menu.js';
 import type { BasicTimelineType } from '@/timelines.js';
 import MkStreamingNotesTimeline from '@/components/MkStreamingNotesTimeline.vue';
+import MkZalipIcon from '@/components/MkZalipIcon.vue';
+import type { ZalipIconName } from '@/components/MkZalipIcon.vue';
 import * as os from '@/os.js';
 import { store } from '@/store.js';
 import { i18n } from '@/i18n.js';
@@ -69,7 +64,6 @@ import { deepMerge } from '@/utility/merge.js';
 import { availableBasicTimelines, isAvailableBasicTimeline, isBasicTimeline, basicTimelineIconClass } from '@/timelines.js';
 import { prefer } from '@/preferences.js';
 import { pleaseLogin } from '@/utility/please-login.js';
-import { openZalipSearch } from '@/utility/zalip-search.js';
 
 const tlComponent = useTemplateRef('tlComponent');
 
@@ -98,12 +92,12 @@ const withSensitive = computed<boolean>({
 	set: (x) => saveTlFilter('withSensitive', x),
 });
 
-const feedModes = computed(() => availableBasicTimelines().map(timeline => ({
+const feedModes = computed(() => (['local', 'home', 'social', 'global'] as const).filter(timeline => availableBasicTimelines().includes(timeline)).map(timeline => ({
 	key: timeline,
-	icon: basicTimelineIconClass(timeline),
+	icon: ({ local: 'sparkles', home: 'person', social: 'users', global: 'movie' } as Record<BasicTimelineType, ZalipIconName>)[timeline],
 	title: ({
 		local: i18n.ts.zalip.feedForYou,
-		home: i18n.ts.zalip.followingFeed,
+		home: i18n.ts.zalip.feedFollowing,
 		social: i18n.ts.zalip.feedFriends,
 		global: i18n.ts.zalip.feedAll,
 	})[timeline],
@@ -133,10 +127,6 @@ function saveTlFilter(key: keyof typeof store.s.tl.filter, newValue: boolean) {
 async function writePost(): Promise<void> {
 	if (!await pleaseLogin()) return;
 	void os.post();
-}
-
-function openSearch(): void {
-	openZalipSearch();
 }
 
 function openFeedSettings(event: PointerEvent): void {
@@ -203,183 +193,34 @@ definePage(() => ({
 </script>
 
 <style lang="scss" module>
-.feedShell {
-	padding: 0 var(--MI-margin) 68px;
-}
-
-.feedColumn {
-	width: min(100%, 700px);
-	margin: 0 auto;
-}
-
+.feedShell { padding-bottom: 112px; }
+.feedColumn { width: 100%; margin: 0 auto; min-width: 0; }
 .feedHead {
 	position: sticky;
-	top: var(--MI-stickyTop, 0px);
-	z-index: 20;
+	top: var(--zalip-chrome-top, 0px);
+	z-index: 100;
+	height: 60px;
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
-	gap: 10px;
-	min-height: 58px;
-	padding: 8px 0;
-	border-bottom: 1px solid var(--MI_THEME-divider);
-	background: color-mix(in srgb, var(--MI_THEME-bg) 84%, transparent);
-	backdrop-filter: blur(20px) saturate(1.1);
-}
-
-.modeRail {
-	display: flex;
-	align-items: center;
-	gap: 3px;
-	min-width: 0;
-	overflow-x: auto;
-	scrollbar-width: none;
-}
-
-.modeRail::-webkit-scrollbar { display: none; }
-
-.mode {
-	display: inline-flex;
-	align-items: center;
-	gap: 7px;
-	flex: 0 0 auto;
-	min-height: 40px;
-	padding: 0 11px;
-	border-radius: 999px;
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.87rem;
-	font-weight: 800;
-	white-space: nowrap;
-	transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
-}
-
-.mode i { font-size: 1.05rem; }
-
-.mode:hover { color: var(--MI_THEME-fg); background: color-mix(in srgb, var(--MI_THEME-fg) 7%, transparent); }
-.mode:active { transform: scale(0.96); }
-
-.modeActive {
-	background: color-mix(in srgb, var(--MI_THEME-fg) 12%, transparent);
-	color: var(--MI_THEME-fg);
-	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--MI_THEME-fg) 5%, transparent);
-}
-
-.headActions { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
-
-.headAction {
-	display: grid;
-	place-items: center;
-	width: 40px;
-	height: 40px;
-	border-radius: 50%;
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 1.16rem;
-}
-
-.headAction:hover { color: var(--MI_THEME-fg); background: color-mix(in srgb, var(--MI_THEME-fg) 8%, transparent); }
-
-.storyRail {
-	display: flex;
-	align-items: center;
-	min-height: 166px;
-	padding: 18px 26px;
-	border-bottom: 1px solid var(--MI_THEME-divider);
 	box-sizing: border-box;
+	border-bottom: 1px solid var(--zalip-social-border);
+	background: color-mix(in srgb, var(--zalip-social-panel) 85%, transparent);
+	-webkit-backdrop-filter: blur(10px);
+	backdrop-filter: blur(10px);
+	transition: top .3s cubic-bezier(.25, .46, .45, .94);
 }
-
-.createStory {
-	display: grid;
-	justify-items: center;
-	gap: 7px;
-	flex: 0 0 86px;
-	padding: 0;
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.67rem;
-	font-weight: 700;
-	line-height: 1.15;
-}
-
-.createStoryCircle {
-	display: grid;
-	place-items: center;
-	width: 78px;
-	height: 78px;
-	border: 1px dashed color-mix(in srgb, var(--MI_THEME-fg) 22%, transparent);
-	border-radius: 50%;
-	background: color-mix(in srgb, var(--MI_THEME-bg) 36%, transparent);
-	font-size: 1.5rem;
-	transition: border-color .16s ease, background .16s ease, transform .16s ease;
-}
-
-.createStory:hover .createStoryCircle { border-color: var(--MI_THEME-accent); background: var(--MI_THEME-accentedBg); color: var(--MI_THEME-accent); transform: translateY(-2px); }
-
-.composer {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	min-height: 82px;
-	padding: 14px 26px;
-	border-bottom: 1px solid var(--MI_THEME-divider);
-}
-
-.composerInput {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	min-width: 0;
-	flex: 1;
-	padding: 0;
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: .95rem;
-	text-align: left;
-}
-
-.composeAvatar, .composerAnonymous {
-	display: grid;
-	place-items: center;
-	flex: 0 0 42px;
-	width: 42px;
-	height: 42px;
-	border-radius: 50%;
-}
-
-.composerAnonymous { background: var(--MI_THEME-panelHighlight); color: var(--MI_THEME-fgTransparentWeak); font-size: 1.25rem; }
-
-.composerInput:hover { color: var(--MI_THEME-fg); }
-
-.publish {
-	flex: 0 0 auto;
-	min-width: 88px;
-	min-height: 40px;
-	padding: 0 16px;
-	border-radius: 999px;
-	background: var(--MI_THEME-fg);
-	color: var(--MI_THEME-bg);
-	font-size: .85rem;
-	font-weight: 850;
-	transition: transform .16s ease, background .16s ease;
-}
-
-.publish:hover { background: var(--MI_THEME-accent); color: var(--MI_THEME-fgOnAccent); }
-.publish:active { transform: scale(.96); }
-
-.tl {
-	padding-top: 10px;
-	background: transparent;
-}
-
-@media (max-width: 1099px) {
-	.feedColumn { width: min(100%, 700px); }
-}
-
-@media (max-width: 767px) {
-	.feedShell { padding: 0 0 92px; }
-	.feedColumn { width: 100%; }
-	.feedHead { min-height: 58px; padding: 7px 10px 7px 12px; }
-	.mode { min-height: 38px; padding: 0 10px; font-size: .79rem; }
-	.mode i { font-size: .98rem; }
-	.headAction { width: 36px; height: 36px; font-size: 1.08rem; }
-	.storyRail, .composer { display: none; }
-	.tl { padding-top: 0; }
-}
+.modeRail { display: flex; align-items: center; gap: 4px; width: 100%; min-width: 0; padding: 0 8px; overflow-x: auto; scrollbar-width: none; }
+.modeRail::-webkit-scrollbar { display: none; }
+.mode { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; height: 32px; padding: 0 10px; border-radius: 99px; color: var(--zalip-social-muted); font-size: 13px; font-weight: 500; white-space: nowrap; text-decoration: none; > svg { width: 16px; height: 16px; } }
+.modeActive { color: var(--zalip-social-fg); background: var(--zalip-social-hover); font-weight: 700; }
+.mode:hover { background: var(--zalip-social-hover); }
+.composer { display: flex; align-items: center; gap: 12px; height: 82px; padding: 16px 24px; box-sizing: border-box; border-bottom: 1px solid var(--zalip-social-border); }
+.composerInput { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 1; text-align: left; color: var(--zalip-social-muted); font-size: 16px; }
+.composeAvatar, .composerAnonymous { flex: 0 0 40px; width: 40px; height: 40px; }
+.composerAnonymous { display: grid; place-items: center; border-radius: 50%; background: var(--zalip-social-hover); }
+.publish { flex: 0 0 auto; min-height: 34px; padding: 0 16px; border-radius: 99px; background: var(--zalip-social-fg); color: var(--zalip-social-panel); font-size: 14px; font-weight: 600; }
+.tl { background: var(--zalip-social-panel); }
+@media (max-width: 1099px) { .feedHead { height: 48px; } }
+@media (max-width: 600px) { .composer { display: none; } }
+@media (prefers-reduced-motion: reduce) { .feedHead { transition: none; } }
 </style>

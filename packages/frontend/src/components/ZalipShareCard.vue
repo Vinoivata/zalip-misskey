@@ -10,11 +10,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<i v-else class="ti ti-movie"></i>
 	</div>
 	<div :class="$style.body">
-		<p :class="$style.meta"><i :class="kindIcon"></i>{{ kindLabel }}<span v-if="share.releaseYear != null"> · {{ share.releaseYear }}</span></p>
 		<strong :class="$style.title">{{ share.title }}</strong>
+		<p :class="$style.meta"><i :class="kindIcon"></i>{{ kindLabel }}<span v-if="share.releaseYear != null"> · {{ share.releaseYear }}</span></p>
 		<p v-if="share.genres.length" :class="$style.genres">{{ share.genres.slice(0, 3).join(' · ') }}</p>
 		<p v-if="share.description" :class="$style.description">{{ share.description }}</p>
-		<span :class="$style.open">{{ i18n.ts.zalip.aboutTitle }}<i class="ti ti-arrow-up-right" aria-hidden="true"></i></span>
 	</div>
 </MkA>
 </template>
@@ -48,14 +47,14 @@ function posterUrl(path: string): string {
 <style lang="scss" module>
 .card {
 	display: grid;
-	grid-template-columns: 82px minmax(0, 1fr);
-	gap: 13px;
-	padding: 10px;
+	grid-template-columns: 88px minmax(0, 1fr);
+	gap: 0;
+	padding: 0;
 	margin-top: 10px;
 	overflow: hidden;
 	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 78%, transparent);
 	border-radius: 14px;
-	background: color-mix(in srgb, var(--MI_THEME-panelHighlight) 34%, var(--MI_THEME-panel));
+	background: var(--zalip-social-raised);
 	color: var(--MI_THEME-fg);
 	text-decoration: none;
 	transition: border-color 0.15s ease;
@@ -76,9 +75,9 @@ function posterUrl(path: string): string {
 .poster {
 	position: relative;
 	display: grid;
-	align-self: start;
+	align-self: stretch;
 	aspect-ratio: 2 / 3;
-	border-radius: var(--zalip-radius-small);
+	border-radius: 0;
 	place-items: center;
 	overflow: hidden;
 	background: color-mix(in srgb, var(--MI_THEME-accent) 18%, var(--MI_THEME-panel));
@@ -96,7 +95,7 @@ function posterUrl(path: string): string {
 
 .body {
 	min-width: 0;
-	padding: 1px 2px 1px 0;
+	padding: 12px 14px;
 }
 
 .meta,
@@ -113,6 +112,7 @@ function posterUrl(path: string): string {
 	color: var(--MI_THEME-fgTransparentWeak);
 	font-size: 12px;
 	font-weight: 500;
+	margin-top: 6px;
 }
 
 .title {
@@ -124,6 +124,7 @@ function posterUrl(path: string): string {
 }
 
 .genres {
+	display: none;
 	margin-top: 4px;
 	color: var(--MI_THEME-fgTransparentWeak);
 	font-size: 12px;
@@ -153,13 +154,13 @@ function posterUrl(path: string): string {
 
 @container (max-width: 360px) {
 	.card {
-		grid-template-columns: 68px minmax(0, 1fr);
-		gap: 10px;
-		padding: 9px;
+		grid-template-columns: 72px minmax(0, 1fr);
+		gap: 0;
+		padding: 0;
 	}
 
 	.description {
-		display: none;
+		-webkit-line-clamp: 2;
 	}
 }
 </style>

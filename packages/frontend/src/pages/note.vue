@@ -4,8 +4,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<PageWithHeader :actions="headerActions" :tabs="headerTabs">
-	<div class="_spacer" style="--MI_SPACER-w: 720px;">
+<PageWithHeader hideHeader>
+	<div :class="$style.page">
 		<Transition :name="prefer.s.animation ? 'fade' : ''" mode="out-in">
 			<div v-if="note">
 				<div v-if="showNext" class="_margin">
@@ -80,7 +80,7 @@ const initialTab = computed<'reactions' | 'replies' | 'renotes' | undefined>(() 
 	if (['reactions', 'replies', 'renotes'].includes(props.initialTab ?? '')) {
 		return props.initialTab as 'reactions' | 'replies' | 'renotes';
 	}
-	return undefined;
+	return 'replies';
 });
 const error = ref();
 
@@ -160,10 +160,6 @@ watch(() => props.noteId, fetchNote, {
 	immediate: true,
 });
 
-const headerActions = computed(() => []);
-
-const headerTabs = computed(() => []);
-
 definePage(() => ({
 	title: i18n.ts.note,
 	...note.value ? {
@@ -213,9 +209,10 @@ definePage(() => ({
 }
 
 .thread { min-width: 0; }
+.page { padding-bottom: 120px; }
 
 @media (max-width: 600px) {
-	.thread { margin-inline: calc(-1 * var(--MI-margin)); }
+	.thread { margin-inline: 0; }
 	.note { border-inline: 0; }
 }
 </style>

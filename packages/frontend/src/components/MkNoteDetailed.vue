@@ -49,7 +49,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<template v-else>
 		<article :class="$style.note" @contextmenu.stop="onContextmenu">
 			<header :class="$style.noteHeader">
-				<MkAvatar :class="$style.noteHeaderAvatar" :user="appearNote.user" indicator link preview/>
+				<MkAvatar :class="$style.noteHeaderAvatar" :user="appearNote.user" link preview/>
 				<div :class="$style.noteHeaderBody">
 					<div>
 						<MkA v-user-preview="appearNote.user.id" :class="$style.noteHeaderName" :to="userPage(appearNote.user)">
@@ -135,28 +135,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<footer>
 				<div :class="$style.noteFooterInfo">
 					<MkA :to="notePage(appearNote)">
-						<MkTime :time="appearNote.createdAt" mode="detail" colored/>
+						<time :datetime="appearNote.createdAt">{{ formattedDate }}</time>
 					</MkA>
-					<span style="margin-left: 0.5em;">
+					<span v-if="appearNote.visibility !== 'public'" style="margin-left: 0.5em;">
 						<span style="border: 1px solid var(--MI_THEME-divider); margin-right: 0.5em;"></span>
-						<i v-if="appearNote.visibility === 'public'" class="ti ti-world"></i>
-						<i v-else-if="appearNote.visibility === 'home'" class="ti ti-home"></i>
+						<i v-if="appearNote.visibility === 'home'" class="ti ti-home"></i>
 						<i v-else-if="appearNote.visibility === 'followers'" class="ti ti-lock"></i>
 						<i v-else-if="appearNote.visibility === 'specified'" ref="specified" class="ti ti-mail"></i>
 						<span style="margin-left: 0.3em;">{{ i18n.ts._visibility[appearNote.visibility] }}</span>
 					</span>
 				</div>
-				<MkReactionsViewer
-					v-if="appearNote.reactionAcceptance !== 'likeOnly'"
-					style="margin-top: 6px;"
-					:reactions="$appearNote.reactions"
-					:reactionEmojis="$appearNote.reactionEmojis"
-					:myReaction="$appearNote.myReaction"
-					:noteId="appearNote.id"
-				/>
+				<div :class="$style.actionRow">
 				<button v-tooltip="i18n.ts.zalip.comments" class="_button" :class="$style.noteFooterButton" :aria-label="i18n.ts.zalip.comments" @click="openComments()">
-					<i class="ti ti-message-circle"></i>
-					<p v-if="appearNote.repliesCount > 0" :class="$style.noteFooterButtonCount">{{ number(appearNote.repliesCount) }}</p>
+					<MkZalipIcon name="reply"/>
+					<span :class="$style.noteFooterButtonCount">{{ number(appearNote.repliesCount) }}</span>
 				</button>
 				<button
 					v-if="canRenote"
@@ -166,39 +158,41 @@ SPDX-License-Identifier: AGPL-3.0-only
 					:aria-label="i18n.ts.renote"
 					@click="renote()"
 				>
-					<i class="ti ti-repeat"></i>
-					<p v-if="appearNote.renoteCount > 0" :class="$style.noteFooterButtonCount">{{ number(appearNote.renoteCount) }}</p>
+					<MkZalipIcon name="repeat"/>
+					<span :class="$style.noteFooterButtonCount">{{ number(appearNote.renoteCount) }}</span>
 				</button>
 				<button v-else class="_button" :class="$style.noteFooterButton" :aria-label="i18n.ts.renote" disabled>
 					<i class="ti ti-ban"></i>
 				</button>
 				<button ref="reactButton" :class="$style.noteFooterButton" class="_button" :aria-label="i18n.ts.reaction" :aria-pressed="$appearNote.myReaction != null" @click="toggleReact()">
-					<i v-if="appearNote.reactionAcceptance === 'likeOnly' && $appearNote.myReaction != null" class="ti ti-heart-filled" style="color: var(--MI_THEME-love);"></i>
-					<i v-else-if="$appearNote.myReaction != null" class="ti ti-minus" style="color: var(--MI_THEME-accent);"></i>
-					<i v-else-if="appearNote.reactionAcceptance === 'likeOnly'" class="ti ti-heart"></i>
-					<i v-else class="ti ti-mood-plus"></i>
-					<p v-if="(appearNote.reactionAcceptance === 'likeOnly' || prefer.s.showReactionsCount) && $appearNote.reactionCount > 0" :class="$style.noteFooterButtonCount">{{ number($appearNote.reactionCount) }}</p>
+					<MkReactionIcon v-if="summaryReaction" :class="$style.summaryReaction" :reaction="summaryReaction" :emojiUrl="$appearNote.reactionEmojis[summaryReaction.substring(1, summaryReaction.length - 1)]"/>
+					<MkZalipIcon v-else :name="appearNote.reactionAcceptance === 'likeOnly' ? 'heart' : 'mood'"/>
+					<span :class="$style.noteFooterButtonCount">{{ number($appearNote.reactionCount) }}</span>
 				</button>
+				<MkZalipBookmark :noteId="appearNote.id"/>
 				<button v-if="prefer.s.showClipButtonInNoteFooter" ref="clipButton" class="_button" :class="$style.noteFooterButton" :aria-label="i18n.ts.clip" @click="clip()">
 					<i class="ti ti-paperclip"></i>
 				</button>
+				</div>
 			</footer>
 		</article>
-		<div :class="$style.tabs">
-			<button class="_button" :class="[$style.tab, { [$style.tabActive]: tab === 'replies' }]" @click="openComments()"><i class="ti ti-message-circle"></i> {{ i18n.ts.zalip.comments }}<span v-if="appearNote.repliesCount > 0" :class="$style.tabCount">{{ number(appearNote.repliesCount) }}</span></button>
-			<button class="_button" :class="[$style.tab, { [$style.tabActive]: tab === 'renotes' }]" @click="tab = 'renotes'"><i class="ti ti-repeat"></i> {{ i18n.ts.renotes }}</button>
-			<button class="_button" :class="[$style.tab, { [$style.tabActive]: tab === 'reactions' }]" @click="tab = 'reactions'"><i class="ti ti-icons"></i> {{ i18n.ts.reactions }}</button>
+		<div :class="$style.commentsHeader">
+			<h2>{{ tab === 'reactions' ? i18n.ts.reactions : tab === 'renotes' ? i18n.ts.renotes : i18n.ts.zalip.comments }}</h2>
+			<select v-model="discussionView" :class="$style.discussionSelect" :aria-label="i18n.ts.zalip.discussion">
+				<option value="newest">{{ i18n.ts.zalip.commentsNewest }}</option>
+				<option value="oldest">{{ i18n.ts.zalip.commentsOldest }}</option>
+				<option value="renotes">{{ i18n.ts.renotes }}</option>
+				<option value="reactions">{{ i18n.ts.reactions }}</option>
+			</select>
 		</div>
 		<div>
 			<div v-if="tab === 'replies'" :class="$style.comments">
-				<div :class="$style.commentsHeader">
-					<h2>Комментарии<span v-if="appearNote.repliesCount > 0"> · {{ number(appearNote.repliesCount) }}</span></h2>
-					<button v-tooltip="'Обновить комментарии'" type="button" class="_button" :class="$style.refreshComments" :disabled="repliesPending" aria-label="Обновить комментарии" @click="loadReplies()"><i :class="repliesPending ? 'ti ti-loader-2 ti-spin' : 'ti ti-refresh'"></i></button>
-				</div>
-				<div v-if="repliesPending" :class="$style.commentsState"><i class="ti ti-loader-2 ti-spin"></i> Загружаем комментарии…</div>
-				<p v-else-if="repliesLoaded && replies.length === 0" :class="$style.commentsState">Пока нет комментариев. Начните обсуждение.</p>
+				<MkLoading v-if="repliesPending"/>
+				<div v-else-if="repliesError" :class="$style.commentsState"><p>{{ i18n.ts.zalip.commentsError }}</p><button class="_textButton" type="button" @click="loadReplies()">{{ i18n.ts.retry }}</button></div>
+				<p v-else-if="repliesLoaded && replies.length === 0" :class="$style.commentsState">{{ i18n.ts.zalip.commentsEmpty }}</p>
 				<MkNoteSub v-for="note in replies" :key="note.id" :note="note" :class="$style.reply" :detail="true" @reply="replyToComment"/>
-				<ZalipCommentForm :rootNote="appearNote" :replyTo="commentTarget" @posted="commentPosted" @cancelReply="commentTarget = appearNote"/>
+				<button v-if="repliesHasMore && !repliesPending" type="button" class="_textButton" :class="$style.commentsState" @click="loadReplies(true)">{{ i18n.ts.loadMore }}</button>
+				<ZalipCommentForm :rootNote="appearNote" :replyTo="commentTarget" floating @posted="commentPosted" @cancelReply="commentTarget = appearNote"/>
 			</div>
 			<div v-else-if="tab === 'renotes'" :class="$style.tab_renotes">
 				<MkPagination :paginator="renotesPaginator" :forceDisableInfiniteScroll="true">
@@ -259,8 +253,10 @@ import type { Keymap } from '@/utility/hotkey.js';
 
 // コンポーネント外部の依存関係
 import MkNoteSub from '@/components/MkNoteSub.vue';
+import MkZalipIcon from '@/components/MkZalipIcon.vue';
+import MkZalipBookmark from '@/components/MkZalipBookmark.vue';
 import MkNoteSimple from '@/components/MkNoteSimple.vue';
-import MkReactionsViewer from '@/components/MkReactionsViewer.vue';
+import MkReactionIcon from '@/components/MkReactionIcon.vue';
 import MkMediaList from '@/components/MkMediaList.vue';
 import MkCwButton from '@/components/MkCwButton.vue';
 import MkPoll from '@/components/MkPoll.vue';
@@ -268,7 +264,6 @@ import MkUrlPreview from '@/components/MkUrlPreview.vue';
 import MkInstanceTicker from '@/components/MkInstanceTicker.vue';
 import MkUserCardMini from '@/components/MkUserCardMini.vue';
 import MkPagination from '@/components/MkPagination.vue';
-import MkReactionIcon from '@/components/MkReactionIcon.vue';
 import MkButton from '@/components/MkButton.vue';
 import ZalipShareCard from '@/components/ZalipShareCard.vue';
 import ZalipCommentForm from '@/components/ZalipCommentForm.vue';
@@ -334,9 +329,21 @@ const {
 
 // provide
 provide(DI.mfmEmojiReactCallback, reactViaMfmEmoji);
+const summaryReaction = computed(() => $appearNote.myReaction ?? Object.entries($appearNote.reactions).sort((a, b) => b[1] - a[1])[0]?.[0]);
+const formattedDate = computed(() => new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(new Date(appearNote.createdAt)) + ' · ' + new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(appearNote.createdAt)));
 
 // MkNoteDetailed固有
-const tab = ref(props.initialTab);
+const tab = ref(props.initialTab ?? 'replies');
+const oldestFirst = ref(false);
+const discussionView = computed({
+	get: () => tab.value === 'replies' ? (oldestFirst.value ? 'oldest' : 'newest') : tab.value,
+	set: (value: string) => {
+		if (value === 'oldest' || value === 'newest') {
+			oldestFirst.value = value === 'oldest';
+			openComments();
+		} else if (value === 'renotes' || value === 'reactions') tab.value = value;
+	},
+});
 const reactionTabType = ref<string | null>(null);
 
 const renotesPaginator = markRaw(new Paginator('notes/renotes', {
@@ -357,21 +364,33 @@ const reactionsPaginator = markRaw(new Paginator('notes/reactions', {
 const replies = ref<Misskey.entities.Note[]>([]);
 const repliesLoaded = ref(false);
 const repliesPending = ref(false);
+const repliesError = ref(false);
+const repliesHasMore = ref(false);
+let repliesRequest = 0;
 const commentTarget = ref<Misskey.entities.Note>(appearNote);
 
-async function loadReplies(): Promise<void> {
+async function loadReplies(append = false): Promise<void> {
+	if (append && repliesPending.value) return;
+	const request = ++repliesRequest;
+	const ascending = oldestFirst.value;
+	const cursor = append ? replies.value.at(-1)?.id : undefined;
+	if (!append) replies.value = [];
 	repliesLoaded.value = true;
 	repliesPending.value = true;
+	repliesError.value = false;
 	try {
 		const res = await misskeyApi('notes/children', {
 			noteId: appearNote.id,
 			limit: 30,
+			...(ascending ? { sinceId: cursor ?? appearNote.id } : cursor ? { untilId: cursor } : {}),
 		});
-		replies.value = res;
+		if (request !== repliesRequest) return;
+		repliesHasMore.value = res.length === 30;
+		replies.value = append ? [...replies.value, ...res.filter(note => !replies.value.some(current => current.id === note.id))] : res;
 	} catch {
-		replies.value = [];
+		if (request === repliesRequest) repliesError.value = true;
 	} finally {
-		repliesPending.value = false;
+		if (request === repliesRequest) repliesPending.value = false;
 	}
 }
 
@@ -432,6 +451,7 @@ const keymap = {
 </script>
 
 <style lang="scss" module>
+.summaryReaction { width: 22px; height: 22px; font-size: 22px; object-fit: contain; }
 .root {
 	position: relative;
 	font-size: max(1em, 15px);
@@ -515,8 +535,8 @@ const keymap = {
 }
 
 .note {
-	padding: 24px;
-	font-size: 16px;
+	padding: 18px 18px 0;
+	font-size: 18px;
 
 	&:hover > .main > .footer > .button {
 		opacity: 1;
@@ -533,8 +553,8 @@ const keymap = {
 .noteHeaderAvatar {
 	display: block;
 	flex-shrink: 0;
-	width: 44px;
-	height: 44px;
+	width: 48px;
+	height: 48px;
 }
 
 .noteHeaderBody {
@@ -544,7 +564,7 @@ const keymap = {
 	flex-direction: column;
 	justify-content: center;
 	padding-left: 12px;
-	font-size: 14px;
+	font-size: 16px;
 }
 
 .noteHeaderName {
@@ -575,7 +595,7 @@ const keymap = {
 	margin-right: 0.5em;
 	line-height: 1.3;
 	word-wrap: anywhere;
-	font-size: 13px;
+	font-size: 14px;
 	color: var(--MI_THEME-fgTransparentWeak);
 }
 
@@ -595,7 +615,7 @@ const keymap = {
 .noteContent {
 	container-type: inline-size;
 	overflow-wrap: break-word;
-	line-height: 1.6;
+	line-height: 1.45;
 }
 
 .menuButton { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; border-radius: 50%; font-size: 20px; color: var(--MI_THEME-fgTransparentWeak); }
@@ -651,8 +671,11 @@ const keymap = {
 .noteFooterInfo {
 	margin: 16px 0;
 	opacity: 0.7;
-	font-size: 12px;
+	font-size: 14px;
 }
+.actionRow { display: flex; justify-content: space-between; align-items: center; min-height: 56px; border-top: 1px solid var(--MI_THEME-divider); }
+.actionRow > button:nth-child(3) { order: -1; }
+.discussionSelect { max-width: 50%; padding: 5px 8px; border: 1px solid var(--MI_THEME-divider); border-radius: 7px; background: transparent; color: var(--MI_THEME-fgTransparentWeak); font: inherit; font-size: 12px; }
 
 .noteFooterButton {
 	display: inline-flex;
@@ -661,11 +684,12 @@ const keymap = {
 	min-width: 44px;
 	min-height: 44px;
 	margin: 0;
-	padding: 0 12px;
+	padding: 0;
 	color: var(--MI_THEME-fgTransparentWeak);
-	border: 1px solid var(--MI_THEME-divider);
+	border: 0;
 	border-radius: 999px;
 	font-size: 20px;
+	> svg { width: 22px; height: 22px; }
 
 	&:not(:last-child) {
 		margin-right: 8px;
@@ -725,7 +749,8 @@ const keymap = {
 	align-items: center;
 	justify-content: space-between;
 	margin: 0;
-	padding: 16px 24px 10px;
+	padding: 14px 18px;
+	border-top: solid 0.5px var(--MI_THEME-divider);
 	border-bottom: solid 0.5px var(--MI_THEME-divider);
 }
 
@@ -797,12 +822,12 @@ const keymap = {
 	}
 
 	.note {
-		padding: 16px;
+		padding: 16px 16px 0;
 	}
 
 	.noteHeaderAvatar {
-		width: 42px;
-		height: 42px;
+		width: 48px;
+		height: 48px;
 	}
 
 	.commentsHeader {

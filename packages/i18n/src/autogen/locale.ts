@@ -1270,6 +1270,70 @@ export interface Locale extends ILocale {
     "start": string;
     "zalip": {
         /**
+         * Добавить контент
+         */
+        "addContent": string;
+        /**
+         * Обсуждение
+         */
+        "discussion": string;
+        /**
+         * Подписки
+         */
+        "feedFollowing": string;
+        /**
+         * Сообщения
+         */
+        "messages": string;
+        /**
+         * Назад
+         */
+        "back": string;
+        /**
+         * Интересы
+         */
+        "feedInterests": string;
+        /**
+         * Напишите комментарий…
+         */
+        "commentPlaceholder": string;
+        /**
+         * Ответ для {name}…
+         */
+        "replyPlaceholder": ParameterizedString<"name">;
+        /**
+         * Пока нет комментариев. Начните обсуждение.
+         */
+        "commentsEmpty": string;
+        /**
+         * Не удалось загрузить комментарии. Попробуйте ещё раз.
+         */
+        "commentsError": string;
+        /**
+         * Сначала новые
+         */
+        "commentsNewest": string;
+        /**
+         * Сначала старые
+         */
+        "commentsOldest": string;
+        /**
+         * Войдите, чтобы оставить комментарий
+         */
+        "commentSignIn": string;
+        /**
+         * Не удалось отправить комментарий. Попробуйте ещё раз.
+         */
+        "commentError": string;
+        /**
+         * Добавление контента
+         */
+        "editorTitle": string;
+        /**
+         * Импортируйте фильм или сериал из TMDB либо заполните карточку вручную. Сначала создаётся черновик — пользователи увидят его только после публикации.
+         */
+        "editorHint": string;
+        /**
          * Новое в сообществе
          */
         "communityFeed": string;

@@ -4,13 +4,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div :class="[$style.root, { '_forceShrinkSpacer': isMobile }]">
+<div :class="[$style.root, { '_forceShrinkSpacer': isMobile, [$style.mobile]: isMobile, [$style.social]: isSocial }]">
 	<XTitlebar v-if="prefer.r.showTitlebar.value" style="flex-shrink: 0;"/>
 
 	<div :class="$style.nonTitlebarArea">
 		<XSidebar v-if="!isMobile" :class="$style.sidebar" :showWidgetButton="!showWidgetsSide" @widgetButtonClick="widgetsShowing = true"/>
 
-		<div :class="[$style.contents, !isMobile && prefer.r.showTitlebar.value ? $style.withSidebarAndTitlebar : null]" @contextmenu.stop="onContextmenu">
+		<div :class="[$style.contents, { [$style.threadContents]: isThread, [$style.chromeHidden]: chromeHidden }, !isMobile && prefer.r.showTitlebar.value ? $style.withSidebarAndTitlebar : null]" @contextmenu.stop="onContextmenu" @scroll.capture.passive="onContentScroll">
 			<div>
 				<XReloadSuggestion v-if="shouldSuggestReload"/>
 				<XPreferenceRestore v-if="shouldSuggestRestoreBackup"/>
@@ -18,14 +18,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<XAnnouncements v-if="$i"/>
 				<XStatusBars :class="$style.statusbars"/>
 			</div>
-			<ZalipSiteHeader/>
+			<ZalipSiteHeader :mobile="isMobile" :hidden="chromeHidden && !isThread"/>
 			<StackingRouterView v-if="prefer.s['experimental.stackingRouterView']" :class="$style.content"/>
 			<RouterView v-else :class="$style.content"/>
-			<XMobileFooterMenu v-if="isMobile" ref="navFooter"/>
+			<XMobileFooterMenu v-if="isMobile && !isThread" :hidden="chromeHidden"/>
+			<div v-if="isThread" id="zalip-reply-slot" :class="$style.replySlot"></div>
 		</div>
 
 		<div v-if="showWidgetsSide && !pageMetadata?.needWideArea" :class="$style.widgets">
-			<XWidgets/>
+			<XWidgets v-if="$i"/>
+			<XDiscovery v-else/>
 		</div>
 	</div>
 
@@ -34,7 +36,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { defineAsyncComponent, provide, onBeforeUnmount, computed, ref } from 'vue';
+import { defineAsyncComponent, provide, onBeforeUnmount, computed, ref, watch } from 'vue';
 import { instanceName } from '@@/js/config.js';
 import { isLink } from '@@/js/is-link.js';
 import XCommon from './_common_/common.vue';
@@ -60,12 +62,44 @@ import { DI } from '@/di.js';
 import { shouldSuggestReload } from '@/utility/reload-suggest.js';
 
 const XWidgets = defineAsyncComponent(() => import('./_common_/widgets.vue'));
+const XDiscovery = defineAsyncComponent(() => import('./_common_/zalip-discovery-widgets.vue'));
 const XStatusBars = defineAsyncComponent(() => import('@/ui/_common_/statusbars.vue'));
 const XAnnouncements = defineAsyncComponent(() => import('@/ui/_common_/announcements.vue'));
 
 const isRoot = computed(() => mainRouter.currentRoute.value.name === 'index');
+const isThread = computed(() => mainRouter.currentRoute.value.name === 'note');
+const isSocial = computed(() => isThread.value || mainRouter.currentRoute.value.path === '/timeline');
+const chromeHidden = ref(false);
+let lastScroll = 0;
+let scrollTravel = 0;
+let scrollElement: HTMLElement | null = null;
 
-const DESKTOP_THRESHOLD = 1440;
+function onContentScroll(event: Event): void {
+	const target = event.target;
+	if (!isMobile.value || isThread.value || !(target instanceof HTMLElement) || !target.classList.contains('_pageScrollable')) return;
+	const y = Math.max(0, Math.min(target.scrollTop, target.scrollHeight - target.clientHeight));
+	if (scrollElement !== target) {
+		scrollElement = target;
+		lastScroll = 0;
+		scrollTravel = 0;
+	}
+	const delta = y - lastScroll;
+	lastScroll = y;
+	if (Math.sign(delta) !== Math.sign(scrollTravel)) scrollTravel = 0;
+	scrollTravel += delta;
+	if (y < 48) chromeHidden.value = false;
+	else if (scrollTravel > 28) chromeHidden.value = true;
+	else if (scrollTravel < -12) chromeHidden.value = false;
+}
+
+watch(() => mainRouter.currentRoute.value, () => {
+	chromeHidden.value = false;
+	lastScroll = 0;
+	scrollTravel = 0;
+	scrollElement = null;
+});
+
+const DESKTOP_THRESHOLD = 1200;
 // Tablets are neither a narrow desktop nor a large phone.  Give them the
 // focused, footer-navigation layout so the 220px sidebar cannot squeeze a
 // timeline into a thin strip.
@@ -134,7 +168,7 @@ function onContextmenu(ev: PointerEvent) {
 </script>
 
 <style lang="scss" module>
-$widgets-hide-threshold: 1439px;
+$widgets-hide-threshold: 1199px;
 
 .root {
 	height: 100dvh;
@@ -142,7 +176,20 @@ $widgets-hide-threshold: 1439px;
 	contain: strict;
 	display: flex;
 	flex-direction: column;
-	background: var(--MI_THEME-navBg);
+	background: var(--zalip-social-bg);
+	color: var(--zalip-social-fg);
+}
+
+.social {
+	--MI_THEME-bg: var(--zalip-social-bg);
+	--MI_THEME-panel: var(--zalip-social-panel);
+	--MI_THEME-fg: var(--zalip-social-fg);
+	--MI_THEME-fgHighlighted: var(--zalip-social-fg);
+	--MI_THEME-fgTransparentWeak: var(--zalip-social-muted);
+	--MI_THEME-fgTransparent: var(--zalip-social-muted);
+	--MI_THEME-divider: var(--zalip-social-border);
+	--MI_THEME-panelHighlight: var(--zalip-social-hover);
+	font-family: Inter, Arial, sans-serif;
 }
 
 @media (max-width: 1099px) {
@@ -155,18 +202,23 @@ $widgets-hide-threshold: 1439px;
 	display: flex;
 	flex: 1;
 	min-height: 0;
+	width: 100%;
+	max-width: 1320px;
+	margin: 0 auto;
 }
 
 .sidebar {
-	border-right: solid 0.5px var(--MI_THEME-divider);
+	flex: 0 0 240px;
 }
 
 .contents {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	flex: 1;
 	height: 100%;
 	min-width: 0;
+	--zalip-chrome-top: 0px;
 
 	&.withSidebarAndTitlebar {
 		background: var(--MI_THEME-navBg);
@@ -178,7 +230,13 @@ $widgets-hide-threshold: 1439px;
 .content {
 	flex: 1;
 	min-height: 0;
+	box-sizing: border-box;
 }
+.replySlot { position: absolute; z-index: 1100; bottom: max(12px, env(safe-area-inset-bottom, 0px)); left: 12px; right: 12px; pointer-events: none; }
+
+.social .contents { border-inline: 1px solid var(--zalip-social-border); background: var(--zalip-social-panel); }
+.social :global(._pageScrollable) { background: var(--zalip-social-panel); }
+.threadContents .content :global(._pageScrollable) > div { padding-top: 64px; }
 
 .statusbars {
 	position: sticky;
@@ -192,12 +250,21 @@ $widgets-hide-threshold: 1439px;
 	height: 100%;
 	box-sizing: border-box;
 	overflow: auto;
-	padding: var(--MI-margin) var(--MI-margin) calc(var(--MI-margin) + env(safe-area-inset-bottom, 0px));
-	border-left: solid 1px var(--MI_THEME-divider);
-	background: var(--MI_THEME-bg);
+	padding: 16px 0 24px 28px;
+	background: var(--zalip-social-bg);
 
 	@media (max-width: $widgets-hide-threshold) {
 		display: none;
 	}
 }
+
+.mobile {
+	.nonTitlebarArea { max-width: 700px; }
+	.contents { --zalip-chrome-top: 53px; }
+	.content :global(._pageScrollable) { scrollbar-width: none; scroll-padding-top: 53px; }
+	.content :global(._pageScrollable) > div { padding-top: 53px; }
+	&:not(.social) .content :global(._pageScrollable) > div { padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px)); }
+	.chromeHidden { --zalip-chrome-top: 0px; }
+}
+@media (max-width: 700px) { .social .contents { border-inline: 0; } }
 </style>

@@ -30,7 +30,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			tag="div"
 		>
 			<template v-for="(note, i) in paginator.items.value" :key="note.id">
-				<div v-if="i > 0 && isSeparatorNeeded(paginator.items.value[i -1].createdAt, note.createdAt)" :data-scroll-anchor="note.id">
+				<div v-if="!zalipFlat && i > 0 && isSeparatorNeeded(paginator.items.value[i -1].createdAt, note.createdAt)" :data-scroll-anchor="note.id">
 					<div :class="$style.date">
 						<span><i class="ti ti-chevron-up"></i> {{ getSeparatorInfo(paginator.items.value[i -1].createdAt, note.createdAt)?.prevText }}</span>
 						<span style="height: 1em; width: 1px; background: var(--MI_THEME-divider);"></span>
@@ -488,17 +488,6 @@ defineExpose({
 	position: relative;
 	gap: 0;
 
-	&::before {
-		content: '';
-		position: absolute;
-		top: 0;
-		bottom: 0;
-		left: 40px;
-		width: 1px;
-		background: color-mix(in srgb, var(--MI_THEME-divider) 72%, transparent);
-		pointer-events: none;
-	}
-
 	> .note:not(:empty) {
 		position: relative;
 		z-index: 1;
@@ -616,6 +605,7 @@ defineExpose({
 	.notes {
 		gap: 8px;
 	}
+	.notes.zalipFlat { gap: 0; }
 
 	.note:not(:empty) {
 		border-radius: 0;

@@ -85,7 +85,7 @@ if (props.detail && props.note) {
 		limit: 5,
 	}).then(res => {
 		replies.value = res;
-	});
+	}).catch(() => { /* The direct thread link remains available if nested replies fail. */ });
 }
 </script>
 

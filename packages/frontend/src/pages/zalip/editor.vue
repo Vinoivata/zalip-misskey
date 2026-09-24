@@ -15,7 +15,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 				<template v-else>
 					<header :class="$style.header">
-						<div><p :class="$style.eyebrow"><i class="ti ti-pencil"></i> ZALIP EDITOR</p><h1>Каталог</h1></div>
+						<div><p :class="$style.eyebrow"><i class="ti ti-pencil"></i> {{ i18n.ts.controlPanel }}</p><h1>{{ i18n.ts.zalip.editorTitle }}</h1><p>{{ i18n.ts.zalip.editorHint }}</p></div>
 						<MkA to="/" :class="$style.back"><i class="ti ti-arrow-left"></i> К кино</MkA>
 					</header>
 
@@ -71,6 +71,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script lang="ts" setup>
 import { onMounted, reactive, ref } from 'vue';
+import { i18n } from '@/i18n.js';
 import { definePage } from '@/page.js';
 import { iAmAdmin } from '@/i.js';
 import { useRouter } from '@/router.js';
@@ -384,12 +385,16 @@ definePage(() => ({ title: 'Редактор Zalip', icon: 'ti ti-pencil' }));
 
 <style lang="scss" module>
 .page { padding: 24px var(--MI-margin) 52px; }
+.page input, .page select, .page textarea { width: 100%; min-width: 0; min-height: 44px; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--MI_THEME-divider); border-radius: 10px; background: var(--MI_THEME-bg); color: var(--MI_THEME-fg); font: inherit; font-size: 15px; }
+.page input:focus, .page select:focus, .page textarea:focus { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; }
+.page input::placeholder, .page textarea::placeholder { color: var(--MI_THEME-fgTransparentWeak); }
 .header, .sectionHeader { display: flex; align-items: end; justify-content: space-between; gap: 16px; }
 .sectionActions { display: flex; align-items: center; flex-wrap: wrap; justify-content: end; gap: 8px; }
 .header { margin-bottom: 24px; }
 .eyebrow { display: flex; align-items: center; gap: 7px; margin: 0 0 8px; color: var(--MI_THEME-accent); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; }
 .header h1, .sectionHeader h2 { margin: 0; }
 .back, .smallButton, .reload { display: inline-flex; align-items: center; gap: 7px; padding: 9px 12px; border-radius: 999px; background: var(--MI_THEME-panelHighlight); color: var(--MI_THEME-fg); font-weight: 700; text-decoration: none; }
+.back { flex-shrink: 0; white-space: nowrap; }
 .create { padding: 22px; border: 1px solid var(--MI_THEME-divider); border-radius: 20px; background: var(--MI_THEME-panel); }
 .create + .create { margin-top: 16px; }
 .create h2 { margin: 0; font-size: 1.2rem; }
