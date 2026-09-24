@@ -21,7 +21,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 		<component
 			:is="prefer.s.animation ? TransitionGroup : 'div'"
-			:class="$style.notes"
+			:class="[$style.notes, { [$style.zalipFlat]: zalipFlat }]"
 			:enterActiveClass="$style.transition_x_enterActive"
 			:leaveActiveClass="$style.transition_x_leaveActive"
 			:enterFromClass="$style.transition_x_enterFrom"
@@ -91,11 +91,13 @@ const props = withDefaults(defineProps<{
 	withReplies?: boolean;
 	withSensitive?: boolean;
 	onlyFiles?: boolean;
+	zalipFlat?: boolean;
 }>(), {
 	withRenotes: true,
 	withReplies: false,
 	withSensitive: true,
 	onlyFiles: false,
+	zalipFlat: false,
 	sound: false,
 	customSound: null,
 });
@@ -482,6 +484,30 @@ defineExpose({
 	background: var(--MI_THEME-panel);
 }
 
+.zalipFlat {
+	position: relative;
+	gap: 0;
+
+	&::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: 40px;
+		width: 1px;
+		background: color-mix(in srgb, var(--MI_THEME-divider) 72%, transparent);
+		pointer-events: none;
+	}
+
+	> .note:not(:empty) {
+		position: relative;
+		z-index: 1;
+		border-radius: 0;
+		background: transparent;
+		border-bottom: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 72%, transparent);
+	}
+}
+
 .new {
 	--gapFill: 0.5px; // 上位ヘッダーの高さにフォントの関係などで少数が含まれると、レンダリングエンジンによっては隙間が表示されてしまうため、隙間を隠すために少しずらす
 
@@ -594,5 +620,7 @@ defineExpose({
 	.note:not(:empty) {
 		border-radius: 0;
 	}
+
+	.zalipFlat::before { left: 36px; }
 }
 </style>

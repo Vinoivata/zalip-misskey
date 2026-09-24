@@ -4,9 +4,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<header :class="$style.root">
-	<button type="button" class="_button" :class="$style.mobileCreate" :aria-label="i18n.ts.zalip.feedQuickPost" @click="writePost"><i class="ti ti-plus"></i></button>
-	<MkA to="/" :class="$style.mobileBrand" :aria-label="i18n.ts.zalip.brand">zalip</MkA>
+<header :class="[$style.root, { [$style.threadHeader]: isThread }]">
+	<button type="button" class="_button" :class="$style.mobileCreate" :aria-label="isThread ? 'Назад' : i18n.ts.zalip.feedQuickPost" @click="isThread ? goBack() : writePost()"><i :class="isThread ? 'ti ti-arrow-left' : 'ti ti-plus'"></i></button>
+	<MkA v-if="!isThread" to="/" :class="$style.mobileBrand" :aria-label="i18n.ts.zalip.brand">zalip</MkA>
+	<div v-else :class="$style.threadTitle">Обсуждение</div>
 	<button type="button" class="_button" :class="$style.search" @click="openSearch">
 		<i class="ti ti-search"></i>
 		<span :class="$style.searchDesktop">{{ i18n.ts.zalip.siteSearchPlaceholder }}</span>
@@ -28,6 +29,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script lang="ts" setup>
 import { getAccountMenu } from '@/accounts.js';
+import { computed } from 'vue';
 import { $i } from '@/i.js';
 import { i18n } from '@/i18n.js';
 import * as os from '@/os.js';
@@ -35,6 +37,9 @@ import { getZalipAppearanceMenu } from '@/utility/zalip-theme.js';
 import { openZalipSearch } from '@/utility/zalip-search.js';
 import { pleaseLogin } from '@/utility/please-login.js';
 import { openZalipSignup } from '@/utility/zalip-signup.js';
+import { mainRouter } from '@/router.js';
+
+const isThread = computed(() => mainRouter.currentRoute.value.name === 'note');
 
 function openSearch(): void {
 	openZalipSearch();
@@ -46,6 +51,10 @@ function openAppearance(ev: PointerEvent): void {
 
 function signIn(): void {
 	void pleaseLogin();
+}
+
+function goBack(): void {
+	window.history.back();
 }
 
 async function writePost(): Promise<void> {
@@ -86,6 +95,8 @@ async function openAccount(ev: PointerEvent): Promise<void> {
 }
 
 .mobileCreate { display: none; }
+
+.threadTitle { display: none; }
 
 .search {
 	display: flex;
@@ -186,6 +197,7 @@ async function openAccount(ev: PointerEvent): Promise<void> {
 	.mobileCreate:hover { background: var(--MI_THEME-panelHighlight); color: var(--MI_THEME-fg); }
 
 	.mobileBrand { display: block; justify-self: center; font-size: 1.55rem; letter-spacing: -0.11em; }
+	.threadTitle { display: block; justify-self: center; font-size: 1.08rem; font-weight: 800; }
 
 	.search {
 		grid-column: 4;
@@ -209,5 +221,14 @@ async function openAccount(ev: PointerEvent): Promise<void> {
 	.iconButton { display: grid; grid-column: 3; place-items: center; width: 40px; height: 40px; padding: 0; border-radius: 50%; }
 
 	.account, .login { display: none; }
+
+	.threadHeader {
+		grid-template-columns: 40px minmax(0, 1fr) 40px;
+
+		.search, .iconButton { display: none; }
+
+		.threadTitle { grid-column: 2; }
+		.mobileCreate { justify-self: start; }
+	}
 }
 </style>

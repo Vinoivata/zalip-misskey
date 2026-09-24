@@ -66,6 +66,7 @@ export type PackedZalipWork = {
 	runtimeMinutes: number | null;
 	posterPath: string | null;
 	backdropPath: string | null;
+	logoPath: string | null;
 	trailerYoutubeKey: string | null;
 	/** Rounded average of public personal ratings, without identifying voters. */
 	communityRating: number | null;
@@ -189,6 +190,7 @@ export class ZalipCatalogService {
 			runtimeMinutes: work.runtimeMinutes,
 			posterPath: work.posterPath,
 			backdropPath: work.backdropPath,
+			logoPath: work.logoPath,
 			trailerYoutubeKey: work.trailerYoutubeKey,
 			communityRating: rating.communityRating,
 			ratingCount: rating.ratingCount,
@@ -477,6 +479,7 @@ export class ZalipCatalogService {
 			tmdbId: null,
 			posterPath: null,
 			backdropPath: null,
+			logoPath: null,
 			galleryPaths: [],
 			trailerYoutubeKey: null,
 		}));
@@ -493,6 +496,7 @@ export class ZalipCatalogService {
 		runtimeMinutes: number | null;
 		posterPath: string | null;
 		backdropPath: string | null;
+		logoPath: string | null;
 		galleryPaths: string[];
 		trailerYoutubeKey: string | null;
 		seasons: Array<{
@@ -534,6 +538,7 @@ export class ZalipCatalogService {
 				tmdbId: input.tmdbId,
 				posterPath: input.posterPath,
 				backdropPath: input.backdropPath,
+				logoPath: input.logoPath,
 				galleryPaths: input.galleryPaths,
 				trailerYoutubeKey: input.trailerYoutubeKey,
 			}));
@@ -779,6 +784,7 @@ export class ZalipCatalogService {
 			runtimeMinutes: number | null;
 			posterPath: string | null;
 			backdropPath: string | null;
+			logoPath: string | null;
 			galleryPaths: string[];
 			trailerYoutubeKey: string | null;
 		},
@@ -789,6 +795,7 @@ export class ZalipCatalogService {
 
 		work.posterPath = input.posterPath;
 		work.backdropPath = input.backdropPath;
+		work.logoPath = input.logoPath;
 		work.genres = input.genres;
 		work.runtimeMinutes = input.runtimeMinutes;
 		work.galleryPaths = input.galleryPaths;

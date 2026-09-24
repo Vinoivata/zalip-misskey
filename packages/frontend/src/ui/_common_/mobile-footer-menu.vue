@@ -13,25 +13,25 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 	<MkA :class="$style.item" :activeClass="$style.active" :aria-label="navbarItemDef.catalogue.title" :title="navbarItemDef.catalogue.title" to="/catalog">
 		<div :class="$style.itemInner">
-			<i :class="[$style.itemIcon, navbarItemDef.catalogue.icon]"></i><span :class="$style.itemText">{{ navbarItemDef.catalogue.title }}</span>
+			<i :class="$style.itemIcon" class="ti ti-device-tv"></i><span :class="$style.itemText">{{ navbarItemDef.catalogue.title }}</span>
 		</div>
 	</MkA>
 
 	<MkA :class="$style.item" :activeClass="$style.active" :aria-label="navbarItemDef.feed.title" :title="navbarItemDef.feed.title" to="/timeline">
 		<div :class="$style.itemInner">
-			<i :class="[$style.itemIcon, navbarItemDef.feed.icon]"></i><span :class="$style.itemText">{{ navbarItemDef.feed.title }}</span>
+			<i :class="$style.itemIcon" class="ti ti-heart"></i><span :class="$style.itemText">{{ navbarItemDef.feed.title }}</span>
 		</div>
 	</MkA>
 
 	<MkA :class="$style.item" :activeClass="$style.active" :aria-label="navbarItemDef.library.title" :title="navbarItemDef.library.title" to="/library">
 		<div :class="$style.itemInner">
-			<i :class="[$style.itemIcon, navbarItemDef.library.icon]"></i><span :class="$style.itemText">{{ navbarItemDef.library.title }}</span>
+			<i :class="$style.itemIcon" class="ti ti-message-circle"></i><span :class="$style.itemText">{{ navbarItemDef.library.title }}</span>
 		</div>
 	</MkA>
 
 	<button type="button" class="_button" :class="[$style.item, $style.accountItem]" :aria-label="i18n.ts.zalip.more" :title="i18n.ts.zalip.more" @click="openMoreMenu">
 		<div :class="$style.itemInner">
-			<MkAvatar v-if="$i" :user="$i" :class="$style.profileAvatar"/>
+			<span v-if="$i" :class="$style.profileInitial">{{ $i.username.slice(0, 1).toUpperCase() }}</span>
 			<i v-else :class="$style.itemIcon" class="ti ti-menu-2"></i><span :class="$style.itemText">{{ i18n.ts.zalip.more }}</span>
 			<span v-if="$i?.hasUnreadNotification" :class="$style.itemIndicator" class="_blink">
 				<span class="_indicateCounter" :class="$style.itemIndicateValueIcon">{{ $i.unreadNotificationsCount > 99 ? '99+' : $i.unreadNotificationsCount }}</span>
@@ -89,12 +89,12 @@ function openMoreMenu(event: PointerEvent): void {
 	grid-template-columns: repeat(5, minmax(0, 1fr));
 	width: min(calc(100% - 24px), 510px);
 	box-sizing: border-box;
-	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 60%, transparent);
+	border: 1px solid color-mix(in srgb, var(--MI_THEME-fg) 28%, var(--MI_THEME-divider));
 	border-radius: 999px;
-	background: color-mix(in srgb, var(--MI_THEME-navBg) 70%, #050507);
+	background: color-mix(in srgb, var(--MI_THEME-navBg) 74%, transparent);
 	color: var(--MI_THEME-navFg);
-	box-shadow: 0 16px 44px color-mix(in srgb, var(--MI_THEME-shadow) 56%, transparent), 0 0 0 1px color-mix(in srgb, var(--MI_THEME-fg) 7%, transparent), inset 0 1px color-mix(in srgb, var(--MI_THEME-fg) 16%, transparent);
-	backdrop-filter: blur(28px) saturate(1.3);
+	box-shadow: 0 14px 38px color-mix(in srgb, var(--MI_THEME-shadow) 42%, transparent), inset 0 1px color-mix(in srgb, var(--MI_THEME-fg) 12%, transparent);
+	backdrop-filter: blur(22px) saturate(1.1);
 }
 
 .item {
@@ -102,7 +102,7 @@ function openMoreMenu(event: PointerEvent): void {
 	align-items: stretch;
 	justify-content: center;
 	min-width: 0;
-	min-height: 58px;
+	min-height: 60px;
 	padding: 5px 0;
 	color: inherit;
 	text-decoration: none;
@@ -122,8 +122,8 @@ function openMoreMenu(event: PointerEvent): void {
 	position: relative;
 	display: grid;
 	place-items: center;
-	width: 46px;
-	height: 46px;
+	width: 48px;
+	height: 48px;
 	margin: auto;
 	border-radius: 50%;
 	transition: transform 0.16s ease, background 0.16s ease, color 0.16s ease, box-shadow .16s ease;
@@ -142,15 +142,15 @@ function openMoreMenu(event: PointerEvent): void {
 }
 
 .accountItem .itemInner {
-	background: color-mix(in srgb, var(--MI_THEME-accent) 76%, #1f5920);
-	color: var(--MI_THEME-fgOnAccent);
-	box-shadow: 0 5px 16px color-mix(in srgb, var(--MI_THEME-accent) 30%, transparent);
+	background: #2e7d2a;
+	color: #fff;
+	box-shadow: 0 5px 16px rgb(17 86 24 / 28%);
 }
 
-.accountItem .itemInner:hover { background: var(--MI_THEME-accent); }
-.accountItem.active .itemInner { background: color-mix(in srgb, var(--MI_THEME-accent) 88%, #1f5920); color: var(--MI_THEME-fgOnAccent); }
+.accountItem .itemInner:hover { background: #3b9134; }
+.accountItem.active .itemInner { background: #2e7d2a; color: #fff; }
 
-.profileAvatar { width: 38px; height: 38px; border-radius: 50%; }
+.profileInitial { font-size: 20px; font-weight: 780; line-height: 1; }
 
 .itemText {
 	display: none;

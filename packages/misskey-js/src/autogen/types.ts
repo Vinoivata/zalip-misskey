@@ -38211,7 +38211,10 @@ export interface operations {
                         runtimeMinutes: number | null;
                         posterPath: string | null;
                         backdropPath: string | null;
+                        logoPath: string | null;
                         trailerYoutubeKey: string | null;
+                        communityRating: number | null;
+                        ratingCount: number;
                         /** @enum {string} */
                         publicationState: 'draft' | 'published' | 'archived';
                         publishedAt: string | null;
@@ -38874,7 +38877,10 @@ export interface operations {
                             runtimeMinutes: number | null;
                             posterPath: string | null;
                             backdropPath: string | null;
+                            logoPath: string | null;
                             trailerYoutubeKey: string | null;
+                            communityRating: number | null;
+                            ratingCount: number;
                         };
                     }[];
                 };
@@ -39450,7 +39456,10 @@ export interface operations {
                         runtimeMinutes: number | null;
                         posterPath: string | null;
                         backdropPath: string | null;
+                        logoPath: string | null;
                         trailerYoutubeKey: string | null;
+                        communityRating: number | null;
+                        ratingCount: number;
                     }[];
                 };
             };
@@ -39534,7 +39543,10 @@ export interface operations {
                         runtimeMinutes: number | null;
                         posterPath: string | null;
                         backdropPath: string | null;
+                        logoPath: string | null;
                         trailerYoutubeKey: string | null;
+                        communityRating: number | null;
+                        ratingCount: number;
                     }[];
                 };
             };
@@ -39614,8 +39626,11 @@ export interface operations {
                         runtimeMinutes: number | null;
                         posterPath: string | null;
                         backdropPath: string | null;
+                        logoPath: string | null;
                         galleryPaths: string[];
                         trailerYoutubeKey: string | null;
+                        communityRating: number | null;
+                        ratingCount: number;
                         seasons: {
                             /** Format: misskey:id */
                             id: string;

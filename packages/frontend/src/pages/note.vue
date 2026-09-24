@@ -206,15 +206,16 @@ definePage(() => ({
 }
 
 .note {
-	border: 1px solid var(--MI_THEME-divider);
-	border-radius: var(--zalip-radius-big);
-	background: var(--MI_THEME-panel);
+	border: 0;
+	border-bottom: 1px solid var(--MI_THEME-divider);
+	border-radius: 0;
+	background: transparent;
 }
 
 .thread { min-width: 0; }
 
 @media (max-width: 600px) {
 	.thread { margin-inline: calc(-1 * var(--MI-margin)); }
-	.note { border-radius: 0; border-inline: 0; }
+	.note { border-inline: 0; }
 }
 </style>

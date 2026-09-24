@@ -24,6 +24,7 @@ type TmdbVideo = {
 
 type TmdbImage = {
 	file_path?: unknown;
+	iso_639_1?: unknown;
 };
 
 type TmdbGenre = {
@@ -45,7 +46,7 @@ type TmdbDetails = {
 	runtime?: unknown;
 	episode_run_time?: unknown;
 	videos?: { results?: unknown };
-	images?: { backdrops?: unknown };
+	images?: { backdrops?: unknown; logos?: unknown };
 	seasons?: unknown;
 };
 
@@ -140,6 +141,30 @@ function tmdbGalleryPaths(details: TmdbDetails): string[] {
 	return [...paths];
 }
 
+/** Prefer the Russian wordmark, then English and finally the provider's language-neutral artwork. */
+function tmdbLogoPath(details: TmdbDetails): string | null {
+	const logos = details.images?.logos;
+	if (!Array.isArray(logos)) return null;
+
+	const scored = logos
+		.filter((value): value is TmdbImage => typeof value === 'object' && value != null)
+		.map(logo => ({
+			path: tmdbImagePath(logo.file_path),
+			language: typeof logo.iso_639_1 === 'string' ? logo.iso_639_1 : null,
+		}))
+		.filter((logo): logo is { path: string; language: string | null } => logo.path != null)
+		.sort((a, b) => logoLanguageScore(a.language) - logoLanguageScore(b.language));
+
+	return scored[0]?.path ?? null;
+}
+
+function logoLanguageScore(language: string | null): number {
+	if (language === 'ru') return 0;
+	if (language === 'en') return 1;
+	if (language == null) return 2;
+	return 3;
+}
+
 function tmdbGenres(details: TmdbDetails): string[] {
 	if (!Array.isArray(details.genres)) return [];
 
@@ -171,6 +196,7 @@ function tmdbMedia(details: TmdbDetails, tmdbMediaType: TmdbMediaType) {
 		runtimeMinutes: tmdbRuntimeMinutes(details, tmdbMediaType),
 		posterPath: tmdbImagePath(details.poster_path),
 		backdropPath: tmdbImagePath(details.backdrop_path),
+		logoPath: tmdbLogoPath(details),
 		galleryPaths: tmdbGalleryPaths(details),
 		trailerYoutubeKey: youtubeTrailer(details),
 	};
@@ -260,6 +286,7 @@ export class ZalipTmdbImportService {
 		url.searchParams.set('api_key', apiKey);
 		url.searchParams.set('language', 'ru-RU');
 		url.searchParams.set('append_to_response', 'videos,images');
+		url.searchParams.set('include_image_language', 'ru,en,null');
 
 		let details: TmdbDetails;
 		try {
@@ -296,6 +323,7 @@ export class ZalipTmdbImportService {
 		url.searchParams.set('api_key', apiKey);
 		url.searchParams.set('language', 'ru-RU');
 		url.searchParams.set('append_to_response', 'videos,images');
+		url.searchParams.set('include_image_language', 'ru,en,null');
 
 		let details: TmdbDetails;
 		try {

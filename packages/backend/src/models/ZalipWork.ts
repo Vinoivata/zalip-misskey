@@ -77,6 +77,10 @@ export class MiZalipWork {
 	@Column('varchar', { length: 512, nullable: true })
 	public backdropPath: string | null;
 
+	/** Localized transparent title artwork returned by TMDB for cinematic hero slides. */
+	@Column('varchar', { length: 512, nullable: true })
+	public logoPath: string | null;
+
 	/** Curated still/backdrop paths fetched from TMDB; actual image bytes remain with TMDB. */
 	@Column('jsonb', { default: () => "'[]'::jsonb" })
 	public galleryPaths: string[];

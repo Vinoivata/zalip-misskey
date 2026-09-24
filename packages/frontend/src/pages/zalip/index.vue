@@ -20,7 +20,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				@pointerup="endOnboardingSwipe"
 				@pointercancel="cancelOnboardingSwipe"
 			>
-					<div v-if="activeOnboarding.backdropPath || activeOnboarding.posterPath" :class="$style.onboardingBackdrop" :style="{ backgroundImage: `url(${tmdbImage(activeOnboarding.backdropPath || activeOnboarding.posterPath || '')})` }"></div>
+					<div v-if="heroBackdropUrl" :class="$style.onboardingBackdrop" :style="{ backgroundImage: `url(${heroBackdropUrl})` }"></div>
 					<div :class="$style.onboardingShade"></div>
 				<div :class="$style.onboardingSlide" role="group" aria-roledescription="slide" :aria-label="i18n.tsx.zalip.onboardingSlideCounter({ current: (activeOnboardingIndex + 1).toString(), total: onboardingSlides.length.toString() })" :aria-live="onboardingPaused ? 'polite' : 'off'">
 					<div :class="$style.onboardingCopy">
@@ -31,7 +31,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<span v-for="genre in activeOnboarding.genres?.slice(0, 2)" :key="genre">{{ genre }}</span>
 							<span v-if="activeOnboarding.communityRating != null" :class="$style.onboardingRating" :aria-label="i18n.tsx.zalip.communityRating({ rating: formatCommunityRating(activeOnboarding.communityRating) })"><i class="ti ti-star-filled"></i>{{ formatCommunityRating(activeOnboarding.communityRating) }}</span>
 						</div>
-						<h1>{{ activeOnboarding.title }}</h1>
+						<img v-if="activeOnboarding.logoPath" :class="$style.onboardingLogo" :src="tmdbLogo(activeOnboarding.logoPath)" :alt="activeOnboarding.title">
+						<h1 v-else>{{ activeOnboarding.title }}</h1>
 						<p v-if="activeOnboarding.originalTitle && activeOnboarding.originalTitle !== activeOnboarding.title" :class="$style.onboardingOriginalTitle">{{ activeOnboarding.originalTitle }}</p>
 						<p v-if="activeOnboarding.description" :class="$style.onboardingDescription">{{ activeOnboarding.description }}</p>
 						<MkA :to="activeOnboarding.to" :class="$style.onboardingAction">{{ activeOnboarding.action }}</MkA>
@@ -107,6 +108,7 @@ type ZalipWork = {
 	releaseYear: number | null;
 	posterPath: string | null;
 	backdropPath: string | null;
+	logoPath: string | null;
 	trailerYoutubeKey: string | null;
 	genres: string[];
 	communityRating: number | null;
@@ -138,6 +140,7 @@ type ZalipHeroSlide = {
 	image?: string;
 	posterPath?: string | null;
 	backdropPath?: string | null;
+	logoPath?: string | null;
 	kind?: WorkKind;
 	releaseYear?: number | null;
 	genres?: string[];
@@ -212,6 +215,7 @@ const onboardingSlides = computed<ZalipHeroSlide[]>(() => {
 		icon: kindIcon(work.kind),
 		posterPath: work.posterPath,
 		backdropPath: work.backdropPath,
+		logoPath: work.logoPath,
 		kind: work.kind,
 		releaseYear: work.releaseYear,
 		genres: work.genres,
@@ -220,6 +224,11 @@ const onboardingSlides = computed<ZalipHeroSlide[]>(() => {
 	}));
 });
 const activeOnboarding = computed(() => onboardingSlides.value[activeOnboardingIndex.value] ?? onboardingFallbackSlides[0]!);
+const heroBackdropUrl = computed(() => {
+	const slide = activeOnboarding.value;
+	if (slide.backdropPath || slide.posterPath) return tmdbBackdrop(slide.backdropPath || slide.posterPath || '');
+	return slide.image ?? null;
+});
 const releaseDrag = useZalipHorizontalDrag();
 const followingFeed = ref(false);
 const publicTimeline = computed(() => isAvailableBasicTimeline('local') ? 'local' : isAvailableBasicTimeline('global') ? 'global' : null);
@@ -263,6 +272,14 @@ const showcaseEyebrow = computed(() => isEpisodeShowcase.value ? i18n.ts.zalip.f
 const showcaseTitle = computed(() => isEpisodeShowcase.value ? i18n.ts.zalip.freshEpisodesTitle : i18n.ts.zalip.newCatalogueTitle);
 
 function tmdbImage(path: string): string {
+	return `https://image.tmdb.org/t/p/w500${path}`;
+}
+
+function tmdbBackdrop(path: string): string {
+	return `https://image.tmdb.org/t/p/w1280${path}`;
+}
+
+function tmdbLogo(path: string): string {
 	return `https://image.tmdb.org/t/p/w500${path}`;
 }
 
@@ -405,7 +422,7 @@ definePage(() => ({
 .onboarding {
 	position: relative;
 	overflow: hidden;
-	min-height: 420px;
+	min-height: 500px;
 	border-radius: var(--zalip-radius-big);
 	background: var(--MI_THEME-zalipOnboardingBg, var(--MI_THEME-panel));
 	touch-action: pan-y;
@@ -440,9 +457,7 @@ definePage(() => ({
 .onboardingSlide {
 	position: relative;
 	z-index: 1;
-	display: grid;
-	grid-template-columns: minmax(0, 0.9fr) minmax(260px, 1.1fr);
-	min-height: 420px;
+	min-height: 500px;
 }
 
 .onboardingCopy {
@@ -451,9 +466,11 @@ definePage(() => ({
 	display: flex;
 	flex-direction: column;
 	align-items: flex-start;
-	justify-content: center;
+	justify-content: flex-end;
 	min-width: 0;
-	padding: 54px 20px 56px 44px;
+	min-height: 500px;
+	box-sizing: border-box;
+	padding: 74px 48px 74px;
 }
 
 .onboardingFeatured .onboardingCopy {
@@ -530,6 +547,16 @@ definePage(() => ({
 	letter-spacing: -0.04em;
 }
 
+.onboardingLogo {
+	display: block;
+	width: min(330px, 58vw);
+	max-height: 112px;
+	margin: 0 0 18px;
+	object-fit: contain;
+	object-position: left center;
+	filter: drop-shadow(0 6px 22px rgb(0 0 0 / 48%));
+}
+
 .onboardingOriginalTitle {
 	max-width: min(470px, 100%);
 	margin: 8px 0 0;
@@ -586,11 +613,7 @@ definePage(() => ({
 }
 
 .onboardingArtwork {
-	display: flex;
-	align-items: flex-end;
-	justify-content: center;
-	min-width: 0;
-	padding: 22px 34px 0 0;
+	display: none;
 }
 
 .onboardingArtwork img {
@@ -629,7 +652,7 @@ definePage(() => ({
 	position: absolute;
 	z-index: 2;
 	bottom: 20px;
-	left: 44px;
+	left: 48px;
 	display: flex;
 	align-items: center;
 	gap: 0;
@@ -1051,25 +1074,18 @@ definePage(() => ({
 		padding-top: 12px;
 	}
 
-	.onboarding {
-		min-height: 590px;
-	}
+	.onboarding { min-height: min(720px, calc(100dvh - 118px)); }
 
-	.onboardingSlide {
-		grid-template-columns: minmax(0, 1fr);
-		grid-template-rows: auto minmax(302px, 1fr);
-		min-height: 590px;
-	}
+	.onboardingSlide { min-height: min(720px, calc(100dvh - 118px)); }
 
-	.onboardingCopy {
-		position: static;
-		padding: 28px 22px 8px;
-	}
+	.onboardingCopy { min-height: min(720px, calc(100dvh - 118px)); padding: 88px 24px 82px; }
 
 	.onboardingCopy h1 {
 		font-size: clamp(1.55rem, 7vw, 2rem);
 		line-height: 1.1;
 	}
+
+	.onboardingLogo { width: min(270px, 74vw); max-height: 86px; margin-bottom: 14px; }
 
 	.onboardingMeta { margin-bottom: 11px; }
 	.onboardingMeta span { padding: 3px 7px; font-size: 0.68rem; }
@@ -1085,55 +1101,12 @@ definePage(() => ({
 		margin: 0;
 	}
 
-	.onboardingArtwork {
-		align-items: center;
-		padding: 2px 20px 76px;
-	}
-
-	.onboardingArtwork img {
-		max-height: 336px;
-	}
-
-	.onboardingFeatured .onboardingArtwork img {
-		width: min(236px, 64%);
-		max-height: 320px;
-	}
-
-	/* On phones the premiere is one complete frame, not a small poster surrounded by UI. */
-	.onboardingFeatured {
-		min-height: min(720px, calc(100dvh - 118px));
-		border-radius: 0 0 28px 28px;
-	}
-
-	.onboardingFeatured .onboardingSlide {
-		display: block;
-		min-height: min(720px, calc(100dvh - 118px));
-	}
-
-	.onboardingFeatured .onboardingCopy {
-		position: absolute;
-		right: 0;
-		bottom: 0;
-		left: 0;
-		align-items: center;
-		padding: 82px 25px 78px;
-		text-align: center;
-	}
-
-	.onboardingFeatured .onboardingEyebrow { justify-content: center; margin-bottom: 9px; }
-	.onboardingFeatured .onboardingMeta { justify-content: center; margin-bottom: 12px; }
-	.onboardingFeatured .onboardingCopy h1 { max-width: 340px; font-size: clamp(2rem, 9vw, 2.65rem); }
+	.onboardingFeatured { border-radius: 0 0 28px 28px; }
+	.onboardingFeatured .onboardingCopy { align-items: center; text-align: center; }
+	.onboardingFeatured .onboardingEyebrow, .onboardingFeatured .onboardingMeta { justify-content: center; }
 	.onboardingFeatured .onboardingOriginalTitle { max-width: 100%; }
 	.onboardingFeatured .onboardingDescription { max-width: 360px; margin-top: 10px; -webkit-line-clamp: 2; }
-	.onboardingFeatured .onboardingArtwork { display: none; }
-
-	.onboardingFeatured .onboardingAction {
-		position: static;
-		min-width: min(260px, 82vw);
-		margin-top: 20px;
-		padding: 0 22px;
-	}
-
+	.onboardingFeatured .onboardingAction { min-width: min(260px, 82vw); margin-top: 20px; padding: 0 22px; }
 	.onboardingFeatured .onboardingDots { bottom: 20px; }
 
 	.onboardingDots {
@@ -1214,6 +1187,13 @@ definePage(() => ({
 @media (max-width: 767px) {
 	.page { padding: 14px var(--MI-margin) 36px; }
 	.releaseListItem { flex-basis: 138px; }
+}
+
+@media (min-width: 768px) and (max-width: 1099px) {
+	.page { padding-top: 16px; }
+	.onboarding, .onboardingSlide, .onboardingCopy { min-height: 540px; }
+	.onboardingCopy { padding: 90px 42px 74px; }
+	.onboardingLogo { width: min(340px, 46vw); }
 }
 
 .feed {

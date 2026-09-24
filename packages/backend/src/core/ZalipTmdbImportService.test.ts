@@ -41,6 +41,7 @@ describe('ZalipTmdbImportService', () => {
 			genres: [{ name: 'Драма' }, { name: 'Триллер' }, { name: 'Драма' }, { name: '' }],
 				poster_path: '/poster.jpg',
 				backdrop_path: '/backdrop.jpg',
+				images: { logos: [{ file_path: '/fallback-logo.png', iso_639_1: null }, { file_path: '/english-logo.png', iso_639_1: 'en' }, { file_path: '/russian-logo.png', iso_639_1: 'ru' }] },
 				seasons: [{
 					season_number: 1,
 					name: 'Первый сезон',
@@ -73,6 +74,7 @@ describe('ZalipTmdbImportService', () => {
 			runtimeMinutes: 118,
 			posterPath: '/poster.jpg',
 			backdropPath: '/backdrop.jpg',
+			logoPath: '/russian-logo.png',
 			galleryPaths: [],
 			trailerYoutubeKey: 'russian001',
 			seasons: [],
@@ -82,6 +84,7 @@ describe('ZalipTmdbImportService', () => {
 		expect(requestUrl.pathname).toBe('/3/movie/11');
 		expect(requestUrl.searchParams.get('language')).toBe('ru-RU');
 		expect(requestUrl.searchParams.get('append_to_response')).toBe('videos,images');
+		expect(requestUrl.searchParams.get('include_image_language')).toBe('ru,en,null');
 	});
 
 	it('refreshes only TMDB-provided artwork for an existing title', async () => {
@@ -93,7 +96,7 @@ describe('ZalipTmdbImportService', () => {
 				genres: [{ name: 'Боевик' }, { name: 12 }],
 				poster_path: '/poster.jpg',
 				backdrop_path: '/hero.jpg',
-				images: { backdrops: [{ file_path: '/hero.jpg' }, { file_path: '/frame.jpg' }, { file_path: '/frame.jpg' }, { file_path: 'not-a-path' }] },
+				images: { backdrops: [{ file_path: '/hero.jpg' }, { file_path: '/frame.jpg' }, { file_path: '/frame.jpg' }, { file_path: 'not-a-path' }], logos: [{ file_path: '/fallback-logo.png', iso_639_1: null }, { file_path: '/english-logo.png', iso_639_1: 'en' }] },
 				videos: { results: [{ site: 'YouTube', type: 'Trailer', iso_639_1: 'ru', key: 'trailer001' }] },
 			}),
 		};
@@ -106,12 +109,14 @@ describe('ZalipTmdbImportService', () => {
 			runtimeMinutes: null,
 			posterPath: '/poster.jpg',
 			backdropPath: '/hero.jpg',
+			logoPath: '/english-logo.png',
 			galleryPaths: ['/hero.jpg', '/frame.jpg'],
 			trailerYoutubeKey: 'trailer001',
 		});
 
 		const requestUrl = new URL(httpRequestService.getJson.mock.calls[0][0]);
 		expect(requestUrl.searchParams.get('append_to_response')).toBe('videos,images');
+		expect(requestUrl.searchParams.get('include_image_language')).toBe('ru,en,null');
 	});
 
 	it('maps a TMDB 404 to a safe editor-facing result', async () => {
