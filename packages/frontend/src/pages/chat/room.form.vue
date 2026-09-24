@@ -13,18 +13,18 @@ SPDX-License-Identifier: AGPL-3.0-only
 		ref="textareaEl"
 		v-model="text"
 		:class="$style.textarea"
-		class="_acrylic"
+		:aria-label="i18n.ts.inputMessageHere"
 		:placeholder="i18n.ts.inputMessageHere"
 		:readonly="textareaReadOnly"
 		@keydown="onKeydown"
 		@paste="onPaste"
 	></textarea>
 	<footer :class="$style.footer">
-		<div v-if="file" :class="$style.file" @click="file = null">{{ file.name }}</div>
+		<button v-if="file" type="button" class="_button" :class="$style.file" :aria-label="i18n.ts.remove" @click="file = null">{{ file.name }} ×</button>
 		<div :class="$style.buttons">
-			<button class="_button" :class="$style.button" @click="chooseFile"><i class="ti ti-photo-plus"></i></button>
-			<button class="_button" :class="$style.button" @click="insertEmoji"><i class="ti ti-mood-happy"></i></button>
-			<button class="_button" :class="[$style.button, $style.send]" :disabled="!canSend || sending" :title="i18n.ts.send" @click="send">
+			<button type="button" class="_button" :class="$style.button" :aria-label="i18n.ts.attachFile" @click="chooseFile"><i class="ti ti-photo-plus"></i></button>
+			<button type="button" class="_button" :class="$style.button" :aria-label="i18n.ts.emoji" @click="insertEmoji"><i class="ti ti-mood-happy"></i></button>
+			<button type="button" class="_button" :class="[$style.button, $style.send]" :disabled="!canSend || sending" :aria-label="i18n.ts.send" @click="send">
 				<template v-if="!sending"><i class="ti ti-send"></i></template><template v-if="sending"><MkLoading :em="true"/></template>
 			</button>
 		</div>
@@ -301,9 +301,14 @@ onBeforeUnmount(() => {
 <style lang="scss" module>
 .root {
 	position: relative;
-	border-bottom: none;
-	border-radius: 14px 14px 0 0;
+	border: 1px solid var(--zalip-social-border);
+	border-radius: 24px;
+	background: var(--zalip-glass);
+	-webkit-backdrop-filter: blur(20px);
+	backdrop-filter: blur(20px);
+	box-shadow: 0 6px 24px var(--zalip-glass-shadow);
 	overflow: clip;
+	&:focus-within { border-color: var(--zalip-accent-border); }
 }
 
 .textarea {
@@ -312,7 +317,8 @@ onBeforeUnmount(() => {
 	width: 100%;
 	min-width: 100%;
 	max-width: 100%;
-	min-height: 80px;
+	min-height: 56px;
+	max-height: 160px;
 	margin: 0;
 	padding: 16px 16px 0 16px;
 	resize: none;
@@ -324,13 +330,14 @@ onBeforeUnmount(() => {
 	box-shadow: none;
 	box-sizing: border-box;
 	color: var(--MI_THEME-fg);
+	background: transparent;
 	field-sizing: content;
 }
 
 .footer {
 	position: sticky;
 	bottom: 0;
-	background: var(--MI_THEME-panel);
+	background: transparent;
 }
 
 .file {
@@ -340,10 +347,13 @@ onBeforeUnmount(() => {
 
 .buttons {
 	display: flex;
+	padding: 0 8px 8px;
 }
 
 .button {
-	height: 50px;
+	height: 40px;
+	border-radius: 50%;
+	font-size: 20px;
 	aspect-ratio: 1;
 
 	&:hover {
@@ -352,6 +362,7 @@ onBeforeUnmount(() => {
 }
 .send {
 	margin-left: auto;
-	color: var(--MI_THEME-accent);
+	color: var(--MI_THEME-fgOnAccent);
+	background: var(--MI_THEME-accent);
 }
 </style>

@@ -76,7 +76,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<span v-else-if="notification.type === 'achievementEarned'">{{ i18n.ts._notification.achievementEarned }}</span>
 			<span v-else-if="notification.type === 'zalipEpisodeReleased'">{{ i18n.ts._notification.zalipEpisodeReleased }}</span>
 			<span v-else-if="notification.type === 'zalipAllohaAvailable'">Доступно в Alloha</span>
-			<span v-else-if="notification.type === 'login'">{{ i18n.ts._notification.login }}</span>
+			<span v-else-if="notification.type === 'login'">{{ i18n.ts.zalip.notificationLogin }}</span>
 			<span v-else-if="notification.type === 'createToken'">{{ i18n.ts._notification.createToken }}</span>
 			<span v-else-if="notification.type === 'test'">{{ i18n.ts._notification.testNotification }}</span>
 			<span v-else-if="notification.type === 'exportCompleted'">{{ i18n.tsx._notification.exportOfXCompleted({ x: exportEntityName[notification.exportedEntity] }) }}</span>
@@ -255,8 +255,8 @@ function allohaAvailabilityDescription(notification: Extract<Misskey.entities.No
 .root {
 	position: relative;
 	box-sizing: border-box;
-	padding: 24px 32px;
-	font-size: 0.9em;
+	padding: 20px 24px;
+	font-size: 14px;
 	overflow-wrap: break-word;
 	display: flex;
 	contain: content;
@@ -279,7 +279,7 @@ function allohaAvailabilityDescription(notification: Extract<Misskey.entities.No
 	flex-shrink: 0;
 	width: 42px;
 	height: 42px;
-	margin-right: 8px;
+	margin-right: 14px;
 }
 
 .icon {

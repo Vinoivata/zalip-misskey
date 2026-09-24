@@ -8,7 +8,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 	ref="buttonEl"
 	v-ripple="canToggle"
 	class="_button"
-	:class="[$style.root, { [$style.reacted]: myReaction == reaction, [$style.canToggle]: canToggle, [$style.small]: prefer.s.reactionsDisplaySize === 'small', [$style.large]: prefer.s.reactionsDisplaySize === 'large' }]"
+	:class="[$style.root, { [$style.canToggle]: canToggle, [$style.small]: prefer.s.reactionsDisplaySize === 'small', [$style.large]: prefer.s.reactionsDisplaySize === 'large' }]"
+	:aria-pressed="myReaction === reaction"
 	@click="toggleReaction()"
 	@contextmenu.prevent.stop="menu"
 >
@@ -276,10 +277,10 @@ if (!mock) {
 	justify-content: center;
 
 	&.canToggle {
-		background: var(--MI_THEME-buttonBg);
+		background: transparent;
 
 		&:hover {
-			background: rgba(0, 0, 0, 0.1);
+			background: var(--MI_THEME-panelHighlight);
 		}
 	}
 
@@ -309,19 +310,7 @@ if (!mock) {
 		}
 	}
 
-	&.reacted, &.reacted:hover {
-		background: var(--MI_THEME-accentedBg);
-		color: var(--MI_THEME-accent);
-		box-shadow: 0 0 0 1px var(--MI_THEME-accent) inset;
-
-		> .count {
-			color: var(--MI_THEME-accent);
-		}
-
-		> .icon {
-			filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.5));
-		}
-	}
+	&:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; }
 }
 
 .limitWidth {

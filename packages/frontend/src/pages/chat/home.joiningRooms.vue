@@ -8,7 +8,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div v-if="memberships.length > 0" class="_gaps_s">
 		<XRoom v-for="membership in memberships" :key="membership.id" :room="membership.room!"/>
 	</div>
-	<MkResult v-if="!fetching && memberships.length == 0" type="empty" :text="i18n.ts._chat.noRooms"/>
+	<MkResult v-if="!fetching && memberships.length == 0" type="empty" :text="i18n.ts.zalip.chatNoRooms"/>
 	<MkLoading v-if="fetching"/>
 </div>
 </template>

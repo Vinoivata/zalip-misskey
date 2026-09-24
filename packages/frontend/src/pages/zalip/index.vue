@@ -5,46 +5,42 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <PageWithHeader hideHeader>
-	<div class="_spacer" style="--MI_SPACER-w: 1180px;">
+	<div>
 		<div :class="$style.page">
 			<section
-				:class="[$style.onboarding, { [$style.onboardingFeatured]: activeOnboarding.backdropPath || activeOnboarding.posterPath }]"
+				:class="$style.onboarding"
 				aria-roledescription="carousel"
 				:aria-label="i18n.ts.zalip.onboardingLabel"
 				@mouseenter="pauseOnboardingForHover"
 				@mouseleave="resumeOnboardingAfterHover"
 				@focusin="pauseOnboardingForFocus"
 				@focusout="resumeOnboardingAfterFocus"
-				@pointerdown="beginOnboardingSwipe"
-				@pointermove="moveOnboardingSwipe"
-				@pointerup="endOnboardingSwipe"
-				@pointercancel="cancelOnboardingSwipe"
 			>
-					<div v-if="heroBackdropUrl" :class="$style.onboardingBackdrop" :style="{ backgroundImage: `url(${heroBackdropUrl})` }"></div>
-					<div :class="$style.onboardingShade"></div>
-				<div :class="$style.onboardingSlide" role="group" aria-roledescription="slide" :aria-label="i18n.tsx.zalip.onboardingSlideCounter({ current: (activeOnboardingIndex + 1).toString(), total: onboardingSlides.length.toString() })" :aria-live="onboardingPaused ? 'polite' : 'off'">
-					<div :class="$style.onboardingCopy">
-						<p :class="$style.onboardingEyebrow"><i :class="activeOnboarding.icon"></i> {{ activeOnboarding.eyebrow }}</p>
-						<div v-if="activeOnboarding.kind" :class="$style.onboardingMeta">
-							<span><i :class="kindIcon(activeOnboarding.kind)"></i>{{ kindLabel(activeOnboarding.kind) }}</span>
-							<span v-if="activeOnboarding.releaseYear">{{ activeOnboarding.releaseYear }}</span>
-							<span v-for="genre in activeOnboarding.genres?.slice(0, 2)" :key="genre">{{ genre }}</span>
-							<span v-if="activeOnboarding.communityRating != null" :class="$style.onboardingRating" :aria-label="i18n.tsx.zalip.communityRating({ rating: formatCommunityRating(activeOnboarding.communityRating) })"><i class="ti ti-star-filled"></i>{{ formatCommunityRating(activeOnboarding.communityRating) }}</span>
+				<div ref="heroRail" :class="$style.heroRail" @scroll.passive="updateOnboardingPosition" @pointerdown="beginOnboardingSwipe" @pointermove="heroDrag.onPointerMove" @pointerup="heroDrag.onPointerUp" @pointercancel="heroDrag.onPointerCancel" @click.capture="heroDrag.onClickCapture">
+					<article v-for="(slide, index) in onboardingSlides" :key="`${slide.to}-${index}`" :class="[$style.onboardingCard, { [$style.onboardingCardActive]: index === activeOnboardingIndex }]" role="group" aria-roledescription="slide" :aria-label="i18n.tsx.zalip.onboardingSlideCounter({ current: (index + 1).toString(), total: onboardingSlides.length.toString() })">
+						<picture :class="$style.onboardingBackdrop">
+							<source v-if="slide.posterPath" media="(max-width: 767px)" :srcset="tmdbImage(slide.posterPath)">
+							<img :src="slide.backdropPath ? tmdbBackdrop(slide.backdropPath) : slide.posterPath ? tmdbImage(slide.posterPath) : slide.image" alt="" draggable="false" :loading="index <= 1 ? 'eager' : 'lazy'">
+						</picture>
+						<div :class="$style.onboardingShade"></div>
+						<p :class="$style.onboardingEyebrow">{{ slide.eyebrow }}</p>
+						<div :class="$style.onboardingCopy">
+							<img v-if="slide.logoPath" :class="$style.onboardingLogo" :src="tmdbLogo(slide.logoPath)" :alt="slide.title" draggable="false">
+							<h2 v-else>{{ slide.title }}</h2>
+							<div v-if="slide.kind" :class="$style.onboardingMeta">
+								<span>{{ kindLabel(slide.kind) }}</span><span v-if="slide.releaseYear">{{ slide.releaseYear }}</span>
+								<span v-if="slide.communityRating != null" :class="$style.onboardingRating" :aria-label="i18n.tsx.zalip.communityRating({ rating: formatCommunityRating(slide.communityRating) })">★ {{ formatCommunityRating(slide.communityRating) }}</span>
+							</div>
+							<p v-if="slide.description" :class="$style.onboardingDescription">{{ slide.description }}</p>
+							<MkA :to="slide.to" :class="$style.onboardingAction">{{ slide.action }}</MkA>
 						</div>
-						<img v-if="activeOnboarding.logoPath" :class="$style.onboardingLogo" :src="tmdbLogo(activeOnboarding.logoPath)" :alt="activeOnboarding.title">
-						<h1 v-else>{{ activeOnboarding.title }}</h1>
-						<p v-if="activeOnboarding.originalTitle && activeOnboarding.originalTitle !== activeOnboarding.title" :class="$style.onboardingOriginalTitle">{{ activeOnboarding.originalTitle }}</p>
-						<p v-if="activeOnboarding.description" :class="$style.onboardingDescription">{{ activeOnboarding.description }}</p>
-						<MkA :to="activeOnboarding.to" :class="$style.onboardingAction">{{ activeOnboarding.action }}</MkA>
-					</div>
-					<div :class="$style.onboardingArtwork">
-						<img v-if="activeOnboarding.posterPath" :key="activeOnboarding.posterPath" :src="tmdbImage(activeOnboarding.posterPath)" :alt="activeOnboarding.title" draggable="false">
-						<img v-else-if="activeOnboarding.image" :key="activeOnboarding.image" :src="activeOnboarding.image" alt="" draggable="false">
-					</div>
+					</article>
 				</div>
-				<button type="button" class="_button" :class="$style.onboardingPlayback" :aria-label="onboardingPaused ? i18n.ts.zalip.onboardingResume : i18n.ts.zalip.onboardingPause" :aria-pressed="onboardingPaused" @click="toggleOnboardingAutoplay"><i :class="onboardingPaused ? 'ti ti-player-play-filled' : 'ti ti-player-pause-filled'"></i></button>
-				<div :class="$style.onboardingDots" role="group" :aria-label="i18n.ts.zalip.onboardingDots">
-					<button v-for="(_slide, index) in onboardingSlides" :key="index" type="button" class="_button" :class="{ [$style.onboardingDotActive]: index === activeOnboardingIndex }" :aria-label="i18n.tsx.zalip.onboardingDot({ number: (index + 1).toString() })" :aria-current="index === activeOnboardingIndex ? 'true' : undefined" @click="selectOnboarding(index)"></button>
+				<div :class="$style.onboardingControls">
+					<div :class="$style.onboardingDots" role="group" :aria-label="i18n.ts.zalip.onboardingDots">
+						<button v-for="(_slide, index) in onboardingSlides" :key="index" type="button" class="_button" :class="{ [$style.onboardingDotActive]: index === activeOnboardingIndex }" :aria-label="i18n.tsx.zalip.onboardingDot({ number: (index + 1).toString() })" :aria-current="index === activeOnboardingIndex ? 'true' : undefined" @click="selectOnboarding(index)"></button>
+					</div>
+					<button type="button" class="_button" :class="$style.onboardingPlayback" :aria-label="onboardingPaused ? i18n.ts.zalip.onboardingResume : i18n.ts.zalip.onboardingPause" :aria-pressed="onboardingPaused" @click="toggleOnboardingAutoplay"><MkZalipIcon :name="onboardingPaused ? 'play' : 'pause'"/></button>
 				</div>
 			</section>
 
@@ -68,35 +64,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</div>
 				</div>
 			</section>
-
-			<section v-if="homeTimeline" :class="$style.feed">
-				<div :class="$style.feedTabs" role="group" :aria-label="i18n.ts.timeline">
-					<button v-if="publicTimeline" type="button" class="_button" :class="{ [$style.feedTabActive]: !followingFeed }" :aria-pressed="!followingFeed" @click="followingFeed = false">{{ i18n.ts.zalip.communityFeed }}</button>
-					<button v-if="$i" type="button" class="_button" :class="{ [$style.feedTabActive]: homeTimeline === 'home' }" :aria-pressed="homeTimeline === 'home'" @click="followingFeed = true">{{ i18n.ts.zalip.followingFeed }}</button>
-				</div>
-				<button type="button" class="_button" :class="$style.compose" @click="writePost">
-					<MkAvatar v-if="$i" :user="$i" :class="$style.composeAvatar"/>
-					<i v-else class="ti ti-user-circle" aria-hidden="true"></i>
-					<span :class="$style.composeField">{{ i18n.ts.zalip.writePost }}<i class="ti ti-pencil-plus" aria-hidden="true"></i></span>
-				</button>
-				<MkStreamingNotesTimeline :key="homeTimeline" :src="homeTimeline" :withReplies="false" :withRenotes="true"/>
-			</section>
 		</div>
+		<MkZalipFeed/>
 	</div>
 </PageWithHeader>
 </template>
 
 <script lang="ts" setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue';
 import { definePage } from '@/page.js';
 import { i18n } from '@/i18n.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { useZalipHorizontalDrag } from '@/composables/use-zalip-horizontal-drag.js';
-import MkStreamingNotesTimeline from '@/components/MkStreamingNotesTimeline.vue';
-import { $i } from '@/i.js';
-import { isAvailableBasicTimeline } from '@/timelines.js';
-import { pleaseLogin } from '@/utility/please-login.js';
-import * as os from '@/os.js';
+import MkZalipFeed from '@/components/MkZalipFeed.vue';
+import MkZalipIcon from '@/components/MkZalipIcon.vue';
 
 type ZalipWork = {
 	id: string;
@@ -201,7 +182,7 @@ const onboardingFallbackSlides: ZalipHeroSlide[] = [
 const works = ref<ZalipWork[]>([]);
 const releaseEvents = ref<ZalipReleaseEvent[]>([]);
 const releaseEventsLoaded = ref(false);
-const activeOnboardingIndex = ref(0);
+const activeOnboardingIndex = ref(1);
 const onboardingPaused = ref(false);
 const onboardingSlides = computed<ZalipHeroSlide[]>(() => {
 	const featured = works.value.filter(work => work.backdropPath || work.posterPath).slice(0, 5);
@@ -223,16 +204,9 @@ const onboardingSlides = computed<ZalipHeroSlide[]>(() => {
 		communityRating: work.communityRating,
 	}));
 });
-const activeOnboarding = computed(() => onboardingSlides.value[activeOnboardingIndex.value] ?? onboardingFallbackSlides[0]!);
-const heroBackdropUrl = computed(() => {
-	const slide = activeOnboarding.value;
-	if (slide.backdropPath || slide.posterPath) return tmdbBackdrop(slide.backdropPath || slide.posterPath || '');
-	return slide.image ?? null;
-});
+const heroRail = useTemplateRef('heroRail');
+const heroDrag = useZalipHorizontalDrag();
 const releaseDrag = useZalipHorizontalDrag();
-const followingFeed = ref(false);
-const publicTimeline = computed(() => isAvailableBasicTimeline('local') ? 'local' : isAvailableBasicTimeline('global') ? 'global' : null);
-const homeTimeline = computed(() => $i && (followingFeed.value || !publicTimeline.value) ? 'home' : publicTimeline.value);
 
 function formatCommunityRating(rating: number): string {
 	return rating.toFixed(1).replace('.', ',');
@@ -242,13 +216,8 @@ watch(() => onboardingSlides.value.length, (length) => {
 	if (activeOnboardingIndex.value >= length) activeOnboardingIndex.value = 0;
 });
 
-async function writePost(): Promise<void> {
-	if (!await pleaseLogin()) return;
-	void os.post();
-}
-
 let onboardingTimer: number | null = null;
-let onboardingSwipe: { pointerId: number; startX: number; startY: number } | null = null;
+let heroResizeObserver: ResizeObserver | null = null;
 let onboardingHovered = false;
 let onboardingFocused = false;
 const isEpisodeShowcase = computed(() => releaseEvents.value.length > 0);
@@ -314,13 +283,37 @@ async function loadHome(): Promise<void> {
 	}
 }
 
-function selectOnboarding(index: number): void {
+function scrollToOnboarding(index: number, animate = true): void {
+	const rail = heroRail.value;
+	const card = rail?.children.item(index);
+	if (!rail || !(card instanceof HTMLElement)) return;
+	const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+	rail.scrollTo({ left: card.offsetLeft - (rail.clientWidth - card.offsetWidth) / 2, behavior: animate && !reducedMotion ? 'smooth' : 'instant' });
 	activeOnboardingIndex.value = index;
-	startOnboardingAutoplay();
+}
+
+function selectOnboarding(index: number): void {
+	onboardingPaused.value = true;
+	stopOnboardingAutoplay();
+	scrollToOnboarding(index);
 }
 
 function showOnboarding(step: number): void {
-	activeOnboardingIndex.value = (activeOnboardingIndex.value + step + onboardingSlides.value.length) % onboardingSlides.value.length;
+	scrollToOnboarding((activeOnboardingIndex.value + step + onboardingSlides.value.length) % onboardingSlides.value.length);
+}
+
+function updateOnboardingPosition(): void {
+	const rail = heroRail.value;
+	if (!rail) return;
+	const center = rail.scrollLeft + rail.clientWidth / 2;
+	let nearest = 0;
+	let distance = Infinity;
+	Array.from(rail.children).forEach((card, index) => {
+		if (!(card instanceof HTMLElement)) return;
+		const delta = Math.abs(card.offsetLeft + card.offsetWidth / 2 - center);
+		if (delta < distance) { distance = delta; nearest = index; }
+	});
+	activeOnboardingIndex.value = nearest;
 }
 
 function stopOnboardingAutoplay(): void {
@@ -363,39 +356,27 @@ function toggleOnboardingAutoplay(): void {
 }
 
 function beginOnboardingSwipe(event: PointerEvent): void {
-	if (event.button !== 0 || (event.target instanceof Element && event.target.closest('a, button'))) return;
-	onboardingSwipe = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY };
-	(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+	onboardingPaused.value = true;
 	stopOnboardingAutoplay();
+	heroDrag.onPointerDown(event);
 }
 
-function moveOnboardingSwipe(event: PointerEvent): void {
-	if (onboardingSwipe == null || onboardingSwipe.pointerId !== event.pointerId) return;
-	const deltaX = Math.abs(event.clientX - onboardingSwipe.startX);
-	const deltaY = Math.abs(event.clientY - onboardingSwipe.startY);
-	if (deltaX > 8 && deltaX > deltaY) event.preventDefault();
-}
-
-function endOnboardingSwipe(event: PointerEvent): void {
-	if (onboardingSwipe == null || onboardingSwipe.pointerId !== event.pointerId) return;
-	const deltaX = event.clientX - onboardingSwipe.startX;
-	const deltaY = event.clientY - onboardingSwipe.startY;
-	if (Math.abs(deltaX) > 48 && Math.abs(deltaX) > Math.abs(deltaY)) showOnboarding(deltaX < 0 ? 1 : -1);
-	onboardingSwipe = null;
-	startOnboardingAutoplay();
-}
-
-function cancelOnboardingSwipe(): void {
-	onboardingSwipe = null;
-	startOnboardingAutoplay();
-}
+watch(onboardingSlides, async () => {
+	await nextTick();
+	scrollToOnboarding(Math.min(1, onboardingSlides.value.length - 1), false);
+});
 
 onMounted(() => {
 	void loadHome();
 	startOnboardingAutoplay();
+	heroResizeObserver = new ResizeObserver(() => scrollToOnboarding(activeOnboardingIndex.value, false));
+	if (heroRail.value) heroResizeObserver.observe(heroRail.value);
 });
 
-onBeforeUnmount(stopOnboardingAutoplay);
+onBeforeUnmount(() => {
+	stopOnboardingAutoplay();
+	heroResizeObserver?.disconnect();
+});
 
 definePage(() => ({
 	title: 'Zalip',
@@ -404,814 +385,88 @@ definePage(() => ({
 </script>
 
 <style lang="scss" module>
-.page {
-	padding: 24px var(--MI-margin) 52px;
-}
-
-.eyebrow {
-	display: flex;
-	align-items: center;
-	gap: 7px;
-	margin: 0 0 10px;
-	font-size: 0.72rem;
-	font-weight: 700;
-	letter-spacing: 0.1em;
-	color: var(--MI_THEME-accent);
-}
-
-.onboarding {
+.page { min-width: 0; margin: 0 auto; padding: 14px 0 30px; }
+.onboarding { container-type: inline-size; min-width: 0; }
+.heroRail {
+	--hero-width: min(78cqw, 760px);
 	position: relative;
-	overflow: hidden;
-	min-height: 500px;
-	border-radius: var(--zalip-radius-big);
-	background: var(--MI_THEME-zalipOnboardingBg, var(--MI_THEME-panel));
-	touch-action: pan-y;
-}
-
-.onboardingFeatured {
-	background: var(--MI_THEME-bg);
-}
-
-.onboardingBackdrop, .onboardingShade {
-	position: absolute;
-	inset: 0;
-	pointer-events: none;
-}
-
-.onboardingBackdrop {
-	background-position: center;
-	background-size: cover;
-	filter: saturate(1.05);
-	transform: scale(1.02);
-}
-
-.onboardingShade {
-	background: linear-gradient(90deg, color-mix(in srgb, var(--MI_THEME-bg) 98%, transparent) 0%, color-mix(in srgb, var(--MI_THEME-bg) 88%, transparent) 38%, color-mix(in srgb, var(--MI_THEME-bg) 24%, transparent) 100%), linear-gradient(0deg, color-mix(in srgb, var(--MI_THEME-bg) 80%, transparent), transparent 55%);
-}
-
-/* A film still stays cinematic even while the rest of Zalip uses the light theme. */
-.onboardingFeatured .onboardingShade {
-	background: linear-gradient(90deg, rgb(4 6 11 / 0.94) 0%, rgb(4 6 11 / 0.84) 35%, rgb(4 6 11 / 0.22) 100%), linear-gradient(0deg, rgb(4 6 11 / 0.82), transparent 58%);
-}
-
-.onboardingSlide {
-	position: relative;
-	z-index: 1;
-	min-height: 500px;
-}
-
-.onboardingCopy {
-	position: relative;
-	z-index: 1;
 	display: flex;
-	flex-direction: column;
-	align-items: flex-start;
-	justify-content: flex-end;
-	min-width: 0;
-	min-height: 500px;
-	box-sizing: border-box;
-	padding: 74px 48px 74px;
-}
-
-.onboardingFeatured .onboardingCopy {
-	padding-right: 34px;
-	color: #f7f8fb;
-}
-
-.onboardingFeatured .onboardingEyebrow { color: #d7dcff; }
-.onboardingFeatured .onboardingOriginalTitle,
-.onboardingFeatured .onboardingDescription { color: rgb(247 248 251 / 0.76); }
-.onboardingFeatured .onboardingMeta span { border-color: rgb(255 255 255 / 0.2); background: rgb(3 5 9 / 0.46); color: #f7f8fb; }
-.onboardingFeatured .onboardingMeta span:first-child { border-color: rgb(255 255 255 / 0.38); color: #fff; }
-
-.onboardingEyebrow {
-	display: flex;
-	align-items: center;
-	gap: 7px;
-	margin: 0 0 10px;
-	color: var(--MI_THEME-accent);
-	font-size: 0.76rem;
-	font-weight: 800;
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
-}
-
-.onboardingMeta {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	flex-wrap: wrap;
-	margin: 0 0 14px;
-}
-
-.onboardingMeta span {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	padding: 4px 8px;
-	border: 1px solid color-mix(in srgb, var(--MI_THEME-fg) 16%, transparent);
-	border-radius: 999px;
-	background: color-mix(in srgb, var(--MI_THEME-bg) 44%, transparent);
-	color: var(--MI_THEME-fgTransparent);
-	font-size: 0.72rem;
-	font-weight: 700;
-	line-height: 1.25;
-	backdrop-filter: blur(8px);
-}
-
-.onboardingMeta span:first-child {
-	border-color: color-mix(in srgb, var(--MI_THEME-accent) 54%, transparent);
-	color: var(--MI_THEME-fg);
-}
-
-.onboardingMeta .onboardingRating {
-	border-color: color-mix(in srgb, var(--MI_THEME-warn) 54%, transparent);
-	background: color-mix(in srgb, var(--MI_THEME-warn) 14%, var(--MI_THEME-bg));
-	color: var(--MI_THEME-fg);
-}
-
-.onboardingMeta i {
-	color: var(--MI_THEME-accent);
-	font-size: 0.82rem;
-}
-
-.onboardingMeta .onboardingRating i {
-	color: var(--MI_THEME-warn);
-}
-
-.onboardingCopy h1 {
-	max-width: 520px;
-	margin: 0;
-	font-size: clamp(1.7rem, 3.25vw, 2.65rem);
-	line-height: 1.08;
-	letter-spacing: -0.04em;
-}
-
-.onboardingLogo {
-	display: block;
-	width: min(330px, 58vw);
-	max-height: 112px;
-	margin: 0 0 18px;
-	object-fit: contain;
-	object-position: left center;
-	filter: drop-shadow(0 6px 22px rgb(0 0 0 / 48%));
-}
-
-.onboardingOriginalTitle {
-	max-width: min(470px, 100%);
-	margin: 8px 0 0;
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.78rem;
-	font-weight: 600;
-	letter-spacing: 0.03em;
-	text-transform: uppercase;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
-.onboardingDescription {
-	max-width: 510px;
-	margin: 16px 0 0;
-	color: var(--MI_THEME-fgTransparent);
-	font-size: 0.98rem;
-	line-height: 1.5;
-	-webkit-line-clamp: 3;
-	-webkit-box-orient: vertical;
-	display: -webkit-box;
-	overflow: hidden;
-}
-
-.onboardingAction {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	min-width: 174px;
-	min-height: 48px;
-	margin-top: 26px;
-	padding: 0 24px;
-	border: 1px solid color-mix(in srgb, var(--MI_THEME-fg) 18%, transparent);
-	border-radius: 999px;
-	background: color-mix(in srgb, var(--MI_THEME-fg) 92%, transparent);
-	color: var(--MI_THEME-bg);
-	font-weight: 800;
-	text-decoration: none;
-	box-shadow: 0 8px 20px color-mix(in srgb, var(--MI_THEME-bg) 30%, transparent);
-}
-
-.onboardingFeatured .onboardingAction {
-	border-color: rgb(255 255 255 / 0.2);
-	background: #f8f9fb;
-	color: #11131a;
-}
-
-.onboardingAction:hover,
-.onboardingAction:focus-visible {
-	background: var(--MI_THEME-accent);
-	color: var(--MI_THEME-fgOnAccent);
-	text-decoration: none;
-}
-
-.onboardingArtwork {
-	display: none;
-}
-
-.onboardingArtwork img {
-	display: block;
-	width: 100%;
-	max-height: 396px;
-	object-fit: contain;
-	object-position: center bottom;
-	user-select: none;
-}
-
-.onboardingFeatured .onboardingArtwork img {
-	width: min(282px, 80%);
-	max-height: 382px;
-	border: 1px solid color-mix(in srgb, var(--MI_THEME-fg) 22%, transparent);
-	border-radius: 14px 14px 2px 2px;
-	box-shadow: 0 24px 52px color-mix(in srgb, var(--MI_THEME-bg) 66%, transparent), 0 0 0 1px color-mix(in srgb, var(--MI_THEME-bg) 40%, transparent);
-	object-fit: cover;
-}
-
-.onboardingPlayback {
-	position: absolute;
-	z-index: 3;
-	top: 12px;
-	right: 12px;
-	display: grid;
-	place-items: center;
-	width: 34px;
-	height: 34px;
-	border-radius: 50%;
-	background: color-mix(in srgb, var(--MI_THEME-bg) 84%, transparent);
-	color: var(--MI_THEME-fg);
-}
-
-.onboardingDots {
-	position: absolute;
-	z-index: 2;
-	bottom: 20px;
-	left: 48px;
-	display: flex;
-	align-items: center;
-	gap: 0;
-}
-
-.onboardingDots button {
-	display: grid;
-	place-items: center;
-	width: 24px;
-	height: 24px;
-	background: transparent;
-}
-
-.onboardingDots button::before {
-	width: 7px;
-	height: 7px;
-	border-radius: 999px;
-	background: color-mix(in srgb, var(--MI_THEME-fg) 28%, transparent);
-	transition: width 0.18s ease, background 0.18s ease;
-	content: '';
-}
-
-.onboardingDots .onboardingDotActive::before {
-	width: 20px;
-	background: var(--MI_THEME-accent);
-}
-
-.catalogue {
-	margin-top: 36px;
-}
-
-.releases {
-	margin-top: 32px;
-}
-
-.sectionHeader {
-	display: flex;
-	align-items: end;
-	justify-content: space-between;
 	gap: 16px;
-	margin-bottom: 16px;
-}
-
-.sectionHeader h2 {
-	margin: 0;
-	font-size: 1.35rem;
-}
-
-.count {
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.85rem;
-}
-
-.releaseControls {
-	display: flex;
-	align-items: center;
-	gap: 7px;
-}
-
-.catalogueMeta {
-	display: flex;
-	align-items: center;
-	justify-content: end;
-	gap: 10px;
-}
-
-.catalogueControls {
-	display: flex;
-	flex-direction: column;
-	align-items: stretch;
-	gap: 10px;
-	margin: -2px 0 18px;
-}
-
-.filterLine {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	min-width: 0;
-}
-
-.kindRail {
-	display: flex;
-	gap: 7px;
-	min-width: 0;
 	overflow-x: auto;
-	padding: 1px;
+	padding: 10px calc((100% - var(--hero-width)) / 2);
 	scrollbar-width: none;
-}
-
-.kindRail::-webkit-scrollbar {
-	display: none;
-}
-
-.kindChip {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	flex: 0 0 auto;
-	padding: 9px 12px;
-	border: 1px solid color-mix(in srgb, var(--MI_THEME-accent) 28%, var(--MI_THEME-divider));
-	border-radius: 999px;
-	background: color-mix(in srgb, var(--MI_THEME-panel) 85%, transparent);
-	color: var(--MI_THEME-fg);
-	font-size: 0.8rem;
-	font-weight: 750;
-	text-decoration: none;
-}
-
-.kindChip:hover,
-.kindChip:focus-visible {
-	border-color: var(--MI_THEME-accent);
-	background: var(--MI_THEME-accentedBg);
-	color: var(--MI_THEME-accent);
-	text-decoration: none;
-}
-
-.kindChipActive {
-	border-color: var(--MI_THEME-accent);
-	background: var(--MI_THEME-accent);
-	color: var(--MI_THEME-fgOnAccent);
-}
-
-.sortControl {
-	display: inline-flex;
-	align-items: center;
-	gap: 7px;
-	flex: 0 0 auto;
-	padding: 10px 12px;
-	border: 1px solid var(--MI_THEME-divider);
-	border-radius: 999px;
-	background: var(--MI_THEME-panel);
-	color: var(--MI_THEME-fg);
-	font-size: 0.82rem;
-	font-weight: 700;
-}
-
-.sortControl i:last-child {
-	font-size: 0.9rem;
-	color: var(--MI_THEME-fgTransparentWeak);
-}
-
-.genreRail {
-	display: flex;
-	gap: 7px;
-	min-width: 0;
-	overflow-x: auto;
-	padding: 1px;
-	scrollbar-width: none;
-}
-
-.genreRail::-webkit-scrollbar {
-	display: none;
-}
-
-.genreChip {
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;
-	flex: 0 0 auto;
-	padding: 9px 11px;
-	border: 1px solid var(--MI_THEME-divider);
-	border-radius: 999px;
-	background: var(--MI_THEME-panel);
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.78rem;
-	font-weight: 700;
-	text-decoration: none;
-	transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
-}
-
-.genreChip:hover {
-	border-color: color-mix(in srgb, var(--MI_THEME-accent) 55%, var(--MI_THEME-divider));
-	color: var(--MI_THEME-fg);
-	text-decoration: none;
-}
-
-.genreChipActive {
-	border-color: var(--MI_THEME-accent);
-	background: var(--MI_THEME-accentedBg);
-	color: var(--MI_THEME-accent);
-}
-
-.resetGenre {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	color: var(--MI_THEME-accent);
-	font-size: 0.82rem;
-	font-weight: 700;
-	text-decoration: none;
-}
-
-.empty {
-	display: grid;
-	justify-items: center;
-	gap: 10px;
-	padding: 48px 20px;
-	border: 1px dashed var(--MI_THEME-divider);
-	border-radius: 20px;
-	text-align: center;
-	color: var(--MI_THEME-fgTransparentWeak);
-}
-
-.empty i {
-	font-size: 2rem;
-	color: var(--MI_THEME-accent);
-}
-
-.empty strong {
-	color: var(--MI_THEME-fg);
-}
-
-.grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-	gap: 14px;
-}
-
-.releaseRail {
-	display: flex;
-	user-select: none;
-	gap: 12px;
-	overflow-x: auto;
-	overflow-y: hidden;
-	padding: 1px;
 	scroll-snap-type: none;
-	scrollbar-width: none;
 	cursor: grab;
-}
-
-.releaseRail::-webkit-scrollbar {
-	display: none;
-}
-
-.releaseRail[data-dragging='true'] {
-	cursor: grabbing;
 	user-select: none;
+	&::-webkit-scrollbar { display: none; }
+	&[data-dragging='true'] { cursor: grabbing; }
 }
-
-.releaseListItem {
-	flex: 0 0 clamp(145px, 16.5vw, 184px);
-}
-
-.releaseCard {
-	display: block;
-	height: 100%;
-	overflow: hidden;
-	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 78%, transparent);
-	border-radius: var(--MI-radius);
-	background: var(--MI_THEME-panel);
-	color: var(--MI_THEME-fg);
-	text-decoration: none;
-	transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.releaseCard:hover {
-	transform: translateY(-3px);
-	border-color: color-mix(in srgb, var(--MI_THEME-accent) 50%, var(--MI_THEME-divider));
-	box-shadow: 0 12px 28px color-mix(in srgb, var(--MI_THEME-shadow) 32%, transparent);
-}
-
-.releaseCard:focus-visible {
-	outline: 2px solid var(--MI_THEME-accent);
-	outline-offset: 3px;
-}
-
-.releasePoster {
+.onboardingCard {
 	position: relative;
-	display: grid;
-	place-items: center;
+	flex: 0 0 var(--hero-width);
+	width: var(--hero-width);
+	height: 350px;
+	box-sizing: border-box;
 	overflow: hidden;
-	aspect-ratio: 2 / 3;
-	background: linear-gradient(145deg, var(--MI_THEME-panelHighlight), color-mix(in srgb, var(--MI_THEME-accent) 26%, var(--MI_THEME-panel)));
-	color: var(--MI_THEME-accent);
-	font-size: 2rem;
+	border: 1px solid rgb(255 255 255 / 14%);
+	border-radius: 16px;
+	background: #121415;
+	color: #fff;
+	transform: scale(.96);
+	transition: transform .2s ease;
 }
-
-.releasePoster::after {
-	position: absolute;
-	inset: 40% 0 0;
-	background: linear-gradient(transparent, color-mix(in srgb, var(--MI_THEME-bg) 84%, transparent));
-	content: '';
-	pointer-events: none;
+.onboardingCardActive { transform: scale(1); }
+.onboardingBackdrop, .onboardingShade { position: absolute; inset: 0; pointer-events: none; }
+.onboardingBackdrop img { width: 100%; height: 100%; object-fit: cover; object-position: center; }
+.onboardingShade { background: linear-gradient(90deg, rgb(9 12 17 / 86%), rgb(9 12 17 / 45%) 55%, transparent), linear-gradient(0deg, rgb(9 12 17 / 90%), transparent 80%); }
+.onboardingEyebrow { position: absolute; top: 20px; left: 24px; margin: 0; color: rgb(255 255 255 / 75%); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.onboardingCopy { position: absolute; bottom: 24px; left: 24px; width: min(70%, 430px); display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.onboardingCopy h2 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; margin: 0; max-width: 100%; font-size: clamp(24px, 3cqw, 34px); line-height: 1.1; letter-spacing: -.025em; overflow-wrap: anywhere; }
+.onboardingLogo { display: block; max-width: min(280px, 100%); height: 80px; object-fit: contain; object-position: left bottom; filter: brightness(0) invert(1) drop-shadow(0 3px 8px rgb(0 0 0 / 50%)); }
+.onboardingMeta { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 12px; font-weight: 600; color: rgb(255 255 255 / 75%); }
+.onboardingRating { color: #ffd268; }
+.onboardingDescription { margin: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 14px; line-height: 1.4; color: rgb(255 255 255 / 86%); }
+.onboardingAction { display: flex; align-items: center; justify-content: center; min-height: 44px; min-width: 150px; padding: 0 20px; box-sizing: border-box; border-radius: 10px; background: var(--MI_THEME-accent); color: var(--MI_THEME-fgOnAccent); font-size: 14px; font-weight: 700; text-decoration: none; &:hover { opacity: .9; text-decoration: none; } &:focus-visible { outline: 2px solid #fff; outline-offset: 3px; } }
+.onboardingControls { display: flex; align-items: center; justify-content: center; gap: 10px; height: 32px; }
+.onboardingDots { display: flex; gap: 4px; button { display: grid; place-items: center; width: 24px; height: 30px; &::before { content: ''; width: 14px; height: 4px; border-radius: 2px; background: var(--zalip-social-muted); opacity: .35; } &:focus-visible { outline: 2px solid var(--MI_THEME-focus); border-radius: 4px; } } .onboardingDotActive::before { background: var(--MI_THEME-accent); opacity: 1; } }
+.onboardingPlayback { display: grid; place-items: center; width: 30px; height: 30px; color: var(--zalip-social-muted); border-radius: 50%; > svg { width: 16px; height: 16px; } &:focus-visible { outline: 2px solid var(--MI_THEME-focus); } }
+@container (max-width: 700px) {
+	.heroRail { --hero-width: min(80cqw, 360px); gap: 12px; }
+	.onboardingCard { height: 416px; border-radius: 14px; }
+	.onboardingBackdrop img { object-position: center top; }
+	.onboardingShade { background: linear-gradient(0deg, #101214 0%, rgb(16 18 20 / 95%) 15%, rgb(16 18 20 / 76%) 35%, rgb(16 18 20 / 6%) 72%); }
+	.onboardingEyebrow { top: 14px; left: 14px; font-size: 10px; text-shadow: 0 1px 4px #000; }
+	.onboardingCopy { left: 16px; bottom: 16px; width: calc(100% - 32px); align-items: center; gap: 10px; text-align: center; }
+	.onboardingCopy h2 { font-size: 23px; }
+	.onboardingLogo { height: 70px; max-width: min(230px, 100%); object-position: center bottom; }
+	.onboardingMeta { justify-content: center; font-size: 11px; gap: 8px; }
+	.onboardingDescription { font-size: 12px; line-height: 1.4; -webkit-line-clamp: 3; }
+	.onboardingAction { width: 100%; }
 }
-
-:global(html[data-color-scheme='light']) .releasePoster::after {
-	display: none;
+@container (max-width: 350px) {
+	.onboardingCard { height: 390px; }
+	.onboardingCopy h2 { font-size: 21px; }
+	.onboardingCopy { left: 12px; width: calc(100% - 24px); }
 }
-
-.releasePoster img {
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-}
-
-.releaseBadge {
-	position: absolute;
-	z-index: 1;
-	bottom: 8px;
-	left: 8px;
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	max-width: calc(100% - 16px);
-	overflow: hidden;
-	padding: 4px 7px;
-	border-radius: 999px;
-	background: color-mix(in srgb, var(--MI_THEME-bg) 82%, transparent);
-	backdrop-filter: blur(8px);
-	color: var(--MI_THEME-fg);
-	font-size: 0.67rem;
-	font-weight: 700;
-	line-height: 1.2;
-}
-
-.releaseBadge i {
-	flex: 0 0 auto;
-	color: var(--MI_THEME-accent);
-	font-size: 0.78rem;
-}
-
-:global(html[data-color-scheme='light']) .releaseBadge {
-	background: var(--MI_THEME-panel);
-	backdrop-filter: none;
-}
-
-.releaseBadgeText {
-	overflow: hidden;
-	min-width: 0;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.releaseBody {
-	display: grid;
-	gap: 4px;
-	padding: 10px 11px 12px;
-}
-
-.releaseBody strong,
-.releaseBody span {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.releaseBody strong {
-	font-size: 1rem;
-	line-height: 1.25;
-	display: -webkit-box;
-	-webkit-line-clamp: 2;
-	-webkit-box-orient: vertical;
-	white-space: normal;
-}
-
-.releaseBody span {
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.74rem;
-}
-
-.credits {
-	margin: 22px 0 0;
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.78rem;
-}
-
-.credits a {
-	color: var(--MI_THEME-accent);
-}
-
-.card {
-	overflow: hidden;
-	border-radius: var(--zalip-radius-big);
-	background: var(--MI_THEME-panel);
-	text-decoration: none;
-	color: var(--MI_THEME-fg);
-	transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.card:hover {
-	transform: translateY(-3px);
-	box-shadow: 0 12px 30px color-mix(in srgb, var(--MI_THEME-shadow) 38%, transparent);
-}
-
-.poster {
-	display: grid;
-	place-items: center;
-	aspect-ratio: 2 / 3;
-	background: linear-gradient(145deg, var(--MI_THEME-panelHighlight), color-mix(in srgb, var(--MI_THEME-accent) 26%, var(--MI_THEME-panel)));
-	color: var(--MI_THEME-accent);
-	font-size: 2.3rem;
-}
-
-.poster img {
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-}
-
-.cardBody {
-	padding: 12px;
-}
-
-.cardBody p, .cardBody span {
-	margin: 0;
-	font-size: 0.78rem;
-	color: var(--MI_THEME-fgTransparentWeak);
-}
-
-.cardBody h3 {
-	margin: 5px 0;
-	font-size: 0.95rem;
-	line-height: 1.25;
-}
-
+.releases { margin: 22px 0 0; padding: 0 24px; }
+.sectionHeader { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.sectionHeader h2 { margin: 0; font-size: 1.35rem; }
+.eyebrow { margin: 0 0 7px; color: var(--MI_THEME-accent); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.count { color: var(--zalip-social-muted); font-size: 12px; }
+.releaseControls { display: flex; align-items: center; }
+.releaseRail { display: flex; gap: 12px; overflow-x: auto; overflow-y: hidden; padding: 1px; scroll-snap-type: none; scrollbar-width: none; cursor: grab; user-select: none; &::-webkit-scrollbar { display: none; } &[data-dragging='true'] { cursor: grabbing; } }
+.releaseListItem { flex: 0 0 158px; }
+.releaseCard { display: block; height: 100%; color: var(--MI_THEME-fg); text-decoration: none; &:hover { text-decoration: none; } &:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; } }
+.releasePoster { position: relative; display: grid; place-items: center; overflow: hidden; aspect-ratio: 2 / 3; border-radius: 12px; background: var(--MI_THEME-panelHighlight); color: var(--MI_THEME-accent); img { width: 100%; height: 100%; object-fit: cover; } }
+.releaseBadge { position: absolute; bottom: 8px; left: 8px; display: inline-flex; align-items: center; gap: 4px; max-width: calc(100% - 16px); overflow: hidden; padding: 4px 7px; border-radius: 99px; background: rgb(0 0 0 / 75%); color: #fff; font-size: 10px; }
+.releaseBadgeText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.releaseBody { display: grid; gap: 4px; padding: 8px 2px 2px; strong { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 14px; line-height: 1.25; } span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--zalip-social-muted); font-size: 11px; } }
 @media (max-width: 767px) {
-	.page {
-		padding-top: 12px;
-	}
-
-	.onboarding { min-height: min(720px, calc(100dvh - 118px)); }
-
-	.onboardingSlide { min-height: min(720px, calc(100dvh - 118px)); }
-
-	.onboardingCopy { min-height: min(720px, calc(100dvh - 118px)); padding: 88px 24px 82px; }
-
-	.onboardingCopy h1 {
-		font-size: clamp(1.55rem, 7vw, 2rem);
-		line-height: 1.1;
-	}
-
-	.onboardingLogo { width: min(270px, 74vw); max-height: 86px; margin-bottom: 14px; }
-
-	.onboardingMeta { margin-bottom: 11px; }
-	.onboardingMeta span { padding: 3px 7px; font-size: 0.68rem; }
-	.onboardingOriginalTitle { margin-top: 6px; }
-	.onboardingDescription { margin-top: 11px; font-size: 0.87rem; -webkit-line-clamp: 2; }
-
-	.onboardingAction {
-		position: absolute;
-		right: 18px;
-		bottom: 14px;
-		left: 18px;
-		min-height: 48px;
-		margin: 0;
-	}
-
-	.onboardingFeatured { border-radius: 0 0 28px 28px; }
-	.onboardingFeatured .onboardingCopy { align-items: center; text-align: center; }
-	.onboardingFeatured .onboardingEyebrow, .onboardingFeatured .onboardingMeta { justify-content: center; }
-	.onboardingFeatured .onboardingOriginalTitle { max-width: 100%; }
-	.onboardingFeatured .onboardingDescription { max-width: 360px; margin-top: 10px; -webkit-line-clamp: 2; }
-	.onboardingFeatured .onboardingAction { min-width: min(260px, 82vw); margin-top: 20px; padding: 0 22px; }
-	.onboardingFeatured .onboardingDots { bottom: 20px; }
-
-	.onboardingDots {
-		bottom: 70px;
-		left: 50%;
-		transform: translateX(-50%);
-	}
-
-	.grid {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-	}
-
-	.releaseRail {
-		gap: 10px;
-		margin-right: calc(var(--MI-margin) * -1);
-		padding-right: var(--MI-margin);
-	}
-
-	.releaseListItem {
-		flex-basis: 142px;
-	}
-
-	.releaseControls .count {
-		display: none;
-	}
-
-	.catalogueControls {
-		align-items: stretch;
-	}
-
-	.filterLine {
-		align-items: stretch;
-		flex-direction: column;
-	}
-
-	.sortControl {
-		align-self: flex-start;
-	}
-}
-
-/* Ongaku-inspired discovery shell, rebuilt with Zalip data and controls. */
-.page {
-	max-width: 960px;
-	margin: 0 auto;
-	padding: 22px var(--MI-margin) 64px;
-}
-
-.releases {
-	margin-top: 30px;
-}
-
-.sectionHeader h2 {
-	font-size: 1.35rem;
-}
-
-.releaseRail {
-	gap: 12px;
-}
-
-.releaseListItem {
-	flex-basis: 158px;
-}
-
-.releaseCard {
-	border: 0;
-	border-radius: var(--zalip-radius);
-	background: transparent;
-}
-
-.releasePoster {
-	border-radius: var(--zalip-radius);
-}
-
-.releaseBody {
-	padding: 8px 2px 2px;
-}
-
-@media (max-width: 767px) {
-	.page { padding: 14px var(--MI-margin) 36px; }
+	.page { padding-top: 6px; }
+	.releases { padding: 0 16px; }
+	.releaseRail { margin-right: -16px; padding-right: 16px; }
 	.releaseListItem { flex-basis: 138px; }
+	.releaseControls .count { display: none; }
 }
-
-@media (min-width: 768px) and (max-width: 1099px) {
-	.page { padding-top: 16px; }
-	.onboarding, .onboardingSlide, .onboardingCopy { min-height: 540px; }
-	.onboardingCopy { padding: 90px 42px 74px; }
-	.onboardingLogo { width: min(340px, 46vw); }
-}
-
-.feed {
-	margin: 32px auto 0;
-	max-width: 720px;
-	overflow: hidden;
-	border-radius: var(--zalip-radius-big);
-	background: var(--MI_THEME-panel);
-}
-
-.feedTabs { display: flex; gap: 4px; padding: 6px 16px 0; border-bottom: 1px solid var(--MI_THEME-divider); }
-.feedTabs button { position: relative; flex: 1; min-width: 0; min-height: 50px; padding: 8px 6px 12px; font-size: 14px; font-weight: 600; color: var(--MI_THEME-fgTransparentWeak); }
-.feedTabs .feedTabActive { color: var(--MI_THEME-fg); }
-.feedTabActive::after { content: ''; position: absolute; height: 3px; bottom: -1px; left: 12%; right: 12%; border-radius: 3px; background: var(--MI_THEME-accent); }
-.compose { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 84px; padding: 16px; color: var(--MI_THEME-fgTransparentWeak); border-bottom: 1px solid var(--MI_THEME-divider); text-align: left; }
-.compose > i { font-size: 38px; }
-.composeAvatar { width: 40px; height: 40px; flex: 0 0 40px; pointer-events: none; }
-.composeField { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 8px 14px; box-sizing: border-box; border-radius: var(--zalip-radius); background: color-mix(in srgb, var(--MI_THEME-bg) 45%, var(--MI_THEME-panel)); font-size: 14px; }
-.composeField i { font-size: 21px; flex-shrink: 0; }
-.compose:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: -3px; }
+@media (prefers-reduced-motion: reduce) { .onboardingCard { transition: none; } }
 </style>

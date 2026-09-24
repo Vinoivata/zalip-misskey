@@ -27,7 +27,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</div>
 		</MkFolder>
 	</div>
-	<MkResult v-if="!fetching && invitations.length == 0" type="empty" :text="i18n.ts._chat.noInvitations"/>
+	<MkResult v-if="!fetching && invitations.length == 0" type="empty" :text="i18n.ts.zalip.chatNoInvitations"/>
 	<MkLoading v-if="fetching"/>
 </div>
 </template>

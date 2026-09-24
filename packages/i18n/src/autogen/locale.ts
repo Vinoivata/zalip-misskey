@@ -1710,9 +1710,109 @@ export interface Locale extends ILocale {
          */
         "catalogueFiltersLabel": string;
         /**
-         * ФИЛЬТРЫ
+         * Фильтры
          */
         "catalogueFilters": string;
+        /**
+         * Год «от» не должен быть больше года «до».
+         */
+        "catalogueInvalidYears": string;
+        /**
+         * Закладки
+         */
+        "bookmarksHeading": string;
+        /**
+         * Выполнен вход в аккаунт
+         */
+        "notificationLogin": string;
+        /**
+         * Диалоги
+         */
+        "chatConversations": string;
+        /**
+         * Приглашения
+         */
+        "chatInvitations": string;
+        /**
+         * Беседы
+         */
+        "chatJoinedRooms": string;
+        /**
+         * Мои беседы
+         */
+        "chatOwnedRooms": string;
+        /**
+         * Поиск по сообщениям
+         */
+        "chatSearchMessages": string;
+        /**
+         * Личный диалог
+         */
+        "chatIndividual": string;
+        /**
+         * Переписка с одним человеком
+         */
+        "chatIndividualDescription": string;
+        /**
+         * Групповая беседа
+         */
+        "chatRoom": string;
+        /**
+         * Общение с несколькими участниками
+         */
+        "chatRoomDescription": string;
+        /**
+         * Создать беседу
+         */
+        "chatCreateRoom": string;
+        /**
+         * Здесь пока нет сообщений. Начните разговор.
+         */
+        "chatNoMessages": string;
+        /**
+         * Новых приглашений нет
+         */
+        "chatNoInvitations": string;
+        /**
+         * Здесь пока нет бесед
+         */
+        "chatNoRooms": string;
+        /**
+         * Этот пользователь принимает сообщения только от своих подписчиков.
+         */
+        "chatOnlyFollowers": string;
+        /**
+         * Этот пользователь принимает сообщения только от тех, на кого подписан.
+         */
+        "chatOnlyFollowing": string;
+        /**
+         * Этот пользователь принимает сообщения только от взаимных подписчиков.
+         */
+        "chatOnlyMutual": string;
+        /**
+         * Этот пользователь отключил личные сообщения.
+         */
+        "chatNotAllowed": string;
+        /**
+         * Пригласите участников в беседу.
+         */
+        "chatInvitePrompt": string;
+        /**
+         * Личные сообщения этому аккаунту недоступны.
+         */
+        "chatOtherAccount": string;
+        /**
+         * Для этого аккаунта доступны только чтение и просмотр сообщений.
+         */
+        "chatReadOnly": string;
+        /**
+         * Сообщения недоступны для этого аккаунта или сервера.
+         */
+        "chatUnavailable": string;
+        /**
+         * Сохранённые записи — чтобы вернуться к ним позже.
+         */
+        "bookmarksDescription": string;
         /**
          * Уточнить выдачу
          */

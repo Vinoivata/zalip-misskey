@@ -8,7 +8,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<MkAvatar :class="[$style.avatar, prefer.s.useStickyIcons ? $style.useSticky : null]" :user="message.fromUser!" :link="!isMe" :preview="false"/>
 	<div :class="[$style.body, message.file != null ? $style.fullWidth : null]" @contextmenu.stop="onContextmenu">
 		<div :class="$style.header"><MkUserName v-if="!isMe && prefer.s['chat.showSenderName'] && message.fromUser != null" :user="message.fromUser"/></div>
-		<MkFukidashi :class="$style.fukidashi" :tail="isMe ? 'right' : 'left'" :fullWidth="message.file != null" :accented="isMe">
+		<div :class="$style.fukidashi">
 			<Mfm
 				v-if="message.text"
 				ref="text"
@@ -20,7 +20,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				:enableEmojiMenuReaction="true"
 			/>
 			<MkMediaList v-if="message.file" :mediaList="[message.file]"/>
-		</MkFukidashi>
+		</div>
 		<MkUrlPreview v-for="url in urls" :key="url" :url="url" style="margin: 8px 0;"/>
 		<div :class="$style.footer">
 			<button class="_textButton" style="color: currentColor;" @click="showMenu"><i class="ti ti-dots-circle-horizontal"></i></button>
@@ -63,7 +63,6 @@ import MkUrlPreview from '@/components/MkUrlPreview.vue';
 import { ensureSignin } from '@/i.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { i18n } from '@/i18n.js';
-import MkFukidashi from '@/components/MkFukidashi.vue';
 import * as os from '@/os.js';
 import { copyToClipboard } from '@/utility/copy-to-clipboard.js';
 import MkMediaList from '@/components/MkMediaList.vue';
@@ -262,6 +261,8 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 
 .body {
 	margin: 0 12px;
+	min-width: 0;
+	max-width: min(78%, 660px);
 
 	&.fullWidth {
 		width: 100%;
@@ -275,7 +276,16 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 
 .fukidashi {
 	text-align: left;
+	padding: 12px 16px;
+	border: 1px solid var(--zalip-social-border);
+	border-radius: 20px 20px 20px 6px;
+	background: var(--zalip-social-raised);
+	color: var(--zalip-social-fg);
+	font-size: 15px;
+	line-height: 1.5;
+	overflow-wrap: anywhere;
 }
+.isMe .fukidashi { border-color: var(--zalip-accent-border); border-radius: 20px 20px 6px 20px; background: var(--zalip-accent-soft); }
 
 .content {
 	overflow: clip;

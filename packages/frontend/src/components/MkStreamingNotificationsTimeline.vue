@@ -25,9 +25,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		>
 			<div v-for="(notification, i) in paginator.items.value" :key="notification.id" :data-scroll-anchor="notification.id" :class="$style.item">
 				<div v-if="i > 0 && isSeparatorNeeded(paginator.items.value[i -1].createdAt, notification.createdAt)" :class="$style.date">
-					<span><i class="ti ti-chevron-up"></i> {{ getSeparatorInfo(paginator.items.value[i -1].createdAt, notification.createdAt)?.prevText }}</span>
-					<span style="height: 1em; width: 1px; background: var(--MI_THEME-divider);"></span>
-					<span>{{ getSeparatorInfo(paginator.items.value[i -1].createdAt, notification.createdAt)?.nextText }} <i class="ti ti-chevron-down"></i></span>
+					<span>{{ new Date(notification.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) }}</span>
 				</div>
 				<MkNote v-if="['reply', 'quote', 'mention'].includes(notification.type) && 'note' in notification" :class="$style.content" :note="notification.note" :withHardMute="true"/>
 				<XNotification v-else :class="$style.content" :notification="notification" :withTime="true" :full="true"/>
@@ -55,7 +53,7 @@ import { i18n } from '@/i18n.js';
 import MkPullToRefresh from '@/components/MkPullToRefresh.vue';
 import { prefer } from '@/preferences.js';
 import { store } from '@/store.js';
-import { isSeparatorNeeded, getSeparatorInfo } from '@/utility/timeline-date-separate.js';
+import { isSeparatorNeeded } from '@/utility/timeline-date-separate.js';
 import { Paginator } from '@/utility/paginator.js';
 
 const props = defineProps<{
@@ -236,9 +234,11 @@ defineExpose({
 	display: flex;
 	font-size: 85%;
 	align-items: center;
-	justify-content: center;
+	justify-content: flex-start;
 	gap: 1em;
-	padding: 8px 8px;
+	padding: 12px 24px;
+	color: var(--zalip-social-muted);
+	background: var(--zalip-accent-wash);
 	margin: 0 auto;
 	border-bottom: solid 0.5px var(--MI_THEME-divider);
 }

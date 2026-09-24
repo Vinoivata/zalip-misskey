@@ -125,7 +125,6 @@ function openMoreMenu(event: PointerEvent): void {
 	&.active {
 		color: var(--zalip-social-fg);
 		&::before { background: var(--zalip-glass-active); transform: scaleX(1.12); }
-		> svg { fill: currentColor; }
 	}
 	&:focus-visible { outline: 2px solid var(--MI_THEME-focus); border-radius: 30px; }
 	> .avatar { width: 32px; height: 32px; opacity: .85; }

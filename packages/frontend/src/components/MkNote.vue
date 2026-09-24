@@ -120,7 +120,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<MkA v-if="appearNote.channel && !inChannel" :class="$style.channel" :to="`/channels/${appearNote.channel.id}`"><i class="ti ti-device-tv"></i> {{ appearNote.channel.name }}</MkA>
 			</div>
 			<footer :class="$style.footer">
-				<button ref="reactButton" type="button" :class="[$style.footerButton, { [$style.reacted]: $appearNote.myReaction != null }]" class="_button" :aria-label="i18n.ts.reaction" :aria-pressed="$appearNote.myReaction != null" @click="handleToggleReact()">
+				<button ref="reactButton" type="button" :class="$style.footerButton" class="_button" :aria-label="i18n.ts.reaction" :aria-pressed="$appearNote.myReaction != null" @click="handleToggleReact()">
 					<MkReactionIcon v-if="summaryReaction" :class="$style.summaryReaction" :reaction="summaryReaction" :emojiUrl="$appearNote.reactionEmojis[summaryReaction.substring(1, summaryReaction.length - 1)]"/>
 					<MkZalipIcon v-else :name="appearNote.reactionAcceptance === 'likeOnly' ? 'heart' : 'mood'"/>
 					<span :class="$style.actionLabel">{{ i18n.ts.reaction }}</span>
@@ -776,7 +776,6 @@ const keymap = {
 	transition: color 0.16s ease, background 0.16s ease;
 	> i { font-size: 19px; }
 	> svg { width: 22px; height: 22px; }
-	&.reacted { color: var(--MI_THEME-accent); background: color-mix(in srgb, var(--MI_THEME-accentedBg) 66%, transparent); }
 
 	&:hover {
 		background: color-mix(in srgb, var(--MI_THEME-panelHighlight) 80%, transparent);

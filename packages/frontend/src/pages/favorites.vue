@@ -4,8 +4,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<PageWithHeader>
-	<div class="_spacer" style="--MI_SPACER-w: 800px;">
+<PageWithHeader hideHeader>
+	<div>
+		<MkZalipSectionHeader :title="i18n.ts.zalip.bookmarksHeading" :description="i18n.ts.zalip.bookmarksDescription"/>
 		<MkPagination :paginator="paginator">
 			<template #empty><MkResult type="empty" :text="i18n.ts.noNotes"/></template>
 
@@ -21,6 +22,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { markRaw } from 'vue';
 import MkPagination from '@/components/MkPagination.vue';
 import MkNote from '@/components/MkNote.vue';
+import MkZalipSectionHeader from '@/components/MkZalipSectionHeader.vue';
 import { i18n } from '@/i18n.js';
 import { definePage } from '@/page.js';
 import { Paginator } from '@/utility/paginator.js';
@@ -30,7 +32,7 @@ const paginator = markRaw(new Paginator('i/favorites', {
 }));
 
 definePage(() => ({
-	title: i18n.ts.favorites,
+	title: i18n.ts.zalip.bookmarksHeading,
 	icon: 'ti ti-star',
 }));
 </script>
@@ -38,6 +40,7 @@ definePage(() => ({
 <style lang="scss" module>
 .note {
 	background: var(--MI_THEME-panel);
-	border-radius: var(--MI-radius);
+	border-radius: 0;
+	border-bottom: 1px solid var(--zalip-social-border);
 }
 </style>

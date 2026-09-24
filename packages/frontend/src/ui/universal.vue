@@ -4,7 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div :class="[$style.root, { '_forceShrinkSpacer': isMobile, [$style.mobile]: isMobile, [$style.social]: isSocial }]">
+<div :class="[$style.root, { '_forceShrinkSpacer': isMobile, [$style.mobile]: isMobile, [$style.social]: isSocial, [$style.wide]: pageMetadata?.needWideArea, [$style.chatRoom]: isChatRoom, [$style.withMobileNav]: isMobile && !isThread && !isChatRoom }]">
 	<XTitlebar v-if="prefer.r.showTitlebar.value" style="flex-shrink: 0;"/>
 
 	<div :class="$style.nonTitlebarArea">
@@ -21,7 +21,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<ZalipSiteHeader :mobile="isMobile" :hidden="chromeHidden && !isThread"/>
 			<StackingRouterView v-if="prefer.s['experimental.stackingRouterView']" :class="$style.content"/>
 			<RouterView v-else :class="$style.content"/>
-			<XMobileFooterMenu v-if="isMobile && !isThread" :hidden="chromeHidden"/>
+			<XMobileFooterMenu v-if="isMobile && !isThread && !isChatRoom" :hidden="chromeHidden"/>
 			<div v-if="isThread" id="zalip-reply-slot" :class="$style.replySlot"></div>
 		</div>
 
@@ -68,7 +68,8 @@ const XAnnouncements = defineAsyncComponent(() => import('@/ui/_common_/announce
 
 const isRoot = computed(() => mainRouter.currentRoute.value.name === 'index');
 const isThread = computed(() => mainRouter.currentRoute.value.name === 'note');
-const isSocial = computed(() => isThread.value || mainRouter.currentRoute.value.path === '/timeline');
+const isChatRoom = computed(() => /^\/chat\/(user|room)\//.test(mainRouter.currentRoute.value.path));
+const isSocial = computed(() => isThread.value || ['/', '/timeline', '/my/favorites', '/my/notifications', '/chat'].includes(mainRouter.currentRoute.value.path) || isChatRoom.value);
 const chromeHidden = ref(false);
 let lastScroll = 0;
 let scrollTravel = 0;
@@ -76,7 +77,7 @@ let scrollElement: HTMLElement | null = null;
 
 function onContentScroll(event: Event): void {
 	const target = event.target;
-	if (!isMobile.value || isThread.value || !(target instanceof HTMLElement) || !target.classList.contains('_pageScrollable')) return;
+	if (!isMobile.value || isThread.value || isChatRoom.value || !(target instanceof HTMLElement) || !target.classList.contains('_pageScrollable')) return;
 	const y = Math.max(0, Math.min(target.scrollTop, target.scrollHeight - target.clientHeight));
 	if (scrollElement !== target) {
 		scrollElement = target;
@@ -99,7 +100,7 @@ watch(() => mainRouter.currentRoute.value, () => {
 	scrollElement = null;
 });
 
-const DESKTOP_THRESHOLD = 1200;
+const DESKTOP_THRESHOLD = 1400;
 // Tablets are neither a narrow desktop nor a large phone.  Give them the
 // focused, footer-navigation layout so the 220px sidebar cannot squeeze a
 // timeline into a thin strip.
@@ -168,7 +169,7 @@ function onContextmenu(ev: PointerEvent) {
 </script>
 
 <style lang="scss" module>
-$widgets-hide-threshold: 1199px;
+$widgets-hide-threshold: 1399px;
 
 .root {
 	height: 100dvh;
@@ -180,7 +181,7 @@ $widgets-hide-threshold: 1199px;
 	color: var(--zalip-social-fg);
 }
 
-.social {
+.root {
 	--MI_THEME-bg: var(--zalip-social-bg);
 	--MI_THEME-panel: var(--zalip-social-panel);
 	--MI_THEME-fg: var(--zalip-social-fg);
@@ -203,7 +204,7 @@ $widgets-hide-threshold: 1199px;
 	flex: 1;
 	min-height: 0;
 	width: 100%;
-	max-width: 1320px;
+	max-width: 1600px;
 	margin: 0 auto;
 }
 
@@ -236,7 +237,6 @@ $widgets-hide-threshold: 1199px;
 
 .social .contents { border-inline: 1px solid var(--zalip-social-border); background: var(--zalip-social-panel); }
 .social :global(._pageScrollable) { background: var(--zalip-social-panel); }
-.threadContents .content :global(._pageScrollable) > div { padding-top: 64px; }
 
 .statusbars {
 	position: sticky;
@@ -245,12 +245,12 @@ $widgets-hide-threshold: 1199px;
 }
 
 .widgets {
-	flex: 0 0 var(--zalip-aside-width);
-	width: var(--zalip-aside-width);
+	flex: 0 0 280px;
+	width: 280px;
 	height: 100%;
 	box-sizing: border-box;
 	overflow: auto;
-	padding: 16px 0 24px 28px;
+	padding: 20px 12px 24px 20px;
 	background: var(--zalip-social-bg);
 
 	@media (max-width: $widgets-hide-threshold) {
@@ -259,12 +259,18 @@ $widgets-hide-threshold: 1199px;
 }
 
 .mobile {
-	.nonTitlebarArea { max-width: 700px; }
+	.nonTitlebarArea { max-width: 920px; }
 	.contents { --zalip-chrome-top: 53px; }
 	.content :global(._pageScrollable) { scrollbar-width: none; scroll-padding-top: 53px; }
 	.content :global(._pageScrollable) > div { padding-top: 53px; }
-	&:not(.social) .content :global(._pageScrollable) > div { padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px)); }
+	.content :global(._pageScrollableReversed) > div { padding-top: 53px; }
+	&.withMobileNav .content :global(._pageScrollable) > div { padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px)); }
 	.chromeHidden { --zalip-chrome-top: 0px; }
+}
+.mobile.wide .nonTitlebarArea { max-width: 1200px; }
+.mobile.chatRoom {
+	.content { margin-top: 53px; }
+	.content :global(._pageScrollable) > div, .content :global(._pageScrollableReversed) > div { padding-top: 0; }
 }
 @media (max-width: 700px) { .social .contents { border-inline: 0; } }
 </style>

@@ -4,13 +4,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<svg :class="$style.icon" :viewBox="name === 'reply' ? '0 0 18 18' : '0 0 24 24'" :fill="filled ? 'currentColor' : 'none'" stroke="currentColor" :stroke-width="name === 'reply' ? 1.25 : 1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<svg :class="$style.icon" :viewBox="name === 'reply' ? '0 0 18 18' : '0 0 24 24'" :fill="filled && (name === 'heart' || name === 'bookmark') ? 'currentColor' : 'none'" stroke="currentColor" :stroke-width="name === 'reply' ? 1.25 : 1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
 	<path v-for="(path, index) in paths[name]" :key="index" :d="path"/>
 </svg>
 </template>
 
 <script lang="ts">
-export type ZalipIconName = 'home' | 'reels' | 'heart' | 'messages' | 'search' | 'plus' | 'sun' | 'moon' | 'back' | 'bookmark' | 'reply' | 'repeat' | 'sparkles' | 'person' | 'users' | 'mood' | 'movie' | 'settings' | 'more';
+export type ZalipIconName = 'home' | 'reels' | 'heart' | 'messages' | 'search' | 'plus' | 'sun' | 'moon' | 'back' | 'bookmark' | 'reply' | 'repeat' | 'sparkles' | 'person' | 'users' | 'mood' | 'movie' | 'settings' | 'more' | 'check' | 'play' | 'pause';
 </script>
 
 <script lang="ts" setup>
@@ -24,6 +24,9 @@ const paths: Record<ZalipIconName, string[]> = {
 	messages: ['M14.1706 20.8905C18.3536 20.6125 21.6856 17.2332 21.9598 12.9909C22.0134 12.1607 22.0134 11.3009 21.9598 10.4707C21.6856 6.22838 18.3536 2.84913 14.1706 2.57107C12.7435 2.47621 11.2536 2.47641 9.8294 2.57107C5.64639 2.84913 2.31441 6.22838 2.04024 10.4707C1.98659 11.3009 1.98659 12.1607 2.04024 12.9909C2.1401 14.536 2.82343 15.9666 3.62791 17.1746C4.09501 18.0203 3.78674 19.0758 3.30021 19.9978C2.94941 20.6626 2.77401 20.995 2.91484 21.2351C3.05568 21.4752 3.37026 21.4829 3.99943 21.4982C5.24367 21.5285 6.08268 21.1757 6.74868 20.6846C7.1264 20.4061 7.31527 20.2668 7.44544 20.2508C7.5756 20.2348 7.83177 20.3403 8.34401 20.5513C8.8044 20.7409 9.33896 20.8579 9.8294 20.8905C11.2536 20.9852 12.7435 20.9854 14.1706 20.8905Z', 'M11.9955 12H12.0045M15.991 12H16M8 12H8.00897'],
 	search: ['M17.5 17.5L22 22', 'M20 11C20 6.02944 15.9706 2 11 2C6.02944 2 2 6.02944 2 11C2 15.9706 6.02944 20 11 20C15.9706 20 20 15.9706 20 11Z'],
 	plus: ['M12 4V20M20 12H4'],
+	check: ['m5 12 4 4L19 6'],
+	play: ['M8 4v16l12-8Z'],
+	pause: ['M8 4v16M16 4v16'],
 	sun: ['M17 12a5 5 0 1 1-10 0a5 5 0 0 1 10 0', 'M12 2V3.5M12 20.5V22M19.0708 19.0713L18.0101 18.0106M5.98926 5.98926L4.9286 4.9286M22 12H20.5M3.5 12H2M19.0713 4.92871L18.0106 5.98937M5.98975 18.0107L4.92909 19.0714'],
 	moon: ['M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z'],
 	back: ['M19 12H5M12 5l-7 7 7 7'],

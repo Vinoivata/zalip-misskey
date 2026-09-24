@@ -4,16 +4,22 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<PageWithHeader v-model:tab="tab" :actions="headerActions" :tabs="headerTabs" :swipable="true">
-	<div class="_spacer" style="--MI_SPACER-w: 800px;">
+<PageWithHeader hideHeader>
+	<div>
+		<MkZalipSectionHeader v-model:tab="tab" :title="i18n.ts.notifications" :tabs="headerTabs">
+			<template #actions>
+				<button v-if="tab === 'all'" type="button" class="_button" :class="[$style.action, { [$style.active]: includeTypes != null }]" :aria-label="i18n.ts.filter" @click="setFilter"><MkZalipIcon name="settings"/></button>
+				<button v-if="tab === 'all'" type="button" class="_button" :class="$style.action" :aria-label="i18n.ts.markAllAsRead" @click="markRead"><MkZalipIcon name="check"/></button>
+			</template>
+		</MkZalipSectionHeader>
 		<div v-if="tab === 'all'">
 			<MkStreamingNotificationsTimeline :class="$style.notifications" :excludeTypes="excludeTypes"/>
 		</div>
 		<div v-else-if="tab === 'mentions'">
-			<MkNotesTimeline :paginator="mentionsPaginator"/>
+			<MkNotesTimeline :paginator="mentionsPaginator" noGap :withControl="false"/>
 		</div>
 		<div v-else-if="tab === 'directNotes'">
-			<MkNotesTimeline :paginator="directNotesPaginator"/>
+			<MkNotesTimeline :paginator="directNotesPaginator" noGap :withControl="false"/>
 		</div>
 	</div>
 </PageWithHeader>
@@ -22,7 +28,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script lang="ts" setup>
 import { computed, markRaw, ref } from 'vue';
 import { notificationTypes } from 'misskey-js';
-import type { PageHeaderItem } from '@/types/page-header.js';
+import MkZalipSectionHeader from '@/components/MkZalipSectionHeader.vue';
+import MkZalipIcon from '@/components/MkZalipIcon.vue';
 import MkStreamingNotificationsTimeline from '@/components/MkStreamingNotificationsTimeline.vue';
 import MkNotesTimeline from '@/components/MkNotesTimeline.vue';
 import * as os from '@/os.js';
@@ -63,18 +70,11 @@ function setFilter(ev: PointerEvent) {
 	os.popupMenu(items, ev.currentTarget ?? ev.target);
 }
 
-const headerActions = computed<PageHeaderItem[]>(() => ([tab.value === 'all' ? {
-	text: i18n.ts.filter,
-	icon: 'ti ti-filter',
-	highlighted: includeTypes.value != null,
-	handler: setFilter,
-} : undefined, tab.value === 'all' ? {
-	text: i18n.ts.markAllAsRead,
-	icon: 'ti ti-check',
-	handler: () => {
-		os.apiWithDialog('notifications/mark-all-as-read', {});
-	},
-} : undefined] as (PageHeaderItem | undefined)[]).filter(x => x !== undefined));
+async function markRead(): Promise<void> {
+	try {
+		await os.apiWithDialog('notifications/mark-all-as-read', {});
+	} catch { /* The dialog displays the server error. */ }
+}
 
 const headerTabs = computed(() => [{
 	key: 'all',
@@ -98,7 +98,9 @@ definePage(() => ({
 
 <style module lang="scss">
 .notifications {
-	border-radius: var(--MI-radius);
+	border-radius: 0;
 	overflow: clip;
 }
+.action { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: var(--zalip-social-muted); font-size: 22px; > svg { width: 22px; height: 22px; } &:hover { background: var(--zalip-social-hover); } }
+.active { background: var(--zalip-accent-soft); color: var(--MI_THEME-accent); }
 </style>

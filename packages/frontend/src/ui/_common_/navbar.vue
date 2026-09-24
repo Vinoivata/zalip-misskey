@@ -63,7 +63,7 @@ function openAppearanceMenu(event: PointerEvent): void {
 .item, .post, .secondary, .admin { display: flex; align-items: center; gap: 18px; min-height: 54px; padding: 0 14px; border-radius: 30px; text-decoration: none; color: inherit; text-align: left; box-sizing: border-box; }
 .item { position: relative; align-self: flex-start; max-width: 100%; gap: 14px; font-size: 17px; font-weight: 600; > svg { width: 27px; height: 27px; flex-shrink: 0; } > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
 .item:hover, .secondary:hover, .account:hover { background: var(--zalip-social-hover); }
-.active { background: var(--zalip-social-hover); color: var(--zalip-social-fg); > svg { fill: currentColor; } }
+.active { background: var(--zalip-accent-soft); color: var(--zalip-social-fg); box-shadow: inset 0 0 0 1px var(--zalip-accent-border); > svg { color: var(--MI_THEME-accent); } }
 .post { justify-content: center; min-height: 48px; margin-top: 18px; border: 1px solid var(--zalip-social-fg); font-size: 19px; font-weight: 600; }
 .admin { min-height: 42px; padding: 0 10px; gap: 10px; font-size: 14px; color: var(--MI_THEME-accent); }
 .bottom { margin-top: auto; padding-top: 24px; }

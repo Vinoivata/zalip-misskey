@@ -4,13 +4,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<PageWithHeader v-model:tab="tab" :actions="headerActions" :tabs="headerTabs" :swipable="true">
-	<MkPolkadots v-if="tab === 'home'" accented :height="200" style="margin-bottom: -200px;"/>
-	<div class="_spacer" style="--MI_SPACER-w: 700px;">
-		<XHome v-if="tab === 'home'"/>
-		<XInvitations v-else-if="tab === 'invitations'"/>
-		<XJoiningRooms v-else-if="tab === 'joiningRooms'"/>
-		<XOwnedRooms v-else-if="tab === 'ownedRooms'"/>
+<PageWithHeader hideHeader>
+	<div>
+		<MkZalipSectionHeader v-model:tab="tab" :title="i18n.ts.zalip.messages" :tabs="headerTabs"/>
+		<div :class="$style.body">
+			<XHome v-if="tab === 'home'"/>
+			<XInvitations v-else-if="tab === 'invitations'"/>
+			<XJoiningRooms v-else-if="tab === 'joiningRooms'"/>
+			<XOwnedRooms v-else-if="tab === 'ownedRooms'"/>
+		</div>
 	</div>
 </PageWithHeader>
 </template>
@@ -23,35 +25,35 @@ import XJoiningRooms from './home.joiningRooms.vue';
 import XOwnedRooms from './home.ownedRooms.vue';
 import { i18n } from '@/i18n.js';
 import { definePage } from '@/page.js';
-import MkPolkadots from '@/components/MkPolkadots.vue';
+import MkZalipSectionHeader from '@/components/MkZalipSectionHeader.vue';
 
 const tab = ref('home');
 
-const headerActions = computed(() => []);
-
 const headerTabs = computed(() => [{
 	key: 'home',
-	title: i18n.ts._chat.home,
+	title: i18n.ts.zalip.chatConversations,
 	icon: 'ti ti-home',
 }, {
 	key: 'invitations',
-	title: i18n.ts._chat.invitations,
+	title: i18n.ts.zalip.chatInvitations,
 	icon: 'ti ti-ticket',
 }, {
 	key: 'joiningRooms',
-	title: i18n.ts._chat.joiningRooms,
+	title: i18n.ts.zalip.chatJoinedRooms,
 	icon: 'ti ti-users-group',
 }, {
 	key: 'ownedRooms',
-	title: i18n.ts._chat.yourRooms,
+	title: i18n.ts.zalip.chatOwnedRooms,
 	icon: 'ti ti-settings',
 }]);
 
 definePage(() => ({
-	title: i18n.ts.directMessage,
+	title: i18n.ts.zalip.messages,
 	icon: 'ti ti-messages',
 }));
 </script>
 
 <style lang="scss" module>
+.body { padding: 24px; }
+@media (max-width: 600px) { .body { padding: 16px; } }
 </style>

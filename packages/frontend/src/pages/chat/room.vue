@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <PageWithHeader v-model:tab="tab" :reversed="tab === 'chat'" :tabs="headerTabs" :actions="headerActions">
-	<div v-if="tab === 'chat'" class="_spacer" style="--MI_SPACER-w: 700px;">
+	<div v-if="tab === 'chat'" class="_spacer" style="--MI_SPACER-w: 900px;">
 		<div class="_gaps">
 			<div v-if="initializing">
 				<MkLoading/>
@@ -13,15 +13,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 			<div v-else-if="messages.length === 0">
 				<div class="_gaps" style="text-align: center;">
-					<div>{{ i18n.ts._chat.noMessagesYet }}</div>
+					<div>{{ i18n.ts.zalip.chatNoMessages }}</div>
 					<template v-if="user">
-						<div v-if="user.chatScope === 'followers'">{{ i18n.ts._chat.thisUserAllowsChatOnlyFromFollowers }}</div>
-						<div v-else-if="user.chatScope === 'following'">{{ i18n.ts._chat.thisUserAllowsChatOnlyFromFollowing }}</div>
-						<div v-else-if="user.chatScope === 'mutual'">{{ i18n.ts._chat.thisUserAllowsChatOnlyFromMutualFollowing }}</div>
-						<div v-else-if="user.chatScope === 'none'">{{ i18n.ts._chat.thisUserNotAllowedChatAnyone }}</div>
+						<div v-if="user.chatScope === 'followers'">{{ i18n.ts.zalip.chatOnlyFollowers }}</div>
+						<div v-else-if="user.chatScope === 'following'">{{ i18n.ts.zalip.chatOnlyFollowing }}</div>
+						<div v-else-if="user.chatScope === 'mutual'">{{ i18n.ts.zalip.chatOnlyMutual }}</div>
+						<div v-else-if="user.chatScope === 'none'">{{ i18n.ts.zalip.chatNotAllowed }}</div>
 					</template>
 					<template v-else-if="room">
-						<div>{{ i18n.ts._chat.inviteUserToChat }}</div>
+						<div>{{ i18n.ts.zalip.chatInvitePrompt }}</div>
 					</template>
 				</div>
 			</div>
@@ -51,10 +51,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</div>
 
 			<div v-if="user && (!user.canChat || user.host !== null)">
-				<MkInfo warn>{{ i18n.ts._chat.chatNotAvailableInOtherAccount }}</MkInfo>
+				<MkInfo warn>{{ i18n.ts.zalip.chatOtherAccount }}</MkInfo>
 			</div>
 
-			<MkInfo v-if="$i.policies.chatAvailability !== 'available'" warn>{{ $i.policies.chatAvailability === 'readonly' ? i18n.ts._chat.chatIsReadOnlyForThisAccountOrServer : i18n.ts._chat.chatNotAvailableForThisAccountOrServer }}</MkInfo>
+			<MkInfo v-if="$i.policies.chatAvailability !== 'available'" warn>{{ $i.policies.chatAvailability === 'readonly' ? i18n.ts.zalip.chatReadOnly : i18n.ts.zalip.chatUnavailable }}</MkInfo>
 		</div>
 	</div>
 
@@ -421,7 +421,7 @@ const tab = ref('chat');
 
 const headerTabs = computed(() => room.value ? [{
 	key: 'chat',
-	title: i18n.ts._chat.messages,
+	title: i18n.ts.zalip.messages,
 	icon: 'ti ti-messages',
 }, {
 	key: 'members',
@@ -437,7 +437,7 @@ const headerTabs = computed(() => room.value ? [{
 	icon: 'ti ti-info-circle',
 }] : [{
 	key: 'chat',
-	title: i18n.ts._chat.messages,
+	title: i18n.ts.zalip.messages,
 	icon: 'ti ti-messages',
 }, {
 	key: 'search',
@@ -500,7 +500,8 @@ definePage(computed(() => {
 
 .footer {
 	width: 100%;
-	padding-top: 8px;
+	padding: 8px 16px max(16px, env(safe-area-inset-bottom, 0px));
+	box-sizing: border-box;
 }
 
 .new {
@@ -530,7 +531,7 @@ definePage(computed(() => {
 .form {
 	margin: 0 auto;
 	width: 100%;
-	max-width: 700px;
+	max-width: 900px;
 }
 
 .fade-enter-active, .fade-leave-active {
