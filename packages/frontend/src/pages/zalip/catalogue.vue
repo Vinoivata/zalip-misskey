@@ -161,7 +161,7 @@ const genreOptions = ref<string[]>([]);
 const pending = ref(true);
 const genresPending = ref(true);
 const loadError = ref(false);
-const filtersOpen = ref(false);
+const filtersOpen = computed(() => props.filters === '1');
 const filtersPanel = useTemplateRef('filtersPanel');
 const filtersButton = useTemplateRef('filtersButton');
 const genresError = ref(false);
@@ -246,13 +246,12 @@ function navigate(patch: Partial<CatalogueQuery>): void {
 }
 
 function toggleFilters(): void {
-	filtersOpen.value = !filtersOpen.value;
-	pendingFilterFocus = filtersOpen.value ? 'panel' : 'button';
-	navigate({ filters: filtersOpen.value ? '1' : '' });
+	const open = !filtersOpen.value;
+	pendingFilterFocus = open ? 'panel' : 'button';
+	navigate({ filters: open ? '1' : '' });
 }
 
 function closeFilters(): void {
-	filtersOpen.value = false;
 	pendingFilterFocus = 'button';
 	navigate({ filters: '' });
 }
@@ -353,7 +352,6 @@ watch(() => [props.genres, props.types, props.query, props.yearFrom, props.yearT
 	void loadWorks();
 }, { immediate: true });
 watch(() => props.sort, value => { sortInput.value = value; }, { immediate: true });
-watch(() => props.filters, value => { filtersOpen.value = value === '1'; }, { immediate: true });
 
 onMounted(() => {
 	void loadGenres();
