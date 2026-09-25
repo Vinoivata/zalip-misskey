@@ -113,6 +113,7 @@ const showWidgetsSide = ref(!isMobile.value && window.innerWidth >= DESKTOP_THRE
 function updateViewport(): void {
 	isMobile.value = deviceKind !== 'desktop' || window.innerWidth <= MOBILE_THRESHOLD;
 	showWidgetsSide.value = !isMobile.value && window.innerWidth >= DESKTOP_THRESHOLD;
+	if (!isMobile.value) chromeHidden.value = false;
 }
 
 window.addEventListener('resize', updateViewport, { passive: true });

@@ -297,6 +297,8 @@ onBeforeUnmount(() => {
 		font: inherit;
 		font-size: 1rem;
 
+		&::-webkit-search-cancel-button { appearance: none; }
+
 		&::placeholder {
 			color: var(--MI_THEME-fgTransparent);
 		}

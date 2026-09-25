@@ -10,16 +10,44 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkZalipIcon :name="item.icon"/>
 			<span v-if="item.to === '/my/notifications' && $i?.hasUnreadNotification" :class="$style.indicator"></span>
 		</MkA>
-		<button type="button" class="_button" :class="$style.item" :aria-label="i18n.ts.zalip.more" @click="openMoreMenu">
+		<button ref="accountTrigger" type="button" class="_button" :class="$style.item" :aria-label="i18n.ts.zalip.more" aria-haspopup="dialog" :aria-expanded="accountSheetOpen" @click="accountSheetOpen = true">
 			<MkAvatar v-if="$i" :user="$i" :class="$style.avatar"/>
 			<MkZalipIcon v-else name="person"/>
 		</button>
 	</nav>
 </div>
 <button v-if="hidden" type="button" class="_button" :class="$style.create" :aria-label="i18n.ts.zalip.feedQuickPost" @click="writePost"><MkZalipIcon name="plus"/></button>
+
+<Teleport to="body">
+	<MkModal v-if="accountSheetOpen" ref="accountModal" preferType="drawer" :returnFocusTo="accountTrigger" @click="closeAccountSheet" @esc="closeAccountSheet" @closed="accountSheetOpen = false">
+		<section :class="$style.accountSheet" role="dialog" aria-modal="true" :aria-label="i18n.ts.zalip.mySpace">
+			<button type="button" class="_button" :class="$style.sheetHandle" :aria-label="i18n.ts.close" @click="closeAccountSheet"><span></span></button>
+			<MkA v-if="$i" :to="'/@' + $i.username" :class="$style.accountCard" @click="closeAccountSheet">
+				<MkAvatar :user="$i" :class="$style.accountAvatar" :link="false"/>
+				<span :class="$style.accountName"><strong>{{ $i.name || $i.username }}</strong><small>@{{ $i.username }}</small></span>
+				<span :class="$style.profilePill">{{ navbarItemDef.profile.title }}</span>
+			</MkA>
+			<button v-else type="button" class="_button" :class="$style.accountCard" @click="login"><MkZalipIcon name="person"/><strong>{{ i18n.ts.login }}</strong></button>
+			<div :class="$style.sheetGrid">
+				<MkA v-for="item in accountLinks" :key="item.to" :to="item.to" :class="$style.sheetTile" @click="closeAccountSheet"><i :class="item.icon" aria-hidden="true"></i><span>{{ item.label }}</span></MkA>
+				<button type="button" class="_button" :class="$style.sheetTile" @click="search"><MkZalipIcon name="search"/><span>{{ i18n.ts.zalip.search }}</span></button>
+			</div>
+			<div :class="$style.sheetRows">
+				<MkA v-if="$i?.isAdmin" to="/zalip/editor" :class="$style.sheetRow" @click="closeAccountSheet"><i class="ti ti-square-plus" aria-hidden="true"></i>{{ i18n.ts.zalip.addContent }}</MkA>
+				<MkA v-if="$i?.isAdmin || $i?.isModerator" to="/admin" :class="$style.sheetRow" @click="closeAccountSheet"><i class="ti ti-shield" aria-hidden="true"></i>{{ i18n.ts.controlPanel }}</MkA>
+				<button type="button" class="_button" :class="$style.sheetRow" @click="appearance"><i class="ti ti-palette" aria-hidden="true"></i>{{ i18n.ts.zalip.appearanceTitle }}</button>
+				<MkA v-if="$i" to="/settings" :class="$style.sheetRow" @click="closeAccountSheet"><i class="ti ti-settings" aria-hidden="true"></i>{{ i18n.ts.settings }}</MkA>
+			</div>
+			<button v-if="$i" type="button" class="_button" :class="[$style.sheetRow, $style.signout]" @click="logout"><i class="ti ti-logout" aria-hidden="true"></i>{{ i18n.ts.logout }}</button>
+		</section>
+	</MkModal>
+</Teleport>
 </template>
 
 <script lang="ts" setup>
+import { computed, ref, useTemplateRef } from 'vue';
+import MkModal from '@/components/MkModal.vue';
+import { signout } from '@/signout.js';
 import MkZalipIcon from '@/components/MkZalipIcon.vue';
 import type { ZalipIconName } from '@/components/MkZalipIcon.vue';
 import { $i } from '@/i.js';
@@ -27,7 +55,6 @@ import { navbarItemDef } from '@/navbar.js';
 import { i18n } from '@/i18n.js';
 import { pleaseLogin } from '@/utility/please-login.js';
 import * as os from '@/os.js';
-import type { MenuItem } from '@/types/menu.js';
 import { getZalipAppearanceMenu } from '@/utility/zalip-theme.js';
 import { openZalipSearch } from '@/utility/zalip-search.js';
 import { openZalipCreateMenu } from '@/utility/zalip-create.js';
@@ -45,27 +72,45 @@ function writePost(event: PointerEvent): void {
 	openZalipCreateMenu(event);
 }
 
-function openMoreMenu(event: PointerEvent): void {
-	const accountItems: MenuItem[] = $i
-		? [{ type: 'link', text: navbarItemDef.profile.title, icon: navbarItemDef.profile.icon, to: '/@' + $i.username }]
-		: [{ text: i18n.ts.login, icon: 'ti ti-login', action: () => { void pleaseLogin(); } }];
+const accountSheetOpen = ref(false);
+const accountModal = useTemplateRef('accountModal');
+const accountTrigger = useTemplateRef('accountTrigger');
+const accountLinks = computed(() => [
+	{ to: '/', icon: 'ti ti-movie', label: navbarItemDef.zalip.title },
+	{ to: '/catalog', icon: 'ti ti-layout-grid', label: navbarItemDef.catalogue.title },
+	{ to: '/library', icon: 'ti ti-bookmark', label: navbarItemDef.library.title },
+	{ to: '/updates', icon: 'ti ti-calendar-event', label: navbarItemDef.updates.title },
+	...($i ? [
+		{ to: '/my/favorites', icon: 'ti ti-star', label: i18n.ts.favorites },
+		{ to: '/my/widgets', icon: 'ti ti-layout', label: i18n.ts.widgets },
+		{ to: '/timeline', icon: 'ti ti-message-circle', label: navbarItemDef.feed.title },
+	] : []),
+]);
 
-	void os.popupMenu([
-		...accountItems,
-		{ type: 'link', text: navbarItemDef.catalogue.title, icon: 'ti ti-movie', to: '/catalog' },
-		{ type: 'link', text: navbarItemDef.library.title, icon: 'ti ti-bookmark', to: '/library' },
-		{ type: 'link', text: i18n.ts.favorites, icon: 'ti ti-star', to: '/my/favorites' },
-		{ text: i18n.ts.zalip.search, icon: 'ti ti-search', action: () => openZalipSearch() },
-		{ type: 'link', text: navbarItemDef.updates.title, icon: navbarItemDef.updates.icon, to: '/updates' },
-		...($i?.isAdmin ? [{ type: 'link' as const, text: i18n.ts.zalip.addContent, icon: 'ti ti-square-plus', to: '/zalip/editor' }] : []),
-		...($i?.isAdmin || $i?.isModerator ? [{ type: 'link' as const, text: i18n.ts.controlPanel, icon: 'ti ti-shield', to: '/admin' }] : []),
-		{ type: 'divider' },
-		...($i ? [
-			{ type: 'link' as const, text: i18n.ts.settings, icon: 'ti ti-settings', to: '/settings' },
-			{ type: 'link' as const, text: i18n.ts.widgets, icon: 'ti ti-layout', to: '/my/widgets' },
-		] : []),
-		...getZalipAppearanceMenu(),
-	], event.currentTarget ?? event.target, { align: 'right', width: 280 });
+function closeAccountSheet(): void {
+	accountModal.value?.close();
+}
+
+function search(): void {
+	closeAccountSheet();
+	openZalipSearch();
+}
+
+function login(): void {
+	closeAccountSheet();
+	void pleaseLogin();
+}
+
+function appearance(event: PointerEvent): void {
+	void os.popupMenu(getZalipAppearanceMenu(), event.currentTarget, { width: 280 });
+}
+
+async function logout(): Promise<void> {
+	const { canceled } = await os.confirm({ type: 'question', text: i18n.ts.logoutConfirm });
+	if (!canceled) {
+		closeAccountSheet();
+		void signout();
+	}
 }
 </script>
 
@@ -145,4 +190,24 @@ function openMoreMenu(event: PointerEvent): void {
 	> svg { width: 28px; height: 28px; }
 }
 @media (prefers-reduced-motion: reduce) { .wrap { transition: none; } }
+
+.accountSheet { width: min(100%, 540px); max-height: 88dvh; box-sizing: border-box; overflow: auto; overscroll-behavior: contain; margin: 0 auto; padding: 0 16px max(24px, env(safe-area-inset-bottom)); border-radius: 28px 28px 0 0; background: var(--zalip-social-panel); color: var(--zalip-social-fg); }
+.sheetHandle { display: grid; place-items: center; width: 100%; height: 34px; }
+.sheetHandle span { width: 36px; height: 4px; border-radius: 99px; background: var(--zalip-social-subtle); opacity: .6; }
+.accountCard { display: flex; align-items: center; gap: 12px; width: 100%; box-sizing: border-box; padding: 16px; margin-bottom: 12px; border-radius: 18px; background: var(--zalip-social-raised); text-decoration: none; }
+.accountAvatar { flex: 0 0 50px; width: 50px; height: 50px; }
+.accountName { display: grid; gap: 4px; min-width: 0; flex: 1; }
+.accountName strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; }
+.accountName small { color: var(--zalip-social-muted); overflow-wrap: anywhere; }
+.profilePill { padding: 8px 12px; border-radius: 99px; background: var(--zalip-social-hover); font-size: 12px; font-weight: 600; }
+.sheetGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.sheetTile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 80px; padding: 8px 4px; box-sizing: border-box; border-radius: 16px; background: var(--zalip-social-raised); color: var(--zalip-social-muted); text-align: center; text-decoration: none; font-size: 11px; overflow-wrap: anywhere; }
+.sheetTile i, .sheetTile svg { width: 23px; height: 23px; font-size: 23px; color: var(--zalip-social-fg); }
+.sheetTile:hover, .accountCard:hover { background: var(--zalip-accent-soft); }
+.sheetRows { padding: 16px 0; }
+.sheetRow { display: flex; align-items: center; gap: 14px; width: 100%; box-sizing: border-box; min-height: 48px; padding: 10px 14px; border-radius: 12px; text-align: left; font-size: 15px; font-weight: 600; text-decoration: none; }
+.sheetRow i { font-size: 22px; }
+.sheetRow:hover { background: var(--zalip-social-hover); }
+.signout { padding-top: 18px; border-top: 1px solid var(--zalip-social-border); border-radius: 0; color: var(--MI_THEME-error); }
+@media (max-width: 350px) { .accountCard { padding: 12px; gap: 8px; } .profilePill { padding: 8px; font-size: 11px; } .accountAvatar { flex-basis: 40px; width: 40px; height: 40px; } .accountName strong { font-size: 14px; } }
 </style>

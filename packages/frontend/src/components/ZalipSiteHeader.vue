@@ -95,9 +95,9 @@ function goBack(): void {
 .desktopNav { display: flex; align-items: center; gap: 2px; white-space: nowrap; > a { padding: 10px 12px; border-radius: 99px; font-size: 14px; font-weight: 600; text-decoration: none; } > a:hover { background: var(--zalip-social-hover); } .active { color: var(--zalip-social-fg); background: var(--zalip-accent-soft); box-shadow: inset 0 0 0 1px var(--zalip-accent-border); } }
 .desktopSearch { display: flex; align-items: center; gap: 10px; min-width: 44px; max-width: 320px; height: 40px; flex: 1; margin-left: auto; padding: 0 14px; border: 1px solid var(--zalip-social-border); border-radius: 99px; background: var(--zalip-social-panel); text-align: left; > svg { width: 20px; height: 20px; } }
 .desktopAction { display: grid; place-items: center; flex: 0 0 40px; height: 40px; border-radius: 50%; &:hover { background: var(--zalip-accent-soft); } > svg { width: 22px; height: 22px; } }
-.desktopSearch input { min-width: 0; width: 100%; flex: 1; border: 0; background: transparent; color: var(--zalip-social-fg); font-size: 14px; }
+.desktopSearch input { min-width: 0; width: 100%; flex: 1; border: 0; outline: none; background: transparent; color: var(--zalip-social-fg); font-size: 14px; }
 .desktopSearch button { display: grid; place-items: center; flex: 0 0 28px; height: 36px; > svg { width: 20px; height: 20px; } }
-.desktopSearch:focus-within { border-color: var(--MI_THEME-accent); }
+.desktopSearch:focus-within { border-color: var(--MI_THEME-accent); outline: 2px solid var(--zalip-accent-border); outline-offset: 2px; }
 .desktopCreate { color: var(--MI_THEME-fgOnAccent); background: var(--MI_THEME-accent); &:hover { background: var(--MI_THEME-accent); opacity: .85; } }
 @media (prefers-reduced-motion: reduce) { .root { transition: none; } }
 </style>

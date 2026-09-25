@@ -4,6 +4,7 @@
 -
 
 ### Client
+- Enhance: Rebuild Zalip title hero and episode player controls, add a mobile account sheet, restore catalogue widgets, and fix nested search focus outlines.
 - Enhance: ZALIPのフィードとスレッドを参照デザインの配色・アイコン・余白に統一し、スクロール方向に追従する半透明モバイルナビゲーション、固定返信欄、管理者向けコンテンツ追加導線を実装
 - Enhance: ZALIPのホームスライダーをポスター、背景、作品種別、年、ジャンル、コミュニティ評価を備えたシネマティック表示に刷新し、320pxからタブレットまでの長い原題表示を修正
 - Enhance: ZALIPのフィードを連続した会話のような軽い表示に整え、投稿アクション、作品共有カード、モバイルdock、タブレット用レイアウトを刷新

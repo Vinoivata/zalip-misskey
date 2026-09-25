@@ -7,131 +7,116 @@ SPDX-License-Identifier: AGPL-3.0-only
 <PageWithHeader hideHeader>
 	<div :class="$style.viewport">
 		<div :class="$style.page">
-			<div v-if="pending" :class="$style.state"><i class="ti ti-loader-2 ti-spin"></i> Загружаем тайтл…</div>
-			<div v-else-if="work == null" :class="$style.state"><i class="ti ti-movie-off"></i> Тайтл не найден или ещё не опубликован.</div>
+			<div v-if="pending" :class="$style.state"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i> Загружаем тайтл…</div>
+			<div v-else-if="work == null" :class="$style.state"><i class="ti ti-movie-off" aria-hidden="true"></i> Тайтл не найден или ещё не опубликован.</div>
 			<article v-else :class="$style.work">
+
 				<section :class="$style.hero">
-					<div v-if="work.backdropPath" :class="$style.heroBackground" aria-hidden="true">
-						<img :src="tmdbBackdrop(work.backdropPath)" alt="" loading="lazy">
-					</div>
-					<div :class="$style.heroContent">
-						<aside :class="$style.sidebar">
-							<div :class="$style.poster">
-								<img v-if="work.posterPath" :src="tmdbImage(work.posterPath)" :alt="work.title">
-								<i v-else class="ti ti-movie"></i>
-							</div>
-							<div :class="$style.sidebarActions">
-								<button type="button" class="_button" :class="$style.watchButton" @click="openPlayer"><i class="ti ti-player-play-filled"></i><span>{{ i18n.ts.zalip.watchTitle }}</span></button>
-								<button type="button" class="_button" :class="[$style.sideButton, { [$style.sideButtonActive]: saved }]" :disabled="saving" @click="showLibraryMenu"><i :class="saved ? 'ti ti-bookmark-filled' : 'ti ti-plus'"></i><span>{{ i18n.ts.zalip.addToList }}</span></button>
-								<button type="button" class="_button" :class="$style.sideButton" @click="focusDiscussion"><i class="ti ti-messages"></i><span>{{ i18n.ts.zalip.discussTitle }}</span></button>
-							</div>
-							<div :class="$style.quickActions" role="group" :aria-label="i18n.ts.zalip.workActions">
-								<button type="button" class="_button" :class="[$style.quickAction, { [$style.quickActionActive]: isFavorite }]" :aria-label="i18n.ts.zalip.favoriteTitle" :aria-pressed="isFavorite" :disabled="saving" @click="toggleFavorite"><i :class="isFavorite ? 'ti ti-heart-filled' : 'ti ti-heart'"></i><span>{{ i18n.ts.zalip.favoriteTitle }}</span></button>
-								<button v-if="work.seasons.length" type="button" class="_button" :class="[$style.quickAction, { [$style.quickActionActive]: releaseSubscribed }]" :aria-label="i18n.ts.zalip.releaseSubscriptionTitle" :aria-pressed="releaseSubscribed" :disabled="saving" @click="toggleReleaseSubscription"><i :class="releaseSubscribed ? 'ti ti-bell-filled' : 'ti ti-bell'"></i><span>{{ i18n.ts.zalip.releaseSubscriptionTitle }}</span></button>
-								<button type="button" class="_button" :class="[$style.quickAction, $style.ratingAction, { [$style.quickActionActive]: personalRating != null }]" :aria-label="i18n.ts.zalip.ratingTitle" :disabled="saving" @click="choosePersonalRating"><i :class="personalRating == null ? 'ti ti-star' : 'ti ti-star-filled'"></i><span>{{ ratingLabel }}</span></button>
-								<button type="button" class="_button" :class="$style.quickAction" :aria-label="i18n.ts.zalip.shareTitle" @click="shareWork"><i class="ti ti-share-3"></i><span>{{ i18n.ts.zalip.shareTitle }}</span></button>
-							</div>
-						</aside>
-						<div :class="$style.info">
-							<div :class="$style.titleArea">
-								<div :class="$style.titleContent">
-									<p :class="$style.kind">{{ kindLabel(work.kind) }}<span v-if="work.releaseYear"> · {{ work.releaseYear }}</span><span v-if="work.runtimeMinutes"> · {{ runtimeLabel(work.runtimeMinutes, work.kind) }}</span></p>
-									<h1>{{ work.title }}</h1>
-									<p v-if="work.originalTitle" :class="$style.original">{{ work.originalTitle }}</p>
-									<div v-if="work.genres.length" :class="$style.genres" aria-label="Жанры"><MkA v-for="genre in work.genres" :key="genre" :to="genreLink(genre)">{{ genre }}</MkA></div>
+					<div v-if="work.backdropPath" :class="$style.heroBackground" aria-hidden="true"><img :src="tmdbBackdrop(work.backdropPath)" alt=""></div>
+					<div :class="$style.heroInner">
+						<nav :class="$style.breadcrumb" :aria-label="i18n.ts.zalip.catalogueHeading"><MkA to="/catalog">{{ i18n.ts.zalip.catalogueHeading }}</MkA><i class="ti ti-chevron-right" aria-hidden="true"></i><span>{{ work.title }}</span></nav>
+						<div v-if="work.logoPath" :class="$style.titleLogo"><img :src="tmdbImage(work.logoPath)" :alt="work.title"></div>
+						<div :class="$style.heroContent">
+							<aside :class="$style.sidebar">
+								<div :class="$style.poster"><img v-if="work.posterPath" :src="tmdbImage(work.posterPath)" :alt="work.title"><i v-else class="ti ti-movie" aria-hidden="true"></i></div>
+								<div :class="$style.sidebarActions">
+									<button type="button" class="_button" :class="$style.watchButton" @click="openPlayer"><i class="ti ti-player-play-filled" aria-hidden="true"></i>{{ i18n.ts.zalip.watchTitle }}</button>
+									<button type="button" class="_button" :class="$style.sideButton" @click="focusDiscussion">{{ i18n.ts.zalip.discussTitle }}</button>
 								</div>
+							</aside>
+							<div :class="$style.info">
+								<p :class="$style.kind">{{ kindLabel(work.kind) }}<span v-if="work.releaseYear"> · {{ work.releaseYear }}</span></p>
+								<h1>{{ work.title }}</h1>
+								<p v-if="work.originalTitle && work.originalTitle !== work.title" :class="$style.original">{{ work.originalTitle }}</p>
+								<div :class="$style.ratings">
+									<span v-if="work.communityRating != null" :class="$style.communityRating" :aria-label="i18n.tsx.zalip.communityRating({ rating: work.communityRating.toFixed(1) })"><i class="ti ti-star" aria-hidden="true"></i><strong>{{ work.communityRating.toFixed(1) }}</strong><small>{{ i18n.tsx.zalip.workRatingCount({ count: work.ratingCount }) }}</small></span>
+									<span v-else :class="$style.original">{{ i18n.ts.zalip.workNoRating }}</span>
+								</div>
+								<dl :class="$style.facts">
+									<template v-if="work.releaseYear"><dt>{{ i18n.ts.zalip.workYear }}</dt><dd>{{ work.releaseYear }}</dd></template>
+									<dt>{{ i18n.ts.zalip.workType }}</dt><dd>{{ kindLabel(work.kind) }}</dd>
+									<template v-if="work.runtimeMinutes"><dt>{{ i18n.ts.zalip.workDuration }}</dt><dd>{{ runtimeLabel(work.runtimeMinutes, work.kind) }}</dd></template>
+									<template v-if="work.seasons.length"><dt>{{ i18n.ts.zalip.workSeasons }}</dt><dd>{{ work.seasons.filter(season => season.seasonNumber > 0).length }}</dd></template>
+									<template v-if="work.genres.length"><dt>{{ i18n.ts.zalip.catalogueGenres }}</dt><dd :class="$style.genres"><MkA v-for="genre in work.genres" :key="genre" :to="genreLink(genre)">{{ genre }}</MkA></dd></template>
+								</dl>
 							</div>
 						</div>
-						<p v-if="work.description" :class="$style.description">{{ work.description }}</p>
-						<p v-else :class="$style.description">Описание появится после редакторской проверки.</p>
 					</div>
 				</section>
+				<div :class="$style.actionStrip" role="group" :aria-label="i18n.ts.zalip.workActions">
+					<button type="button" class="_button" :class="{ [$style.actionActive]: personalRating != null }" :disabled="saving" @click="choosePersonalRating"><i class="ti ti-star" aria-hidden="true"></i><span>{{ personalRating == null ? i18n.ts.zalip.workRateAction : ratingLabel }}</span></button>
+					<button type="button" class="_button" :class="{ [$style.actionActive]: saved }" :disabled="saving" @click="showLibraryMenu"><i class="ti ti-bookmark-plus" aria-hidden="true"></i><span>{{ saved ? libraryStatusText(libraryStatus) : i18n.ts.zalip.addToList }}</span></button>
+					<button type="button" class="_button" @click="shareWork"><i class="ti ti-repeat" aria-hidden="true"></i><span>{{ i18n.ts.zalip.workRepost }}</span></button>
+					<button type="button" class="_button" :aria-label="i18n.ts.zalip.more" :disabled="saving" @click="showWorkMenu"><i class="ti ti-dots" aria-hidden="true"></i><span>{{ i18n.ts.zalip.more }}</span></button>
+				</div>
+				<p v-if="work.description" :class="$style.description">{{ work.description }}</p>
 				<div :class="$style.content">
-					<section ref="playerSection" :class="$style.player" aria-label="Просмотр">
+
+					<section ref="playerSection" :class="$style.player" :aria-label="i18n.ts.zalip.playerTab">
 						<div :class="$style.playerTabs">
-							<button type="button" class="_button" :class="[$style.playerTab, { [$style.playerTabActive]: playerView === 'player' }]" :aria-label="i18n.ts.zalip.playerTab" :aria-pressed="playerView === 'player'" :title="i18n.ts.zalip.playerTab" @click="openPlayer"><i class="ti ti-device-tv"></i><span>{{ i18n.ts.zalip.playerTab }}</span></button>
-							<button v-if="work.trailerYoutubeKey" type="button" class="_button" :class="[$style.playerTab, { [$style.playerTabActive]: playerView === 'trailer' }]" :aria-label="i18n.ts.zalip.trailerTab" :aria-pressed="playerView === 'trailer'" :title="i18n.ts.zalip.trailerTab" @click="openTrailer"><i class="ti ti-player-play"></i><span>{{ i18n.ts.zalip.trailerTab }}</span></button>
+							<button type="button" class="_button" :class="[$style.playerTab, { [$style.playerTabActive]: playerView === 'player' }]" :aria-pressed="playerView === 'player'" @click="playerView = 'player'"><i class="ti ti-list" aria-hidden="true"></i><span>{{ work.seasons.length ? i18n.ts.zalip.workEpisodes : i18n.ts.zalip.playerTab }}</span></button>
+							<button v-if="work.trailerYoutubeKey" type="button" class="_button" :class="[$style.playerTab, { [$style.playerTabActive]: playerView === 'trailer' }]" :aria-pressed="playerView === 'trailer'" @click="openTrailer"><i class="ti ti-player-play" aria-hidden="true"></i><span>{{ i18n.ts.zalip.trailerTab }}</span></button>
+							<button type="button" class="_button" :class="$style.playerTab" @click="focusDiscussion"><i class="ti ti-messages" aria-hidden="true"></i><span>{{ i18n.ts.zalip.comments }}</span></button>
 						</div>
-						<div v-if="work.trailerYoutubeKey" v-show="playerView === 'trailer'" :class="$style.playerFrame"><iframe :src="youtubeEmbed(work.trailerYoutubeKey)" :title="`Официальный трейлер: ${work.title}`" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>
-						<div v-show="playerView === 'player'">
-						<template v-if="$i">
-							<p v-if="allohaPlayback == null" :class="$style.playerState"><i class="ti ti-loader-2 ti-spin"></i> Проверяем доступность в Alloha…</p>
-							<template v-else-if="allohaPlayback.available">
-								<div :class="[$style.watchLayout, { [$style.hasTranslations]: allohaPlayback.translations.length > 1 }]">
-								<div :class="$style.screen">
-								<div v-if="allohaPlayerOpen && activeAllohaIframe" :class="$style.playerFrame"><iframe :key="activeAllohaIframeKey" :src="activeAllohaIframe" :title="`Плеер Alloha: ${work.title}`" loading="lazy" referrerpolicy="origin" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>
+						<div v-if="work.trailerYoutubeKey && playerView === 'trailer'" :class="$style.playerFrame"><iframe :src="youtubeEmbed(work.trailerYoutubeKey)" :title="i18n.ts.zalip.trailerTab + ': ' + work.title" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>
+						<template v-if="playerView === 'player'">
+							<div ref="watchFrame" :class="$style.watchFrame">
+								<div v-if="$i && allohaPlayerOpen && activeAllohaIframe" :class="$style.playerFrame"><iframe :key="activeAllohaIframeKey" :src="activeAllohaIframe" :title="i18n.ts.zalip.playerTab + ': ' + work.title" loading="lazy" referrerpolicy="origin" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>
 								<div v-else :class="$style.playerPreview">
-									<img v-if="selectedEpisode?.stillPath" :src="tmdbBackdrop(selectedEpisode.stillPath)" alt="" loading="lazy">
-									<img v-else-if="work.backdropPath" :src="tmdbBackdrop(work.backdropPath)" alt="" loading="lazy">
-									<div :class="$style.playerPreviewShade">
-										<span>ALLOHA · ПЛЕЕР</span>
-										<strong>{{ selectedEpisode ? episodeLabel(selectedEpisode) : work.title }}</strong>
-										<button type="button" class="_button" :class="$style.playerButton" @click="openAllohaPlayer"><i class="ti ti-player-play-filled"></i> Открыть плеер</button>
-									</div>
-								</div>
-								</div>
-								<aside v-if="allohaPlayback.translations.length > 1" :class="$style.voices" :aria-label="i18n.ts.zalip.playerVoices">
-									<h3><i class="ti ti-headphones"></i>{{ i18n.ts.zalip.playerVoices }}</h3>
-									<label :class="$style.voiceSearch"><i class="ti ti-search"></i><input v-model="voiceQuery" class="_input" type="search" :placeholder="i18n.ts.zalip.playerVoiceSearch" :aria-label="i18n.ts.zalip.playerVoiceSearch"></label>
-									<div :class="$style.voiceList">
-										<button v-for="translation in filteredTranslations" :key="translation.id" type="button" class="_button" :class="{ [$style.voiceSelected]: selectedAllohaTranslationId === translation.id }" :aria-pressed="selectedAllohaTranslationId === translation.id" @click="selectedAllohaTranslationId = translation.id"><span>{{ translation.name }}</span><small v-if="translation.quality">{{ translation.quality }}</small><i v-if="selectedAllohaTranslationId === translation.id" class="ti ti-check"></i></button>
-										<p v-if="!filteredTranslations.length">{{ i18n.ts.zalip.searchNoResults }}</p>
-									</div>
-								</aside>
+									<img v-if="selectedEpisode?.stillPath || work.backdropPath" :src="tmdbBackdrop(selectedEpisode?.stillPath || work.backdropPath!)" alt="" loading="lazy">
+									<button v-if="$i && allohaPlayback?.available" type="button" class="_button" :class="$style.playOverlay" :aria-label="i18n.ts.zalip.watchTitle" @click="openAllohaPlayer"><i class="ti ti-player-play-filled" aria-hidden="true"></i></button>
+									<button v-else-if="!$i" type="button" class="_button" :class="$style.playerState" @click="signInForDiscussion"><i class="ti ti-login" aria-hidden="true"></i>{{ i18n.ts.zalip.playerSignIn }}</button>
+									<p v-else :class="$style.playerState"><i :class="allohaPlayback == null ? 'ti ti-loader-2 ti-spin' : 'ti ti-clock'" aria-hidden="true"></i>{{ allohaPlayback == null ? i18n.ts.zalip.playerChecking : i18n.ts.zalip.playerUnavailable }}</p>
 								</div>
 								<div :class="$style.playerToolbar">
-									<button type="button" class="_button" :class="$style.episodeNav" :disabled="previousEpisode == null" aria-label="Предыдущая серия" @click="selectRelativeEpisode(-1)"><i class="ti ti-chevron-left"></i></button>
-									<div :class="$style.nowPlaying"><span>Выбрано</span><strong>{{ selectedEpisode ? episodeLabel(selectedEpisode) : kindLabel(work.kind) }}</strong></div>
-									<button type="button" class="_button" :class="$style.episodeNav" :disabled="nextEpisode == null" aria-label="Следующая серия" @click="selectRelativeEpisode(1)"><i class="ti ti-chevron-right"></i></button>
-									<span :class="$style.providerLabel">{{ selectedVoiceLabel }}</span>
+									<div v-if="work.seasons.length" :class="$style.episodeControls">
+										<button type="button" class="_button" :disabled="previousEpisode == null" :aria-label="i18n.ts.zalip.playerPreviousEpisode" @click="selectRelativeEpisode(-1)"><i class="ti ti-chevron-left" aria-hidden="true"></i></button>
+										<button type="button" class="_button" :disabled="!episodes.length" aria-haspopup="dialog" :aria-expanded="episodeMenuOpen" @click="openEpisodeMenu">{{ selectedEpisode ? i18n.tsx.zalip.playerEpisodeNumber({ number: selectedEpisode.episodeNumber }) : i18n.ts.zalip.workEpisodes }}<i class="ti ti-chevron-down" aria-hidden="true"></i></button>
+										<button type="button" class="_button" :disabled="nextEpisode == null" :aria-label="i18n.ts.zalip.playerNextEpisode" @click="selectRelativeEpisode(1)"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
+									</div>
+									<button v-if="$i && selectedEpisodeProgress != null" type="button" class="_button" :class="[$style.watched, { [$style.actionActive]: episodeWatched }]" :disabled="saving || episodeWatched" @click="markEpisodeWatched"><i :class="episodeWatched ? 'ti ti-eye-check' : 'ti ti-eye'" aria-hidden="true"></i>{{ episodeWatched ? i18n.ts.zalip.playerWatched : i18n.ts.zalip.playerMarkWatched }}</button>
+									<button v-if="$i && allohaPlayback?.available" type="button" class="_button" :class="$style.voiceButton" aria-haspopup="dialog" :aria-expanded="voiceMenuOpen" @click="openVoiceMenu"><span>{{ selectedVoiceLabel }}</span><i class="ti ti-volume" aria-hidden="true"></i></button>
 								</div>
-								<p :class="$style.providerNotice">{{ i18n.ts.zalip.playerEpisodeSwitchNotice }}</p>
-							</template>
-							<p v-else :class="$style.playerUnavailable"><i class="ti ti-clock"></i> В Alloha этот тайтл пока не найден. Доступность проверяется автоматически раз в час.</p>
-						</template>
-						<p v-else :class="$style.playerUnavailable"><i class="ti ti-login"></i> Войдите в Zalip, чтобы открыть плеер и сохранить подписку на новые серии.</p>
-						</div>
-
-						<div v-if="playerView === 'player' && work.seasons.length" :class="$style.playerEpisodes">
-							<div :class="$style.seasonPicker"><span>Сезон</span><div><button v-for="season in work.seasons" :key="season.id" type="button" class="_button" :class="[$style.seasonPill, { [$style.selectedSeasonPill]: selectedSeasonNumber === season.seasonNumber }]" @click="selectSeason(season)">{{ season.seasonNumber === 0 ? 'Спец.' : season.seasonNumber }}</button></div></div>
-							<p v-if="episodesPending" :class="$style.episodeRailState"><i class="ti ti-loader-2 ti-spin"></i> Загружаем эпизоды…</p>
-							<p v-else-if="episodes.length === 0" :class="$style.episodeRailState">Список серий пока готовится редактором.</p>
-							<div v-else :class="$style.episodeRail" aria-label="Серии выбранного сезона" @pointerdown="episodeDrag.onPointerDown" @pointermove="episodeDrag.onPointerMove" @pointerup="episodeDrag.onPointerUp" @pointercancel="episodeDrag.onPointerCancel" @click.capture="episodeDrag.onClickCapture">
-								<button v-for="episode in episodes" :key="episode.id" type="button" class="_button" :class="[$style.episodeTile, { [$style.selectedEpisodeTile]: selectedEpisode?.id === episode.id }]" :aria-pressed="selectedEpisode?.id === episode.id" @click="selectEpisode(episode)">
-									<img v-if="episode.stillPath" :src="tmdbGalleryImage(episode.stillPath)" :alt="`Кадр: ${episodeLabel(episode)}`" loading="lazy">
-									<span v-else :class="$style.episodeTileFallback"><i class="ti ti-device-tv"></i></span>
-									<strong>Эпизод {{ episode.episodeNumber }}</strong>
-									<small>{{ episode.title }}</small>
-								</button>
 							</div>
-						</div>
+							<div v-if="work.seasons.length" :class="$style.playerEpisodes">
+								<div v-if="work.seasons.length > 1" :class="$style.seasonPicker"><span>{{ i18n.ts.zalip.workSeason }}</span><div><button v-for="season in work.seasons" :key="season.id" type="button" class="_button" :class="{ [$style.selectedSeasonPill]: selectedSeasonNumber === season.seasonNumber }" :aria-pressed="selectedSeasonNumber === season.seasonNumber" @click="selectSeason(season)">{{ season.seasonNumber === 0 ? i18n.ts.zalip.releaseSpecial : season.seasonNumber }}</button></div></div>
+								<p v-if="episodesPending" :class="$style.episodeRailState"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i>{{ i18n.ts.zalip.playerEpisodesLoading }}</p>
+								<p v-else-if="!episodes.length" :class="$style.episodeRailState">{{ i18n.ts.zalip.playerEpisodesEmpty }}</p>
+								<div v-else :class="$style.episodeRail" :aria-label="i18n.ts.zalip.workEpisodes" @pointerdown="episodeDrag.onPointerDown" @pointermove="episodeDrag.onPointerMove" @pointerup="episodeDrag.onPointerUp" @pointercancel="episodeDrag.onPointerCancel" @click.capture="episodeDrag.onClickCapture">
+									<button v-for="episode in episodes" :key="episode.id" type="button" class="_button" :class="[$style.episodeTile, { [$style.selectedEpisodeTile]: selectedEpisode?.id === episode.id }]" :aria-pressed="selectedEpisode?.id === episode.id" @click="selectEpisode(episode)">
+										<span :class="$style.episodeThumb"><img v-if="episode.stillPath" :src="tmdbGalleryImage(episode.stillPath)" alt="" loading="lazy"><i v-else class="ti ti-device-tv" aria-hidden="true"></i><span v-if="selectedEpisode?.id === episode.id" :class="$style.selectedPlay"><i class="ti ti-player-play-filled" aria-hidden="true"></i></span></span>
+										<strong>{{ i18n.tsx.zalip.playerEpisodeNumber({ number: episode.episodeNumber }) }}</strong>
+										<small>{{ episode.title }}</small>
+									</button>
+								</div>
+							</div>
+						</template>
 					</section>
 					<section v-if="selectedEpisode" :class="$style.episodeGuide">
-						<div v-if="selectedEpisode.stillPath" :class="$style.episodeGuideStill"><img :src="tmdbGalleryImage(selectedEpisode.stillPath)" :alt="`Кадр: ${episodeLabel(selectedEpisode)}`" loading="lazy"></div>
 						<div :class="$style.episodeGuideContent">
 							<p>{{ i18n.ts.zalip.episodeInformation }}</p>
 							<h2>{{ episodeLabel(selectedEpisode) }}</h2>
 							<span v-if="selectedEpisode.runtimeMinutes || selectedEpisode.airDate">{{ episodeMeta(selectedEpisode) }}</span>
 							<p v-if="selectedEpisode.description">{{ selectedEpisode.description }}</p>
-							<button type="button" class="_button" :class="$style.episodeDiscussButton" @click="selectDiscussionScope('episode')"><i class="ti ti-messages"></i> {{ selectedEpisode.discussionNoteId ? i18n.ts.zalip.episodeComments : i18n.ts.zalip.discussEpisode }}</button>
+							<button type="button" class="_button" :class="$style.episodeDiscussButton" @click="selectDiscussionScope('episode')"><i class="ti ti-messages" aria-hidden="true"></i> {{ selectedEpisode.discussionNoteId ? i18n.ts.zalip.episodeComments : i18n.ts.zalip.discussEpisode }}</button>
 						</div>
 					</section>
 					<section v-if="work.galleryPaths.length" :class="$style.gallery">
-						<h2><i class="ti ti-photo"></i> Кадры</h2>
+						<h2><i class="ti ti-photo" aria-hidden="true"></i> Кадры</h2>
 						<div :class="$style.galleryGrid">
 							<a v-for="path in work.galleryPaths" :key="path" :href="tmdbBackdrop(path)" target="_blank" rel="noopener noreferrer" :aria-label="`Открыть кадр из ${work.title}`"><img :src="tmdbGalleryImage(path)" alt="" loading="lazy"></a>
 						</div>
 					</section>
 					<section ref="discussionSection" :class="$style.discussionArea">
 						<div v-if="work.seasons.length" :class="$style.discussionScope" role="group" :aria-label="i18n.ts.zalip.discussionContext">
-							<button type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionScope === 'work' }]" :aria-pressed="discussionScope === 'work'" @click="selectDiscussionScope('work')"><i class="ti ti-movie"></i> {{ i18n.ts.zalip.workDiscussionScope }}</button>
-							<button v-if="selectedEpisode" type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionScope === 'episode' }]" :aria-pressed="discussionScope === 'episode'" @click="selectDiscussionScope('episode')"><i class="ti ti-device-tv"></i> {{ episodeLabel(selectedEpisode) }}</button>
+							<button type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionScope === 'work' }]" :aria-pressed="discussionScope === 'work'" @click="selectDiscussionScope('work')"><i class="ti ti-movie" aria-hidden="true"></i> {{ i18n.ts.zalip.workDiscussionScope }}</button>
+							<button v-if="selectedEpisode" type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionScope === 'episode' }]" :aria-pressed="discussionScope === 'episode'" @click="selectDiscussionScope('episode')"><i class="ti ti-device-tv" aria-hidden="true"></i> {{ episodeLabel(selectedEpisode) }}</button>
 						</div>
 						<ZalipDiscussionPanel v-if="activeDiscussionNoteId" :noteId="activeDiscussionNoteId" :heading="activeDiscussionHeading"/>
 						<section v-else :class="$style.discussionPending">
-							<p><i class="ti ti-messages"></i> {{ activeDiscussionEmptyText }}</p>
-							<button v-if="$i" type="button" class="_button" :class="$style.openDiscussion" :disabled="openingDiscussionScope != null" @click="openActiveDiscussion"><i :class="openingDiscussionScope != null ? 'ti ti-loader-2 ti-spin' : 'ti ti-message-plus'"></i> {{ openingDiscussionScope != null ? i18n.ts.zalip.openingDiscussion : i18n.ts.zalip.startDiscussion }}</button>
-							<button v-else type="button" class="_button" :class="$style.openDiscussion" @click="signInForDiscussion"><i class="ti ti-login"></i> {{ i18n.ts.zalip.loginToComment }}</button>
+							<p><i class="ti ti-messages" aria-hidden="true"></i> {{ activeDiscussionEmptyText }}</p>
+							<button v-if="$i" type="button" class="_button" :class="$style.openDiscussion" :disabled="openingDiscussionScope != null" @click="openActiveDiscussion"><i :class="openingDiscussionScope != null ? 'ti ti-loader-2 ti-spin' : 'ti ti-message-plus'" aria-hidden="true"></i> {{ openingDiscussionScope != null ? i18n.ts.zalip.openingDiscussion : i18n.ts.zalip.startDiscussion }}</button>
+							<button v-else type="button" class="_button" :class="$style.openDiscussion" @click="signInForDiscussion"><i class="ti ti-login" aria-hidden="true"></i> {{ i18n.ts.zalip.loginToComment }}</button>
 							<p v-if="discussionError" :class="$style.discussionError">{{ discussionError }}</p>
 						</section>
 					</section>
@@ -140,11 +125,37 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</div>
 	<ZalipRatingDialog v-if="ratingDialogOpen" :initialRating="personalRating ?? 0" :saving="saving" :error="ratingError" @save="savePersonalRating" @later="closeRatingDialog" @closed="closeRatingDialog"/>
+
+	<Teleport to="body">
+		<MkModal v-if="episodeMenuOpen" ref="episodeModal" v-slot="{ maxHeight }" :class="$style.voiceOverlay" preferType="popup" :anchorElement="episodeAnchor" @click="episodeModal?.close()" @esc="episodeModal?.close()" @closed="episodeMenuOpen = false">
+			<section :class="$style.episodeMenu" :style="maxHeight == null ? undefined : { maxHeight: `min(${maxHeight}px, 55dvh)` }" role="dialog" aria-modal="true" :aria-label="i18n.ts.zalip.workEpisodes">
+				<label :class="$style.menuSearch"><i class="ti ti-search" aria-hidden="true"></i><input v-model="episodeQuery" type="search" :placeholder="i18n.ts.zalip.playerEpisodeSearch" :aria-label="i18n.ts.zalip.playerEpisodeSearch" @keydown.esc.stop.prevent="episodeModal?.close()"></label>
+				<div :class="$style.episodeChoices">
+					<button v-for="episode in filteredEpisodes" :key="episode.id" type="button" class="_button" :class="{ [$style.menuSelected]: selectedEpisodeId === episode.id }" :aria-pressed="selectedEpisodeId === episode.id" @click="selectEpisode(episode)">{{ i18n.tsx.zalip.playerEpisodeNumber({ number: episode.episodeNumber }) }}<i v-if="selectedEpisodeId === episode.id" class="ti ti-check" aria-hidden="true"></i></button>
+					<p v-if="!filteredEpisodes.length">{{ i18n.ts.zalip.searchNoResults }}</p>
+				</div>
+			</section>
+		</MkModal>
+		<MkModal v-if="voiceMenuOpen" ref="voiceModal" :class="$style.voiceOverlay" preferType="dialog" :returnFocusTo="voiceAnchor" @click="voiceModal?.close()" @esc="voiceModal?.close()" @closed="voiceMenuOpen = false">
+			<section :class="$style.voiceDrawer" :style="viewportWidth <= 600 ? undefined : voicePanelPosition" role="dialog" aria-modal="true" :aria-label="i18n.ts.zalip.playerVoices">
+				<header><h2>{{ i18n.ts.zalip.playerTab }}</h2><button type="button" class="_button" :aria-label="i18n.ts.close" @click="voiceModal?.close()"><i class="ti ti-x" aria-hidden="true"></i></button></header>
+				<span :class="$style.providerPill">ALLOHA</span>
+				<h3>{{ i18n.ts.zalip.playerVoices }}</h3>
+				<label :class="$style.menuSearch"><i class="ti ti-search" aria-hidden="true"></i><input v-model="voiceQuery" type="search" :placeholder="i18n.ts.zalip.playerVoiceSearch" :aria-label="i18n.ts.zalip.playerVoiceSearch" @keydown.esc.stop.prevent="voiceModal?.close()"></label>
+				<div :class="$style.voiceList">
+					<button v-for="translation in filteredTranslations" :key="translation.id" type="button" class="_button" :class="{ [$style.menuSelected]: selectedAllohaTranslationId === translation.id }" :aria-pressed="selectedAllohaTranslationId === translation.id" @click="selectTranslation(translation.id)"><span>{{ translation.name }}</span><small v-if="translation.quality">{{ translation.quality }}</small><i v-if="selectedAllohaTranslationId === translation.id" class="ti ti-check" aria-hidden="true"></i></button>
+					<p v-if="!filteredTranslations.length">{{ i18n.ts.zalip.searchNoResults }}</p>
+				</div>
+			</section>
+		</MkModal>
+	</Teleport>
 </PageWithHeader>
 </template>
 
 <script lang="ts" setup>
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, useTemplateRef, watch } from 'vue';
+import MkModal from '@/components/MkModal.vue';
+import { getEpisodeProgress } from '@/utility/zalip-episode-progress.js';
 import { $i } from '@/i.js';
 import { i18n } from '@/i18n.js';
 import * as os from '@/os.js';
@@ -167,6 +178,9 @@ type ZalipWork = {
 	runtimeMinutes: number | null;
 	posterPath: string | null;
 	backdropPath: string | null;
+	logoPath: string | null;
+	communityRating: number | null;
+	ratingCount: number;
 	galleryPaths: string[];
 	trailerYoutubeKey: string | null;
 	seasons: Array<{
@@ -215,6 +229,24 @@ type AllohaPlayback = {
 	lastCheckedAt: string | null;
 };
 
+const viewportWidth = ref(window.innerWidth);
+
+function updateViewport(): void {
+	viewportWidth.value = window.innerWidth;
+	if (voiceMenuOpen.value) void nextTick(updateVoicePanelPosition);
+}
+
+window.addEventListener('resize', updateViewport, { passive: true });
+onBeforeUnmount(() => window.removeEventListener('resize', updateViewport));
+const voiceMenuOpen = ref(false);
+const episodeMenuOpen = ref(false);
+const voiceAnchor = ref<HTMLElement | null>(null);
+const episodeAnchor = ref<HTMLElement | null>(null);
+const voiceModal = useTemplateRef('voiceModal');
+const episodeModal = useTemplateRef('episodeModal');
+const watchFrame = useTemplateRef('watchFrame');
+const voicePanelPosition = ref<{ top: string; left: string; width: string; height: string }>();
+const episodeQuery = ref('');
 const props = defineProps<{ slug: string }>();
 const work = ref<ZalipWork | null>(null);
 const pending = ref(true);
@@ -233,7 +265,7 @@ const voiceQuery = ref('');
 const filteredTranslations = computed(() => (allohaPlayback.value?.translations ?? []).filter(translation => translation.name.toLocaleLowerCase('ru').includes(voiceQuery.value.trim().toLocaleLowerCase('ru'))));
 const selectedVoiceLabel = computed(() => {
 	const translation = allohaPlayback.value?.translations.find(item => item.id === selectedAllohaTranslationId.value);
-	return translation ? translationLabel(translation) : 'Alloha';
+	return translation?.name ?? 'Alloha';
 });
 const discussionNoteId = ref<string | null>(null);
 const discussionError = ref<string | null>(null);
@@ -250,6 +282,10 @@ const ratingDialogOpen = ref(false);
 const ratingError = ref<string | null>(null);
 const episodeDrag = useZalipHorizontalDrag();
 const selectedEpisode = computed(() => episodes.value.find(episode => episode.id === selectedEpisodeId.value) ?? null);
+
+const filteredEpisodes = computed(() => episodes.value.filter(episode => `${episode.episodeNumber} ${episode.title}`.toLocaleLowerCase('ru').includes(episodeQuery.value.trim().toLocaleLowerCase('ru'))));
+const selectedEpisodeProgress = computed(() => getEpisodeProgress(work.value?.seasons ?? [], selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null));
+const episodeWatched = computed(() => selectedEpisodeProgress.value != null && episodesWatched.value >= selectedEpisodeProgress.value);
 
 const activeAllohaIframe = computed(() => {
 	if (allohaPlayback.value == null) return null;
@@ -319,11 +355,7 @@ function genreLink(genre: string): string {
 }
 
 function episodeMeta(episode: ZalipEpisode): string {
-	return [episode.airDate?.slice(0, 4), episode.runtimeMinutes != null ? `${episode.runtimeMinutes} мин.` : null].filter((value): value is string => value != null).join(' · ');
-}
-
-function translationLabel(translation: AllohaPlayback['translations'][number]): string {
-	return [translation.name, translation.quality, translation.resolutions.join('/')].filter((value): value is string => value != null && value !== '').join(' · ');
+	return [episode.airDate ? new Date(episode.airDate).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : null, episode.runtimeMinutes != null ? `${episode.runtimeMinutes} мин.` : null].filter((value): value is string => value != null).join(' · ');
 }
 
 function libraryStatusText(status: LibraryStatus): string {
@@ -357,6 +389,8 @@ function libraryStatusIcon(status: LibraryStatus): string {
 }
 
 async function load(): Promise<void> {
+	voiceMenuOpen.value = false;
+	episodeMenuOpen.value = false;
 	pending.value = true;
 	work.value = null;
 	saved.value = false;
@@ -418,7 +452,7 @@ async function loadSeason(season: ZalipSeason): Promise<void> {
 		});
 		if (selectedSeasonNumber.value === season.seasonNumber && episodeRequestId.value === requestId) {
 			episodes.value = loadedEpisodes;
-			selectedEpisodeId.value = loadedEpisodes.find(episode => episode.episodeNumber > episodesWatched.value)?.id
+			selectedEpisodeId.value = loadedEpisodes.find(episode => (getEpisodeProgress(work.value?.seasons ?? [], season.seasonNumber, episode.episodeNumber) ?? 0) > episodesWatched.value)?.id
 				?? loadedEpisodes[0]?.id
 				?? null;
 		}
@@ -437,6 +471,7 @@ async function selectSeason(season: ZalipSeason): Promise<void> {
 }
 
 function selectEpisode(episode: ZalipEpisode): void {
+	episodeModal.value?.close();
 	selectedEpisodeId.value = episode.id;
 	discussionScope.value = 'episode';
 }
@@ -444,6 +479,54 @@ function selectEpisode(episode: ZalipEpisode): void {
 function selectRelativeEpisode(offset: -1 | 1): void {
 	const episode = offset === -1 ? previousEpisode.value : nextEpisode.value;
 	if (episode != null) selectEpisode(episode);
+}
+
+function openEpisodeMenu(event: MouseEvent): void {
+	episodeAnchor.value = event.currentTarget as HTMLElement;
+	episodeQuery.value = '';
+	episodeMenuOpen.value = true;
+}
+
+function openVoiceMenu(event: MouseEvent): void {
+	voiceAnchor.value = event.currentTarget as HTMLElement;
+	voiceQuery.value = '';
+	updateVoicePanelPosition();
+	voiceMenuOpen.value = true;
+}
+
+function updateVoicePanelPosition(): void {
+	const rect = watchFrame.value?.getBoundingClientRect();
+	if (!rect) return;
+	const width = Math.min(340, Math.max(280, rect.width * 0.42), window.innerWidth - 32);
+	const height = Math.min(Math.max(320, rect.height), window.innerHeight - 32);
+	voicePanelPosition.value = {
+		top: `${Math.max(16, Math.min(rect.top, window.innerHeight - height - 16))}px`,
+		left: `${Math.max(16, Math.min(rect.right - width, window.innerWidth - width - 16))}px`,
+		width: `${width}px`,
+		height: `${height}px`,
+	};
+}
+
+function selectTranslation(id: number): void {
+	selectedAllohaTranslationId.value = id;
+	voiceModal.value?.close();
+}
+
+async function markEpisodeWatched(): Promise<void> {
+	if (!$i || saving.value || selectedEpisodeProgress.value == null || episodeWatched.value) return;
+	try {
+		await updateLibrary({ episodesWatched: selectedEpisodeProgress.value, status: libraryStatus.value === 'planned' ? 'watching' : libraryStatus.value });
+	} catch {
+		os.toast(i18n.ts.zalip.libraryUpdateFailed);
+	}
+}
+
+function showWorkMenu(event: MouseEvent): void {
+	void os.popupMenu([
+		{ text: i18n.ts.zalip.favoriteTitle, icon: 'ti ti-heart', active: isFavorite.value, action: () => void toggleFavorite() },
+		...(work.value?.seasons.length ? [{ text: i18n.ts.zalip.releaseSubscriptionTitle, icon: 'ti ti-bell', active: releaseSubscribed.value, action: () => void toggleReleaseSubscription() }] : []),
+		{ text: i18n.ts.zalip.discussTitle, icon: 'ti ti-messages', action: focusDiscussion },
+	], event.currentTarget);
 }
 
 function openAllohaPlayer(): void {
@@ -649,1217 +732,157 @@ watch(() => props.slug, () => void load(), { immediate: true });
 definePage(() => ({
 	title: work.value?.title ?? 'Zalip',
 	icon: 'ti ti-movie',
-	needWideArea: true,
 }));
 </script>
 
 <style lang="scss" module>
 .viewport { container-type: inline-size; }
-.page {
-	max-width: 1200px;
-	margin: 0 auto;
-	padding: 24px 24px 52px;
-	box-sizing: border-box;
+.page { max-width: 960px; margin: 0 auto; padding-bottom: 48px; min-width: 0; color: var(--zalip-social-fg); background: var(--zalip-social-panel); }
+.work, .content { min-width: 0; }
+.state { display: grid; place-content: center; gap: 12px; min-height: 300px; text-align: center; color: var(--zalip-social-muted); }
+.hero { position: relative; isolation: isolate; overflow: hidden; }
+.heroBackground { position: absolute; z-index: -2; inset: 0; }
+.heroBackground img { width: 100%; height: 100%; object-fit: cover; object-position: center top; }
+.hero::after { content: ''; position: absolute; z-index: -1; inset: 0; background: linear-gradient(0deg, var(--zalip-social-panel) 0%, color-mix(in srgb, var(--zalip-social-panel) 78%, transparent) 35%, color-mix(in srgb, var(--zalip-social-panel) 45%, transparent) 100%); }
+.heroInner { padding: 24px 28px 28px; }
+.breadcrumb { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; color: var(--zalip-social-muted); }
+.breadcrumb span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.titleLogo { display: flex; justify-content: flex-end; align-items: center; height: 100px; margin: 10px 8px 12px; }
+.titleLogo img { max-width: 220px; max-height: 80px; object-fit: contain; filter: drop-shadow(0 2px 8px var(--zalip-glass-shadow)); }
+.heroContent { display: grid; grid-template-columns: minmax(160px, 30%) minmax(0, 1fr); gap: 28px; margin-top: 32px; align-items: start; }
+.titleLogo + .heroContent { margin-top: 0; }
+.sidebar, .info { min-width: 0; }
+.poster { display: grid; place-items: center; aspect-ratio: 2 / 3; overflow: hidden; border-radius: 12px; background: var(--zalip-social-raised); box-shadow: 0 10px 35px var(--zalip-glass-shadow); }
+.poster img { width: 100%; height: 100%; object-fit: cover; }
+.poster > i { font-size: 48px; color: var(--zalip-social-muted); }
+.sidebarActions { display: grid; gap: 7px; margin-top: 12px; }
+.watchButton, .sideButton { display: flex; justify-content: center; align-items: center; gap: 8px; min-height: 40px; padding: 8px 12px; border-radius: 99px; font-size: 13px; font-weight: 650; }
+.watchButton { background: var(--MI_THEME-accent); color: var(--MI_THEME-fgOnAccent); }
+.sideButton { border: 1px solid var(--zalip-social-border); background: color-mix(in srgb, var(--zalip-social-panel) 60%, transparent); }
+.kind { margin: 2px 0 8px; font-size: 12px; color: var(--zalip-social-muted); }
+.info h1 { font-size: clamp(24px, 3.6cqi, 34px); letter-spacing: -.035em; line-height: 1.12; margin: 0; overflow-wrap: anywhere; }
+.original { color: var(--zalip-social-muted); font-size: 13px; line-height: 1.5; margin: 10px 0 0; }
+.ratings { margin: 20px 0 24px; }
+.communityRating { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.communityRating > i { color: var(--MI_THEME-accent); font-size: 23px; }
+.communityRating strong { font-size: 22px; }
+.communityRating small { color: var(--zalip-social-muted); font-size: 12px; }
+.facts { display: grid; grid-template-columns: minmax(90px, .8fr) minmax(0, 1.5fr); gap: 12px 14px; margin: 0; font-size: 13px; line-height: 1.5; }
+.facts dt { color: var(--zalip-social-muted); }
+.facts dd { margin: 0; overflow-wrap: anywhere; }
+.genres { display: flex; gap: 6px 10px; flex-wrap: wrap; }
+.genres a { border-bottom: 1px solid var(--zalip-social-border); text-decoration: none; }
+.actionStrip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; padding: 8px 24px 20px; }
+.actionStrip button { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 8px; min-height: 76px; border-radius: 16px; padding: 14px 6px 8px; color: var(--zalip-social-muted); font-size: 12px; line-height: 1.4; text-align: center; }
+.actionStrip i { font-size: 25px; }
+.actionStrip button:hover { background: var(--zalip-accent-wash); }
+.actionStrip .actionActive, .actionActive { color: var(--MI_THEME-accent); }
+.description { margin: 0; padding: 0 28px 30px; line-height: 1.7; font-size: 15px; white-space: pre-line; }
+.content { padding: 0 24px; }
+.player { scroll-margin-top: 20px; }
+.playerTabs { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin-bottom: 18px; padding: 2px; }
+.playerTab { flex: 0 0 auto; display: flex; align-items: center; gap: 7px; padding: 10px 12px; border: 1px solid transparent; border-radius: 14px; color: var(--zalip-social-muted); font-weight: 600; font-size: 13px; }
+.playerTabActive { color: var(--zalip-social-fg); background: var(--zalip-accent-wash); border-color: var(--zalip-accent-border); }
+.watchFrame { overflow: hidden; border-radius: 16px; background: var(--zalip-social-raised); }
+.playerFrame, .playerPreview { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; background: var(--zalip-social-bg); }
+.playerFrame iframe { display: block; width: 100%; height: 100%; border: 0; }
+.playerPreview { display: grid; place-items: center; }
+.playerPreview > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.playOverlay { position: relative; display: grid; place-items: center; width: 72px; height: 72px; border: 2px solid var(--MI_THEME-fgOnAccent); border-radius: 8px; color: var(--MI_THEME-fgOnAccent); background: color-mix(in srgb, var(--MI_THEME-accent) 65%, transparent); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+.playOverlay i { font-size: 38px; }
+.playerState { position: relative; display: flex; align-items: center; gap: 9px; max-width: 80%; box-sizing: border-box; margin: 0; padding: 16px; border-radius: 16px; background: color-mix(in srgb, var(--zalip-social-panel) 90%, transparent); color: var(--zalip-social-fg); line-height: 1.5; font-size: 13px; }
+.playerToolbar { display: flex; align-items: center; gap: 8px; padding: 10px; flex-wrap: wrap; }
+.episodeControls { display: flex; align-items: center; gap: 5px; }
+.episodeControls button, .voiceButton { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; padding: 9px 11px; border-radius: 12px; background: var(--zalip-social-hover); font-size: 12px; font-weight: 600; }
+.episodeControls button:disabled { opacity: .35; }
+.voiceButton { margin-left: auto; max-width: 52%; }
+.voiceButton span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.voiceButton i { flex-shrink: 0; font-size: 18px; }
+.watched { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 6px; font-size: 11px; }
+.watched i { font-size: 18px; }
+.playerEpisodes { margin-top: 12px; }
+.seasonPicker { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; font-size: 12px; color: var(--zalip-social-muted); }
+.seasonPicker > div { display: flex; gap: 6px; overflow-x: auto; }
+.seasonPicker button { min-width: 34px; padding: 8px 10px; border-radius: 10px; background: var(--zalip-social-raised); }
+.seasonPicker .selectedSeasonPill { background: var(--zalip-accent-soft); color: var(--MI_THEME-accent); }
+.episodeRail { display: flex; gap: 10px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; padding: 2px 0 12px; touch-action: pan-x pan-y; }
+.episodeTile { flex: 0 0 132px; min-width: 0; text-align: left; }
+.episodeThumb { position: relative; display: grid; place-items: center; aspect-ratio: 16 / 10; overflow: hidden; border-radius: 12px; background: var(--zalip-social-raised); }
+.episodeThumb > img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.selectedPlay { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in srgb, var(--zalip-social-panel) 20%, transparent); color: var(--MI_THEME-accent); font-size: 34px; }
+.selectedPlay i { filter: drop-shadow(0 1px 3px var(--zalip-social-panel)); }
+.episodeTile strong { display: block; margin-top: 8px; font-size: 13px; }
+.episodeTile small { display: block; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--zalip-social-muted); font-size: 11px; }
+.selectedEpisodeTile .episodeThumb { outline: 2px solid var(--MI_THEME-accent); outline-offset: -2px; }
+.episodeRailState { color: var(--zalip-social-muted); font-size: 13px; }
+.episodeGuide { margin: 28px 0; }
+.episodeGuideContent > p:first-child { margin: 0 0 12px; font-weight: 700; font-size: 16px; color: var(--zalip-social-fg); }
+.episodeGuideContent h2 { font-size: 15px; margin: 0 0 8px; }
+.episodeGuideContent > span, .episodeGuideContent > p { font-size: 13px; color: var(--zalip-social-muted); line-height: 1.6; }
+.episodeDiscussButton { display: inline-flex; align-items: center; gap: 7px; margin-top: 12px; color: var(--MI_THEME-accent); font-size: 13px; }
+.gallery { margin: 32px 0; }
+.gallery h2 { font-size: 17px; }
+.galleryGrid { display: flex; gap: 10px; overflow-x: auto; }
+.galleryGrid a { flex: 0 0 180px; }
+.galleryGrid img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 12px; }
+.discussionArea { margin-top: 30px; scroll-margin-top: 20px; }
+.discussionScope { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 16px; }
+.scopeButton { flex: 0 0 auto; padding: 10px 13px; border-radius: 99px; background: var(--zalip-social-raised); color: var(--zalip-social-muted); font-size: 12px; }
+.scopeButtonActive { background: var(--zalip-accent-soft); color: var(--MI_THEME-accent); }
+.discussionPending { padding: 20px; border: 1px solid var(--zalip-social-border); border-radius: 16px; color: var(--zalip-social-muted); font-size: 14px; }
+.openDiscussion { padding: 10px 16px; border-radius: 99px; background: var(--MI_THEME-accent); color: var(--MI_THEME-fgOnAccent); }
+.discussionError { color: var(--MI_THEME-error); }
+.episodeMenu, .voiceDrawer { box-sizing: border-box; background: var(--zalip-social-raised); color: var(--zalip-social-fg); box-shadow: 0 8px 40px var(--zalip-glass-shadow); }
+.episodeMenu { width: min(250px, calc(100vw - 32px)); max-height: 55dvh; padding: 8px; border-radius: 16px; display: flex; flex-direction: column; }
+.menuSearch { display: flex; flex-shrink: 0; align-items: center; gap: 8px; border: 1px solid transparent; border-radius: 12px; padding: 10px; background: var(--zalip-social-hover); color: var(--zalip-social-muted); }
+.menuSearch:focus-within { border-color: var(--MI_THEME-accent); }
+.menuSearch input { min-width: 0; width: 100%; border: 0; outline: none; padding: 0; color: var(--zalip-social-fg); background: transparent; font: inherit; font-size: 14px; }
+.episodeChoices { overflow-y: auto; min-height: 0; padding-top: 6px; }
+.episodeChoices button { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 12px 10px; border-radius: 10px; text-align: left; font-size: 14px; }
+.episodeChoices p, .voiceList p { color: var(--zalip-social-muted); font-size: 13px; }
+.voiceOverlay :global(._modalBg) { -webkit-backdrop-filter: none; backdrop-filter: none; }
+.voiceDrawer { position: fixed; width: min(340px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 18px; border-radius: 16px; }
+.voiceDrawer header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.voiceDrawer h2 { margin: 0; font-size: 18px; }
+.voiceDrawer header button { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 12px; background: var(--zalip-social-hover); }
+.providerPill { display: inline-block; margin: 18px 0; padding: 9px 12px; border-radius: 99px; background: var(--zalip-social-hover); font-size: 13px; font-weight: 700; }
+.voiceDrawer h3 { margin: 0 0 14px; padding-top: 18px; border-top: 1px solid var(--zalip-social-border); font-size: 16px; }
+.voiceList { display: grid; gap: 6px; margin-top: 12px; }
+.voiceList button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 42px; padding: 10px 12px; box-sizing: border-box; border-radius: 12px; background: var(--zalip-social-hover); text-align: left; }
+.voiceList button span { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+.voiceList small { color: var(--zalip-social-muted); font-size: 11px; }
+.voiceList .menuSelected, .episodeChoices .menuSelected { background: var(--zalip-accent-soft); color: var(--MI_THEME-accent); }
+@container (max-width: 600px) {
+	.heroInner { padding: 16px 18px 20px; }
+	.breadcrumb { font-size: 11px; }
+	.titleLogo { justify-content: center; height: 76px; margin: 20px 0; }
+	.titleLogo img { max-width: 180px; max-height: 76px; }
+	.heroContent { display: flex; flex-direction: column; gap: 28px; margin-top: 28px; }
+	.sidebar { width: min(62%, 240px); min-width: 180px; margin: 0 auto; }
+	.heroBackground { max-height: 660px; }
+	.heroBackground img { object-position: 58% top; }
+	.hero::after { background: linear-gradient(0deg, var(--zalip-social-panel) 3%, var(--zalip-social-panel) 25%, color-mix(in srgb, var(--zalip-social-panel) 60%, transparent) 60%, color-mix(in srgb, var(--zalip-social-panel) 35%, transparent)); }
+	.info { width: 100%; }
+	.info h1 { font-size: 27px; }
+	.kind { font-size: 12px; }
+	.ratings { margin: 16px 0 22px; }
+	.facts { font-size: 13px; grid-template-columns: minmax(95px, 1fr) minmax(0, 1.5fr); }
+	.actionStrip { padding: 0 12px 20px; gap: 2px; }
+	.actionStrip button { font-size: 11px; padding-inline: 2px; }
+	.description { padding: 0 18px 26px; font-size: 14px; }
+	.content { padding: 0 12px; }
+	.playerTabs { gap: 3px; }
+	.playerTab { padding: 10px; font-size: 12px; }
+	.playerToolbar { gap: 7px; padding: 10px; }
+	.voiceButton { flex-basis: 100%; max-width: 100%; min-width: 0; }
+	.watched { margin-left: auto; max-width: 40%; font-size: 10px; }
+	.episodeControls { gap: 4px; }
+	.episodeControls button { padding: 8px 9px; font-size: 11px; }
+	.episodeTile { flex-basis: 112px; }
+	.playOverlay { width: 58px; height: 58px; }
+	.playerState { padding: 12px; font-size: 12px; }
 }
-
-.state {
-	display: grid;
-	place-items: center;
-	gap: 10px;
-	min-height: 240px;
-	border: 1px dashed var(--MI_THEME-divider);
-	border-radius: 20px;
-	color: var(--MI_THEME-fgTransparentWeak);
-}
-
-.state i {
-	font-size: 2rem;
-	color: var(--MI_THEME-accent);
-}
-
-.work {
-	display: grid;
-	gap: 24px;
-}
-
-.hero {
-	position: relative;
-	overflow: hidden;
-	border: 1px solid var(--MI_THEME-divider);
-	border-radius: 20px;
-	background: var(--zalip-social-panel);
-}
-
-.hero::after {
-	position: absolute;
-	inset: 0;
-	background: linear-gradient(90deg, color-mix(in srgb, var(--MI_THEME-bg) 96%, transparent) 0%, color-mix(in srgb, var(--MI_THEME-bg) 78%, transparent) 50%, color-mix(in srgb, var(--MI_THEME-bg) 56%, transparent) 100%), linear-gradient(0deg, color-mix(in srgb, var(--MI_THEME-bg) 98%, transparent) 0%, color-mix(in srgb, var(--MI_THEME-bg) 38%, transparent) 62%, color-mix(in srgb, var(--MI_THEME-bg) 60%, transparent) 100%);
-	content: '';
-	pointer-events: none;
-}
-
-.heroBackground {
-	position: absolute;
-	inset: 0;
-	opacity: 0.9;
-}
-
-.heroBackground img {
-	display: block;
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-}
-
-.heroContent {
-	position: relative;
-	z-index: 1;
-	display: grid;
-	grid-template-columns: 200px minmax(0, 1fr);
-	grid-template-rows: auto 1fr;
-	align-items: start;
-	gap: 20px 28px;
-	padding: 28px;
-}
-
-.content {
-	min-width: 0;
-}
-
-.sidebar {
-	align-self: start;
-	grid-row: 1 / 3;
-}
-
-.poster {
-	display: grid;
-	place-items: center;
-	overflow: hidden;
-	aspect-ratio: 2 / 3;
-	border: 1px solid color-mix(in srgb, var(--MI_THEME-fg) 16%, transparent);
-	border-radius: calc(var(--MI-radius) + 4px);
-	background: linear-gradient(145deg, var(--MI_THEME-panelHighlight), color-mix(in srgb, var(--MI_THEME-accent) 30%, var(--MI_THEME-panel)));
-	color: var(--MI_THEME-accent);
-	font-size: 3rem;
-}
-
-.poster img {
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-}
-
-.sidebarActions {
-	display: grid;
-	gap: 8px;
-	margin-top: 12px;
-}
-
-.watchButton, .sideButton {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 8px;
-	min-height: 42px;
-	padding: 9px 12px;
-	border-radius: calc(var(--MI-radius) / 1.2);
-	font-size: 0.86rem;
-	font-weight: 750;
-}
-
-.watchButton {
-	background: var(--MI_THEME-accent);
-	color: var(--MI_THEME-fgOnAccent);
-}
-
-.sideButton {
-	border: 1px solid color-mix(in srgb, var(--MI_THEME-fg) 18%, transparent);
-	background: color-mix(in srgb, var(--MI_THEME-panel) 82%, transparent);
-	backdrop-filter: blur(12px);
-	color: var(--MI_THEME-fg);
-}
-
-.sideButtonActive {
-	border-color: color-mix(in srgb, var(--MI_THEME-accent) 72%, var(--MI_THEME-divider));
-	color: var(--MI_THEME-accent);
-}
-
-.quickActions {
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 6px;
-	margin-top: 8px;
-}
-
-.quickAction:last-child:nth-child(odd) {
-	grid-column: 1 / -1;
-}
-
-.quickAction {
-	display: flex;
-	min-width: 0;
-	min-height: 34px;
-	align-items: center;
-	justify-content: center;
-	gap: 5px;
-	padding: 6px 4px;
-	border: 1px solid color-mix(in srgb, var(--MI_THEME-fg) 14%, transparent);
-	border-radius: calc(var(--MI-radius) / 1.35);
-	background: color-mix(in srgb, var(--MI_THEME-panel) 72%, transparent);
-	backdrop-filter: blur(12px);
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.66rem;
-	font-weight: 700;
-	white-space: nowrap;
-}
-
-.quickAction i {
-	font-size: 0.9rem;
-}
-
-.quickActionActive {
-	border-color: color-mix(in srgb, var(--MI_THEME-accent) 68%, var(--MI_THEME-divider));
-	background: color-mix(in srgb, var(--MI_THEME-accent) 16%, var(--MI_THEME-panel));
-	color: var(--MI_THEME-accent);
-}
-
-.titleArea {
-	scroll-margin-top: 72px;
-}
-
-.titleContent {
-	min-width: 0;
-}
-
-.kind {
-	margin: 5px 0 8px;
-	font-size: 0.78rem;
-	font-weight: 700;
-	letter-spacing: 0.09em;
-	color: var(--MI_THEME-accent);
-}
-
-.info h1 {
-	margin: 0;
-	font-size: clamp(1.8rem, 3vw, 2.6rem);
-	line-height: 1.08;
-	letter-spacing: -0.035em;
-}
-
-.original {
-	margin: 8px 0 0;
-	color: var(--MI_THEME-fgTransparentWeak);
-}
-
-.genres {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px;
-	margin-top: 12px;
-}
-
-.genres a {
-	display: inline-flex;
-	align-items: center;
-	padding: 5px 9px;
-	border: 1px solid var(--MI_THEME-divider);
-	border-radius: 999px;
-	background: var(--MI_THEME-panel);
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.78rem;
-	font-weight: 650;
-	text-decoration: none;
-	transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
-}
-
-.genres a:hover, .genres a:focus-visible {
-	border-color: color-mix(in srgb, var(--MI_THEME-accent) 65%, var(--MI_THEME-divider));
-	background: color-mix(in srgb, var(--MI_THEME-accent) 14%, var(--MI_THEME-panel));
-	color: var(--MI_THEME-accent);
-}
-
-.description {
-	grid-column: 2;
-	max-width: 800px;
-	margin: 0;
-	white-space: pre-line;
-	line-height: 1.6;
-	color: color-mix(in srgb, var(--MI_THEME-fg) 82%, transparent);
-}
-
-.gallery {
-	margin-top: 24px;
-}
-
-.gallery h2 {
-	display: flex;
-	align-items: center;
-	gap: 7px;
-	margin: 0 0 10px;
-	font-size: 1rem;
-}
-
-.gallery h2 i {
-	color: var(--MI_THEME-accent);
-}
-
-.galleryGrid {
-	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
-	gap: 8px;
-}
-
-.galleryGrid a {
-	display: block;
-	overflow: hidden;
-	aspect-ratio: 16 / 9;
-	border-radius: 10px;
-	background: var(--MI_THEME-panelHighlight);
-}
-
-.galleryGrid img {
-	display: block;
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-	transition: transform 0.18s ease;
-}
-
-.galleryGrid a:hover img, .galleryGrid a:focus-visible img {
-	transform: scale(1.04);
-}
-
-.seasons {
-	margin-top: 24px;
-}
-
-.seasons h2 {
-	margin: 0 0 10px;
-	font-size: 1rem;
-}
-
-.player {
-	margin-top: 0;
-	scroll-margin-top: 72px;
-	overflow: hidden;
-	border: 1px solid var(--MI_THEME-divider);
-	border-radius: 18px;
-	background: var(--MI_THEME-panel);
-}
-
-.watchLayout { display: grid; min-width: 0; background: var(--zalip-social-panel); }
-.hasTranslations { grid-template-columns: minmax(0, 1fr) 228px; }
-.screen { min-width: 0; align-self: start; background: var(--zalip-social-bg); }
-.voices { display: flex; flex-direction: column; min-width: 0; max-height: 440px; padding: 16px; gap: 12px; border-left: 1px solid var(--zalip-social-border); box-sizing: border-box; }
-.voices h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 14px; }
-.voiceSearch { display: flex; align-items: center; gap: 7px; padding: 10px; border: 1px solid var(--zalip-social-border); border-radius: 10px; color: var(--zalip-social-muted); }
-.voiceSearch input { width: 100%; min-width: 0; border: 0; padding: 0; color: var(--zalip-social-fg); background: transparent; font-size: 12px; }
-.voiceList { display: grid; align-content: start; gap: 5px; overflow-y: auto; min-height: 0; }
-.voiceList button { display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 10px; border: 1px solid transparent; border-radius: 10px; font-size: 13px; text-align: left; }
-.voiceList button span { min-width: 0; overflow-wrap: anywhere; }
-.voiceList small { margin-left: auto; color: var(--zalip-social-muted); }
-.voiceList p { font-size: 13px; color: var(--zalip-social-muted); }
-.voiceList button:hover { background: var(--zalip-social-hover); }
-.voiceList .voiceSelected { border-color: var(--zalip-accent-border); background: var(--zalip-accent-soft); color: var(--MI_THEME-accent); }
-@container (max-width: 850px) {
-	.hasTranslations { grid-template-columns: 1fr; }
-	.voices { border-left: 0; border-top: 1px solid var(--zalip-social-border); padding: 14px; max-height: 220px; }
-	.voiceList { display: flex; overflow-x: auto; }
-	.voiceList button { flex: 0 0 auto; }
-	.voiceSearch { max-width: 320px; }
-}
-
-.playerTabs {
-	display: flex;
-	align-items: center;
-	min-height: 54px;
-	gap: 8px;
-	padding: 0 14px;
-	border-bottom: 1px solid var(--MI_THEME-divider);
-	overflow-x: auto;
-}
-
-.playerTab, .playerTabActive {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	min-height: 52px;
-	border-bottom: 2px solid transparent;
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.84rem;
-	font-weight: 700;
-	text-decoration: none;
-	white-space: nowrap;
-}
-
-.playerTabActive {
-	border-color: var(--MI_THEME-accent);
-	color: var(--MI_THEME-fg);
-}
-
-.playerState, .playerUnavailable {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	margin: 0;
-	padding: 24px 18px;
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.86rem;
-}
-
-.playerPreview, .playerFrame {
-	position: relative;
-	overflow: hidden;
-	aspect-ratio: 16 / 9;
-	background: #050607;
-}
-
-.playerPreview > img {
-	display: block;
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-	opacity: 0.68;
-}
-
-.playerPreviewShade {
-	position: absolute;
-	inset: 0;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	gap: 10px;
-	padding: 24px;
-	background: linear-gradient(90deg, rgb(0 0 0 / 74%), rgb(0 0 0 / 35%)), linear-gradient(0deg, rgb(0 0 0 / 56%), transparent 58%);
-	color: #fff;
-	text-align: center;
-}
-
-.playerPreviewShade > span {
-	font-size: 0.7rem;
-	font-weight: 800;
-	letter-spacing: 0.12em;
-	color: color-mix(in srgb, var(--MI_THEME-accent) 72%, white);
-}
-
-.playerPreviewShade > strong {
-	max-width: 540px;
-	font-size: clamp(1.1rem, 3vw, 1.7rem);
-	line-height: 1.15;
-}
-
-.playerButton {
-	display: inline-flex;
-	align-items: center;
-	gap: 8px;
-	margin-top: 4px;
-	padding: 10px 14px;
-	border-radius: 10px;
-	background: var(--MI_THEME-accent);
-	color: var(--MI_THEME-fgOnAccent);
-	font-weight: 800;
-}
-
-.playerFrame iframe {
-	display: block;
-	width: 100%;
-	height: 100%;
-	border: 0;
-}
-
-.playerToolbar {
-	display: grid;
-	grid-template-columns: auto minmax(0, 1fr) auto minmax(140px, 0.8fr);
-	align-items: center;
-	gap: 8px;
-	padding: 10px 12px;
-	border-bottom: 1px solid var(--MI_THEME-divider);
-	background: color-mix(in srgb, var(--MI_THEME-bg) 35%, var(--MI_THEME-panel));
-}
-
-.episodeNav {
-	display: grid;
-	place-items: center;
-	width: 34px;
-	height: 34px;
-	border-radius: 9px;
-	background: var(--MI_THEME-panelHighlight);
-	color: var(--MI_THEME-fg);
-}
-
-.episodeNav:disabled {
-	opacity: 0.42;
-}
-
-.nowPlaying {
-	display: grid;
-	gap: 1px;
-	min-width: 0;
-}
-
-.nowPlaying span {
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.68rem;
-	font-weight: 650;
-}
-
-.nowPlaying strong {
-	overflow: hidden;
-	font-size: 0.82rem;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.translation {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	min-width: 0;
-	padding: 0 8px;
-	border: 1px solid var(--MI_THEME-divider);
-	border-radius: 9px;
-	background: var(--MI_THEME-panel);
-	color: var(--MI_THEME-fgTransparentWeak);
-}
-
-.translation select {
-	min-width: 0;
-	width: 100%;
-	height: 34px;
-	padding: 0;
-	border: 0;
-	background: transparent;
-	color: var(--MI_THEME-fg);
-	font-size: 0.78rem;
-}
-
-.providerLabel {
-	justify-self: end;
-	padding: 8px 10px;
-	border-radius: 9px;
-	background: var(--MI_THEME-panelHighlight);
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.78rem;
-	font-weight: 700;
-}
-
-.providerNotice {
-	margin: 0;
-	padding: 10px 14px 0;
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.74rem;
-	line-height: 1.45;
-}
-
-.playerEpisodes {
-	padding: 14px;
-	scroll-margin-top: 80px;
-}
-
-.seasonPicker {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	margin-bottom: 12px;
-}
-
-.seasonPicker > span {
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.78rem;
-	font-weight: 700;
-}
-
-.seasonPicker > div {
-	display: flex;
-	gap: 5px;
-	overflow-x: auto;
-}
-
-.seasonPill {
-	min-width: 32px;
-	min-height: 30px;
-	padding: 0 8px;
-	border: 1px solid var(--MI_THEME-divider);
-	border-radius: calc(var(--MI-radius) / 2);
-	background: var(--MI_THEME-panelHighlight);
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.78rem;
-	font-weight: 750;
-}
-
-.selectedSeasonPill {
-	border-color: color-mix(in srgb, var(--MI_THEME-accent) 68%, var(--MI_THEME-divider));
-	background: color-mix(in srgb, var(--MI_THEME-accent) 18%, var(--MI_THEME-panel));
-	color: var(--MI_THEME-accent);
-}
-
-.episodeRailState {
-	margin: 0;
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.8rem;
-}
-
-.episodeRail {
-	display: flex;
-	gap: 10px;
-	overflow-x: auto;
-	padding-bottom: 2px;
-	scroll-snap-type: none;
-	scrollbar-width: none;
-	cursor: grab;
-}
-
-.episodeRail::-webkit-scrollbar {
-	display: none;
-}
-
-.episodeRail[data-dragging='true'] {
-	cursor: grabbing;
-	user-select: none;
-}
-
-.episodeTile {
-	display: grid;
-	grid-template-rows: 70px auto auto;
-	gap: 4px;
-	flex: 0 0 122px;
-	overflow: hidden;
-	padding: 0 0 8px;
-	border: 1px solid transparent;
-	border-radius: 10px;
-	background: transparent;
-	color: var(--MI_THEME-fg);
-	text-align: left;
-}
-
-.episodeTile > img, .episodeTileFallback {
-	width: 100%;
-	height: 70px;
-	border-radius: 9px;
-	object-fit: cover;
-	background: var(--MI_THEME-panelHighlight);
-}
-
-.episodeTileFallback {
-	display: grid;
-	place-items: center;
-	color: var(--MI_THEME-fgTransparentWeak);
-}
-
-.episodeTile strong, .episodeTile small {
-	overflow: hidden;
-	padding: 0 4px;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.episodeTile strong {
-	font-size: 0.76rem;
-}
-
-.episodeTile small {
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.68rem;
-}
-
-.selectedEpisodeTile {
-	border-color: var(--MI_THEME-accent);
-	background: color-mix(in srgb, var(--MI_THEME-accent) 12%, var(--MI_THEME-panel));
-}
-
-.episodeGuide {
-	display: grid;
-	grid-template-columns: minmax(150px, 230px) minmax(0, 1fr);
-	gap: 16px;
-	margin-top: 18px;
-	overflow: hidden;
-	border: 1px solid var(--MI_THEME-divider);
-	border-radius: 16px;
-	background: var(--MI_THEME-panel);
-}
-
-.episodeGuideStill {
-	min-height: 150px;
-	background: var(--MI_THEME-panelHighlight);
-}
-
-.episodeGuideStill img {
-	display: block;
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-}
-
-.episodeGuideContent {
-	display: grid;
-	align-content: center;
-	gap: 5px;
-	padding: 16px 18px 16px 0;
-}
-
-.episodeGuideContent > p {
-	margin: 0;
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.8rem;
-	line-height: 1.5;
-}
-
-.episodeGuideContent > p:first-child {
-	font-size: 0.72rem;
-	font-weight: 750;
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
-}
-
-.episodeGuideContent h2 {
-	margin: 0;
-	font-size: 1.05rem;
-}
-
-.episodeGuideContent > span {
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.78rem;
-}
-
-.episodeDiscussButton {
-	justify-self: start;
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	margin-top: 5px;
-	padding: 7px 10px;
-	border-radius: 8px;
-	background: color-mix(in srgb, var(--MI_THEME-accent) 14%, var(--MI_THEME-panelHighlight));
-	color: var(--MI_THEME-accent);
-	font-size: 0.8rem;
-	font-weight: 700;
-}
-
-.seasonList {
-	display: grid;
-	gap: 8px;
-}
-
-.seasonBlock {
-	border-radius: 12px;
-	background: var(--MI_THEME-panel);
-}
-
-.season {
-	display: flex;
-	width: 100%;
-	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
-	padding: 11px 13px;
-	border-radius: 12px;
-	color: var(--MI_THEME-fg);
-	text-align: left;
-}
-
-.selectedSeason {
-	background: color-mix(in srgb, var(--MI_THEME-accent) 18%, var(--MI_THEME-panel));
-}
-
-.season strong {
-	font-size: 0.9rem;
-}
-
-.season p, .season > span {
-	margin: 3px 0 0;
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.78rem;
-}
-
-.episodes {
-	display: grid;
-	gap: 1px;
-	margin: 0 12px 12px;
-	overflow: hidden;
-	border: 1px solid var(--MI_THEME-divider);
-	border-radius: 10px;
-}
-
-.episode, .episodeState {
-	margin: 0;
-	padding: 10px 12px;
-	background: var(--MI_THEME-panelHighlight);
-}
-
-.episode {
-	display: grid;
-	gap: 3px;
-}
-
-.episodeWithStill {
-	grid-template-columns: 132px minmax(0, 1fr);
-	gap: 10px;
-}
-
-.episodeStill {
-	width: 100%;
-	height: 100%;
-	min-height: 74px;
-	border-radius: 7px;
-	object-fit: cover;
-	background: var(--MI_THEME-panel);
-}
-
-.episodeContent {
-	display: grid;
-	gap: 3px;
-}
-
-.episode strong {
-	font-size: 0.85rem;
-}
-
-.episode span, .episode p, .episodeState {
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.78rem;
-}
-
-.episode p {
-	margin: 4px 0 0;
-	line-height: 1.45;
-}
-
-.episodeActions {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	margin-top: 4px;
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.78rem;
-}
-
-.episodeActions a, .episodeActions button {
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;
-	padding: 5px 7px;
-	border-radius: 7px;
-	background: var(--MI_THEME-panel);
-	color: var(--MI_THEME-accent);
-	font-weight: 700;
-	text-decoration: none;
-}
-
-.discussionArea {
-	scroll-margin-top: 72px;
-}
-
-.discussionScope {
-	display: flex;
-	gap: 7px;
-	margin-top: 28px;
-	padding-bottom: 10px;
-	border-bottom: 1px solid var(--MI_THEME-divider);
-	overflow-x: auto;
-}
-
-.scopeButton {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	flex: 0 0 auto;
-	padding: 8px 11px;
-	border: 1px solid var(--MI_THEME-divider);
-	border-radius: 999px;
-	background: var(--MI_THEME-panel);
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.82rem;
-	font-weight: 700;
-}
-
-.scopeButtonActive {
-	border-color: color-mix(in srgb, var(--MI_THEME-accent) 64%, var(--MI_THEME-divider));
-	background: color-mix(in srgb, var(--MI_THEME-accent) 15%, var(--MI_THEME-panel));
-	color: var(--MI_THEME-accent);
-}
-
-.discussionPending {
-	margin-top: 28px;
-	padding: 18px;
-	border: 1px dashed var(--MI_THEME-divider);
-	border-radius: 14px;
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.86rem;
-}
-
-.discussionPending p {
-	margin: 0;
-}
-
-.discussionPending p + p {
-	margin-top: 10px;
-}
-
-.openDiscussion {
-	display: inline-flex;
-	align-items: center;
-	gap: 7px;
-	margin-top: 12px;
-	padding: 8px 11px;
-	border-radius: 9px;
-	background: var(--MI_THEME-accent);
-	color: var(--MI_THEME-fgOnAccent);
-	font-weight: 700;
-}
-
-.discussionError {
-	color: var(--MI_THEME-error);
-}
-
 @media (max-width: 600px) {
-	.page {
-		padding: 12px var(--MI-margin) 28px;
-	}
-
-	.work {
-		display: flex;
-		flex-direction: column;
-		gap: 18px;
-	}
-
-	.hero {
-		min-height: 0;
-		border-radius: calc(var(--MI-radius) + 4px);
-	}
-
-	.hero::after {
-		background: linear-gradient(0deg, color-mix(in srgb, var(--MI_THEME-bg) 96%, transparent) 0%, color-mix(in srgb, var(--MI_THEME-bg) 74%, transparent) 62%, color-mix(in srgb, var(--MI_THEME-bg) 54%, transparent) 100%);
-	}
-
-	.heroContent {
-		display: flex;
-		flex-direction: column;
-		align-items: stretch;
-		gap: 18px;
-		min-height: 0;
-		padding: 108px 16px 18px;
-	}
-
-	.sidebar {
-		display: grid;
-		grid-template-columns: minmax(102px, 116px) minmax(0, 1fr);
-		align-items: start;
-		gap: 0 14px;
-	}
-
-	.poster {
-		border-radius: calc(var(--MI-radius) + 2px);
-	}
-
-	.sidebarActions {
-		grid-template-columns: minmax(0, 1fr);
-		gap: 8px;
-		margin: 0;
-	}
-
-	.quickActions {
-		grid-column: 1 / -1;
-		margin-top: 10px;
-	}
-
-	.quickAction {
-		min-height: 38px;
-		font-size: 0.7rem;
-	}
-
-	.watchButton, .sideButton {
-		min-height: 44px;
-		padding: 9px 10px;
-		font-size: 0.78rem;
-	}
-
-	.watchButton {
-		grid-column: auto;
-	}
-
-	.info {
-		min-width: 0;
-	}
-
-	.kind {
-		margin-top: 0;
-	}
-
-	.info h1 {
-		font-size: clamp(1.7rem, 9vw, 2.2rem);
-	}
-
-	.description {
-		margin-top: 16px;
-		line-height: 1.55;
-	}
-
-	.galleryGrid {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-	}
-
-	.episodeWithStill {
-		grid-template-columns: 108px minmax(0, 1fr);
-	}
-
-	.playerTabs {
-		min-height: 46px;
-		gap: 2px;
-		padding-inline: 8px;
-	}
-
-	.playerTab, .playerTabActive {
-		min-height: 44px;
-		padding: 0 7px;
-		font-size: 0.72rem;
-	}
-
-	.playerToolbar {
-		grid-template-columns: auto minmax(0, 1fr) auto;
-		gap: 10px;
-		padding: 10px;
-	}
-
-	.episodeNav {
-		width: 40px;
-		height: 40px;
-	}
-
-	.translation, .providerLabel {
-		grid-column: 1 / -1;
-		justify-self: stretch;
-	}
-
-	.providerLabel {
-		justify-self: stretch;
-		text-align: center;
-	}
-
-	.episodeTile {
-		flex-basis: 118px;
-	}
-
-	.episodeGuide {
-		grid-template-columns: 1fr;
-		gap: 0;
-	}
-
-	.episodeGuideStill {
-		aspect-ratio: 16 / 8;
-		min-height: 0;
-	}
-
-	.episodeGuideContent {
-		padding: 14px;
-	}
-
-	.discussionScope {
-		margin-top: 20px;
-	}
-}
-
-@media (max-width: 420px) {
-	.sidebar {
-		grid-template-columns: 96px minmax(0, 1fr);
-		gap: 0 12px;
-	}
-
-	.watchButton, .sideButton {
-		padding-inline: 7px;
-	}
-
-	.playerTab, .playerTabActive {
-		justify-content: center;
-		min-width: 42px;
-		padding-inline: 9px;
-	}
-
-	.playerTab > span, .playerTabActive > span {
-		display: none;
-	}
-
-	.playerEpisodes {
-		padding: 12px 10px;
-	}
-
-	.seasonPill {
-		min-width: 36px;
-		min-height: 36px;
-	}
-}
-
-/* Ongaku title-card layout: compact facts first, media and discussion below. */
-.page {
-	max-width: var(--zalip-content-max-width);
-	margin: 0 auto;
-	padding: 24px var(--zalip-container-offset) 56px;
-}
-
-.work {
-	gap: 16px;
-}
-
-.hero {
-	min-height: 0;
-	border: 0;
-	border-radius: var(--zalip-radius-big);
-	background: var(--MI_THEME-panel);
-}
-
-.heroBackground {
-	opacity: 0.5;
-}
-
-.hero::after {
-	background: linear-gradient(0deg, var(--MI_THEME-panel), color-mix(in srgb, var(--MI_THEME-panel) 70%, transparent) 65%, color-mix(in srgb, var(--MI_THEME-panel) 40%, transparent));
-}
-
-.heroContent {
-	grid-template-columns: 200px minmax(0, 1fr);
-	grid-template-rows: auto 1fr;
-	align-items: start;
-	gap: 24px;
-	min-height: 0;
-	padding: 24px;
-}
-
-.sidebar {
-	grid-row: 1 / span 2;
-}
-
-.poster {
-	border: 0;
-	border-radius: var(--zalip-radius-small);
-}
-
-.sidebarActions {
-	gap: 6px;
-	margin-top: 10px;
-}
-
-.watchButton, .sideButton {
-	min-height: 44px;
-	border-radius: var(--zalip-radius);
-	font-size: 1rem;
-}
-
-.quickActions {
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	margin-top: 6px;
-}
-
-.quickAction, .quickAction:last-child:nth-child(odd) {
-	grid-column: auto;
-	min-height: 44px;
-	border: 0;
-	background: var(--MI_THEME-panelHighlight);
-}
-
-.quickAction span {
-	display: none;
-}
-
-.quickAction.ratingAction span {
-	display: inline;
-}
-
-.info h1 {
-	font-size: clamp(1.65rem, 4vw, 2.45rem);
-	line-height: 1.12;
-}
-
-.kind {
-	margin-top: 2px;
-}
-
-.genres {
-	margin-top: 10px;
-}
-
-.genres a {
-	padding: 8px 10px;
-	border: 0;
-	border-radius: 14px;
-	background: var(--MI_THEME-panelHighlight);
-	font-size: 0.9rem;
-}
-
-.description {
-	align-self: start;
-	margin-top: 0;
-	font-size: 1rem;
-	line-height: 1.55;
-}
-
-.player {
-	margin-top: 0;
-	border: 0;
-	border-radius: var(--zalip-radius-big);
-}
-
-.playerTabs {
-	min-height: 48px;
-	padding: 0 12px;
-}
-
-.playerTab, .playerTabActive {
-	min-height: 36px;
-	border-radius: var(--zalip-radius);
-}
-
-.gallery, .seasons {
-	margin-top: 20px;
-}
-
-@media (max-width: 767px) {
-	.page { padding: 0 0 34px; }
-	.hero { border-radius: 0; }
-	.heroBackground { height: 440px; opacity: 0.75; }
-	.hero::after { background: linear-gradient(0deg, var(--MI_THEME-panel) calc(100% - 440px), color-mix(in srgb, var(--MI_THEME-panel) 32%, transparent)); }
-	.heroContent { display: grid; grid-template-columns: 112px minmax(0, 1fr); align-items: start; gap: 18px 16px; padding: 24px var(--zalip-container-offset); }
-	.sidebar { display: contents; }
-	.poster { grid-column: 1; grid-row: 1; width: 100%; border-radius: 14px; box-shadow: 0 8px 24px var(--MI_THEME-shadow); }
-	.info { grid-column: 2; grid-row: 1; min-width: 0; }
-	.sidebarActions { grid-column: 1 / -1; grid-row: 2; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 0; }
-	.watchButton { grid-column: 1 / -1; }
-	.watchButton, .sideButton { min-height: 50px; padding: 12px; gap: 10px; font-size: max(16px, 1rem); font-weight: 650; line-height: 1.25; }
-	.watchButton i, .sideButton i { flex: 0 0 auto; font-size: 20px; }
-	.quickActions { grid-column: 1 / -1; grid-row: 3; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 0; }
-	.quickAction { min-height: 46px; padding: 10px 8px; gap: 8px; font-size: max(14px, 0.9rem); font-weight: 550; line-height: 1.3; white-space: normal; }
-	.quickAction:not(.quickActionActive) { color: var(--MI_THEME-fg); }
-	.quickAction i { flex: 0 0 auto; font-size: 20px; }
-	.quickAction span { display: none; }
-	.kind { margin: 0 0 10px; color: var(--MI_THEME-fgTransparentWeak); font-size: max(14px, 0.9rem); font-weight: 500; letter-spacing: normal; }
-	.info h1 { font-size: clamp(21px, 5vw, 28px); line-height: 1.2; letter-spacing: -0.02em; overflow-wrap: anywhere; }
-	.original { margin-top: 8px; font-size: max(16px, 1rem); line-height: 1.4; }
-	.genres { margin-top: 16px; gap: 8px; }
-	.genres a { min-height: 40px; box-sizing: border-box; padding: 9px 12px; color: var(--MI_THEME-fg); font-size: max(14px, 0.9rem); font-weight: 500; line-height: 1.4; }
-	.description { grid-column: 1 / -1; grid-row: 4; margin: 0; font-size: 15px; line-height: 1.65; color: var(--MI_THEME-fg); }
-	.content { padding: 0 var(--zalip-container-offset); }
-	.player { margin-inline: calc(var(--zalip-container-offset) * -1); border-radius: 0; }
-	.playerTabs { gap: 8px; padding: 8px var(--zalip-container-offset); }
-	.playerTab, .playerTabActive { min-height: 46px; font-size: max(16px, 1rem); gap: 8px; padding-inline: 14px; }
-	.playerTab i { font-size: 20px; }
-	.playerTab > span, .playerTabActive > span { display: inline; }
-	.playerState, .playerUnavailable { font-size: max(15px, 1rem); line-height: 1.6; }
-	.playerEpisodes { padding: 16px var(--zalip-container-offset); }
-	.seasonPicker { gap: 12px; font-size: max(15px, 1rem); }
-	.seasonPicker > span { font-size: inherit; }
-	.seasonPill { min-width: 44px; min-height: 44px; font-size: max(15px, 1rem); }
-	.episodeNav { min-width: 44px; min-height: 44px; font-size: 20px; }
-	.nowPlaying strong, .translation select { font-size: max(14px, 0.9rem); }
-	.nowPlaying span, .providerNotice { font-size: max(12px, 0.8rem); line-height: 1.5; }
-	.episodeTile { flex-basis: 140px; grid-template-rows: 79px auto auto; gap: 7px; }
-	.episodeTile > img, .episodeTileFallback { height: 79px; }
-	.episodeTile strong { font-size: max(14px, 0.9rem); }
-	.episodeTile small { font-size: max(13px, 0.85rem); line-height: 1.35; }
-	.episodeGuideContent { gap: 10px; padding: 18px; }
-	.episodeGuideContent h2, .gallery h2 { font-size: max(20px, 1.25rem); line-height: 1.3; }
-	.episodeGuideContent > p { font-size: max(16px, 1rem); line-height: 1.6; color: var(--MI_THEME-fg); }
-	.episodeGuideContent > p:first-child, .episodeGuideContent > span { font-size: max(13px, 0.85rem); color: var(--MI_THEME-fgTransparentWeak); }
-	.episodeDiscussButton, .scopeButton, .openDiscussion { min-height: 44px; box-sizing: border-box; font-size: max(14px, 0.9rem); line-height: 1.4; }
-	.episodeDiscussButton i, .scopeButton i, .openDiscussion i { flex: 0 0 auto; font-size: 20px; }
-	.discussionArea { font-size: max(16px, 1rem); }
+	.voiceDrawer { position: fixed; inset: 0 0 0 auto; width: min(360px, 90vw); max-height: none; height: 100dvh; padding: 18px 16px max(24px, env(safe-area-inset-bottom)); border-radius: 0; overscroll-behavior: contain; }
 }
 </style>

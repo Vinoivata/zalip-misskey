@@ -400,7 +400,7 @@ onMounted(() => {
 });
 onActivated(() => { void restoreFilterFocus(); void loadLibrary(); });
 
-definePage(() => ({ title: i18n.ts.zalip.catalogueHeading, icon: 'ti ti-layout-grid', needWideArea: true }));
+definePage(() => ({ title: i18n.ts.zalip.catalogueHeading, icon: 'ti ti-layout-grid' }));
 </script>
 
 <style lang="scss" module>
@@ -415,9 +415,9 @@ definePage(() => ({ title: i18n.ts.zalip.catalogueHeading, icon: 'ti ti-layout-g
 .categoryTabs .categoryActive { background: var(--zalip-accent-soft); border-color: var(--zalip-accent-border); color: var(--zalip-social-fg); font-weight: 650; }
 .search { display: flex; align-items: center; gap: 10px; max-width: 780px; margin-top: 20px; padding: 7px 8px 7px 16px; border: 1px solid var(--zalip-social-border); border-radius: 16px; background: var(--zalip-social-panel); }
 .search > i, .genreSearch > i { color: var(--zalip-social-muted); font-size: 20px; }
-.search input, .genreSearch input { min-width: 0; flex: 1; border: 0; color: var(--zalip-social-fg); background: transparent; font-size: 14px; }
+.search input, .genreSearch input { min-width: 0; flex: 1; border: 0; outline: none; color: var(--zalip-social-fg); background: transparent; font-size: 14px; }
 .search button:last-child { min-height: 38px; padding: 0 18px; border-radius: 12px; background: var(--MI_THEME-accent); color: var(--MI_THEME-fgOnAccent); font-weight: 650; }
-.search:focus-within, .genreSearch:focus-within { border-color: var(--MI_THEME-accent); }
+.search:focus-within, .genreSearch:focus-within { border-color: var(--MI_THEME-accent); outline: 2px solid var(--zalip-accent-border); outline-offset: 2px; }
 .catalogueLayout { display: grid; grid-template-columns: minmax(0, 1fr) 240px; grid-template-areas: "results filters"; gap: 24px; align-items: start; }
 .results { grid-area: results; min-width: 0; }
 .filters { grid-area: filters; position: sticky; top: 20px; min-width: 0; padding: 18px; border: 1px solid var(--zalip-social-border); border-radius: 20px; background: var(--zalip-social-panel); }

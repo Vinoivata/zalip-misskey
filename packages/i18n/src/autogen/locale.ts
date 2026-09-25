@@ -1478,6 +1478,90 @@ export interface Locale extends ILocale {
          */
         "playerVoices": string;
         /**
+         * Оценить
+         */
+        "workRateAction": string;
+        /**
+         * Репост
+         */
+        "workRepost": string;
+        /**
+         * Год выхода
+         */
+        "workYear": string;
+        /**
+         * Тип
+         */
+        "workType": string;
+        /**
+         * Длительность
+         */
+        "workDuration": string;
+        /**
+         * Сезонов
+         */
+        "workSeasons": string;
+        /**
+         * Сезон
+         */
+        "workSeason": string;
+        /**
+         * Эпизоды
+         */
+        "workEpisodes": string;
+        /**
+         * Оценок: {count}
+         */
+        "workRatingCount": ParameterizedString<"count">;
+        /**
+         * Пока нет оценок
+         */
+        "workNoRating": string;
+        /**
+         * Предыдущая серия
+         */
+        "playerPreviousEpisode": string;
+        /**
+         * Следующая серия
+         */
+        "playerNextEpisode": string;
+        /**
+         * {number} серия
+         */
+        "playerEpisodeNumber": ParameterizedString<"number">;
+        /**
+         * Найти серию
+         */
+        "playerEpisodeSearch": string;
+        /**
+         * Просмотрено
+         */
+        "playerWatched": string;
+        /**
+         * Отметить просмотр
+         */
+        "playerMarkWatched": string;
+        /**
+         * Войти и смотреть
+         */
+        "playerSignIn": string;
+        /**
+         * Проверяем доступность плеера…
+         */
+        "playerChecking": string;
+        /**
+         * Плеер пока недоступен. Попробуйте позже.
+         */
+        "playerUnavailable": string;
+        /**
+         * Загружаем эпизоды…
+         */
+        "playerEpisodesLoading": string;
+        /**
+         * Список серий пока готовится.
+         */
+        "playerEpisodesEmpty": string;
+        /**
          * Найти озвучку
          */
         "playerVoiceSearch": string;
