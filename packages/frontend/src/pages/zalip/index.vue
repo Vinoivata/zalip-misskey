@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <PageWithHeader hideHeader>
-	<div>
+	<component :is="prefer.s.enablePullToRefresh ? MkPullToRefresh : 'div'" :refresher="refreshHome">
 		<div :class="$style.page">
 			<section
 				:class="$style.onboarding"
@@ -65,8 +65,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</div>
 			</section>
 		</div>
-		<MkZalipFeed/>
-	</div>
+		<MkZalipFeed ref="feed" :pullToRefresh="false"/>
+	</component>
 </PageWithHeader>
 </template>
 
@@ -78,6 +78,8 @@ import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { useZalipHorizontalDrag } from '@/composables/use-zalip-horizontal-drag.js';
 import MkZalipFeed from '@/components/MkZalipFeed.vue';
 import MkZalipIcon from '@/components/MkZalipIcon.vue';
+import MkPullToRefresh from '@/components/MkPullToRefresh.vue';
+import { prefer } from '@/preferences.js';
 
 type ZalipWork = {
 	id: string;
@@ -180,6 +182,7 @@ const onboardingFallbackSlides: ZalipHeroSlide[] = [
 ] as const;
 
 const works = ref<ZalipWork[]>([]);
+const feed = useTemplateRef('feed');
 const releaseEvents = ref<ZalipReleaseEvent[]>([]);
 const releaseEventsLoaded = ref(false);
 const activeOnboardingIndex = ref(1);
@@ -265,22 +268,29 @@ function releaseLabel(release: ZalipReleaseEvent): string {
 	return `${season} · ${i18n.tsx.zalip.releaseEpisode({ number: release.episode.episodeNumber.toString() })}`;
 }
 
-async function loadHome(): Promise<void> {
+async function loadHome(reportFailure = false): Promise<void> {
+	let failed = false;
 	try {
 		works.value = await misskeyApiZalip<ZalipWork[]>('zalip/works/list', {
 			limit: 12,
 		});
 	} catch {
-		works.value = [];
+		failed = true;
 	}
 
 	try {
 		releaseEvents.value = await misskeyApiZalip<ZalipReleaseEvent[]>('zalip/releases/list', { limit: 12 });
 	} catch {
-		releaseEvents.value = [];
+		failed = true;
 	} finally {
 		releaseEventsLoaded.value = true;
 	}
+	// A failed refresh must not replace already loaded titles with onboarding slides.
+	if (failed && reportFailure) throw new Error('Home refresh failed');
+}
+
+async function refreshHome(): Promise<void> {
+	await Promise.all([loadHome(true), feed.value?.refresh()]);
 }
 
 function scrollToOnboarding(index: number, animate = true): void {

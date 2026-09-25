@@ -8,7 +8,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div v-if="memberships.length > 0" class="_gaps_s">
 		<XRoom v-for="membership in memberships" :key="membership.id" :room="membership.room!"/>
 	</div>
-	<MkResult v-if="!fetching && memberships.length == 0" type="empty" :text="i18n.ts.zalip.chatNoRooms"/>
+	<MkError v-if="loadError" @retry="fetchRooms"/>
+	<MkResult v-else-if="!fetching && memberships.length == 0" type="empty" :text="i18n.ts.zalip.chatNoRooms"/>
 	<MkLoading v-if="fetching"/>
 </div>
 </template>
@@ -21,21 +22,25 @@ import { i18n } from '@/i18n.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 
 const fetching = ref(true);
+const loadError = ref(false);
 const memberships = ref<Misskey.entities.ChatRoomMembership[]>([]);
 
 async function fetchRooms() {
 	fetching.value = true;
-
-	const res = await misskeyApi('chat/rooms/joining');
-
-	memberships.value = res;
-
-	fetching.value = false;
+	loadError.value = false;
+	try {
+		memberships.value = await misskeyApi('chat/rooms/joining');
+	} catch {
+		loadError.value = true;
+	} finally {
+		fetching.value = false;
+	}
 }
 
 onMounted(() => {
 	fetchRooms();
 });
+defineExpose({ refresh: fetchRooms });
 </script>
 
 <style lang="scss" module>

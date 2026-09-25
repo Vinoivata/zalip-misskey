@@ -33,12 +33,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</MkFoldableSection>
 
-	<MkChatHistories/>
+	<MkChatHistories ref="histories"/>
 </div>
 </template>
 
 <script lang="ts" setup>
-import { onMounted, ref } from 'vue';
+import { onActivated, onMounted, ref, useTemplateRef } from 'vue';
 import * as Misskey from 'misskey-js';
 import XMessage from './XMessage.vue';
 import MkZalipIcon from '@/components/MkZalipIcon.vue';
@@ -48,7 +48,7 @@ import { misskeyApi } from '@/utility/misskey-api.js';
 import { ensureSignin } from '@/i.js';
 import { useRouter } from '@/router.js';
 import * as os from '@/os.js';
-import { updateCurrentAccountPartial } from '@/accounts.js';
+import { refreshCurrentAccount } from '@/accounts.js';
 import MkInput from '@/components/MkInput.vue';
 import MkFoldableSection from '@/components/MkFoldableSection.vue';
 import MkInfo from '@/components/MkInfo.vue';
@@ -63,6 +63,7 @@ const searched = ref(false);
 const searching = ref(false);
 const searchError = ref(false);
 const searchResults = ref<Misskey.entities.ChatMessage[]>([]);
+const histories = useTemplateRef('histories');
 
 function start(ev: PointerEvent) {
 	os.popupMenu([{
@@ -126,9 +127,14 @@ async function search(): Promise<void> {
 	}
 }
 
-onMounted(() => {
-	updateCurrentAccountPartial({ hasUnreadChatMessages: false });
-});
+async function refresh(): Promise<void> {
+	await Promise.all([histories.value?.refresh(), refreshCurrentAccount(), ...(searched.value ? [search()] : [])]);
+}
+
+// Opening the conversation list does not mean its messages have been read.
+onMounted(() => { void refreshCurrentAccount(); });
+onActivated(() => { void refreshCurrentAccount(); });
+defineExpose({ refresh });
 </script>
 
 <style lang="scss" module>

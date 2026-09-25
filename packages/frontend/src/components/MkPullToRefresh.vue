@@ -28,6 +28,7 @@ import { getScrollContainer } from '@@/js/scroll.js';
 import { i18n } from '@/i18n.js';
 import { isHorizontalSwipeSwiping } from '@/utility/touch.js';
 import { haptic } from '@/utility/haptic.js';
+import * as os from '@/os.js';
 
 const SCROLL_STOP = 10;
 const MAX_PULL_DISTANCE = Infinity;
@@ -42,6 +43,11 @@ const isRefreshing = ref(false);
 const pullDistance = ref(0);
 
 let startScreenY: number | null = null;
+let startScreenX = 0;
+let settling = false;
+let disposed = false;
+let originalOverscrollY = '';
+const stopAnimations = new Set<() => void>();
 
 const rootEl = useTemplateRef('rootEl');
 let scrollEl: HTMLElement | null = null;
@@ -56,74 +62,55 @@ const emit = defineEmits<{
 	(ev: 'refresh'): void;
 }>();
 
-function getScreenY(event: TouchEvent | MouseEvent | PointerEvent): number {
-	if (('touches' in event) && event.touches[0] && event.touches[0].screenY != null) {
-		return event.touches[0].screenY;
-	} else if ('screenY' in event) {
-		return event.screenY;
-	} else {
-		return 0; // TSを黙らせるため
+function startPull(event: MouseEvent | TouchEvent): boolean {
+	if (isRefreshing.value || settling || startScreenY !== null || disposed) return false;
+	if ((scrollEl?.scrollTop ?? 0) > 0) return false;
+	if (event.target instanceof HTMLElement) {
+		if (event.target.closest('input, textarea, select, [contenteditable="true"]')) return false;
+		const nested = getScrollContainer(event.target);
+		if (nested && nested !== scrollEl && nested.scrollHeight > nested.clientHeight) return false;
 	}
-}
-
-// When at the top of the page, disable vertical overscroll so passive touch listeners can take over.
-function lockDownScroll() {
-	if (scrollEl == null) return;
-	scrollEl.style.touchAction = 'pan-x pan-down pinch-zoom';
-	scrollEl.style.overscrollBehavior = 'auto none';
-}
-
-function unlockDownScroll() {
-	if (scrollEl == null) return;
-	scrollEl.style.touchAction = 'auto';
-	scrollEl.style.overscrollBehavior = 'auto contain';
+	const point = 'touches' in event ? event.touches[0] : event;
+	if (!point) return false;
+	startScreenY = point.screenY;
+	startScreenX = point.screenX;
+	pullDistance.value = 0;
+	isPulledEnough.value = false;
+	return true;
 }
 
 function moveStartByMouse(event: MouseEvent) {
 	if (event.button !== 1) return;
-	if (isRefreshing.value) return;
-
-	const scrollPos = scrollEl!.scrollTop;
-	if (scrollPos !== 0) {
-		unlockDownScroll();
-		return;
-	}
-
-	lockDownScroll();
-
+	if (!startPull(event)) return;
 	event.preventDefault(); // 中クリックによるスクロール、テキスト選択などを防ぐ
-
-	isPulling.value = true;
-	startScreenY = getScreenY(event);
-	pullDistance.value = 0;
-
-	window.addEventListener('mousemove', moving, { passive: true });
-	window.addEventListener('mouseup', () => {
-		window.removeEventListener('mousemove', moving);
-		onPullRelease();
-	}, { passive: true, once: true });
+	window.addEventListener('mousemove', moving, { passive: false });
+	window.addEventListener('mouseup', onPullEnd, { passive: true });
 }
 
 function moveStartByTouch(event: TouchEvent) {
-	if (isRefreshing.value) return;
+	if (event.touches.length !== 1 || !startPull(event)) return;
+	// Only consume a downward pull at the top, leaving horizontal rails and normal scrolling native.
+	window.addEventListener('touchmove', moving, { passive: false });
+	window.addEventListener('touchend', onPullEnd, { passive: true });
+	window.addEventListener('touchcancel', cancelPull, { passive: true });
+}
 
-	const scrollPos = scrollEl!.scrollTop;
-	if (scrollPos !== 0) {
-		unlockDownScroll();
-		return;
-	}
+function detachGesture() {
+	window.removeEventListener('mousemove', moving);
+	window.removeEventListener('mouseup', onPullEnd);
+	window.removeEventListener('touchmove', moving);
+	window.removeEventListener('touchend', onPullEnd);
+	window.removeEventListener('touchcancel', cancelPull);
+}
 
-	lockDownScroll();
+function onPullEnd() {
+	detachGesture();
+	void onPullRelease();
+}
 
-	isPulling.value = true;
-	startScreenY = getScreenY(event);
-	pullDistance.value = 0;
-
-	window.addEventListener('touchmove', moving, { passive: true });
-	window.addEventListener('touchend', () => {
-		window.removeEventListener('touchmove', moving);
-		onPullRelease();
-	}, { passive: true, once: true });
+function cancelPull() {
+	isPulledEnough.value = false;
+	onPullEnd();
 }
 
 function moveBySystem(to: number): Promise<void> {
@@ -135,18 +122,23 @@ function moveBySystem(to: number): Promise<void> {
 			return;
 		}
 		const startTime = Date.now();
+		const stop = () => {
+			window.clearInterval(intervalId);
+			stopAnimations.delete(stop);
+			r();
+		};
 		let intervalId = window.setInterval(() => {
 			const time = Date.now() - startTime;
 			if (time > RELEASE_TRANSITION_DURATION) {
 				pullDistance.value = to;
-				window.clearInterval(intervalId);
-				r();
+				stop();
 				return;
 			}
 			const nextHeight = startHeight - (overHeight / RELEASE_TRANSITION_DURATION) * time;
 			if (pullDistance.value < nextHeight) return;
 			pullDistance.value = nextHeight;
-		}, 1);
+		}, 16);
+		stopAnimations.add(stop);
 	});
 }
 
@@ -162,78 +154,73 @@ async function closeContent() {
 	}
 }
 
-function onPullRelease() {
+async function onPullRelease() {
+	if (startScreenY === null) return;
 	startScreenY = null;
-	if (isPulledEnough.value) {
-		isPulledEnough.value = false;
-		isRefreshing.value = true;
-		fixOverContent().then(() => {
+	settling = true;
+	const shouldRefresh = isPulledEnough.value;
+	isPulledEnough.value = false;
+	try {
+		if (shouldRefresh) {
+			isRefreshing.value = true;
+			await fixOverContent();
+			if (disposed) return;
 			emit('refresh');
-			props.refresher().then(() => {
-				refreshFinished();
-			});
-		});
-	} else {
-		closeContent().then(() => isPulling.value = false);
-	}
-}
-
-function toggleScrollLockOnTouchEnd() {
-	const scrollPos = scrollEl!.scrollTop;
-	if (scrollPos === 0) {
-		lockDownScroll();
-	} else {
-		unlockDownScroll();
+			await props.refresher();
+		}
+	} catch {
+		if (!disposed) void os.alert({ type: 'error', text: i18n.ts.somethingHappened });
+	} finally {
+		if (!disposed) await closeContent();
+		isPulling.value = false;
+		isRefreshing.value = false;
+		settling = false;
 	}
 }
 
 function moving(event: MouseEvent | TouchEvent) {
+	if (startScreenY === null) return;
+	if ('touches' in event && event.touches.length !== 1) {
+		cancelPull();
+		return;
+	}
 	if ((scrollEl?.scrollTop ?? 0) > SCROLL_STOP + pullDistance.value || isHorizontalSwipeSwiping.value) {
-		pullDistance.value = 0;
-		isPulledEnough.value = false;
-		onPullRelease();
+		cancelPull();
 		return;
 	}
 
-	if (startScreenY === null) {
-		startScreenY = getScreenY(event);
+	const point = 'touches' in event ? event.touches[0] : event;
+	const moveHeight = point.screenY - startScreenY;
+	const moveWidth = Math.abs(point.screenX - startScreenX);
+	if (!isPulling.value && (moveWidth > SCROLL_STOP && moveWidth > Math.abs(moveHeight) || moveHeight < -SCROLL_STOP)) {
+		cancelPull();
+		return;
 	}
-	const moveScreenY = getScreenY(event);
-
-	const moveHeight = moveScreenY - startScreenY!;
+	if (!isPulling.value && moveHeight < SCROLL_STOP) return;
+	if (event.cancelable) event.preventDefault();
+	isPulling.value = true;
 	pullDistance.value = Math.min(Math.max(moveHeight, 0), MAX_PULL_DISTANCE);
-
+	const wasEnough = isPulledEnough.value;
 	isPulledEnough.value = pullDistance.value >= FIRE_THRESHOLD;
-
-	if (isPulledEnough.value) haptic();
-}
-
-/**
- * emit(refresh)が完了したことを知らせる関数
- *
- * タイムアウトがないのでこれを最終的に実行しないと出たままになる
- */
-function refreshFinished() {
-	closeContent().then(() => {
-		isPulling.value = false;
-		isRefreshing.value = false;
-	});
+	if (isPulledEnough.value && !wasEnough) haptic();
 }
 
 onMounted(() => {
 	if (rootEl.value == null) return;
-	scrollEl = getScrollContainer(rootEl.value);
-	lockDownScroll();
+	scrollEl = getScrollContainer(rootEl.value) ?? window.document.documentElement;
+	originalOverscrollY = scrollEl.style.overscrollBehaviorY;
+	scrollEl.style.overscrollBehaviorY = 'contain';
 	rootEl.value.addEventListener('mousedown', moveStartByMouse, { passive: false }); // preventDefaultするため
 	rootEl.value.addEventListener('touchstart', moveStartByTouch, { passive: true });
-	rootEl.value.addEventListener('touchend', toggleScrollLockOnTouchEnd, { passive: true });
 });
 
 onUnmounted(() => {
-	unlockDownScroll();
+	disposed = true;
+	detachGesture();
+	stopAnimations.forEach(stop => stop());
+	if (scrollEl) scrollEl.style.overscrollBehaviorY = originalOverscrollY;
 	if (rootEl.value) rootEl.value.removeEventListener('mousedown', moveStartByMouse);
 	if (rootEl.value) rootEl.value.removeEventListener('touchstart', moveStartByTouch);
-	if (rootEl.value) rootEl.value.removeEventListener('touchend', toggleScrollLockOnTouchEnd);
 });
 </script>
 

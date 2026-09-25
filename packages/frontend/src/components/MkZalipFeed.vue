@@ -39,6 +39,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			:onlyFiles="onlyFiles"
 			:sound="true"
 			:zalipFlat="true"
+			:pullToRefresh="pullToRefresh"
 		/>
 	</section>
 </main>
@@ -61,6 +62,13 @@ import { prefer } from '@/preferences.js';
 import { pleaseLogin } from '@/utility/please-login.js';
 
 const tlComponent = useTemplateRef('tlComponent');
+withDefaults(defineProps<{ pullToRefresh?: boolean }>(), { pullToRefresh: true });
+
+async function refresh(): Promise<void> {
+	await tlComponent.value?.reloadTimeline();
+}
+
+defineExpose({ refresh });
 
 type TimelinePageSrc = BasicTimelineType | `list:${string}`;
 
@@ -186,7 +194,7 @@ onActivated(() => {
 
 <style lang="scss" module>
 .feedShell { padding-bottom: 24px; }
-.feedColumn { width: 100%; max-width: 780px; margin: 0 auto; min-width: 0; }
+.feedColumn { width: 100%; max-width: var(--zalip-feed-width); margin: 0 auto; min-width: 0; }
 .feedHead {
 	position: sticky;
 	top: var(--zalip-chrome-top, 0px);

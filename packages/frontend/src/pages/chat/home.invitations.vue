@@ -27,7 +27,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</div>
 		</MkFolder>
 	</div>
-	<MkResult v-if="!fetching && invitations.length == 0" type="empty" :text="i18n.ts.zalip.chatNoInvitations"/>
+	<MkError v-if="loadError" @retry="fetchInvitations"/>
+	<MkResult v-else-if="!fetching && invitations.length == 0" type="empty" :text="i18n.ts.zalip.chatNoInvitations"/>
 	<MkLoading v-if="fetching"/>
 </div>
 </template>
@@ -44,16 +45,19 @@ import MkFolder from '@/components/MkFolder.vue';
 const router = useRouter();
 
 const fetching = ref(true);
+const loadError = ref(false);
 const invitations = ref<Misskey.entities.ChatRoomInvitation[]>([]);
 
 async function fetchInvitations() {
 	fetching.value = true;
-
-	const res = await misskeyApi('chat/rooms/invitations/inbox');
-
-	invitations.value = res;
-
-	fetching.value = false;
+	loadError.value = false;
+	try {
+		invitations.value = await misskeyApi('chat/rooms/invitations/inbox');
+	} catch {
+		loadError.value = true;
+	} finally {
+		fetching.value = false;
+	}
 }
 
 async function join(invitation: Misskey.entities.ChatRoomInvitation) {
@@ -79,6 +83,7 @@ async function ignore(invitation: Misskey.entities.ChatRoomInvitation) {
 onMounted(() => {
 	fetchInvitations();
 });
+defineExpose({ refresh: fetchInvitations });
 </script>
 
 <style lang="scss" module>

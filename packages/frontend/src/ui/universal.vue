@@ -234,7 +234,7 @@ $widgets-hide-threshold: 1399px;
 	min-height: 0;
 	box-sizing: border-box;
 }
-.replySlot { position: absolute; z-index: 1100; bottom: max(12px, env(safe-area-inset-bottom, 0px)); left: 12px; right: 12px; pointer-events: none; }
+.replySlot { position: absolute; z-index: 1100; bottom: max(12px, env(safe-area-inset-bottom, 0px)); left: 12px; right: 12px; max-width: calc(var(--zalip-feed-width) - 24px); margin-inline: auto; pointer-events: none; }
 
 .social .contents { border-inline: 1px solid var(--zalip-social-border); background: var(--zalip-social-panel); }
 .social :global(._pageScrollable) { background: var(--zalip-social-panel); }

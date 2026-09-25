@@ -107,6 +107,8 @@ onActivated(() => {
 onMounted(() => {
 	fetchHistory();
 });
+
+defineExpose({ refresh: fetchHistory });
 </script>
 
 <style lang="scss" module>

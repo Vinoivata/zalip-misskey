@@ -4,7 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<component :is="prefer.s.enablePullToRefresh ? MkPullToRefresh : 'div'" :refresher="() => reloadTimeline()">
+<component :is="pullToRefresh && prefer.s.enablePullToRefresh ? MkPullToRefresh : 'div'" :refresher="() => reloadTimeline()">
 	<MkLoading v-if="paginator.fetching.value"/>
 
 	<MkError v-else-if="paginator.error.value" @retry="paginator.init()"/>
@@ -92,12 +92,14 @@ const props = withDefaults(defineProps<{
 	withSensitive?: boolean;
 	onlyFiles?: boolean;
 	zalipFlat?: boolean;
+	pullToRefresh?: boolean;
 }>(), {
 	withRenotes: true,
 	withReplies: false,
 	withSensitive: true,
 	onlyFiles: false,
 	zalipFlat: false,
+	pullToRefresh: true,
 	sound: false,
 	customSound: null,
 });
@@ -418,14 +420,9 @@ onUnmounted(() => {
 	disconnectChannel();
 });
 
-function reloadTimeline() {
-	return new Promise<void>((res) => {
-		adInsertionCounter = 0;
-
-		paginator.reload().then(() => {
-			res();
-		});
-	});
+async function reloadTimeline(): Promise<void> {
+	adInsertionCounter = 0;
+	await paginator.reload();
 }
 
 defineExpose({

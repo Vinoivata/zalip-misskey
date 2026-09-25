@@ -6,9 +6,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <div :class="[$style.wrap, { [$style.hidden]: hidden }]">
 	<nav :class="$style.root" :aria-label="i18n.ts.menu" :inert="hidden">
-		<MkA v-for="item in items" :key="item.to" :class="$style.item" :activeClass="$style.active" :aria-label="item.label" :title="item.label" :to="item.to" :exact="item.to === '/'">
+		<MkA v-for="item in items" :key="item.to" :class="$style.item" :activeClass="$style.active" :aria-label="item.unread ? `${item.label} · ${i18n.ts.unread}` : item.label" :title="item.label" :to="item.to" :exact="item.to === '/'">
 			<MkZalipIcon :name="item.icon"/>
-			<span v-if="item.to === '/my/notifications' && $i?.hasUnreadNotification" :class="$style.indicator"></span>
+			<span v-if="item.unread" :class="[$style.indicator, { [$style.counter]: item.count > 0 }]" aria-hidden="true">{{ item.count > 0 ? (item.count > 99 ? '99+' : item.count) : '' }}</span>
 		</MkA>
 		<button ref="accountTrigger" type="button" class="_button" :class="$style.item" :aria-label="i18n.ts.zalip.more" aria-haspopup="dialog" :aria-expanded="accountSheetOpen" @click="accountSheetOpen = true">
 			<MkAvatar v-if="$i" :user="$i" :class="$style.avatar"/>
@@ -19,7 +19,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <button v-if="hidden" type="button" class="_button" :class="$style.create" :aria-label="i18n.ts.zalip.feedQuickPost" @click="writePost"><MkZalipIcon name="plus"/></button>
 
 <Teleport to="body">
-	<MkModal v-if="accountSheetOpen" ref="accountModal" preferType="drawer" :returnFocusTo="accountTrigger" @click="closeAccountSheet" @esc="closeAccountSheet" @closed="accountSheetOpen = false">
+	<MkModal v-if="accountSheetOpen" ref="accountModal" preferType="drawer" :returnFocusTo="accountTrigger" @click="closeAccountSheet" @esc="closeAccountSheet" @closed="onAccountSheetClosed">
 		<section :class="$style.accountSheet" role="dialog" aria-modal="true" :aria-label="i18n.ts.zalip.mySpace">
 			<button type="button" class="_button" :class="$style.sheetHandle" :aria-label="i18n.ts.close" @click="closeAccountSheet"><span></span></button>
 			<MkA v-if="$i" :to="'/@' + $i.username" :class="$style.accountCard" @click="closeAccountSheet">
@@ -45,7 +45,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, ref, useTemplateRef } from 'vue';
+import { computed, nextTick, ref, useTemplateRef } from 'vue';
 import MkModal from '@/components/MkModal.vue';
 import { signout } from '@/signout.js';
 import MkZalipIcon from '@/components/MkZalipIcon.vue';
@@ -61,12 +61,12 @@ import { openZalipCreateMenu } from '@/utility/zalip-create.js';
 
 defineProps<{ hidden?: boolean }>();
 
-const items: { to: string; icon: ZalipIconName; label: string }[] = [
-	{ to: '/timeline', icon: 'home', label: navbarItemDef.feed.title },
-	{ to: '/', icon: 'reels', label: navbarItemDef.zalip.title },
-	{ to: '/my/notifications', icon: 'heart', label: i18n.ts.notifications },
-	{ to: '/chat', icon: 'messages', label: i18n.ts.zalip.messages },
-];
+const items = computed<{ to: string; icon: ZalipIconName; label: string; unread?: boolean; count: number }[]>(() => [
+	{ to: '/timeline', icon: 'home', label: navbarItemDef.feed.title, count: 0 },
+	{ to: '/', icon: 'reels', label: navbarItemDef.zalip.title, count: 0 },
+	{ to: '/my/notifications', icon: 'heart', label: i18n.ts.notifications, unread: !!$i?.hasUnreadNotification || ($i?.unreadNotificationsCount ?? 0) > 0, count: $i?.unreadNotificationsCount ?? 0 },
+	{ to: '/chat', icon: 'messages', label: i18n.ts.zalip.messages, unread: !!$i?.hasUnreadChatMessages, count: 0 },
+]);
 
 function writePost(event: PointerEvent): void {
 	openZalipCreateMenu(event);
@@ -75,6 +75,7 @@ function writePost(event: PointerEvent): void {
 const accountSheetOpen = ref(false);
 const accountModal = useTemplateRef('accountModal');
 const accountTrigger = useTemplateRef('accountTrigger');
+let afterAccountSheetClosed: (() => void) | undefined;
 const accountLinks = computed(() => [
 	{ to: '/', icon: 'ti ti-movie', label: navbarItemDef.zalip.title },
 	{ to: '/catalog', icon: 'ti ti-layout-grid', label: navbarItemDef.catalogue.title },
@@ -91,26 +92,38 @@ function closeAccountSheet(): void {
 	accountModal.value?.close();
 }
 
-function search(): void {
+async function onAccountSheetClosed(): Promise<void> {
+	accountSheetOpen.value = false;
+	// The body-teleported drawer must release its focus trap before an app popup mounts.
+	await nextTick();
+	const action = afterAccountSheetClosed;
+	afterAccountSheetClosed = undefined;
+	action?.();
+}
+
+function openAfterAccountSheet(action: () => void): void {
+	afterAccountSheetClosed = action;
 	closeAccountSheet();
-	openZalipSearch();
+}
+
+function search(): void {
+	openAfterAccountSheet(() => openZalipSearch());
 }
 
 function login(): void {
-	closeAccountSheet();
-	void pleaseLogin();
+	openAfterAccountSheet(() => { void pleaseLogin(); });
 }
 
-function appearance(event: PointerEvent): void {
-	void os.popupMenu(getZalipAppearanceMenu(), event.currentTarget, { width: 280 });
+function appearance(): void {
+	openAfterAccountSheet(() => { void os.popupMenu(getZalipAppearanceMenu(), accountTrigger.value, { width: 280 }); });
 }
 
-async function logout(): Promise<void> {
-	const { canceled } = await os.confirm({ type: 'question', text: i18n.ts.logoutConfirm });
-	if (!canceled) {
-		closeAccountSheet();
-		void signout();
-	}
+function logout(): void {
+	openAfterAccountSheet(() => {
+		void os.confirm({ type: 'question', text: i18n.ts.logoutConfirm }).then(({ canceled }) => {
+			if (!canceled) void signout();
+		});
+	});
 }
 </script>
 
@@ -174,7 +187,8 @@ async function logout(): Promise<void> {
 	&:focus-visible { outline: 2px solid var(--MI_THEME-focus); border-radius: 30px; }
 	> .avatar { width: 32px; height: 32px; opacity: .85; }
 }
-.indicator { position: absolute; top: 16px; right: 24%; width: 6px; height: 6px; border: 2px solid var(--zalip-social-panel); border-radius: 50%; background: var(--MI_THEME-indicator); }
+.indicator { position: absolute; z-index: 1; top: 15px; left: calc(50% + 5px); width: 8px; height: 8px; border: 2px solid var(--zalip-social-panel); border-radius: 99px; background: var(--MI_THEME-accent); pointer-events: none; }
+.counter { top: 8px; min-width: 16px; width: auto; height: 16px; padding: 0 3px; color: var(--MI_THEME-fgOnAccent); font-size: 10px; line-height: 16px; font-weight: 700; text-align: center; }
 .create {
 	position: absolute;
 	z-index: 1190;
@@ -201,12 +215,13 @@ async function logout(): Promise<void> {
 .accountName small { color: var(--zalip-social-muted); overflow-wrap: anywhere; }
 .profilePill { padding: 8px 12px; border-radius: 99px; background: var(--zalip-social-hover); font-size: 12px; font-weight: 600; }
 .sheetGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.sheetTile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 80px; padding: 8px 4px; box-sizing: border-box; border-radius: 16px; background: var(--zalip-social-raised); color: var(--zalip-social-muted); text-align: center; text-decoration: none; font-size: 11px; overflow-wrap: anywhere; }
-.sheetTile i, .sheetTile svg { width: 23px; height: 23px; font-size: 23px; color: var(--zalip-social-fg); }
+.sheetTile { display: grid; grid-template-rows: 24px minmax(28px, auto); justify-items: center; align-content: start; gap: 8px; min-height: 88px; padding: 14px 4px 10px; box-sizing: border-box; border-radius: 16px; background: var(--zalip-social-raised); color: var(--zalip-social-muted); text-align: center; text-decoration: none; font-size: 11px; line-height: 14px; overflow-wrap: anywhere; }
+.sheetTile > span { width: 100%; }
+.sheetTile i, .sheetTile svg { display: grid; place-items: center; width: 24px; height: 24px; font-size: 23px; line-height: 1; color: var(--zalip-social-fg); }
 .sheetTile:hover, .accountCard:hover { background: var(--zalip-accent-soft); }
 .sheetRows { padding: 16px 0; }
 .sheetRow { display: flex; align-items: center; gap: 14px; width: 100%; box-sizing: border-box; min-height: 48px; padding: 10px 14px; border-radius: 12px; text-align: left; font-size: 15px; font-weight: 600; text-decoration: none; }
-.sheetRow i { font-size: 22px; }
+.sheetRow i { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; font-size: 22px; line-height: 1; }
 .sheetRow:hover { background: var(--zalip-social-hover); }
 .signout { padding-top: 18px; border-top: 1px solid var(--zalip-social-border); border-radius: 0; color: var(--MI_THEME-error); }
 @media (max-width: 350px) { .accountCard { padding: 12px; gap: 8px; } .profilePill { padding: 8px; font-size: 11px; } .accountAvatar { flex-basis: 40px; width: 40px; height: 40px; } .accountName strong { font-size: 14px; } }

@@ -43,6 +43,8 @@
 - Enhance: ZALIPホームの長いヒーローを隣のカードが見えるコンパクトなカルーセルに変更し、ナビゲーションの再生・メッセージアイコンの内部を維持
 - Fix: 評価ダイアログの破棄後にページが操作不能になる問題を修正し、ZALIPのフィード幅・検索導線・カード切替・配色選択・リアクション・作品プレイヤーを改善
 
+- Fix: Align Zalip mobile account tiles, open appearance without blocking the page, show unread navigation badges, match thread and feed widths, and support pull-to-refresh on home and chat.
+
 ### Server
 - Feat: ZALIP作品の公開API、ライブラリ、更新、管理画面で匿名のコミュニティ評価と評価数を一貫して返すように
 - Enhance: ZALIPカタログで同時に選択できるジャンル数を40件に拡張

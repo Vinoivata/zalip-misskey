@@ -8,7 +8,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div v-if="rooms.length > 0" class="_gaps_s">
 		<XRoom v-for="room in rooms" :key="room.id" :room="room"/>
 	</div>
-	<MkResult v-if="!fetching && rooms.length == 0" type="empty" :text="i18n.ts.zalip.chatNoRooms"/>
+	<MkError v-if="loadError" @retry="fetchRooms"/>
+	<MkResult v-else-if="!fetching && rooms.length == 0" type="empty" :text="i18n.ts.zalip.chatNoRooms"/>
 	<MkLoading v-if="fetching"/>
 </div>
 </template>
@@ -21,22 +22,25 @@ import { i18n } from '@/i18n.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 
 const fetching = ref(true);
+const loadError = ref(false);
 const rooms = ref<Misskey.entities.ChatRoom[]>([]);
 
 async function fetchRooms() {
 	fetching.value = true;
-
-	const res = await misskeyApi('chat/rooms/owned', {
-	});
-
-	rooms.value = res;
-
-	fetching.value = false;
+	loadError.value = false;
+	try {
+		rooms.value = await misskeyApi('chat/rooms/owned', {});
+	} catch {
+		loadError.value = true;
+	} finally {
+		fetching.value = false;
+	}
 }
 
 onMounted(() => {
 	fetchRooms();
 });
+defineExpose({ refresh: fetchRooms });
 </script>
 
 <style lang="scss" module>

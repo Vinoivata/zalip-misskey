@@ -209,7 +209,7 @@ definePage(() => ({
 }
 
 .thread { min-width: 0; }
-.page { padding-bottom: 120px; }
+.page { width: 100%; max-width: var(--zalip-feed-width); margin-inline: auto; padding-bottom: 120px; box-sizing: border-box; }
 
 @media (max-width: 600px) {
 	.thread { margin-inline: 0; }
