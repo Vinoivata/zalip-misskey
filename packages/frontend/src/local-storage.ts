@@ -18,6 +18,7 @@ export type Keys = (
 	'drafts' |
 	'hashtags' |
 	'colorScheme' |
+	'zalipCatalogueView' |
 	'useSystemFont' |
 	'fontSize' |
 	'ui' |

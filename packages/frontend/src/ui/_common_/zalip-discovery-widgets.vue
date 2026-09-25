@@ -5,7 +5,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div :class="$style.root">
-	<button type="button" class="_button" :class="$style.search" @click="openZalipSearch()"><MkZalipIcon name="search"/><span>{{ i18n.ts.zalip.search }}</span></button>
 	<section :class="$style.panel">
 		<h2>{{ i18n.ts.zalip.mySpace }}</h2>
 		<template v-if="$i">
@@ -34,8 +33,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script lang="ts" setup>
 import { onMounted, ref } from 'vue';
-import MkZalipIcon from '@/components/MkZalipIcon.vue';
-import { openZalipSearch } from '@/utility/zalip-search.js';
 import { $i } from '@/i.js';
 import { i18n } from '@/i18n.js';
 import { navbarItemDef } from '@/navbar.js';
@@ -62,7 +59,6 @@ onMounted(async () => {
 <style lang="scss" module>
 .root { display: grid; gap: 16px; margin-bottom: 16px; }
 .panel { padding: 24px; border: 1px solid var(--zalip-social-border); border-radius: 20px; background: var(--zalip-social-panel); }
-.search { display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 18px; border: 1px solid var(--zalip-social-border); border-radius: 99px; background: var(--zalip-social-panel); color: var(--zalip-social-muted); font-size: 16px; > svg { width: 20px; height: 20px; } }
 .panel h2 { margin: 0 0 16px; font-size: 1.2rem; }
 .panel p { line-height: 1.6; color: var(--MI_THEME-fgTransparentWeak); }
 .account, .work { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; color: var(--MI_THEME-fg); text-decoration: none; }

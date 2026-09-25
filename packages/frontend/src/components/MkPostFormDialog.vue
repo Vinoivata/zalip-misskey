@@ -75,7 +75,17 @@ function onModalClosed() {
 <style lang="scss" module>
 .form {
 	width: 100%;
-	max-width: 520px;
-	margin: 0 auto auto auto;
+	max-width: 680px;
+	max-height: calc(100dvh - 64px);
+	margin: auto;
+	overflow-y: auto;
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: 24px;
+	box-shadow: 0 20px 80px var(--MI_THEME-shadow);
+
+	@media (max-width: 500px) {
+		max-height: calc(100dvh - 32px);
+		border-radius: 20px;
+	}
 }
 </style>

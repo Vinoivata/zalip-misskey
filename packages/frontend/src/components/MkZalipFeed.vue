@@ -186,7 +186,7 @@ onActivated(() => {
 
 <style lang="scss" module>
 .feedShell { padding-bottom: 24px; }
-.feedColumn { width: 100%; margin: 0 auto; min-width: 0; }
+.feedColumn { width: 100%; max-width: 780px; margin: 0 auto; min-width: 0; }
 .feedHead {
 	position: sticky;
 	top: var(--zalip-chrome-top, 0px);

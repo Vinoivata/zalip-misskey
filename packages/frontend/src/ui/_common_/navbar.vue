@@ -8,7 +8,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<MkA to="/" :class="$style.brand" :aria-label="i18n.ts.zalip.brand">zalip</MkA>
 	<nav :class="$style.menu" :aria-label="i18n.ts.menu">
 		<MkA to="/timeline" :class="$style.item" :activeClass="$style.active"><MkZalipIcon name="home"/><span>{{ navbarItemDef.feed.title }}</span></MkA>
-		<button type="button" class="_button" :class="$style.item" @click="openZalipSearch()"><MkZalipIcon name="search"/><span>{{ i18n.ts.zalip.search }}</span></button>
 		<MkA to="/" exact :class="$style.item" :activeClass="$style.active"><MkZalipIcon name="reels"/><span>{{ navbarItemDef.zalip.title }}</span></MkA>
 		<MkA v-if="$i && $i.policies.chatAvailability !== 'unavailable'" to="/chat" :class="$style.item" :activeClass="$style.active"><MkZalipIcon name="messages"/><span>{{ i18n.ts.zalip.messages }}</span><span v-if="$i.hasUnreadChatMessages" :class="$style.indicator"></span></MkA>
 		<MkA v-if="$i" to="/my/notifications" :class="$style.item" :activeClass="$style.active"><MkZalipIcon name="heart"/><span>{{ i18n.ts.notifications }}</span><span v-if="$i.hasUnreadNotification" :class="$style.indicator"></span></MkA>
@@ -40,7 +39,6 @@ import { i18n } from '@/i18n.js';
 import { getAccountMenu } from '@/accounts.js';
 import { $i } from '@/i.js';
 import { getZalipAppearanceMenu } from '@/utility/zalip-theme.js';
-import { openZalipSearch } from '@/utility/zalip-search.js';
 import { openZalipCreateMenu } from '@/utility/zalip-create.js';
 import { pleaseLogin } from '@/utility/please-login.js';
 

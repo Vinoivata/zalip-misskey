@@ -42,7 +42,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { nextTick, normalizeClass, onMounted, onUnmounted, provide, watch, ref, useTemplateRef, computed } from 'vue';
+import { nextTick, normalizeClass, onBeforeUnmount, onMounted, onUnmounted, provide, watch, ref, useTemplateRef, computed } from 'vue';
 import type { Keymap } from '@/utility/hotkey.js';
 import * as os from '@/os.js';
 import { isTouchUsing } from '@/utility/touch.js';
@@ -337,6 +337,7 @@ onMounted(() => {
 			}
 		} else {
 			releaseFocusTrap?.();
+			releaseFocusTrap = null;
 			focusParent(props.returnFocusTo ?? props.anchorElement, true, false);
 		}
 	}, { immediate: true });
@@ -344,6 +345,14 @@ onMounted(() => {
 	nextTick(() => {
 		alignObserver.observe(content.value!);
 	});
+});
+
+onBeforeUnmount(() => {
+	// A parent may remove an open dialog with v-if (for example after saving a
+	// rating). Release while the DOM ancestry still exists, not after unmount.
+	releaseFocusTrap?.();
+	releaseFocusTrap = null;
+	if (props.anchorElement) props.anchorElement.style.pointerEvents = 'auto';
 });
 
 onUnmounted(() => {

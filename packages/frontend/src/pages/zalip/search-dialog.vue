@@ -10,12 +10,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div :class="$style.root">
 		<label :class="$style.searchField">
 			<i class="ti ti-search"></i>
-			<input ref="searchInput" v-model="query" type="search" :placeholder="i18n.ts.zalip.searchPlaceholder" autocomplete="off" :aria-label="i18n.ts.zalip.searchPlaceholder">
+			<input ref="searchInput" v-model="query" type="search" :placeholder="i18n.ts.zalip.searchPlaceholder" autocomplete="off" :aria-label="i18n.ts.zalip.searchPlaceholder" @keydown.esc.prevent.stop="dismissDialog">
 			<button v-if="query" type="button" class="_button" :aria-label="i18n.ts.zalip.searchClear" @click="query = ''"><i class="ti ti-x"></i></button>
 		</label>
 
 		<div :class="$style.tabs" role="tablist" :aria-label="i18n.ts.zalip.searchSections">
-			<button v-for="tab in tabs" :key="tab.id" type="button" class="_button" :class="[$style.tab, { [$style.tabActive]: activeTab === tab.id }]" role="tab" :aria-selected="activeTab === tab.id" @click="activeTab = tab.id">
+			<button v-for="tab in tabs" :key="tab.id" type="button" class="_button" :class="[$style.tab, { [$style.tabActive]: activeTab === tab.id }]" role="tab" :aria-label="tab.label" :aria-selected="activeTab === tab.id" @click="activeTab = tab.id">
 				<i :class="tab.icon"></i><span>{{ tab.label }}</span>
 			</button>
 		</div>
@@ -207,6 +207,7 @@ async function search(term: string, tab: ZalipSearchTab): Promise<void> {
 }
 
 watch([query, activeTab], ([value, tab]) => {
+	requestId++;
 	if (searchTimer != null) window.clearTimeout(searchTimer);
 	const term = value.trim();
 	if (term.length < 2) {
@@ -230,6 +231,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+	requestId++;
 	if (searchTimer != null) window.clearTimeout(searchTimer);
 });
 </script>

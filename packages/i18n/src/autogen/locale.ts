@@ -1474,6 +1474,14 @@ export interface Locale extends ILocale {
          */
         "playerTab": string;
         /**
+         * Озвучка и перевод
+         */
+        "playerVoices": string;
+        /**
+         * Найти озвучку
+         */
+        "playerVoiceSearch": string;
+        /**
          * Трейлер
          */
         "trailerTab": string;
@@ -1697,6 +1705,38 @@ export interface Locale extends ILocale {
          * Поиск по каталогу
          */
         "catalogueSearchLabel": string;
+        /**
+         * Вид каталога
+         */
+        "catalogueView": string;
+        /**
+         * Плитки
+         */
+        "catalogueTiles": string;
+        /**
+         * Карточки с описанием
+         */
+        "catalogueCards": string;
+        /**
+         * Смотрю
+         */
+        "statusWatching": string;
+        /**
+         * В планах
+         */
+        "statusPlanned": string;
+        /**
+         * Просмотрено
+         */
+        "statusCompleted": string;
+        /**
+         * Отложено
+         */
+        "statusOnHold": string;
+        /**
+         * Брошено
+         */
+        "statusDropped": string;
         /**
          * Очистить поиск
          */

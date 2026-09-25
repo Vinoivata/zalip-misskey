@@ -13,6 +13,7 @@ import lightEmerald from '@@/themes/l-zalip-emerald.json5';
 import lightSapphire from '@@/themes/l-zalip-sapphire.json5';
 import lightViolet from '@@/themes/l-zalip-violet.json5';
 import type { MenuItem } from '@/types/menu.js';
+import MkZalipAccentPicker from '@/components/MkZalipAccentPicker.vue';
 import { i18n } from '@/i18n.js';
 import { prefer } from '@/preferences.js';
 import { store } from '@/store.js';
@@ -101,16 +102,19 @@ export function getZalipAppearanceMenu(): MenuItem[] {
 			text: modeLabel(mode),
 			icon: modeIcon(mode),
 			active: currentMode === mode,
-			action: () => applyZalipAppearance(mode, currentAccent ?? 'sapphire'),
+			action: () => applyZalipAppearance(mode, getZalipAccent() ?? 'sapphire'),
 		})),
 		{ type: 'divider' },
 		{ type: 'label', text: i18n.ts.zalip.appearancePalette },
-		...accents.map(accent => ({
-			text: accentLabel(accent),
-			icon: accentIcon(accent),
-			active: currentAccent === accent,
-			action: () => applyZalipAppearance(currentMode, accent),
-		})),
+		{
+			type: 'component',
+			component: MkZalipAccentPicker,
+			props: {
+				initialValue: currentAccent,
+				options: accents.map(accent => ({ value: accent, label: accentLabel(accent), icon: accentIcon(accent), color: themes[accent][store.s.darkMode ? 'dark' : 'light'].props.accent })),
+				onSelect: (value: string) => applyZalipAppearance(getZalipAppearanceMode(), value as ZalipAccent),
+			},
+		},
 		{ type: 'divider' },
 		{ type: 'link', text: i18n.ts.zalip.appearanceSettings, icon: 'ti ti-settings', to: '/settings/theme' },
 	];

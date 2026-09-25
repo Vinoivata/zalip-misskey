@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <PageWithHeader hideHeader>
-	<div class="_spacer" style="--MI_SPACER-w: 1180px;">
+	<div :class="$style.viewport">
 		<div :class="$style.page">
 			<div v-if="pending" :class="$style.state"><i class="ti ti-loader-2 ti-spin"></i> Загружаем тайтл…</div>
 			<div v-else-if="work == null" :class="$style.state"><i class="ti ti-movie-off"></i> Тайтл не найден или ещё не опубликован.</div>
@@ -57,6 +57,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<template v-if="$i">
 							<p v-if="allohaPlayback == null" :class="$style.playerState"><i class="ti ti-loader-2 ti-spin"></i> Проверяем доступность в Alloha…</p>
 							<template v-else-if="allohaPlayback.available">
+								<div :class="[$style.watchLayout, { [$style.hasTranslations]: allohaPlayback.translations.length > 1 }]">
+								<div :class="$style.screen">
 								<div v-if="allohaPlayerOpen && activeAllohaIframe" :class="$style.playerFrame"><iframe :key="activeAllohaIframeKey" :src="activeAllohaIframe" :title="`Плеер Alloha: ${work.title}`" loading="lazy" referrerpolicy="origin" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>
 								<div v-else :class="$style.playerPreview">
 									<img v-if="selectedEpisode?.stillPath" :src="tmdbBackdrop(selectedEpisode.stillPath)" alt="" loading="lazy">
@@ -67,12 +69,21 @@ SPDX-License-Identifier: AGPL-3.0-only
 										<button type="button" class="_button" :class="$style.playerButton" @click="openAllohaPlayer"><i class="ti ti-player-play-filled"></i> Открыть плеер</button>
 									</div>
 								</div>
+								</div>
+								<aside v-if="allohaPlayback.translations.length > 1" :class="$style.voices" :aria-label="i18n.ts.zalip.playerVoices">
+									<h3><i class="ti ti-headphones"></i>{{ i18n.ts.zalip.playerVoices }}</h3>
+									<label :class="$style.voiceSearch"><i class="ti ti-search"></i><input v-model="voiceQuery" class="_input" type="search" :placeholder="i18n.ts.zalip.playerVoiceSearch" :aria-label="i18n.ts.zalip.playerVoiceSearch"></label>
+									<div :class="$style.voiceList">
+										<button v-for="translation in filteredTranslations" :key="translation.id" type="button" class="_button" :class="{ [$style.voiceSelected]: selectedAllohaTranslationId === translation.id }" :aria-pressed="selectedAllohaTranslationId === translation.id" @click="selectedAllohaTranslationId = translation.id"><span>{{ translation.name }}</span><small v-if="translation.quality">{{ translation.quality }}</small><i v-if="selectedAllohaTranslationId === translation.id" class="ti ti-check"></i></button>
+										<p v-if="!filteredTranslations.length">{{ i18n.ts.zalip.searchNoResults }}</p>
+									</div>
+								</aside>
+								</div>
 								<div :class="$style.playerToolbar">
 									<button type="button" class="_button" :class="$style.episodeNav" :disabled="previousEpisode == null" aria-label="Предыдущая серия" @click="selectRelativeEpisode(-1)"><i class="ti ti-chevron-left"></i></button>
 									<div :class="$style.nowPlaying"><span>Выбрано</span><strong>{{ selectedEpisode ? episodeLabel(selectedEpisode) : kindLabel(work.kind) }}</strong></div>
 									<button type="button" class="_button" :class="$style.episodeNav" :disabled="nextEpisode == null" aria-label="Следующая серия" @click="selectRelativeEpisode(1)"><i class="ti ti-chevron-right"></i></button>
-									<label v-if="allohaPlayback.translations.length > 1" :class="$style.translation"><i class="ti ti-language"></i><span class="_visuallyHidden">Озвучка</span><select v-model="selectedAllohaTranslationId" class="_input" aria-label="Озвучка Alloha"><option v-for="translation in allohaPlayback.translations" :key="translation.id" :value="translation.id">{{ translationLabel(translation) }}</option></select></label>
-									<span v-else :class="$style.providerLabel">Alloha</span>
+									<span :class="$style.providerLabel">{{ selectedVoiceLabel }}</span>
 								</div>
 								<p :class="$style.providerNotice">{{ i18n.ts.zalip.playerEpisodeSwitchNotice }}</p>
 							</template>
@@ -218,6 +229,12 @@ const playerView = ref<'player' | 'trailer'>('player');
 const allohaPlayback = ref<AllohaPlayback | null>(null);
 const allohaPlayerOpen = ref(false);
 const selectedAllohaTranslationId = ref<number | null>(null);
+const voiceQuery = ref('');
+const filteredTranslations = computed(() => (allohaPlayback.value?.translations ?? []).filter(translation => translation.name.toLocaleLowerCase('ru').includes(voiceQuery.value.trim().toLocaleLowerCase('ru'))));
+const selectedVoiceLabel = computed(() => {
+	const translation = allohaPlayback.value?.translations.find(item => item.id === selectedAllohaTranslationId.value);
+	return translation ? translationLabel(translation) : 'Alloha';
+});
 const discussionNoteId = ref<string | null>(null);
 const discussionError = ref<string | null>(null);
 const discussionScope = ref<'work' | 'episode'>('work');
@@ -632,12 +649,17 @@ watch(() => props.slug, () => void load(), { immediate: true });
 definePage(() => ({
 	title: work.value?.title ?? 'Zalip',
 	icon: 'ti ti-movie',
+	needWideArea: true,
 }));
 </script>
 
 <style lang="scss" module>
+.viewport { container-type: inline-size; }
 .page {
-	padding: 24px var(--MI-margin) 52px;
+	max-width: 1200px;
+	margin: 0 auto;
+	padding: 24px 24px 52px;
+	box-sizing: border-box;
 }
 
 .state {
@@ -662,11 +684,10 @@ definePage(() => ({
 
 .hero {
 	position: relative;
-	min-height: 480px;
 	overflow: hidden;
 	border: 1px solid var(--MI_THEME-divider);
-	border-radius: calc(var(--MI-radius) * 2);
-	background: var(--MI_THEME-panel);
+	border-radius: 20px;
+	background: var(--zalip-social-panel);
 }
 
 .hero::after {
@@ -694,11 +715,11 @@ definePage(() => ({
 	position: relative;
 	z-index: 1;
 	display: grid;
-	grid-template-columns: minmax(190px, 230px) minmax(0, 1fr);
-	align-items: end;
-	gap: 32px;
-	min-height: 480px;
-	padding: 42px;
+	grid-template-columns: 200px minmax(0, 1fr);
+	grid-template-rows: auto 1fr;
+	align-items: start;
+	gap: 20px 28px;
+	padding: 28px;
 }
 
 .content {
@@ -707,6 +728,7 @@ definePage(() => ({
 
 .sidebar {
 	align-self: start;
+	grid-row: 1 / 3;
 }
 
 .poster {
@@ -819,7 +841,7 @@ definePage(() => ({
 
 .info h1 {
 	margin: 0;
-	font-size: clamp(2.15rem, 5vw, 3.75rem);
+	font-size: clamp(1.8rem, 3vw, 2.6rem);
 	line-height: 1.08;
 	letter-spacing: -0.035em;
 }
@@ -859,7 +881,7 @@ definePage(() => ({
 .description {
 	grid-column: 2;
 	max-width: 800px;
-	margin: 18px 0 0;
+	margin: 0;
 	white-space: pre-line;
 	line-height: 1.6;
 	color: color-mix(in srgb, var(--MI_THEME-fg) 82%, transparent);
@@ -917,12 +939,34 @@ definePage(() => ({
 }
 
 .player {
-	margin-top: 24px;
+	margin-top: 0;
 	scroll-margin-top: 72px;
 	overflow: hidden;
 	border: 1px solid var(--MI_THEME-divider);
 	border-radius: 18px;
 	background: var(--MI_THEME-panel);
+}
+
+.watchLayout { display: grid; min-width: 0; background: var(--zalip-social-panel); }
+.hasTranslations { grid-template-columns: minmax(0, 1fr) 228px; }
+.screen { min-width: 0; align-self: start; background: var(--zalip-social-bg); }
+.voices { display: flex; flex-direction: column; min-width: 0; max-height: 440px; padding: 16px; gap: 12px; border-left: 1px solid var(--zalip-social-border); box-sizing: border-box; }
+.voices h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 14px; }
+.voiceSearch { display: flex; align-items: center; gap: 7px; padding: 10px; border: 1px solid var(--zalip-social-border); border-radius: 10px; color: var(--zalip-social-muted); }
+.voiceSearch input { width: 100%; min-width: 0; border: 0; padding: 0; color: var(--zalip-social-fg); background: transparent; font-size: 12px; }
+.voiceList { display: grid; align-content: start; gap: 5px; overflow-y: auto; min-height: 0; }
+.voiceList button { display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 10px; border: 1px solid transparent; border-radius: 10px; font-size: 13px; text-align: left; }
+.voiceList button span { min-width: 0; overflow-wrap: anywhere; }
+.voiceList small { margin-left: auto; color: var(--zalip-social-muted); }
+.voiceList p { font-size: 13px; color: var(--zalip-social-muted); }
+.voiceList button:hover { background: var(--zalip-social-hover); }
+.voiceList .voiceSelected { border-color: var(--zalip-accent-border); background: var(--zalip-accent-soft); color: var(--MI_THEME-accent); }
+@container (max-width: 850px) {
+	.hasTranslations { grid-template-columns: 1fr; }
+	.voices { border-left: 0; border-top: 1px solid var(--zalip-social-border); padding: 14px; max-height: 220px; }
+	.voiceList { display: flex; overflow-x: auto; }
+	.voiceList button { flex: 0 0 auto; }
+	.voiceSearch { max-width: 320px; }
 }
 
 .playerTabs {
@@ -1672,7 +1716,7 @@ definePage(() => ({
 }
 
 .heroContent {
-	grid-template-columns: 232px minmax(0, 1fr);
+	grid-template-columns: 200px minmax(0, 1fr);
 	grid-template-rows: auto 1fr;
 	align-items: start;
 	gap: 24px;
@@ -1773,24 +1817,25 @@ definePage(() => ({
 	.hero { border-radius: 0; }
 	.heroBackground { height: 440px; opacity: 0.75; }
 	.hero::after { background: linear-gradient(0deg, var(--MI_THEME-panel) calc(100% - 440px), color-mix(in srgb, var(--MI_THEME-panel) 32%, transparent)); }
-	.heroContent { display: flex; flex-direction: column; align-items: stretch; gap: 24px; padding: 32px var(--zalip-container-offset) 24px; }
-	.sidebar { display: flex; flex-direction: column; align-items: stretch; align-self: stretch; gap: 0; }
-	.poster { width: min(78vw, 320px); align-self: center; border-radius: var(--zalip-radius-big); box-shadow: 0 12px 40px var(--MI_THEME-shadow); }
-	.sidebarActions { grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 20px; }
+	.heroContent { display: grid; grid-template-columns: 112px minmax(0, 1fr); align-items: start; gap: 18px 16px; padding: 24px var(--zalip-container-offset); }
+	.sidebar { display: contents; }
+	.poster { grid-column: 1; grid-row: 1; width: 100%; border-radius: 14px; box-shadow: 0 8px 24px var(--MI_THEME-shadow); }
+	.info { grid-column: 2; grid-row: 1; min-width: 0; }
+	.sidebarActions { grid-column: 1 / -1; grid-row: 2; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 0; }
 	.watchButton { grid-column: 1 / -1; }
 	.watchButton, .sideButton { min-height: 50px; padding: 12px; gap: 10px; font-size: max(16px, 1rem); font-weight: 650; line-height: 1.25; }
 	.watchButton i, .sideButton i { flex: 0 0 auto; font-size: 20px; }
-	.quickActions { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+	.quickActions { grid-column: 1 / -1; grid-row: 3; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 0; }
 	.quickAction { min-height: 46px; padding: 10px 8px; gap: 8px; font-size: max(14px, 0.9rem); font-weight: 550; line-height: 1.3; white-space: normal; }
 	.quickAction:not(.quickActionActive) { color: var(--MI_THEME-fg); }
 	.quickAction i { flex: 0 0 auto; font-size: 20px; }
-	.quickAction span { display: inline; }
+	.quickAction span { display: none; }
 	.kind { margin: 0 0 10px; color: var(--MI_THEME-fgTransparentWeak); font-size: max(14px, 0.9rem); font-weight: 500; letter-spacing: normal; }
-	.info h1 { font-size: clamp(28px, 7vw, 2.4rem); line-height: 1.2; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+	.info h1 { font-size: clamp(21px, 5vw, 28px); line-height: 1.2; letter-spacing: -0.02em; overflow-wrap: anywhere; }
 	.original { margin-top: 8px; font-size: max(16px, 1rem); line-height: 1.4; }
 	.genres { margin-top: 16px; gap: 8px; }
 	.genres a { min-height: 40px; box-sizing: border-box; padding: 9px 12px; color: var(--MI_THEME-fg); font-size: max(14px, 0.9rem); font-weight: 500; line-height: 1.4; }
-	.description { margin: 0; font-size: max(16px, 1rem); line-height: 1.65; color: var(--MI_THEME-fg); }
+	.description { grid-column: 1 / -1; grid-row: 4; margin: 0; font-size: 15px; line-height: 1.65; color: var(--MI_THEME-fg); }
 	.content { padding: 0 var(--zalip-container-offset); }
 	.player { margin-inline: calc(var(--zalip-container-offset) * -1); border-radius: 0; }
 	.playerTabs { gap: 8px; padding: 8px var(--zalip-container-offset); }
