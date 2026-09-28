@@ -80,7 +80,7 @@ type LibraryFilter = LibraryStatus | 'all';
 type LibrarySort = 'recent' | 'title' | 'rating';
 
 type LibraryEntry = {
-	status: LibraryStatus;
+	status: LibraryStatus | null;
 	episodesWatched: number;
 	personalRating: number | null;
 	isFavorite: boolean;
@@ -130,7 +130,8 @@ function kindLabel(kind: WorkKind): string {
 	return ({ movie: i18n.ts.zalip.catalogueKindMovie, series: i18n.ts.zalip.catalogueKindSeries, anime: i18n.ts.zalip.catalogueKindAnime, animation: i18n.ts.zalip.catalogueKindAnimation })[kind];
 }
 
-function statusLabel(status: LibraryStatus): string {
+function statusLabel(status: LibraryStatus | null): string {
+	if (status == null) return i18n.ts.zalip.libraryNoStatus;
 	return ({ watching: i18n.ts.zalip.libraryWatching, planned: i18n.ts.zalip.libraryPlanned, completed: i18n.ts.zalip.libraryCompleted, on_hold: i18n.ts.zalip.libraryOnHold, dropped: i18n.ts.zalip.libraryDropped })[status];
 }
 
@@ -138,7 +139,8 @@ async function loadLibrary(): Promise<void> {
 	pending.value = true;
 	loadError.value = false;
 	try {
-		entries.value = await misskeyApiZalip<LibraryEntry[]>('zalip/library/list');
+		const library = await misskeyApiZalip<LibraryEntry[]>('zalip/library/list');
+		entries.value = library.filter(entry => entry.status != null || entry.isFavorite || entry.isReleaseSubscribed || entry.personalRating != null || entry.episodesWatched > 0);
 	} catch {
 		loadError.value = true;
 	} finally {

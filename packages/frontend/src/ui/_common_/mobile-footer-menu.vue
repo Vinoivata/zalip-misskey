@@ -30,15 +30,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<button v-else type="button" class="_button" :class="$style.accountCard" @click="login"><MkZalipIcon name="person"/><strong>{{ i18n.ts.login }}</strong></button>
 			<div :class="$style.sheetGrid">
 				<MkA v-for="item in accountLinks" :key="item.to" :to="item.to" :class="$style.sheetTile" @click="closeAccountSheet"><i :class="item.icon" aria-hidden="true"></i><span>{{ item.label }}</span></MkA>
-				<button type="button" class="_button" :class="$style.sheetTile" @click="search"><MkZalipIcon name="search"/><span>{{ i18n.ts.zalip.search }}</span></button>
+				<button type="button" class="_button" :class="$style.sheetTile" @click="search"><i class="ti ti-search" aria-hidden="true"></i><span>{{ i18n.ts.zalip.search }}</span></button>
 			</div>
 			<div :class="$style.sheetRows">
-				<MkA v-if="$i?.isAdmin" to="/zalip/editor" :class="$style.sheetRow" @click="closeAccountSheet"><i class="ti ti-square-plus" aria-hidden="true"></i>{{ i18n.ts.zalip.addContent }}</MkA>
-				<MkA v-if="$i?.isAdmin || $i?.isModerator" to="/admin" :class="$style.sheetRow" @click="closeAccountSheet"><i class="ti ti-shield" aria-hidden="true"></i>{{ i18n.ts.controlPanel }}</MkA>
-				<button type="button" class="_button" :class="$style.sheetRow" @click="appearance"><i class="ti ti-palette" aria-hidden="true"></i>{{ i18n.ts.zalip.appearanceTitle }}</button>
-				<MkA v-if="$i" to="/settings" :class="$style.sheetRow" @click="closeAccountSheet"><i class="ti ti-settings" aria-hidden="true"></i>{{ i18n.ts.settings }}</MkA>
+				<MkA v-if="$i?.isAdmin" to="/zalip/editor" :class="$style.sheetRow" @click="closeAccountSheet"><i class="ti ti-square-plus" aria-hidden="true"></i><span>{{ i18n.ts.zalip.addContent }}</span></MkA>
+				<MkA v-if="$i?.isAdmin || $i?.isModerator" to="/admin" :class="$style.sheetRow" @click="closeAccountSheet"><i class="ti ti-shield" aria-hidden="true"></i><span>{{ i18n.ts.controlPanel }}</span></MkA>
+				<button type="button" class="_button" :class="$style.sheetRow" @click="appearance"><i class="ti ti-palette" aria-hidden="true"></i><span>{{ i18n.ts.zalip.appearanceTitle }}</span></button>
+				<MkA v-if="$i" to="/settings" :class="$style.sheetRow" @click="closeAccountSheet"><i class="ti ti-settings" aria-hidden="true"></i><span>{{ i18n.ts.settings }}</span></MkA>
 			</div>
-			<button v-if="$i" type="button" class="_button" :class="[$style.sheetRow, $style.signout]" @click="logout"><i class="ti ti-logout" aria-hidden="true"></i>{{ i18n.ts.logout }}</button>
+			<button v-if="$i" type="button" class="_button" :class="[$style.sheetRow, $style.signout]" @click="logout"><i class="ti ti-logout" aria-hidden="true"></i><span>{{ i18n.ts.logout }}</span></button>
 		</section>
 	</MkModal>
 </Teleport>
@@ -217,11 +217,14 @@ function logout(): void {
 .sheetGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .sheetTile { display: grid; grid-template-rows: 24px minmax(28px, auto); justify-items: center; align-content: start; gap: 8px; min-height: 88px; padding: 14px 4px 10px; box-sizing: border-box; border-radius: 16px; background: var(--zalip-social-raised); color: var(--zalip-social-muted); text-align: center; text-decoration: none; font-size: 11px; line-height: 14px; overflow-wrap: anywhere; }
 .sheetTile > span { width: 100%; }
-.sheetTile i, .sheetTile svg { display: grid; place-items: center; width: 24px; height: 24px; font-size: 23px; line-height: 1; color: var(--zalip-social-fg); }
+.sheetTile i { display: grid; place-items: center; width: 24px; height: 24px; font-size: 24px; line-height: 1; color: var(--zalip-social-fg); }
+.sheetTile i::before, .sheetRow i::before { display: block; font-size: 1em; line-height: 1; }
 .sheetTile:hover, .accountCard:hover { background: var(--zalip-accent-soft); }
 .sheetRows { padding: 16px 0; }
-.sheetRow { display: flex; align-items: center; gap: 14px; width: 100%; box-sizing: border-box; min-height: 48px; padding: 10px 14px; border-radius: 12px; text-align: left; font-size: 15px; font-weight: 600; text-decoration: none; }
-.sheetRow i { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; font-size: 22px; line-height: 1; }
+.sheetRow { display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: center; gap: 14px; width: 100%; box-sizing: border-box; min-height: 48px; padding: 10px 14px; border-radius: 12px; text-align: left; font-size: 15px; font-weight: 600; text-decoration: none; }
+.sheetRow i { display: grid; place-items: center; width: 24px; height: 24px; font-size: 24px; line-height: 1; }
+.sheetRow span { line-height: 1.4; }
+.sheetRow:focus-visible, .sheetTile:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: -2px; }
 .sheetRow:hover { background: var(--zalip-social-hover); }
 .signout { padding-top: 18px; border-top: 1px solid var(--zalip-social-border); border-radius: 0; color: var(--MI_THEME-error); }
 @media (max-width: 350px) { .accountCard { padding: 12px; gap: 8px; } .profilePill { padding: 8px; font-size: 11px; } .accountAvatar { flex-basis: 40px; width: 40px; height: 40px; } .accountName strong { font-size: 14px; } }

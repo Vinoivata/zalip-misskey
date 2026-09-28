@@ -38857,8 +38857,8 @@ export interface operations {
                 };
                 content: {
                     'application/json': {
-                        /** @enum {string} */
-                        status: 'watching' | 'planned' | 'completed' | 'on_hold' | 'dropped';
+                        /** @enum {string|null} */
+                        status: 'watching' | 'planned' | 'completed' | 'on_hold' | 'dropped' | null;
                         episodesWatched: number;
                         personalRating: number | null;
                         isFavorite: boolean;
@@ -38938,8 +38938,8 @@ export interface operations {
                 'application/json': {
                     /** Format: misskey:id */
                     workId: string;
-                    /** @enum {string} */
-                    status: 'watching' | 'planned' | 'completed' | 'on_hold' | 'dropped';
+                    /** @enum {string|null} */
+                    status: 'watching' | 'planned' | 'completed' | 'on_hold' | 'dropped' | null;
                     episodesWatched?: number;
                     personalRating?: number | null;
                     isFavorite?: boolean;
@@ -38955,8 +38955,8 @@ export interface operations {
                 };
                 content: {
                     'application/json': {
-                        /** @enum {string} */
-                        status: 'watching' | 'planned' | 'completed' | 'on_hold' | 'dropped';
+                        /** @enum {string|null} */
+                        status: 'watching' | 'planned' | 'completed' | 'on_hold' | 'dropped' | null;
                         episodesWatched: number;
                         personalRating: number | null;
                         isFavorite: boolean;

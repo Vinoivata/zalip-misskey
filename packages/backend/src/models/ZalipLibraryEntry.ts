@@ -29,8 +29,8 @@ export class MiZalipLibraryEntry {
 	@JoinColumn()
 	public work: MiZalipWork | null;
 
-	@Column('varchar', { length: 16, default: 'planned' })
-	public status: ZalipLibraryStatus;
+	@Column('varchar', { length: 16, nullable: true })
+	public status: ZalipLibraryStatus | null;
 
 	@Column('integer', { default: 0 })
 	public episodesWatched: number;

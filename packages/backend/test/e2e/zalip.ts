@@ -67,6 +67,25 @@ describe('Zalip discussions', () => {
 		assert.strictEqual(typeof response.body.noteId, 'string');
 	});
 
+	test('clears and restores a list status without losing personal state or affecting another user', async () => {
+		const before = await api('zalip/library/update', { workId, status: 'watching', episodesWatched: 4, personalRating: 8, isFavorite: true, isReleaseSubscribed: true }, viewer);
+		assert.strictEqual(before.status, 200);
+		const removed = await api('zalip/library/update', { workId, status: null }, viewer);
+		assert.strictEqual(removed.status, 200);
+		assert.strictEqual(removed.body.status, null);
+		assert.strictEqual(removed.body.personalRating, 8);
+		assert.strictEqual(removed.body.episodesWatched, 4);
+		assert.strictEqual(removed.body.isFavorite, true);
+		assert.strictEqual(removed.body.isReleaseSubscribed, true);
+		const list = await api('zalip/library/list', {}, viewer);
+		assert.strictEqual(list.body.find(entry => entry.work.id === workId)?.status, null);
+		const other = await api('zalip/library/list', {}, admin);
+		assert.strictEqual(other.body.some(entry => entry.work.id === workId), false);
+		const restored = await api('zalip/library/update', { workId, status: 'planned' }, viewer);
+		assert.strictEqual(restored.body.status, 'planned');
+		assert.strictEqual(restored.body.personalRating, 8);
+	});
+
 	test('creates an episode discussion once and returns the same context on repeat', async () => {
 		const first = await api('zalip/episodes/discussions/ensure', { episodeId }, viewer);
 		const repeated = await api('zalip/episodes/discussions/ensure', { episodeId }, viewer);

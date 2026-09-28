@@ -190,8 +190,8 @@ function statusLabel(status: LibraryStatus): string {
 async function loadLibrary(): Promise<void> {
 	if (!$i) return;
 	try {
-		const entries = await misskeyApiZalip<{ status: LibraryStatus; work: { id: string } }[]>('zalip/library/list');
-		library.value = Object.fromEntries(entries.map(entry => [entry.work.id, entry.status]));
+		const entries = await misskeyApiZalip<{ status: LibraryStatus | null; work: { id: string } }[]>('zalip/library/list');
+		library.value = Object.fromEntries(entries.flatMap(entry => entry.status == null ? [] : [[entry.work.id, entry.status]]));
 	} catch {
 		// Library badges are optional; catalogue browsing remains available.
 	}

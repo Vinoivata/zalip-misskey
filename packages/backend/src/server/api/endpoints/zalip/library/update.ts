@@ -20,7 +20,7 @@ export const meta = {
 		optional: false,
 		nullable: false,
 		properties: {
-			status: { type: 'string', enum: ['watching', 'planned', 'completed', 'on_hold', 'dropped'] },
+			status: { type: 'string', optional: false, nullable: true, enum: ['watching', 'planned', 'completed', 'on_hold', 'dropped', null] },
 			episodesWatched: { type: 'integer' },
 			personalRating: { type: 'integer', nullable: true },
 			isFavorite: { type: 'boolean' },
@@ -44,7 +44,7 @@ export const paramDef = {
 	type: 'object',
 	properties: {
 		workId: { type: 'string', format: 'misskey:id' },
-		status: { type: 'string', enum: ['watching', 'planned', 'completed', 'on_hold', 'dropped'] },
+		status: { type: 'string', nullable: true, enum: ['watching', 'planned', 'completed', 'on_hold', 'dropped', null] },
 		episodesWatched: { type: 'integer', minimum: 0 },
 		personalRating: { type: 'integer', nullable: true, minimum: 1, maximum: 10 },
 		isFavorite: { type: 'boolean' },

@@ -2142,6 +2142,30 @@ export interface Locale extends ILocale {
          */
         "releaseSubscriptionTitle": string;
         /**
+         * Следить за новыми сериями
+         */
+        "subscribeEpisodes": string;
+        /**
+         * Сообщить о выходе фильма
+         */
+        "subscribePremiere": string;
+        /**
+         * Вы подписаны
+         */
+        "releaseSubscribed": string;
+        /**
+         * Уведомим, когда появится новая серия или фильм станет доступен.
+         */
+        "releaseSubscribeHint": string;
+        /**
+         * Нажмите ещё раз, чтобы отменить подписку.
+         */
+        "releaseUnsubscribeHint": string;
+        /**
+         * Моя оценка
+         */
+        "myRating": string;
+        /**
          * Закладки
          */
         "libraryMenuTitle": string;
@@ -2149,6 +2173,14 @@ export interface Locale extends ILocale {
          * По статусу
          */
         "libraryStatusHeading": string;
+        /**
+         * Нажмите ещё раз, чтобы убрать из списка. Оценка и история сохранятся.
+         */
+        "libraryRemoveStatusHint": string;
+        /**
+         * Без списка
+         */
+        "libraryNoStatus": string;
         /**
          * В планах
          */

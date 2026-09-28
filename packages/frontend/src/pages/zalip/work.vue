@@ -11,7 +11,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div v-else-if="work == null" :class="$style.state"><i class="ti ti-movie-off" aria-hidden="true"></i> Тайтл не найден или ещё не опубликован.</div>
 			<article v-else :class="$style.work">
 
-				<section :class="$style.hero">
+				<section :class="[$style.hero, { [$style.hasLogo]: work.logoPath }]">
 					<div v-if="work.backdropPath" :class="$style.heroBackground" aria-hidden="true"><img :src="tmdbBackdrop(work.backdropPath)" alt=""></div>
 					<div :class="$style.heroInner">
 						<nav :class="$style.breadcrumb" :aria-label="i18n.ts.zalip.catalogueHeading"><MkA to="/catalog">{{ i18n.ts.zalip.catalogueHeading }}</MkA><i class="ti ti-chevron-right" aria-hidden="true"></i><span>{{ work.title }}</span></nav>
@@ -27,11 +27,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<div :class="$style.info">
 								<p :class="$style.kind">{{ kindLabel(work.kind) }}<span v-if="work.releaseYear"> · {{ work.releaseYear }}</span></p>
 								<h1>{{ work.title }}</h1>
-								<p v-if="work.originalTitle && work.originalTitle !== work.title" :class="$style.original">{{ work.originalTitle }}</p>
 								<div :class="$style.ratings">
 									<span v-if="work.communityRating != null" :class="$style.communityRating" :aria-label="i18n.tsx.zalip.communityRating({ rating: work.communityRating.toFixed(1) })"><i class="ti ti-star" aria-hidden="true"></i><strong>{{ work.communityRating.toFixed(1) }}</strong><small>{{ i18n.tsx.zalip.workRatingCount({ count: work.ratingCount }) }}</small></span>
 									<span v-else :class="$style.original">{{ i18n.ts.zalip.workNoRating }}</span>
+									<span v-if="work.originalTitle && work.originalTitle !== work.title" :class="$style.original">{{ work.originalTitle }}</span>
 								</div>
+								<div :class="$style.compactFacts"><p>{{ [work.releaseYear, ...work.genres].filter(Boolean).join(', ') }}</p><p>{{ [kindLabel(work.kind), work.runtimeMinutes ? runtimeLabel(work.runtimeMinutes, work.kind) : null].filter(Boolean).join(' · ') }}</p></div>
 								<dl :class="$style.facts">
 									<template v-if="work.releaseYear"><dt>{{ i18n.ts.zalip.workYear }}</dt><dd>{{ work.releaseYear }}</dd></template>
 									<dt>{{ i18n.ts.zalip.workType }}</dt><dd>{{ kindLabel(work.kind) }}</dd>
@@ -44,10 +45,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</div>
 				</section>
 				<div :class="$style.actionStrip" role="group" :aria-label="i18n.ts.zalip.workActions">
-					<button type="button" class="_button" :class="{ [$style.actionActive]: personalRating != null }" :disabled="saving" @click="choosePersonalRating"><i class="ti ti-star" aria-hidden="true"></i><span>{{ personalRating == null ? i18n.ts.zalip.workRateAction : ratingLabel }}</span></button>
-					<button type="button" class="_button" :class="{ [$style.actionActive]: saved }" :disabled="saving" @click="showLibraryMenu"><i class="ti ti-bookmark-plus" aria-hidden="true"></i><span>{{ saved ? libraryStatusText(libraryStatus) : i18n.ts.zalip.addToList }}</span></button>
-					<button type="button" class="_button" @click="shareWork"><i class="ti ti-repeat" aria-hidden="true"></i><span>{{ i18n.ts.zalip.workRepost }}</span></button>
-					<button type="button" class="_button" :aria-label="i18n.ts.zalip.more" :disabled="saving" @click="showWorkMenu"><i class="ti ti-dots" aria-hidden="true"></i><span>{{ i18n.ts.zalip.more }}</span></button>
+					<button type="button" class="_button" :disabled="saving" :aria-label="personalRating == null ? i18n.ts.zalip.workRateAction : `${i18n.ts.zalip.myRating}: ${ratingLabel}`" @click="choosePersonalRating"><span :class="$style.actionSymbol"><span v-if="personalRating != null" :class="$style.ratingBadge"><i class="ti ti-star-filled" aria-hidden="true"></i>{{ personalRating }}</span><i v-else class="ti ti-star" aria-hidden="true"></i></span><span>{{ personalRating == null ? i18n.ts.zalip.workRateAction : i18n.ts.zalip.myRating }}</span></button>
+					<button type="button" class="_button" :class="{ [$style.actionActive]: saved }" :disabled="saving" aria-haspopup="menu" @click="showLibraryMenu"><span :class="$style.actionSymbol"><i :class="saved ? libraryStatusIcon(libraryStatus) : 'ti ti-bookmark-plus'" aria-hidden="true"></i></span><span>{{ saved ? libraryStatusText(libraryStatus) : i18n.ts.zalip.addToList }}</span></button>
+					<button type="button" class="_button" @click="shareWork"><span :class="$style.actionSymbol"><i class="ti ti-share-3" aria-hidden="true"></i></span><span>{{ i18n.ts.zalip.workRepost }}</span></button>
+					<button type="button" class="_button" :aria-label="i18n.ts.zalip.more" :disabled="saving" aria-haspopup="menu" @click="showWorkMenu"><span :class="$style.actionSymbol"><i class="ti ti-dots" aria-hidden="true"></i></span><span>{{ i18n.ts.zalip.more }}</span></button>
 				</div>
 				<p v-if="work.description" :class="$style.description">{{ work.description }}</p>
 				<div :class="$style.content">
@@ -57,6 +58,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<button type="button" class="_button" :class="[$style.playerTab, { [$style.playerTabActive]: playerView === 'player' }]" :aria-pressed="playerView === 'player'" @click="playerView = 'player'"><i class="ti ti-list" aria-hidden="true"></i><span>{{ work.seasons.length ? i18n.ts.zalip.workEpisodes : i18n.ts.zalip.playerTab }}</span></button>
 							<button v-if="work.trailerYoutubeKey" type="button" class="_button" :class="[$style.playerTab, { [$style.playerTabActive]: playerView === 'trailer' }]" :aria-pressed="playerView === 'trailer'" @click="openTrailer"><i class="ti ti-player-play" aria-hidden="true"></i><span>{{ i18n.ts.zalip.trailerTab }}</span></button>
 							<button type="button" class="_button" :class="$style.playerTab" @click="focusDiscussion"><i class="ti ti-messages" aria-hidden="true"></i><span>{{ i18n.ts.zalip.comments }}</span></button>
+						</div>
+						<div v-if="showReleaseSubscription" :class="$style.subscriptionBar">
+							<button type="button" class="_button" :class="[$style.subscribeButton, { [$style.subscribed]: releaseSubscribed }]" :disabled="saving" :aria-pressed="releaseSubscribed" @click="toggleReleaseSubscription"><i :class="releaseSubscribed ? 'ti ti-bell-check' : 'ti ti-bell-plus'" aria-hidden="true"></i><span>{{ releaseSubscribed ? i18n.ts.zalip.releaseSubscribed : releaseSubscriptionLabel }}</span></button>
+							<small>{{ releaseSubscribed ? i18n.ts.zalip.releaseUnsubscribeHint : i18n.ts.zalip.releaseSubscribeHint }}</small>
 						</div>
 						<div v-if="work.trailerYoutubeKey && playerView === 'trailer'" :class="$style.playerFrame"><iframe :src="youtubeEmbed(work.trailerYoutubeKey)" :title="i18n.ts.zalip.trailerTab + ': ' + work.title" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>
 						<template v-if="playerView === 'player'">
@@ -212,7 +217,7 @@ type ZalipEpisode = {
 type LibraryStatus = 'watching' | 'planned' | 'completed' | 'on_hold' | 'dropped';
 
 type LibraryEntry = {
-	status: LibraryStatus;
+	status: LibraryStatus | null;
 	episodesWatched: number;
 	personalRating: number | null;
 	isFavorite: boolean;
@@ -251,12 +256,18 @@ const props = defineProps<{ slug: string }>();
 const work = ref<ZalipWork | null>(null);
 const pending = ref(true);
 const saving = ref(false);
-const saved = ref(false);
-const libraryStatus = ref<LibraryStatus>('planned');
+const libraryStatus = ref<LibraryStatus | null>(null);
+const saved = computed(() => libraryStatus.value != null);
 const episodesWatched = ref(0);
 const personalRating = ref<number | null>(null);
 const isFavorite = ref(false);
 const releaseSubscribed = ref(false);
+// Menu switches must remain clickable when selected. `active` menu buttons intentionally do not.
+const favoriteSwitch = computed({ get: () => isFavorite.value, set: () => { void toggleFavorite(); } });
+const releaseSwitch = computed({ get: () => releaseSubscribed.value, set: () => { void toggleReleaseSubscription(); } });
+const episodic = computed(() => work.value?.kind === 'series' || !!work.value?.seasons.length);
+const showReleaseSubscription = computed(() => episodic.value || releaseSubscribed.value || allohaPlayback.value?.available !== true);
+const releaseSubscriptionLabel = computed(() => episodic.value ? i18n.ts.zalip.subscribeEpisodes : i18n.ts.zalip.subscribePremiere);
 const playerView = ref<'player' | 'trailer'>('player');
 const allohaPlayback = ref<AllohaPlayback | null>(null);
 const allohaPlayerOpen = ref(false);
@@ -358,7 +369,8 @@ function episodeMeta(episode: ZalipEpisode): string {
 	return [episode.airDate ? new Date(episode.airDate).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : null, episode.runtimeMinutes != null ? `${episode.runtimeMinutes} мин.` : null].filter((value): value is string => value != null).join(' · ');
 }
 
-function libraryStatusText(status: LibraryStatus): string {
+function libraryStatusText(status: LibraryStatus | null): string {
+	if (status == null) return i18n.ts.zalip.addToList;
 	return ({
 		planned: i18n.ts.zalip.libraryPlanned,
 		watching: i18n.ts.zalip.libraryWatching,
@@ -378,7 +390,8 @@ function libraryStatusCaption(status: LibraryStatus): string {
 	})[status];
 }
 
-function libraryStatusIcon(status: LibraryStatus): string {
+function libraryStatusIcon(status: LibraryStatus | null): string {
+	if (status == null) return 'ti ti-bookmark-plus';
 	return ({
 		planned: 'ti ti-bookmark',
 		watching: 'ti ti-eye',
@@ -393,8 +406,7 @@ async function load(): Promise<void> {
 	episodeMenuOpen.value = false;
 	pending.value = true;
 	work.value = null;
-	saved.value = false;
-	libraryStatus.value = 'planned';
+	libraryStatus.value = null;
 	episodesWatched.value = 0;
 	personalRating.value = null;
 	isFavorite.value = false;
@@ -419,8 +431,7 @@ async function load(): Promise<void> {
 		]);
 		discussionNoteId.value = discussion.noteId;
 		const entry = entries.find(candidate => candidate.work?.id === work.value?.id);
-		saved.value = entry != null;
-		libraryStatus.value = entry?.status ?? 'planned';
+		libraryStatus.value = entry?.status ?? null;
 		episodesWatched.value = entry?.episodesWatched ?? 0;
 		personalRating.value = entry?.personalRating ?? null;
 		isFavorite.value = entry?.isFavorite ?? false;
@@ -515,7 +526,7 @@ function selectTranslation(id: number): void {
 async function markEpisodeWatched(): Promise<void> {
 	if (!$i || saving.value || selectedEpisodeProgress.value == null || episodeWatched.value) return;
 	try {
-		await updateLibrary({ episodesWatched: selectedEpisodeProgress.value, status: libraryStatus.value === 'planned' ? 'watching' : libraryStatus.value });
+		await updateLibrary({ episodesWatched: selectedEpisodeProgress.value, status: libraryStatus.value == null || libraryStatus.value === 'planned' ? 'watching' : libraryStatus.value });
 	} catch {
 		os.toast(i18n.ts.zalip.libraryUpdateFailed);
 	}
@@ -523,8 +534,8 @@ async function markEpisodeWatched(): Promise<void> {
 
 function showWorkMenu(event: MouseEvent): void {
 	void os.popupMenu([
-		{ text: i18n.ts.zalip.favoriteTitle, icon: 'ti ti-heart', active: isFavorite.value, action: () => void toggleFavorite() },
-		...(work.value?.seasons.length ? [{ text: i18n.ts.zalip.releaseSubscriptionTitle, icon: 'ti ti-bell', active: releaseSubscribed.value, action: () => void toggleReleaseSubscription() }] : []),
+		{ type: 'switch', text: i18n.ts.zalip.favoriteTitle, icon: 'ti ti-heart', ref: favoriteSwitch, disabled: saving },
+		...(showReleaseSubscription.value ? [{ type: 'switch' as const, text: releaseSubscriptionLabel.value, icon: 'ti ti-bell', ref: releaseSwitch, disabled: saving }] : []),
 		{ text: i18n.ts.zalip.discussTitle, icon: 'ti ti-messages', action: focusDiscussion },
 	], event.currentTarget);
 }
@@ -592,7 +603,6 @@ function normalizedEpisodesWatched(): number {
 }
 
 function applyLibraryEntry(entry: LibraryEntry): void {
-	saved.value = true;
 	libraryStatus.value = entry.status;
 	episodesWatched.value = entry.episodesWatched;
 	personalRating.value = entry.personalRating;
@@ -628,25 +638,27 @@ async function showLibraryMenu(event: MouseEvent): Promise<void> {
 	void os.popupMenu([
 		{ type: 'label', text: i18n.ts.zalip.libraryMenuTitle, caption: work.value.title },
 		{
+			type: 'switch',
 			text: i18n.ts.zalip.favoriteTitle,
 			caption: i18n.ts.zalip.favoriteCaption,
 			icon: isFavorite.value ? 'ti ti-heart-filled' : 'ti ti-heart',
-			active: isFavorite.value,
-			action: () => void toggleFavorite(),
+			ref: favoriteSwitch,
+			disabled: saving,
 		},
 		null,
 		{ type: 'label', text: i18n.ts.zalip.libraryStatusHeading },
 		...(['planned', 'watching', 'on_hold', 'completed', 'dropped'] as const).map(status => ({
+			type: 'switch' as const,
 			text: libraryStatusText(status),
-			caption: libraryStatusCaption(status),
+			caption: computed(() => libraryStatus.value === status ? i18n.ts.zalip.libraryRemoveStatusHint : libraryStatusCaption(status)),
 			icon: libraryStatusIcon(status),
-			active: saved.value && libraryStatus.value === status,
-			action: () => void setLibraryStatus(status),
+			ref: computed({ get: () => libraryStatus.value === status, set: checked => { void setLibraryStatus(checked ? status : null); } }),
+			disabled: saving,
 		})),
 	], event.currentTarget, { align: 'left', width: 320 });
 }
 
-async function setLibraryStatus(status: LibraryStatus): Promise<void> {
+async function setLibraryStatus(status: LibraryStatus | null): Promise<void> {
 	if (!$i) {
 		await pleaseLogin({ path: window.location.pathname + window.location.search });
 		return;
@@ -748,7 +760,8 @@ definePage(() => ({
 .breadcrumb { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; color: var(--zalip-social-muted); }
 .breadcrumb span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .titleLogo { display: flex; justify-content: flex-end; align-items: center; height: 100px; margin: 10px 8px 12px; }
-.titleLogo img { max-width: 220px; max-height: 80px; object-fit: contain; filter: drop-shadow(0 2px 8px var(--zalip-glass-shadow)); }
+.titleLogo img { max-width: 220px; max-height: 80px; object-fit: contain; filter: brightness(0) drop-shadow(0 2px 8px var(--zalip-glass-shadow)); }
+:global(html[data-color-scheme=dark]) .titleLogo img { filter: brightness(0) invert(1) drop-shadow(0 2px 8px var(--zalip-glass-shadow)); }
 .heroContent { display: grid; grid-template-columns: minmax(160px, 30%) minmax(0, 1fr); gap: 28px; margin-top: 32px; align-items: start; }
 .titleLogo + .heroContent { margin-top: 0; }
 .sidebar, .info { min-width: 0; }
@@ -761,8 +774,9 @@ definePage(() => ({
 .sideButton { border: 1px solid var(--zalip-social-border); background: color-mix(in srgb, var(--zalip-social-panel) 60%, transparent); }
 .kind { margin: 2px 0 8px; font-size: 12px; color: var(--zalip-social-muted); }
 .info h1 { font-size: clamp(24px, 3.6cqi, 34px); letter-spacing: -.035em; line-height: 1.12; margin: 0; overflow-wrap: anywhere; }
-.original { color: var(--zalip-social-muted); font-size: 13px; line-height: 1.5; margin: 10px 0 0; }
-.ratings { margin: 20px 0 24px; }
+.original { color: var(--zalip-social-muted); font-size: 13px; line-height: 1.5; }
+.ratings { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 20px 0 24px; }
+.compactFacts { display: none; }
 .communityRating { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .communityRating > i { color: var(--MI_THEME-accent); font-size: 23px; }
 .communityRating strong { font-size: 22px; }
@@ -773,9 +787,14 @@ definePage(() => ({
 .genres { display: flex; gap: 6px 10px; flex-wrap: wrap; }
 .genres a { border-bottom: 1px solid var(--zalip-social-border); text-decoration: none; }
 .actionStrip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; padding: 8px 24px 20px; }
-.actionStrip button { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 8px; min-height: 76px; border-radius: 16px; padding: 14px 6px 8px; color: var(--zalip-social-muted); font-size: 12px; line-height: 1.4; text-align: center; }
-.actionStrip i { font-size: 25px; }
+.actionStrip button { display: grid; grid-template-rows: 32px auto; justify-items: center; align-content: start; gap: 8px; min-height: 76px; border-radius: 16px; padding: 14px 6px 8px; color: var(--zalip-social-muted); font-size: 12px; line-height: 1.4; text-align: center; }
+.actionSymbol { display: flex; align-items: center; justify-content: center; height: 32px; min-width: 32px; }
+.actionSymbol i { display: grid; place-items: center; width: 28px; height: 28px; font-size: 28px; line-height: 1; }
+.actionSymbol i::before { font-size: 1em; }
+.ratingBadge { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 44px; height: 28px; box-sizing: border-box; padding: 0 8px; border-radius: 99px; background: var(--MI_THEME-accent); color: var(--MI_THEME-fgOnAccent); font-size: 17px; font-weight: 750; }
+.ratingBadge i { width: 17px; height: 17px; font-size: 17px; }
 .actionStrip button:hover { background: var(--zalip-accent-wash); }
+.actionStrip button:focus-visible, .subscribeButton:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; }
 .actionStrip .actionActive, .actionActive { color: var(--MI_THEME-accent); }
 .description { margin: 0; padding: 0 28px 30px; line-height: 1.7; font-size: 15px; white-space: pre-line; }
 .content { padding: 0 24px; }
@@ -783,6 +802,12 @@ definePage(() => ({
 .playerTabs { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin-bottom: 18px; padding: 2px; }
 .playerTab { flex: 0 0 auto; display: flex; align-items: center; gap: 7px; padding: 10px 12px; border: 1px solid transparent; border-radius: 14px; color: var(--zalip-social-muted); font-weight: 600; font-size: 13px; }
 .playerTabActive { color: var(--zalip-social-fg); background: var(--zalip-accent-wash); border-color: var(--zalip-accent-border); }
+.subscriptionBar { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; margin: 0 0 16px; }
+.subscriptionBar small { flex: 1 1 180px; color: var(--zalip-social-muted); font-size: 11px; line-height: 1.5; }
+.subscribeButton { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 10px 14px; border: 1px solid var(--zalip-social-border); border-radius: 99px; color: var(--zalip-social-fg); font-size: 12px; }
+.subscribeButton i { flex-shrink: 0; }
+.subscribeButton.subscribed { color: var(--MI_THEME-accent); background: var(--zalip-accent-soft); border-color: var(--zalip-accent-border); }
+.subscribeButton:disabled { opacity: .6; }
 .watchFrame { overflow: hidden; border-radius: 16px; background: var(--zalip-social-raised); }
 .playerFrame, .playerPreview { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; background: var(--zalip-social-bg); }
 .playerFrame iframe { display: block; width: 100%; height: 100%; border: 0; }
@@ -853,22 +878,28 @@ definePage(() => ({
 .voiceList small { color: var(--zalip-social-muted); font-size: 11px; }
 .voiceList .menuSelected, .episodeChoices .menuSelected { background: var(--zalip-accent-soft); color: var(--MI_THEME-accent); }
 @container (max-width: 600px) {
-	.heroInner { padding: 16px 18px 20px; }
-	.breadcrumb { font-size: 11px; }
-	.titleLogo { justify-content: center; height: 76px; margin: 20px 0; }
-	.titleLogo img { max-width: 180px; max-height: 76px; }
-	.heroContent { display: flex; flex-direction: column; gap: 28px; margin-top: 28px; }
-	.sidebar { width: min(62%, 240px); min-width: 180px; margin: 0 auto; }
-	.heroBackground { max-height: 660px; }
-	.heroBackground img { object-position: 58% top; }
-	.hero::after { background: linear-gradient(0deg, var(--zalip-social-panel) 3%, var(--zalip-social-panel) 25%, color-mix(in srgb, var(--zalip-social-panel) 60%, transparent) 60%, color-mix(in srgb, var(--zalip-social-panel) 35%, transparent)); }
-	.info { width: 100%; }
-	.info h1 { font-size: 27px; }
-	.kind { font-size: 12px; }
-	.ratings { margin: 16px 0 22px; }
-	.facts { font-size: 13px; grid-template-columns: minmax(95px, 1fr) minmax(0, 1.5fr); }
+	.heroInner { padding: 18px 18px 12px; }
+	.breadcrumb, .sidebar, .kind, .facts { display: none; }
+	.titleLogo { justify-content: center; height: auto; min-height: 56px; margin: 0 0 16px; }
+	.titleLogo img { width: auto; max-width: 86%; max-height: 100px; }
+	.heroContent { display: block; margin-top: 0; }
+	.heroBackground { position: relative; inset: auto; aspect-ratio: 16 / 9; }
+	.heroBackground img { display: block; object-position: center; }
+	.hero::after { display: none; }
+	.info { width: 100%; text-align: center; }
+	.info h1 { font-size: clamp(25px, 7cqi, 36px); line-height: 1.15; margin-bottom: 16px; }
+	.hasLogo h1 { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+	.ratings { justify-content: center; gap: 5px 8px; margin: 0 0 5px; }
+	.communityRating { gap: 5px; }
+	.communityRating > i { display: none; }
+	.communityRating strong { font-size: 15px; color: var(--MI_THEME-accent); }
+	.communityRating small, .original { font-size: 12px; }
+	.compactFacts { display: block; color: var(--zalip-social-muted); font-size: 13px; line-height: 1.5; }
+	.compactFacts p { margin: 3px 0; }
 	.actionStrip { padding: 0 12px 20px; gap: 2px; }
 	.actionStrip button { font-size: 11px; padding-inline: 2px; }
+	.subscriptionBar { gap: 6px; }
+	.subscriptionBar small { flex-basis: 100%; }
 	.description { padding: 0 18px 26px; font-size: 14px; }
 	.content { padding: 0 12px; }
 	.playerTabs { gap: 3px; }

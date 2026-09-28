@@ -15,6 +15,21 @@ import { MiZalipSharedNote } from '@/models/ZalipSharedNote.js';
 import { MiZalipWork } from '@/models/ZalipWork.js';
 
 describe('ZalipCatalogService', () => {
+	it('clears only the list status, preserving ratings, progress, favorites and subscriptions', async () => {
+		const work = { id: 'work-1', publicationState: 'published' };
+		const entry = { userId: 'viewer', workId: work.id, status: 'watching', episodesWatched: 4, personalRating: 8, isFavorite: true, isReleaseSubscribed: true };
+		const library = { findOneBy: vi.fn().mockResolvedValue(entry), save: vi.fn().mockImplementation(async value => value) };
+		const works = { findOneBy: vi.fn().mockResolvedValue(work) };
+		const db = { getRepository: (model: unknown) => model === MiZalipWork ? works : library };
+		const service = new ZalipCatalogService(db as never, {} as never, {} as never, {} as never);
+		vi.spyOn(service as unknown as { packWorksWithCommunityRatings: () => Promise<unknown[]> }, 'packWorksWithCommunityRatings').mockResolvedValue([work]);
+
+		const result = await service.updateLibrary({ id: 'viewer' } as never, work.id, { status: null });
+		expect(library.findOneBy).toHaveBeenCalledWith({ userId: 'viewer', workId: work.id });
+		expect(result).toMatchObject({ status: null, episodesWatched: 4, personalRating: 8, isFavorite: true, isReleaseSubscribed: true });
+		expect(library.save).toHaveBeenCalledWith(expect.objectContaining({ status: null, personalRating: 8 }));
+	});
+
 	it('creates a normal local note and stores its canonical Zalip work card', async () => {
 		const work = { id: 'work-1', publicationState: 'published' };
 		const worksRepository = {

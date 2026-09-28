@@ -83,7 +83,7 @@ export type ZalipPublishedCatalogueFilters = {
 };
 
 export type PackedZalipLibraryEntry = {
-	status: ZalipLibraryStatus;
+	status: ZalipLibraryStatus | null;
 	episodesWatched: number;
 	personalRating: number | null;
 	isFavorite: boolean;
@@ -407,7 +407,7 @@ export class ZalipCatalogService {
 		me: MiLocalUser,
 		workId: MiZalipWork['id'],
 		input: {
-			status: ZalipLibraryStatus;
+			status: ZalipLibraryStatus | null;
 			episodesWatched?: number;
 			personalRating?: number | null;
 			isFavorite?: boolean;
