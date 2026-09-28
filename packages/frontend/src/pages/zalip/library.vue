@@ -4,7 +4,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-	<PageWithHeader>
+<PageWithHeader>
+	<component :is="prefer.s.enablePullToRefresh ? MkPullToRefresh : 'div'" :refresher="loadLibrary">
 		<div class="_spacer" style="--MI_SPACER-w: 980px;">
 			<div :class="$style.page">
 				<div :class="$style.heading">
@@ -13,7 +14,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<h1>{{ i18n.ts.zalip.libraryHeading }}</h1>
 						<p :class="$style.description">{{ i18n.ts.zalip.libraryDescription }}</p>
 					</div>
-					<MkA to="/catalog" :class="$style.browse"><i class="ti ti-search"></i> {{ i18n.ts.zalip.libraryBrowse }}</MkA>
+					<MkA to="/my/favorites" :class="$style.browse"><i class="ti ti-message-bookmark" aria-hidden="true"></i> {{ i18n.ts.zalip.postBookmarks }}</MkA>
 				</div>
 
 				<div v-if="pending" :class="$style.empty"><i class="ti ti-loader-2 ti-spin"></i> {{ i18n.ts.zalip.libraryLoading }}</div>
@@ -28,10 +29,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<section :class="$style.summary" :aria-label="i18n.ts.zalip.libraryStats">
 						<div :class="$style.stat"><i class="ti ti-books"></i><strong>{{ entries.length }}</strong><span>{{ i18n.ts.zalip.libraryTotal }}</span></div>
 						<div :class="$style.stat"><i class="ti ti-player-play"></i><strong>{{ statusCounts.watching }}</strong><span>{{ i18n.ts.zalip.libraryWatching }}</span></div>
-						<div :class="$style.stat"><i class="ti ti-star-filled"></i><strong>{{ favoriteCount }}</strong><span>{{ i18n.ts.zalip.libraryFavorites }}</span></div>
+						<button type="button" class="_button" :class="$style.stat" @click="activeFilter = 'favorites'"><i class="ti ti-bookmark"></i><strong>{{ favoriteCount }}</strong><span>{{ i18n.ts.zalip.contentBookmarks }}</span></button>
 						<div :class="$style.stat"><i class="ti ti-chart-bar"></i><strong>{{ averageRating == null ? '—' : averageRating.toFixed(1) }}</strong><span>{{ i18n.ts.zalip.libraryAverageRating }}</span></div>
 					</section>
-					<section v-if="continueEntries.length" :class="$style.continueSection">
+					<section v-if="continueEntries.length && activeFilter === 'all' && !searchQuery" :class="$style.continueSection">
 						<div :class="$style.sectionHeading"><h2>{{ i18n.ts.zalip.libraryContinue }}</h2><span>{{ continueEntries.length }}</span></div>
 						<div :class="$style.continueRail">
 							<MkA v-for="entry in continueEntries" :key="entry.work.id" :to="`/zalip/${entry.work.slug}`" :class="$style.continueCard">
@@ -45,38 +46,45 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<label :class="$style.search"><i class="ti ti-search" aria-hidden="true"></i><input v-model.trim="searchQuery" class="_input" type="search" :placeholder="i18n.ts.zalip.librarySearch" :aria-label="i18n.ts.zalip.librarySearch"></label>
 						<label :class="$style.sort"><i class="ti ti-arrows-sort"></i><select v-model="sortOrder" class="_input" :aria-label="i18n.ts.zalip.librarySort"><option value="recent">{{ i18n.ts.zalip.librarySortRecent }}</option><option value="title">{{ i18n.ts.zalip.librarySortTitle }}</option><option value="rating">{{ i18n.ts.zalip.librarySortRating }}</option></select></label>
 					</div>
-					<div :class="$style.filters" role="tablist" :aria-label="i18n.ts.zalip.libraryStatus">
-						<button v-for="filter in filters" :key="filter" type="button" class="_button" :class="[$style.filter, { [$style.activeFilter]: activeFilter === filter }]" role="tab" :aria-selected="activeFilter === filter" @click="activeFilter = filter">{{ filter === 'all' ? `${i18n.ts.zalip.libraryAll} · ${entries.length}` : `${statusLabel(filter)} · ${statusCounts[filter]}` }}</button>
+					<div :class="$style.filters" role="group" :aria-label="i18n.ts.zalip.libraryStatus">
+						<button v-for="filter in filters" :key="filter" type="button" class="_button" :class="[$style.filter, { [$style.activeFilter]: activeFilter === filter }]" :aria-pressed="activeFilter === filter" @click="activeFilter = filter">{{ filterLabel(filter) }} · {{ filterCount(filter) }}</button>
 					</div>
+					<div :class="$style.viewControls"><span>{{ i18n.tsx.zalip.libraryResultCount({ count: filteredEntries.length }) }}</span><div role="group" :aria-label="i18n.ts.zalip.catalogueView"><button type="button" class="_button" :aria-label="i18n.ts.zalip.catalogueTiles" :aria-pressed="viewMode === 'tiles'" @click="viewMode = 'tiles'"><i class="ti ti-layout-grid" aria-hidden="true"></i></button><button type="button" class="_button" :aria-label="i18n.ts.zalip.catalogueCards" :aria-pressed="viewMode === 'cards'" @click="viewMode = 'cards'"><i class="ti ti-list-details" aria-hidden="true"></i></button></div></div>
 					<div v-if="filteredEntries.length === 0" :class="$style.empty"><i class="ti ti-filter-off"></i> {{ i18n.ts.zalip.libraryEmptyFilter }}</div>
-					<div v-else :class="$style.grid">
+					<div v-else :class="[$style.grid, { [$style.listView]: viewMode === 'cards' }]">
 						<MkA v-for="entry in filteredEntries" :key="entry.work.id" :to="`/zalip/${entry.work.slug}`" :class="$style.card">
-						<div :class="$style.poster">
-							<img v-if="entry.work.posterPath" :src="tmdbImage(entry.work.posterPath)" :alt="entry.work.title" loading="lazy">
-							<i v-else class="ti ti-movie"></i>
-						</div>
-						<div :class="$style.body">
-							<div :class="$style.meta"><span>{{ statusLabel(entry.status) }}</span><span :class="$style.icons"><span v-if="entry.personalRating != null" :class="$style.rating" :title="i18n.ts.zalip.libraryPersonalRating"><i class="ti ti-star-filled"></i>{{ entry.personalRating }}</span><i v-if="entry.isReleaseSubscribed" class="ti ti-bell-filled" :title="i18n.ts.zalip.libraryReleaseSubscribed"></i><i v-if="entry.isFavorite" class="ti ti-star-filled" :title="i18n.ts.zalip.libraryFavorite"></i></span></div>
-							<h2>{{ entry.work.title }}</h2>
-							<p>{{ kindLabel(entry.work.kind) }}<span v-if="entry.work.releaseYear"> · {{ entry.work.releaseYear }}</span><span v-if="entry.episodesWatched"> · {{ i18n.tsx.zalip.libraryEpisodesWatched({ count: entry.episodesWatched.toString() }) }}</span></p>
-						</div>
+							<div :class="$style.poster">
+								<img v-if="entry.work.posterPath" :src="tmdbImage(entry.work.posterPath)" :alt="entry.work.title" loading="lazy">
+								<i v-else class="ti ti-movie"></i>
+								<span v-if="entry.status" :class="$style.statusBadge"><i :class="statusIcon(entry.status)" aria-hidden="true"></i>{{ statusLabel(entry.status) }}</span>
+							</div>
+							<div :class="$style.body">
+								<h2>{{ entry.work.title }}</h2>
+								<p>{{ kindLabel(entry.work.kind) }}<span v-if="entry.work.releaseYear"> · {{ entry.work.releaseYear }}</span></p>
+								<div :class="$style.meta"><span v-if="entry.episodesWatched">{{ i18n.tsx.zalip.libraryEpisodesWatched({ count: entry.episodesWatched.toString() }) }}</span><span :class="$style.icons"><span v-if="entry.personalRating != null" :class="$style.rating" :title="i18n.ts.zalip.libraryPersonalRating"><i class="ti ti-star-filled" aria-hidden="true"></i>{{ entry.personalRating }}</span><i v-if="entry.isReleaseSubscribed" class="ti ti-bell" :title="i18n.ts.zalip.libraryReleaseSubscribed" :aria-label="i18n.ts.zalip.libraryReleaseSubscribed"></i><i v-if="entry.isFavorite" class="ti ti-bookmark" :title="i18n.ts.zalip.inBookmarks" :aria-label="i18n.ts.zalip.inBookmarks"></i></span></div>
+								<p v-if="viewMode === 'cards' && entry.work.description" :class="$style.synopsis">{{ entry.work.description }}</p>
+							</div>
 						</MkA>
 					</div>
 				</template>
 			</div>
 		</div>
-	</PageWithHeader>
+	</component>
+</PageWithHeader>
 </template>
 
 <script lang="ts" setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import MkPullToRefresh from '@/components/MkPullToRefresh.vue';
+import { prefer } from '@/preferences.js';
+import { miLocalStorage } from '@/local-storage.js';
 import { definePage } from '@/page.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { i18n } from '@/i18n.js';
 
 type WorkKind = 'movie' | 'series' | 'anime' | 'animation';
 type LibraryStatus = 'watching' | 'planned' | 'completed' | 'on_hold' | 'dropped';
-type LibraryFilter = LibraryStatus | 'all';
+type LibraryFilter = LibraryStatus | 'all' | 'favorites' | 'subscribed' | 'rated';
 type LibrarySort = 'recent' | 'title' | 'rating';
 
 type LibraryEntry = {
@@ -90,21 +98,47 @@ type LibraryEntry = {
 		slug: string;
 		kind: WorkKind;
 		title: string;
+		description?: string | null;
 		releaseYear: number | null;
 		posterPath: string | null;
 	};
 };
 
+const props = defineProps<{ filter?: string }>();
 const entries = ref<LibraryEntry[]>([]);
 const pending = ref(true);
 const loadError = ref(false);
 const activeFilter = ref<LibraryFilter>('all');
 const searchQuery = ref('');
 const sortOrder = ref<LibrarySort>('recent');
-const filters: LibraryFilter[] = ['all', 'watching', 'planned', 'completed', 'on_hold', 'dropped'];
+const filters: LibraryFilter[] = ['all', 'favorites', 'watching', 'planned', 'completed', 'on_hold', 'dropped', 'subscribed', 'rated'];
+const viewMode = ref<'tiles' | 'cards'>(miLocalStorage.getItem('zalipLibraryView') === 'cards' ? 'cards' : 'tiles');
+watch(viewMode, value => miLocalStorage.setItem('zalipLibraryView', value));
+watch(() => props.filter, value => { activeFilter.value = filters.includes(value as LibraryFilter) ? value as LibraryFilter : 'all'; }, { immediate: true });
+
+function matchesFilter(entry: LibraryEntry, filter: LibraryFilter): boolean {
+	if (filter === 'all') return true;
+	if (filter === 'favorites') return entry.isFavorite;
+	if (filter === 'subscribed') return entry.isReleaseSubscribed;
+	if (filter === 'rated') return entry.personalRating != null;
+	return entry.status === filter;
+}
+
+function filterCount(filter: LibraryFilter): number { return entries.value.filter(entry => matchesFilter(entry, filter)).length; }
+
+function filterLabel(filter: LibraryFilter): string {
+	if (filter === 'all') return i18n.ts.zalip.libraryAll;
+	if (filter === 'favorites') return i18n.ts.zalip.libraryBookmarks;
+	if (filter === 'subscribed') return i18n.ts.zalip.librarySubscriptions;
+	if (filter === 'rated') return i18n.ts.zalip.libraryRated;
+	return statusLabel(filter);
+}
+
+function statusIcon(status: LibraryStatus): string { return ({ watching: 'ti ti-eye', planned: 'ti ti-bookmark', completed: 'ti ti-check', on_hold: 'ti ti-player-pause', dropped: 'ti ti-x' })[status]; }
+
 const filteredEntries = computed(() => {
 	const normalizedQuery = searchQuery.value.toLocaleLowerCase('ru');
-	const filtered = entries.value.filter(entry => (activeFilter.value === 'all' || entry.status === activeFilter.value)
+	const filtered = entries.value.filter(entry => matchesFilter(entry, activeFilter.value)
 		&& (!normalizedQuery || entry.work.title.toLocaleLowerCase('ru').includes(normalizedQuery)));
 	if (sortOrder.value === 'title') return [...filtered].sort((left, right) => left.work.title.localeCompare(right.work.title, 'ru'));
 	if (sortOrder.value === 'rating') return [...filtered].sort((left, right) => (right.personalRating ?? -1) - (left.personalRating ?? -1));
@@ -231,9 +265,21 @@ definePage(() => ({
 
 .grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
-	gap: 14px;
+	grid-template-columns: repeat(auto-fill, minmax(138px, 1fr));
+	gap: 22px 14px;
 }
+.viewControls { display: flex; align-items: center; justify-content: space-between; margin: 0 0 16px; color: var(--MI_THEME-fgTransparentWeak); font-size: 13px; }
+.viewControls > div { display: flex; border-radius: 99px; background: var(--MI_THEME-panelHighlight); padding: 3px; }
+.viewControls button { display: grid; place-items: center; width: 38px; height: 36px; border-radius: 99px; font-size: 20px; }
+.viewControls button[aria-pressed=true] { background: var(--MI_THEME-accentedBg); color: var(--MI_THEME-accent); }
+.viewControls i::before, .icons i::before { font-size: 1em; }
+.listView { grid-template-columns: 1fr; gap: 22px; }
+.listView .card { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 18px; }
+.listView .body { padding: 2px 0; }
+.listView .body h2 { margin-top: 0; font-size: 17px; -webkit-line-clamp: 3; }
+.body .synopsis { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; margin-top: 10px; font-size: 13px; line-height: 1.6; }
+.statusBadge { position: absolute; bottom: 7px; left: 5px; right: 5px; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 4px 3px; box-sizing: border-box; border-radius: 99px; background: color-mix(in srgb, var(--MI_THEME-accent) 88%, transparent); color: var(--MI_THEME-fgOnAccent); font-size: 10px; line-height: 1.25; font-weight: 650; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.statusBadge i::before { font-size: 1em; }
 
 .continueSection {
 	margin: 0 0 22px;
@@ -384,9 +430,7 @@ definePage(() => ({
 }
 
 .card {
-	overflow: hidden;
-	border-radius: 16px;
-	background: var(--MI_THEME-panel);
+	min-width: 0;
 	color: var(--MI_THEME-fg);
 	text-decoration: none;
 	transition: transform 0.2s ease;
@@ -397,6 +441,9 @@ definePage(() => ({
 }
 
 .poster {
+	position: relative;
+	overflow: hidden;
+	border-radius: 14px;
 	display: grid;
 	place-items: center;
 	aspect-ratio: 2 / 3;
@@ -412,17 +459,18 @@ definePage(() => ({
 }
 
 .body {
-	padding: 12px;
+	padding: 0;
 }
 
 .meta {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
+	flex-wrap: wrap;
 	gap: 8px;
 	color: var(--MI_THEME-accent);
 	font-size: 0.75rem;
 	font-weight: 700;
+	margin-top: 6px;
 }
 
 .icons {
@@ -440,7 +488,11 @@ definePage(() => ({
 
 .body h2 {
 	margin: 7px 0 5px;
-	font-size: 0.95rem;
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	overflow: hidden;
+	font-size: 0.85rem;
 	line-height: 1.25;
 }
 
@@ -451,14 +503,20 @@ definePage(() => ({
 }
 
 @media (max-width: 600px) {
-	.page { padding-top: 12px; }
+	.page { padding: 12px 0 32px; }
 	.heading { align-items: start; }
 	.heading { flex-wrap: wrap; }
 	.heading > div { min-width: 0; }
 	.description { display: none; }
 	.browse { font-size: 0.8rem; }
-	.summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-	.grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	.summary { display: none; }
+	.heading h1 { font-size: 1.5rem; }
+	.eyebrow { display: none; }
+	.grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px 10px; }
+	.listView { grid-template-columns: 1fr; }
+	.listView .card { grid-template-columns: minmax(88px, 29%) minmax(0, 1fr); gap: 14px; }
+	.body h2 { font-size: 12px; }
+	.body p, .meta { font-size: 10px; }
 	.controls { gap: 7px; }
 	.sort { max-width: 144px; }
 	.sort select { max-width: 110px; }

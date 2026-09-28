@@ -4,6 +4,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import { DataSource, EntitySchema } from 'typeorm';
 import { ZalipCatalogService } from '@/core/ZalipCatalogService.js';
 import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
 import { MiZalipEpisodeNoteContext } from '@/models/ZalipEpisodeNoteContext.js';
@@ -13,8 +14,104 @@ import { MiZalipReleaseEvent } from '@/models/ZalipReleaseEvent.js';
 import { MiZalipSeason } from '@/models/ZalipSeason.js';
 import { MiZalipSharedNote } from '@/models/ZalipSharedNote.js';
 import { MiZalipWork } from '@/models/ZalipWork.js';
+import { MiZalipAllohaAvailabilityEvent } from '@/models/ZalipAllohaAvailabilityEvent.js';
+import { MiZalipAllohaSource } from '@/models/ZalipAllohaSource.js';
 
 describe('ZalipCatalogService', () => {
+	it('selects the joined ordering column inside real TypeORM pagination', async () => {
+		class MetadataOnlyDataSource extends DataSource {
+			async prepare() { await this.buildMetadatas(); }
+		}
+		const db = new MetadataOnlyDataSource({
+			type: 'postgres',
+			entities: [
+				new EntitySchema({ name: 'MiZalipWork', target: MiZalipWork, columns: { id: { type: String, primary: true }, tmdbMediaType: { type: String }, tmdbId: { type: Number } } }),
+				new EntitySchema({ name: 'MiZalipAllohaSource', target: MiZalipAllohaSource, columns: { id: { type: String, primary: true }, workId: { type: String }, lastCheckedAt: { type: Date } } }),
+			],
+		});
+		await db.prepare();
+		const runner = db.createQueryRunner();
+		const query = vi.spyOn(runner, 'query').mockResolvedValue({ records: [], raw: [] });
+		vi.spyOn(runner, 'release').mockResolvedValue();
+		vi.spyOn(db, 'createQueryRunner').mockReturnValue(runner);
+		const service = new ZalipCatalogService(db, {} as never, {} as never, {} as never);
+		await service.listAllohaSyncTargets(100);
+		const sql = query.mock.calls[0][0];
+		expect(sql).toContain('SELECT DISTINCT');
+		expect(sql).toContain('"source"."lastCheckedAt" AS "source_lastCheckedAt"');
+		expect(sql).toContain('LIMIT 100');
+	});
+
+	it.each([null, false, true])('atomically saves movie availability and outbox under a work lock (previous=%s)', async previous => {
+		const sources = { findOneBy: vi.fn().mockResolvedValue(previous == null ? null : { id: 'source', isAvailable: previous, createdAt: new Date() }), create: vi.fn(value => value), save: vi.fn() };
+		const events = { existsBy: vi.fn().mockResolvedValue(false), create: vi.fn(value => value), save: vi.fn() };
+		const works = { findOneOrFail: vi.fn().mockResolvedValue({ id: 'movie' }) };
+		const manager = { getRepository: (model: unknown) => model === MiZalipWork ? works : model === MiZalipAllohaSource ? sources : events };
+		const db = { transaction: vi.fn(async action => await action(manager)) };
+		const service = new ZalipCatalogService(db as never, { gen: () => 'generated' } as never, {} as never, {} as never);
+		const input = { workId: 'movie', category: 'movie', isAvailable: true, iframe: 'https://example.test/player', translations: [], recordMovieAvailability: true };
+		await expect(service.upsertAllohaSource(input)).resolves.toEqual({ created: previous == null, movieEventCreated: true });
+		expect(works.findOneOrFail).toHaveBeenCalledWith({ where: { id: 'movie' }, lock: { mode: 'pessimistic_write' } });
+		expect(events.save).toHaveBeenCalledWith(expect.objectContaining({ availabilityKey: 'movie', notificationDeliveredAt: previous === false ? null : expect.any(Date) }));
+		expect(sources.save).toHaveBeenCalledWith(expect.objectContaining({ isAvailable: true }));
+		sources.save.mockClear();
+		events.save.mockRejectedValueOnce(new Error('Database failure'));
+		await expect(service.upsertAllohaSource(input)).rejects.toThrow('Database failure');
+		expect(sources.save).not.toHaveBeenCalled();
+	});
+	it('merges only the viewers subscribed published catalogue and playback events, ordered and bounded', async () => {
+		const work = { id: 'movie', slug: 'movie', title: 'Movie' };
+		const availability = [{ id: 'new', createdAt: new Date('2026-09-28'), work, seasonNumber: null, episodeNumber: null }];
+
+		function builder(rows: unknown[]) {
+			const query = { innerJoinAndSelect: vi.fn(), innerJoin: vi.fn(), where: vi.fn(), andWhere: vi.fn(), orderBy: vi.fn(), take: vi.fn(), getMany: vi.fn().mockResolvedValue(rows) };
+			for (const name of ['innerJoinAndSelect', 'innerJoin', 'where', 'andWhere', 'orderBy', 'take'] as const) query[name].mockReturnValue(query);
+			return query;
+		}
+
+		const catalogQuery = builder([]);
+		const playbackQuery = builder(availability);
+		const db = { getRepository: (model: unknown) => ({ createQueryBuilder: () => model === MiZalipReleaseEvent ? catalogQuery : playbackQuery }) };
+		const service = new ZalipCatalogService(db as never, {} as never, {} as never, {} as never);
+		const packing = service as unknown as { packReleaseEvents: () => Promise<unknown[]>; getCommunityRatings: () => Promise<Map<string, unknown>>; packWork: () => unknown };
+		vi.spyOn(packing, 'packReleaseEvents').mockResolvedValue([{ id: 'old', createdAt: '2026-09-27T00:00:00.000Z', work, season: { seasonNumber: 1, title: 'Season' }, episode: { episodeNumber: 2, title: 'Episode' } }]);
+		vi.spyOn(packing, 'getCommunityRatings').mockResolvedValue(new Map());
+		vi.spyOn(packing, 'packWork').mockReturnValue(work);
+		const result = await service.listSubscribedReleaseEvents({ id: 'viewer' } as never, 1);
+		expect(result).toEqual([{ id: 'new', createdAt: '2026-09-28T00:00:00.000Z', source: 'playback', work, season: null, episode: null }]);
+		for (const query of [catalogQuery, playbackQuery]) {
+			expect(query.where).toHaveBeenCalledWith('library.userId = :userId', { userId: 'viewer' });
+			expect(query.andWhere).toHaveBeenCalledWith('library.isReleaseSubscribed = true');
+			expect(query.andWhere).toHaveBeenCalledWith('work.publicationState = :publicationState', { publicationState: 'published' });
+			expect(query.take).toHaveBeenCalledWith(1);
+		}
+	});
+
+	it('delivers playback events only to active subscribers and leaves failed delivery retryable', async () => {
+		const event = { id: 'event', work: { id: 'movie', slug: 'movie', title: 'Movie' }, seasonNumber: null, episodeNumber: null, translationCount: 2 };
+		const query = { innerJoinAndSelect: vi.fn(), where: vi.fn(), andWhere: vi.fn(), orderBy: vi.fn(), take: vi.fn(), getMany: vi.fn().mockResolvedValue([event]) };
+		for (const key of ['innerJoinAndSelect', 'where', 'andWhere', 'orderBy', 'take'] as const) query[key].mockReturnValue(query);
+		const events = { createQueryBuilder: () => query, update: vi.fn().mockResolvedValue(undefined) };
+		const library = { find: vi.fn().mockResolvedValue([{ userId: 'subscriber' }]) };
+		const notification = { createNotificationAndWait: vi.fn().mockRejectedValueOnce(new Error('Redis down')).mockResolvedValue(undefined) };
+		const service = new ZalipCatalogService({ getRepository: (model: unknown) => model === MiZalipAllohaAvailabilityEvent ? events : library } as never, {} as never, {} as never, notification as never);
+		await expect(service.dispatchPendingAllohaAvailabilityNotifications()).rejects.toThrow('Redis down');
+		expect(events.update).not.toHaveBeenCalled();
+		await service.dispatchPendingAllohaAvailabilityNotifications();
+		expect(library.find).toHaveBeenCalledWith({ select: { userId: true }, where: { workId: 'movie', isReleaseSubscribed: true } });
+		expect(notification.createNotificationAndWait).toHaveBeenCalledWith('subscriber', 'zalipAllohaAvailable', { workId: 'movie', workSlug: 'movie', workTitle: 'Movie', seasonNumber: null, episodeNumber: null, translationCount: 2 });
+		expect(events.update).toHaveBeenCalledExactlyOnceWith('event', { notificationDeliveredAt: expect.any(Date) });
+	});
+
+	it('deduplicates movie availability independently of translation changes', async () => {
+		const repository = { existsBy: vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true), create: vi.fn(value => value), save: vi.fn() };
+		const service = new ZalipCatalogService({ getRepository: () => repository } as never, { gen: () => 'event' } as never, {} as never, {} as never);
+		const input = { workId: 'movie', seasonNumber: null, episodeNumber: null, translationCount: 1, suppressNotification: false };
+		expect(await service.recordAllohaAvailability(input)).toBe(true);
+		expect(await service.recordAllohaAvailability({ ...input, translationCount: 3 })).toBe(false);
+		expect(repository.save).toHaveBeenCalledOnce();
+		expect(repository.save).toHaveBeenCalledWith(expect.objectContaining({ availabilityKey: 'movie', notificationDeliveredAt: null }));
+	});
 	it('clears only the list status, preserving ratings, progress, favorites and subscriptions', async () => {
 		const work = { id: 'work-1', publicationState: 'published' };
 		const entry = { userId: 'viewer', workId: work.id, status: 'watching', episodesWatched: 4, personalRating: 8, isFavorite: true, isReleaseSubscribed: true };

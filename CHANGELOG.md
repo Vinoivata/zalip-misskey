@@ -45,6 +45,7 @@
 
 - Fix: Align Zalip mobile account tiles, open appearance without blocking the page, show unread navigation badges, match thread and feed widths, and support pull-to-refresh on home and chat.
 - Fix: Refine the mobile title summary and rating badge, show the selected library icon, enable reversible favorites and release subscriptions beside the player, and normalize account menu icon alignment.
+- Fix: Clarify title bookmarks and watch lists, add responsive title action sheets and poster fallback, synchronize episode navigation, and support title refresh and compact library views.
 
 ### Server
 - Fix: Allow clearing a Zalip library status without removing personal ratings, watch progress, favorites or release subscriptions.
@@ -59,6 +60,7 @@
 - Feat: ZALIP作品のローカルシーズンとエピソードを管理者が追加できるAPIを追加
 - Fix: VDSのDNS設定によってTMDBインポートがループバックへ接続してしまう問題を修正
 - Enhance: ZALIP作品一覧APIで一度に指定できるジャンルを24件に拡張
+- Fix: Include film playback arrivals in subscription updates, atomically record movie availability notifications, retry delivery during upstream failures, and rotate provider checks across the catalogue.
 
 ## 2026.7.0
 

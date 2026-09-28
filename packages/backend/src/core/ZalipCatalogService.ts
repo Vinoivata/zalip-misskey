@@ -150,6 +150,12 @@ export type PackedZalipReleaseEvent = {
 	episode: Pick<PackedZalipEpisode, 'episodeNumber' | 'title'>;
 };
 
+export type PackedZalipSubscribedReleaseEvent = Omit<PackedZalipReleaseEvent, 'season' | 'episode'> & {
+	source: 'catalogue' | 'playback';
+	season: PackedZalipReleaseEvent['season'] | null;
+	episode: PackedZalipReleaseEvent['episode'] | null;
+};
+
 export type PackedZalipAdminWork = PackedZalipWork & {
 	publicationState: ZalipPublicationState;
 	publishedAt: string | null;
@@ -355,7 +361,7 @@ export class ZalipCatalogService {
 	}
 
 	/** Signed-in updates page: only events from titles the current Misskey user follows. */
-	public async listSubscribedReleaseEvents(me: MiLocalUser, limit: number): Promise<PackedZalipReleaseEvent[]> {
+	public async listSubscribedReleaseEvents(me: MiLocalUser, limit: number): Promise<PackedZalipSubscribedReleaseEvent[]> {
 		const events = await this.db.getRepository(MiZalipReleaseEvent).createQueryBuilder('event')
 			.innerJoinAndSelect('event.work', 'work')
 			.innerJoinAndSelect('event.season', 'season')
@@ -367,7 +373,28 @@ export class ZalipCatalogService {
 			.orderBy('event.createdAt', 'DESC')
 			.take(limit)
 			.getMany();
-		return await this.packReleaseEvents(events);
+		const availability = await this.db.getRepository(MiZalipAllohaAvailabilityEvent).createQueryBuilder('event')
+			.innerJoinAndSelect('event.work', 'work')
+			.innerJoin(MiZalipLibraryEntry, 'library', 'library.workId = work.id')
+			.where('library.userId = :userId', { userId: me.id })
+			.andWhere('library.isReleaseSubscribed = true')
+			.andWhere('work.publicationState = :publicationState', { publicationState: 'published' })
+			.orderBy('event.createdAt', 'DESC')
+			.take(limit)
+			.getMany();
+		const ratings = await this.getCommunityRatings(availability.flatMap(event => event.work ? [event.work] : []));
+		const combined: PackedZalipSubscribedReleaseEvent[] = [
+			...(await this.packReleaseEvents(events)).map(event => ({ ...event, source: 'catalogue' as const })),
+			...availability.flatMap(event => event.work == null ? [] : [{
+				id: event.id,
+				createdAt: event.createdAt.toISOString(),
+				work: this.packWork(event.work, ratings.get(event.work.id)),
+				source: 'playback' as const,
+				season: event.seasonNumber == null ? null : { seasonNumber: event.seasonNumber, title: '' },
+				episode: event.episodeNumber == null ? null : { episodeNumber: event.episodeNumber, title: '' },
+			}]),
+		];
+		return combined.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id)).slice(0, limit);
 	}
 
 	private async packReleaseEvents(events: MiZalipReleaseEvent[]): Promise<PackedZalipReleaseEvent[]> {
@@ -643,7 +670,18 @@ export class ZalipCatalogService {
 
 	/** Bounded provider source list. TMDB IDs are intentionally kept at this server-only boundary. */
 	public async listAllohaSyncTargets(limit: number): Promise<ZalipAllohaSyncTarget[]> {
-		return await this.listTmdbMediaSyncTargets(Math.max(1, Math.min(limit, 100)));
+		// Rotate by provider check time, not metadata update time, so catalogues over 100
+		// titles do not keep polling the same first page forever.
+		const works = await this.db.getRepository(MiZalipWork).createQueryBuilder('work')
+			.leftJoin(MiZalipAllohaSource, 'source', 'source.workId = work.id')
+			.addSelect('source.lastCheckedAt')
+			.where('work.tmdbMediaType IS NOT NULL')
+			.andWhere('work.tmdbId IS NOT NULL')
+			.orderBy('source.lastCheckedAt', 'ASC', 'NULLS FIRST')
+			.addOrderBy('work.id', 'ASC')
+			.take(Math.max(1, Math.min(limit, 100)))
+			.getMany();
+		return works.map(work => ({ workId: work.id, tmdbMediaType: work.tmdbMediaType!, tmdbId: work.tmdbId! }));
 	}
 
 	/** Records a validated Alloha response without exposing the source mapping on catalogue endpoints. */
@@ -653,33 +691,40 @@ export class ZalipCatalogService {
 		isAvailable: boolean;
 		iframe: string | null;
 		translations: ZalipAllohaTranslation[];
-	}): Promise<{ created: boolean }> {
-		const repository = this.db.getRepository(MiZalipAllohaSource);
-		const existing = await repository.findOneBy({ workId: input.workId });
-		const now = new Date();
-		if (existing != null) {
-			existing.category = input.category;
-			existing.isAvailable = input.isAvailable;
-			existing.iframe = input.iframe;
-			existing.translations = input.translations;
-			existing.lastCheckedAt = now;
-			existing.updatedAt = now;
-			await repository.save(existing);
-			return { created: false };
-		}
-
-		await repository.save(repository.create({
-			id: this.idService.gen(),
-			workId: input.workId,
-			category: input.category,
-			isAvailable: input.isAvailable,
-			iframe: input.iframe,
-			translations: input.translations,
-			lastCheckedAt: now,
-			createdAt: now,
-			updatedAt: now,
-		}));
-		return { created: true };
+		recordMovieAvailability?: boolean;
+	}): Promise<{ created: boolean; movieEventCreated: boolean }> {
+		return await this.db.transaction(async manager => {
+			// Serialize first-time mappings as well as refreshes, and atomically commit the
+			// availability transition with its outbox row. A retry cannot lose a premiere.
+			await manager.getRepository(MiZalipWork).findOneOrFail({ where: { id: input.workId }, lock: { mode: 'pessimistic_write' } });
+			const repository = manager.getRepository(MiZalipAllohaSource);
+			const existing = await repository.findOneBy({ workId: input.workId });
+			const now = new Date();
+			let movieEventCreated = false;
+			if (input.recordMovieAvailability && input.isAvailable) {
+				const events = manager.getRepository(MiZalipAllohaAvailabilityEvent);
+				if (!await events.existsBy({ workId: input.workId, availabilityKey: 'movie' })) {
+					await events.save(events.create({
+						id: this.idService.gen(), workId: input.workId, availabilityKey: 'movie',
+						seasonNumber: null, episodeNumber: null, translationCount: input.translations.length,
+						createdAt: now, notificationDeliveredAt: existing == null || existing.isAvailable ? now : null,
+					}));
+					movieEventCreated = true;
+				}
+			}
+			await repository.save(repository.create({
+				id: existing?.id ?? this.idService.gen(),
+				workId: input.workId,
+				category: input.category,
+				isAvailable: input.isAvailable,
+				iframe: input.iframe,
+				translations: input.translations,
+				lastCheckedAt: now,
+				createdAt: existing?.createdAt ?? now,
+				updatedAt: now,
+			}));
+			return { created: existing == null, movieEventCreated };
+		});
 	}
 
 	/** Player data is only available for a published work after a normal Zalip login. */

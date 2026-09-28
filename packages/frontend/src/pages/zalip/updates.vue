@@ -9,7 +9,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div :class="$style.page">
 			<header :class="$style.heading">
 				<div><p :class="$style.eyebrow"><i class="ti ti-bell"></i> {{ i18n.ts.zalip.updatesEyebrow }}</p><h1>{{ i18n.ts.zalip.updatesHeading }}</h1><p>{{ i18n.ts.zalip.updatesDescription }}</p></div>
-				<MkA to="/library" :class="$style.library"><i class="ti ti-bookmark"></i> {{ i18n.ts.zalip.updatesLibrary }}</MkA>
+				<MkA to="/library?filter=subscribed" :class="$style.library"><i class="ti ti-bell"></i> {{ i18n.ts.zalip.librarySubscriptions }}</MkA>
 			</header>
 
 			<div v-if="pending" :class="$style.empty"><i class="ti ti-loader-2 ti-spin"></i> {{ i18n.ts.zalip.updatesLoading }}</div>
@@ -18,7 +18,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div v-else :class="$style.list">
 				<MkA v-for="event in events" :key="event.id" :to="`/zalip/${event.work.slug}`" :class="$style.event">
 					<img v-if="event.work.posterPath" :src="tmdbImage(event.work.posterPath)" :alt="event.work.title" loading="lazy">
-					<div><p>{{ event.work.title }}</p><h2>{{ releaseLabel(event) }}</h2><span>{{ dateLabel(event.createdAt) }}</span></div>
+					<div><p>{{ event.work.title }}</p><h2>{{ releaseLabel(event) }}</h2><span>{{ event.source === 'playback' ? i18n.ts.zalip.releaseInPlayer : i18n.ts.zalip.releaseInCatalogue }} · {{ dateLabel(event.createdAt) }}</span></div>
 				</MkA>
 			</div>
 		</div>
@@ -35,9 +35,10 @@ import { i18n } from '@/i18n.js';
 type ReleaseEvent = {
 	id: string;
 	createdAt: string;
+	source: 'catalogue' | 'playback';
 	work: { slug: string; title: string; posterPath: string | null; };
-	season: { seasonNumber: number; title: string; };
-	episode: { episodeNumber: number; title: string; };
+	season: { seasonNumber: number; title: string; } | null;
+	episode: { episodeNumber: number; title: string; } | null;
 };
 
 const events = ref<ReleaseEvent[]>([]);
@@ -49,8 +50,9 @@ function tmdbImage(path: string): string {
 }
 
 function releaseLabel(event: ReleaseEvent): string {
+	if (event.season == null || event.episode == null) return i18n.ts.zalip.releaseAvailable;
 	const season = event.season.seasonNumber === 0 ? i18n.ts.zalip.releaseSpecial : i18n.tsx.zalip.releaseSeason({ number: event.season.seasonNumber.toString() });
-	return `${season} · ${i18n.tsx.zalip.releaseEpisode({ number: event.episode.episodeNumber.toString() })}: ${event.episode.title}`;
+	return `${season} · ${i18n.tsx.zalip.releaseEpisode({ number: event.episode.episodeNumber.toString() })}${event.episode.title ? `: ${event.episode.title}` : ''}`;
 }
 
 function dateLabel(createdAt: string): string {

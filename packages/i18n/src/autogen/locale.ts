@@ -1686,13 +1686,77 @@ export interface Locale extends ILocale {
          */
         "libraryEyebrow": string;
         /**
-         * Закладки и просмотренное
+         * Библиотека
          */
         "libraryHeading": string;
         /**
-         * Ваши фильмы, сериалы и аниме — с прогрессом, оценками и подписками на новые серии.
+         * Здесь хранятся закладки тайтлов, списки просмотра, оценки и подписки. Записи из ленты — в закладках записей.
          */
         "libraryDescription": string;
+        /**
+         * Тайтлы
+         */
+        "contentBookmarks": string;
+        /**
+         * Закладки
+         */
+        "libraryBookmarks": string;
+        /**
+         * Записи
+         */
+        "postBookmarks": string;
+        /**
+         * Мои подписки
+         */
+        "librarySubscriptions": string;
+        /**
+         * Оценено
+         */
+        "libraryRated": string;
+        /**
+         * Тайтлов: {count}
+         */
+        "libraryResultCount": ParameterizedString<"count">;
+        /**
+         * В закладках
+         */
+        "inBookmarks": string;
+        /**
+         * В закладки
+         */
+        "addContentBookmark": string;
+        /**
+         * Убрать из закладок
+         */
+        "removeContentBookmark": string;
+        /**
+         * Фильм уже доступен в плеере — ждать выхода не нужно.
+         */
+        "movieAlreadyAvailable": string;
+        /**
+         * Неинтересно
+         */
+        "workNotInterested": string;
+        /**
+         * Сохранить в список «Брошено».
+         */
+        "workNotInterestedHint": string;
+        /**
+         * Листайте серии
+         */
+        "episodeSwipeHint": string;
+        /**
+         * Доступно для просмотра
+         */
+        "releaseAvailable": string;
+        /**
+         * В плеере
+         */
+        "releaseInPlayer": string;
+        /**
+         * В каталоге
+         */
+        "releaseInCatalogue": string;
         /**
          * Найти тайтл
          */
@@ -1770,7 +1834,7 @@ export interface Locale extends ILocale {
          */
         "libraryPersonalRating": string;
         /**
-         * Отслеживаются новые серии
+         * Подписка на выход
          */
         "libraryReleaseSubscribed": string;
         /**
@@ -2130,11 +2194,11 @@ export interface Locale extends ILocale {
          */
         "workActions": string;
         /**
-         * Избранное
+         * Закладка тайтла
          */
         "favoriteTitle": string;
         /**
-         * Мой список
+         * Библиотека → Закладки. Не меняет список просмотра.
          */
         "favoriteCaption": string;
         /**

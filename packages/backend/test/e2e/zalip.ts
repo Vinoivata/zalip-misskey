@@ -7,7 +7,8 @@ process.env.NODE_ENV = 'test';
 
 import * as assert from 'node:assert';
 import { beforeAll, describe, test } from 'vitest';
-import { api, castAsError, signup } from '../utils.js';
+import { MiZalipAllohaAvailabilityEvent } from '@/models/ZalipAllohaAvailabilityEvent.js';
+import { api, castAsError, initTestDb, signup } from '../utils.js';
 import type * as misskey from 'misskey-js';
 
 describe('Zalip discussions', () => {
@@ -65,6 +66,34 @@ describe('Zalip discussions', () => {
 		assert.strictEqual(response.status, 200);
 		assert.strictEqual(response.body.created, false);
 		assert.strictEqual(typeof response.body.noteId, 'string');
+	});
+
+	test('includes nullable movie playback events only for authenticated active subscribers', async () => {
+		const created = await api('zalip/admin/works/create', { slug: 'zalip-premiere-test', kind: 'movie', title: 'Premiere test' }, admin);
+		assert.strictEqual(created.status, 200);
+		const movieId = created.body.id;
+		const db = await initTestDb(true);
+		await db.getRepository(MiZalipAllohaAvailabilityEvent).save({ id: 'zalipmovieevent01', workId: movieId, availabilityKey: 'movie', seasonNumber: null, episodeNumber: null, translationCount: 1, createdAt: new Date(), notificationDeliveredAt: new Date() });
+		const anonymous = await api('zalip/releases/subscribed', {});
+		assert.strictEqual(anonymous.status, 401);
+		await api('zalip/admin/works/update-state', { workId: movieId, publicationState: 'published' }, admin);
+		await api('zalip/library/update', { workId: movieId, status: null, isReleaseSubscribed: true }, viewer);
+		const response = await api('zalip/releases/subscribed', { limit: 50 }, viewer);
+		assert.strictEqual(response.status, 200);
+		const movieEvent = response.body.find(event => event.work.id === movieId);
+		assert.ok(movieEvent);
+		assert.strictEqual(movieEvent.source, 'playback');
+		assert.strictEqual(movieEvent.season, null);
+		assert.strictEqual(movieEvent.episode, null);
+		const other = await api('zalip/releases/subscribed', {}, admin);
+		assert.strictEqual(other.body.some(event => event.work.id === movieId), false);
+		await api('zalip/admin/works/update-state', { workId: movieId, publicationState: 'draft' }, admin);
+		const draft = await api('zalip/releases/subscribed', {}, viewer);
+		assert.strictEqual(draft.body.some(event => event.work.id === movieId), false);
+		await api('zalip/admin/works/update-state', { workId: movieId, publicationState: 'published' }, admin);
+		await api('zalip/library/update', { workId: movieId, status: null, isReleaseSubscribed: false }, viewer);
+		const unsubscribed = await api('zalip/releases/subscribed', {}, viewer);
+		assert.strictEqual(unsubscribed.body.some(event => event.work.id === movieId), false);
 	});
 
 	test('clears and restores a list status without losing personal state or affecting another user', async () => {

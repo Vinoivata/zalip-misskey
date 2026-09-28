@@ -4,7 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/vue';
+import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/vue';
 import { defineComponent, h } from 'vue';
 import Work from '@/pages/zalip/work.vue';
 import { i18n } from '@/i18n.js';
@@ -14,18 +14,26 @@ import type { MenuItem, MenuSwitch } from '@/types/menu.js';
 
 vi.mock('@/i.js', () => ({ $i: { id: 'viewer' } }));
 vi.mock('@/page.js', () => ({ definePage: vi.fn() }));
+vi.mock('@/preferences.js', () => ({ prefer: { s: { enablePullToRefresh: true } } }));
+vi.mock('@/components/MkPullToRefresh.vue', () => ({ default: defineComponent({ props: ['refresher'], setup: (props, { slots }) => () => h('div', [h('button', { onClick: props.refresher }, 'test-refresh'), slots.default?.()]) }) }));
 vi.mock('@/os.js', () => ({ popupMenu: vi.fn(), toast: vi.fn(), post: vi.fn() }));
 vi.mock('@/utility/misskey-api.js', () => ({ misskeyApiZalip: vi.fn() }));
 vi.mock('@/utility/please-login.js', () => ({ pleaseLogin: vi.fn().mockResolvedValue(true) }));
 vi.mock('@/components/ZalipDiscussionPanel.vue', () => ({ default: defineComponent({ setup: () => () => null }) }));
 vi.mock('@/components/ZalipRatingDialog.vue', () => ({ default: defineComponent({ setup: () => () => null }) }));
-vi.mock('@/components/MkModal.vue', () => ({ default: defineComponent({ setup: () => () => null }) }));
+vi.mock('@/components/MkModal.vue', () => ({ default: defineComponent({ emits: ['closed'], setup(_, { slots, emit, expose }) {
+	expose({ close: () => emit('closed') });
+	return () => h('div', slots.default?.({ maxHeight: null }));
+} }) }));
 
 const title = { id: 'work', slug: 'film', kind: 'movie', title: 'Film', originalTitle: 'Original', description: 'Description', releaseYear: 2027, genres: ['Drama'], runtimeMinutes: 100, seasons: [], galleryPaths: [], communityRating: 8, ratingCount: 2 };
 let entry: { status: string | null; episodesWatched: number; personalRating: number | null; isFavorite: boolean; isReleaseSubscribed: boolean; work: { id: string } };
 let workKind = 'movie';
 let available = false;
 let failUpdate = false;
+let withEpisodes = false;
+const testEpisodes = [1, 2, 3].map(n => ({ id: `ep${n}`, episodeNumber: n, title: `Episode ${n}`, stillPath: `/frame${n}.jpg`, description: `Description ${n}`, airDate: `2026-09-0${n}`, runtimeMinutes: 40, discussionNoteId: null }));
+const scrollTo = vi.fn();
 
 function setup() {
 	return render(Work, { props: { slug: 'film' }, global: { stubs: {
@@ -47,9 +55,12 @@ beforeEach(() => {
 	available = false;
 	failUpdate = false;
 	workKind = 'movie';
+	withEpisodes = false;
+	HTMLElement.prototype.scrollTo = scrollTo;
 	entry = { status: 'watching', episodesWatched: 4, personalRating: 8, isFavorite: false, isReleaseSubscribed: false, work: { id: title.id } };
 	vi.mocked(misskeyApiZalip).mockImplementation(async (endpoint, data) => {
-		if (endpoint === 'zalip/works/show') return { ...title, kind: workKind };
+		if (endpoint === 'zalip/works/show') return { ...title, kind: workKind, posterPath: '/poster.jpg', backdropPath: null, seasons: withEpisodes ? [{ id: 'season', seasonNumber: 1, title: 'Season 1', episodeCount: 3 }] : [] };
+		if (endpoint === 'zalip/seasons/episodes') return testEpisodes;
 		if (endpoint === 'zalip/discussions/show') return { noteId: null };
 		if (endpoint === 'zalip/library/list') return [entry];
 		if (endpoint === 'zalip/playback/alloha/show') return { available, translations: [], iframe: null };
@@ -104,12 +115,12 @@ describe('Zalip work actions', () => {
 		const item = items.find(item => item && 'type' in item && item.type === 'switch' && item.text !== i18n.ts.zalip.favoriteTitle && item.ref.value) as MenuSwitch;
 		expect(item).toBeTruthy();
 		item.ref.value = false;
-		await view.findByRole('button', { name: i18n.ts.zalip.addToList });
+		await view.findByRole('button', { name: i18n.ts.zalip.inBookmarks });
 		expect(entry).toMatchObject({ status: null, personalRating: 8, episodesWatched: 4, isFavorite: true, isReleaseSubscribed: true });
 		view.unmount();
 		const restored = setup();
-		const addButton = await restored.findByRole('button', { name: i18n.ts.zalip.addToList });
-		expect(addButton.querySelector('.ti-bookmark-plus')).not.toBeNull();
+		const addButton = await restored.findByRole('button', { name: i18n.ts.zalip.inBookmarks });
+		expect(addButton.querySelector('.ti-bookmark')).not.toBeNull();
 		await fireEvent.click(addButton);
 		const reloadedItems = vi.mocked(os.popupMenu).mock.calls.at(-1)![0] as MenuItem[];
 		const planned = reloadedItems.find(item => item && 'type' in item && item.type === 'switch' && item.text === i18n.ts.zalip.libraryPlanned) as MenuSwitch;
@@ -165,11 +176,56 @@ describe('Zalip work actions', () => {
 		available = true;
 		const view = setup();
 		await fireEvent.click(await view.findByRole('button', { name: i18n.ts.zalip.more }));
-		const items = vi.mocked(os.popupMenu).mock.calls.at(-1)![0] as MenuItem[];
-		const item = items.find(item => item && 'type' in item && item.type === 'switch' && item.icon === 'ti ti-bell') as MenuSwitch;
-		expect(item.ref.value).toBe(true);
-		item.ref.value = false;
+		const sheet = within(view.getByRole('dialog', { name: i18n.ts.zalip.more }));
+		await fireEvent.click(sheet.getByRole('button', { name: i18n.ts.zalip.subscribePremiere, pressed: true }));
 		await waitFor(() => expect(entry.isReleaseSubscribed).toBe(false));
+	});
+
+	it('prioritizes the watch status over a bookmark and falls back to the bookmark when cleared', async () => {
+		entry.status = null;
+		entry.isFavorite = true;
+		const view = setup();
+		const bookmark = await view.findByRole('button', { name: i18n.ts.zalip.inBookmarks });
+		expect(bookmark.querySelector('.ti-bookmark')).toBeTruthy();
+		await fireEvent.click(bookmark);
+		const items = vi.mocked(os.popupMenu).mock.calls.at(-1)![0] as MenuItem[];
+		const watching = items.find(item => item && 'type' in item && item.type === 'switch' && item.text === i18n.ts.zalip.libraryWatching) as MenuSwitch;
+		watching.ref.value = true;
+		expect((await view.findByRole('button', { name: i18n.ts.zalip.libraryWatching })).querySelector('.ti-eye')).toBeTruthy();
+		expect(entry.isFavorite).toBe(true);
+	});
+
+	it('renders a mobile poster fallback without a backdrop and restores the repost icon', async () => {
+		const view = setup();
+		const repost = await view.findByRole('button', { name: i18n.ts.zalip.workRepost });
+		expect(repost.querySelector('.ti-repeat')).toBeTruthy();
+		expect(view.container.querySelector('[class*=mobilePosterFallback] img')?.getAttribute('src')).toContain('/poster.jpg');
+		await fireEvent.click(view.getByRole('button', { name: 'test-refresh' }));
+		await view.findByRole('button', { name: i18n.ts.zalip.workRepost });
+		expect(vi.mocked(misskeyApiZalip).mock.calls.filter(([endpoint]) => endpoint === 'zalip/works/show')).toHaveLength(2);
+	});
+
+	it('synchronizes dropdown, frame, metadata and rail, with horizontal swipes ignoring vertical movement', async () => {
+		withEpisodes = true;
+		entry.episodesWatched = 0;
+		const view = setup();
+		const firstEpisodeLabel = i18n.tsx.zalip.playerEpisodeNumber({ number: 1 });
+		const dropdown = await view.findByRole('button', { name: firstEpisodeLabel, expanded: false });
+		await fireEvent.click(dropdown);
+		const menu = within(view.getByRole('dialog', { name: i18n.ts.zalip.workEpisodes }));
+		await fireEvent.click(menu.getByRole('button', { name: i18n.tsx.zalip.playerEpisodeNumber({ number: 3 }) }));
+		await waitFor(() => expect(view.container.querySelector('[class*=episodeGuideStill]')?.getAttribute('src')).toContain('/frame3.jpg'));
+		expect(view.getByText('Description 3')).toBeTruthy();
+		expect(view.container.querySelector('[data-episode-id=ep3]')?.getAttribute('aria-pressed')).toBe('true');
+		expect(scrollTo).toHaveBeenCalled();
+		const guide = view.container.querySelector('[class*=episodeGuideContent]')!;
+		await fireEvent.touchStart(guide, { touches: [{ clientX: 100, clientY: 100 }] });
+		await fireEvent.touchEnd(guide, { changedTouches: [{ clientX: 105, clientY: 250 }] });
+		expect(view.getByText('Description 3')).toBeTruthy();
+		await fireEvent.touchStart(guide, { touches: [{ clientX: 100, clientY: 100 }] });
+		await fireEvent.touchEnd(guide, { changedTouches: [{ clientX: 230, clientY: 103 }] });
+		await view.findByText('Description 2');
+		expect(view.container.querySelector('[class*=episodeGuideStill]')?.getAttribute('src')).toContain('/frame2.jpg');
 	});
 
 	it('restores subscription state and permits retry on save failure', async () => {

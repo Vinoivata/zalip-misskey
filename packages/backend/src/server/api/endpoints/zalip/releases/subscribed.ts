@@ -11,19 +11,20 @@ export const meta = {
 	tags: ['zalip', 'account'],
 	requireCredential: true,
 	kind: 'read:account',
-	description: 'List recent episode arrivals only for works the signed-in user follows in Zalip.',
+	description: 'List catalogue episode arrivals and film/episode playback availability for titles followed by the signed-in user.',
 	res: {
 		type: 'array', optional: false, nullable: false,
 		items: {
 			type: 'object', optional: false, nullable: false,
 			properties: {
-				id: { type: 'string', format: 'misskey:id' },
-				createdAt: { type: 'string' },
-				work: { type: 'object', additionalProperties: true },
-				season: { type: 'object', additionalProperties: true },
-				episode: { type: 'object', additionalProperties: true },
+				id: { type: 'string', format: 'misskey:id', optional: false, nullable: false },
+				createdAt: { type: 'string', optional: false, nullable: false },
+				source: { type: 'string', enum: ['catalogue', 'playback'], optional: false, nullable: false },
+				work: { type: 'object', additionalProperties: true, optional: false, nullable: false },
+				season: { type: 'object', additionalProperties: true, optional: false, nullable: true },
+				episode: { type: 'object', additionalProperties: true, optional: false, nullable: true },
 			},
-			required: ['id', 'createdAt', 'work', 'season', 'episode'],
+			required: ['id', 'createdAt', 'source', 'work', 'season', 'episode'],
 		},
 	},
 } as const;

@@ -76,8 +76,34 @@ describe('ZalipAllohaService', () => {
 		expect(catalog.upsertAllohaSource).toHaveBeenCalledWith(expect.objectContaining({
 			workId: 'work-2', isAvailable: false, iframe: null, translations: [],
 		}));
-		expect(catalog.recordAllohaAvailability).toHaveBeenCalledWith({
-			workId: 'work-2', seasonNumber: null, episodeNumber: null, translationCount: 1, suppressNotification: true,
-		});
+		expect(catalog.recordAllohaAvailability).not.toHaveBeenCalled();
+	});
+
+	it('records an available movie atomically with its source even outside the recent feed', async () => {
+		process.env.ZALIP_ALLOHA_API_TOKEN = 'test-token';
+		const getJson = vi.fn()
+			.mockResolvedValueOnce({ data: { category: { slug: 'movie' }, iframe: 'https://ascorbic-as.stravers.live/embed/movie', translations: [] } })
+			.mockResolvedValueOnce({ data: [], meta: { has_more: false } });
+		const catalog = {
+			listAllohaSyncTargets: vi.fn().mockResolvedValue([{ workId: 'movie', tmdbMediaType: 'movie', tmdbId: 2024 }]),
+			upsertAllohaSource: vi.fn().mockResolvedValue({ created: false, movieEventCreated: true }),
+			recordAllohaAvailability: vi.fn().mockResolvedValue(true),
+			dispatchPendingAllohaAvailabilityNotifications: vi.fn().mockResolvedValue(undefined),
+		};
+		const result = await new ZalipAllohaService({ getJson } as never, catalog as never).sync();
+		expect(result).toEqual({ kind: 'synced', checked: 1, available: 1, events: 1 });
+		expect(catalog.upsertAllohaSource).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ workId: 'movie', isAvailable: true, recordMovieAvailability: true }));
+		expect(catalog.recordAllohaAvailability).not.toHaveBeenCalled();
+		expect(catalog.dispatchPendingAllohaAvailabilityNotifications).toHaveBeenCalledOnce();
+	});
+
+	it('retries pending deliveries even if the latest upstream feed fails', async () => {
+		process.env.ZALIP_ALLOHA_API_TOKEN = 'test-token';
+		const catalog = {
+			listAllohaSyncTargets: vi.fn().mockResolvedValue([]),
+			dispatchPendingAllohaAvailabilityNotifications: vi.fn().mockResolvedValue(undefined),
+		};
+		await expect(new ZalipAllohaService({ getJson: vi.fn().mockRejectedValue(new Error('Upstream unavailable')) } as never, catalog as never).sync()).resolves.toEqual({ kind: 'upstream-failure' });
+		expect(catalog.dispatchPendingAllohaAvailabilityNotifications).toHaveBeenCalledOnce();
 	});
 });

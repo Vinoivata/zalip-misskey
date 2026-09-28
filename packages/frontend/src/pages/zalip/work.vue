@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <PageWithHeader hideHeader>
-	<div :class="$style.viewport">
+	<component :is="prefer.s.enablePullToRefresh ? MkPullToRefresh : 'div'" :refresher="refreshWork" :class="$style.viewport">
 		<div :class="$style.page">
 			<div v-if="pending" :class="$style.state"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i> Загружаем тайтл…</div>
 			<div v-else-if="work == null" :class="$style.state"><i class="ti ti-movie-off" aria-hidden="true"></i> Тайтл не найден или ещё не опубликован.</div>
@@ -13,6 +13,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 				<section :class="[$style.hero, { [$style.hasLogo]: work.logoPath }]">
 					<div v-if="work.backdropPath" :class="$style.heroBackground" aria-hidden="true"><img :src="tmdbBackdrop(work.backdropPath)" alt=""></div>
+					<div v-else :class="$style.mobilePosterFallback"><img v-if="work.posterPath" :src="tmdbImage(work.posterPath)" :alt="work.title"><div v-else :class="$style.missingArtwork"><i class="ti ti-movie" aria-hidden="true"></i><span>{{ work.title }}</span></div></div>
 					<div :class="$style.heroInner">
 						<nav :class="$style.breadcrumb" :aria-label="i18n.ts.zalip.catalogueHeading"><MkA to="/catalog">{{ i18n.ts.zalip.catalogueHeading }}</MkA><i class="ti ti-chevron-right" aria-hidden="true"></i><span>{{ work.title }}</span></nav>
 						<div v-if="work.logoPath" :class="$style.titleLogo"><img :src="tmdbImage(work.logoPath)" :alt="work.title"></div>
@@ -46,9 +47,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</section>
 				<div :class="$style.actionStrip" role="group" :aria-label="i18n.ts.zalip.workActions">
 					<button type="button" class="_button" :disabled="saving" :aria-label="personalRating == null ? i18n.ts.zalip.workRateAction : `${i18n.ts.zalip.myRating}: ${ratingLabel}`" @click="choosePersonalRating"><span :class="$style.actionSymbol"><span v-if="personalRating != null" :class="$style.ratingBadge"><i class="ti ti-star-filled" aria-hidden="true"></i>{{ personalRating }}</span><i v-else class="ti ti-star" aria-hidden="true"></i></span><span>{{ personalRating == null ? i18n.ts.zalip.workRateAction : i18n.ts.zalip.myRating }}</span></button>
-					<button type="button" class="_button" :class="{ [$style.actionActive]: saved }" :disabled="saving" aria-haspopup="menu" @click="showLibraryMenu"><span :class="$style.actionSymbol"><i :class="saved ? libraryStatusIcon(libraryStatus) : 'ti ti-bookmark-plus'" aria-hidden="true"></i></span><span>{{ saved ? libraryStatusText(libraryStatus) : i18n.ts.zalip.addToList }}</span></button>
-					<button type="button" class="_button" @click="shareWork"><span :class="$style.actionSymbol"><i class="ti ti-share-3" aria-hidden="true"></i></span><span>{{ i18n.ts.zalip.workRepost }}</span></button>
-					<button type="button" class="_button" :aria-label="i18n.ts.zalip.more" :disabled="saving" aria-haspopup="menu" @click="showWorkMenu"><span :class="$style.actionSymbol"><i class="ti ti-dots" aria-hidden="true"></i></span><span>{{ i18n.ts.zalip.more }}</span></button>
+					<button type="button" class="_button" :class="{ [$style.actionActive]: saved || isFavorite }" :disabled="saving" aria-haspopup="menu" @click="showLibraryMenu"><span :class="$style.actionSymbol"><i :class="saved ? libraryStatusIcon(libraryStatus) : isFavorite ? 'ti ti-bookmark' : 'ti ti-bookmark-plus'" aria-hidden="true"></i></span><span>{{ saved ? libraryStatusText(libraryStatus) : isFavorite ? i18n.ts.zalip.inBookmarks : i18n.ts.zalip.addToList }}</span></button>
+					<button type="button" class="_button" @click="shareWork"><span :class="$style.actionSymbol"><i class="ti ti-repeat" aria-hidden="true"></i></span><span>{{ i18n.ts.zalip.workRepost }}</span></button>
+					<button ref="moreTrigger" type="button" class="_button" :aria-label="i18n.ts.zalip.more" :disabled="saving" aria-haspopup="dialog" :aria-expanded="workMenuOpen" @click="showWorkMenu"><span :class="$style.actionSymbol"><i class="ti ti-dots" aria-hidden="true"></i></span><span>{{ i18n.ts.zalip.more }}</span></button>
 				</div>
 				<p v-if="work.description" :class="$style.description">{{ work.description }}</p>
 				<div :class="$style.content">
@@ -63,6 +64,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<button type="button" class="_button" :class="[$style.subscribeButton, { [$style.subscribed]: releaseSubscribed }]" :disabled="saving" :aria-pressed="releaseSubscribed" @click="toggleReleaseSubscription"><i :class="releaseSubscribed ? 'ti ti-bell-check' : 'ti ti-bell-plus'" aria-hidden="true"></i><span>{{ releaseSubscribed ? i18n.ts.zalip.releaseSubscribed : releaseSubscriptionLabel }}</span></button>
 							<small>{{ releaseSubscribed ? i18n.ts.zalip.releaseUnsubscribeHint : i18n.ts.zalip.releaseSubscribeHint }}</small>
 						</div>
+						<p v-else :class="$style.availableNotice"><i class="ti ti-circle-check" aria-hidden="true"></i>{{ i18n.ts.zalip.movieAlreadyAvailable }}</p>
 						<div v-if="work.trailerYoutubeKey && playerView === 'trailer'" :class="$style.playerFrame"><iframe :src="youtubeEmbed(work.trailerYoutubeKey)" :title="i18n.ts.zalip.trailerTab + ': ' + work.title" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>
 						<template v-if="playerView === 'player'">
 							<div ref="watchFrame" :class="$style.watchFrame">
@@ -87,8 +89,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 								<div v-if="work.seasons.length > 1" :class="$style.seasonPicker"><span>{{ i18n.ts.zalip.workSeason }}</span><div><button v-for="season in work.seasons" :key="season.id" type="button" class="_button" :class="{ [$style.selectedSeasonPill]: selectedSeasonNumber === season.seasonNumber }" :aria-pressed="selectedSeasonNumber === season.seasonNumber" @click="selectSeason(season)">{{ season.seasonNumber === 0 ? i18n.ts.zalip.releaseSpecial : season.seasonNumber }}</button></div></div>
 								<p v-if="episodesPending" :class="$style.episodeRailState"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i>{{ i18n.ts.zalip.playerEpisodesLoading }}</p>
 								<p v-else-if="!episodes.length" :class="$style.episodeRailState">{{ i18n.ts.zalip.playerEpisodesEmpty }}</p>
-								<div v-else :class="$style.episodeRail" :aria-label="i18n.ts.zalip.workEpisodes" @pointerdown="episodeDrag.onPointerDown" @pointermove="episodeDrag.onPointerMove" @pointerup="episodeDrag.onPointerUp" @pointercancel="episodeDrag.onPointerCancel" @click.capture="episodeDrag.onClickCapture">
-									<button v-for="episode in episodes" :key="episode.id" type="button" class="_button" :class="[$style.episodeTile, { [$style.selectedEpisodeTile]: selectedEpisode?.id === episode.id }]" :aria-pressed="selectedEpisode?.id === episode.id" @click="selectEpisode(episode)">
+								<div v-else ref="episodeRail" :class="$style.episodeRail" :aria-label="i18n.ts.zalip.workEpisodes" @pointerdown="episodeDrag.onPointerDown" @pointermove="episodeDrag.onPointerMove" @pointerup="episodeDrag.onPointerUp" @pointercancel="episodeDrag.onPointerCancel" @click.capture="episodeDrag.onClickCapture">
+									<button v-for="episode in episodes" :key="episode.id" :data-episode-id="episode.id" type="button" class="_button" :class="[$style.episodeTile, { [$style.selectedEpisodeTile]: selectedEpisode?.id === episode.id }]" :aria-pressed="selectedEpisode?.id === episode.id" @click="selectEpisode(episode)">
 										<span :class="$style.episodeThumb"><img v-if="episode.stillPath" :src="tmdbGalleryImage(episode.stillPath)" alt="" loading="lazy"><i v-else class="ti ti-device-tv" aria-hidden="true"></i><span v-if="selectedEpisode?.id === episode.id" :class="$style.selectedPlay"><i class="ti ti-player-play-filled" aria-hidden="true"></i></span></span>
 										<strong>{{ i18n.tsx.zalip.playerEpisodeNumber({ number: episode.episodeNumber }) }}</strong>
 										<small>{{ episode.title }}</small>
@@ -97,9 +99,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 							</div>
 						</template>
 					</section>
-					<section v-if="selectedEpisode" :class="$style.episodeGuide">
-						<div :class="$style.episodeGuideContent">
+					<section v-if="selectedEpisode" :class="$style.episodeGuide" @touchstart.passive="startEpisodeSwipe" @touchend.passive="finishEpisodeSwipe" @touchcancel="episodeSwipeStart = null">
+						<img v-if="selectedEpisode.stillPath" :key="selectedEpisode.id" :class="$style.episodeGuideStill" :src="tmdbGalleryImage(selectedEpisode.stillPath)" alt="" loading="lazy">
+						<div :class="$style.episodeGuideContent" aria-live="polite">
 							<p>{{ i18n.ts.zalip.episodeInformation }}</p>
+							<div :class="$style.guideNavigation"><button type="button" class="_button" :disabled="!previousEpisode" :aria-label="i18n.ts.zalip.playerPreviousEpisode" @click="selectRelativeEpisode(-1)"><i class="ti ti-chevron-left" aria-hidden="true"></i></button><span>{{ i18n.ts.zalip.episodeSwipeHint }}</span><button type="button" class="_button" :disabled="!nextEpisode" :aria-label="i18n.ts.zalip.playerNextEpisode" @click="selectRelativeEpisode(1)"><i class="ti ti-chevron-right" aria-hidden="true"></i></button></div>
 							<h2>{{ episodeLabel(selectedEpisode) }}</h2>
 							<span v-if="selectedEpisode.runtimeMinutes || selectedEpisode.airDate">{{ episodeMeta(selectedEpisode) }}</span>
 							<p v-if="selectedEpisode.description">{{ selectedEpisode.description }}</p>
@@ -128,10 +132,28 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</div>
 			</article>
 		</div>
-	</div>
-	<ZalipRatingDialog v-if="ratingDialogOpen" :initialRating="personalRating ?? 0" :saving="saving" :error="ratingError" @save="savePersonalRating" @later="closeRatingDialog" @closed="closeRatingDialog"/>
+	</component>
 
 	<Teleport to="body">
+		<ZalipRatingDialog v-if="ratingDialogOpen" :initialRating="personalRating ?? 0" :saving="saving" :error="ratingError" :title="work?.title" :subtitle="workSubtitle" :posterUrl="work?.posterPath ? tmdbImage(work.posterPath) : undefined" :communityRating="work?.communityRating" @save="savePersonalRating" @later="closeRatingDialog" @closed="closeRatingDialog"/>
+		<MkModal v-if="workMenuOpen && work" ref="workModal" :preferType="viewportWidth <= 600 ? 'drawer' : 'dialog'" :returnFocusTo="moreTrigger" @click="closeWorkMenu" @esc="closeWorkMenu" @closed="workMenuOpen = false">
+			<section :class="$style.workSheet" role="dialog" aria-modal="true" :aria-label="i18n.ts.zalip.more">
+				<div :class="$style.sheetHandle" aria-hidden="true"></div>
+				<button type="button" class="_button" :class="$style.sheetClose" :disabled="saving" :aria-label="i18n.ts.close" @click="closeWorkMenu"><i class="ti ti-x" aria-hidden="true"></i></button>
+				<header :class="$style.sheetTitle"><div :class="$style.sheetPoster"><img v-if="work.posterPath" :src="tmdbImage(work.posterPath)" alt=""><i v-else class="ti ti-movie" aria-hidden="true"></i><span v-if="work.communityRating != null">{{ work.communityRating.toFixed(1) }}</span></div><div><h2>{{ work.title }}</h2><p>{{ workSubtitle }}</p></div></header>
+				<div v-if="workMenuLists" :class="$style.sheetRows">
+					<button type="button" class="_button" :class="$style.sheetRow" @click="workMenuLists = false"><i class="ti ti-arrow-left" aria-hidden="true"></i><span>{{ i18n.ts.zalip.more }}</span></button>
+					<button v-for="status in libraryStatuses" :key="status" type="button" class="_button" :class="$style.sheetRow" :disabled="saving" :aria-pressed="libraryStatus === status" @click="setLibraryStatus(libraryStatus === status ? null : status)"><i :class="libraryStatusIcon(status)" aria-hidden="true"></i><span>{{ libraryStatusText(status) }}</span><i v-if="libraryStatus === status" class="ti ti-check" aria-hidden="true"></i></button>
+				</div>
+				<div v-else :class="$style.sheetRows">
+					<button type="button" class="_button" :class="$style.sheetRow" @click="workMenuLists = true"><i class="ti ti-folder-plus" aria-hidden="true"></i><span>{{ i18n.ts.zalip.addToList }}<small v-if="saved">{{ libraryStatusText(libraryStatus) }}</small></span><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
+					<button type="button" class="_button" :class="$style.sheetRow" :disabled="saving" :aria-pressed="isFavorite" @click="toggleFavorite"><i class="ti ti-bookmark" aria-hidden="true"></i><span>{{ isFavorite ? i18n.ts.zalip.removeContentBookmark : i18n.ts.zalip.addContentBookmark }}</span><i v-if="isFavorite" class="ti ti-check" aria-hidden="true"></i></button>
+					<button type="button" class="_button" :class="$style.sheetRow" :disabled="saving" :aria-pressed="libraryStatus === 'dropped'" @click="setLibraryStatus(libraryStatus === 'dropped' ? null : 'dropped')"><i class="ti ti-circle-minus" aria-hidden="true"></i><span>{{ i18n.ts.zalip.workNotInterested }}<small>{{ i18n.ts.zalip.workNotInterestedHint }}</small></span><i v-if="libraryStatus === 'dropped'" class="ti ti-check" aria-hidden="true"></i></button>
+					<button type="button" class="_button" :class="$style.sheetRow" :disabled="saving" :aria-pressed="libraryStatus === 'completed'" @click="setLibraryStatus(libraryStatus === 'completed' ? null : 'completed')"><i class="ti ti-eye" aria-hidden="true"></i><span>{{ i18n.ts.zalip.playerWatched }}</span><i v-if="libraryStatus === 'completed'" class="ti ti-check" aria-hidden="true"></i></button>
+					<button v-if="showReleaseSubscription" type="button" class="_button" :class="$style.sheetRow" :disabled="saving" :aria-pressed="releaseSubscribed" @click="toggleReleaseSubscription"><i class="ti ti-bell" aria-hidden="true"></i><span>{{ releaseSubscriptionLabel }}</span><i v-if="releaseSubscribed" class="ti ti-check" aria-hidden="true"></i></button>
+				</div>
+			</section>
+		</MkModal>
 		<MkModal v-if="episodeMenuOpen" ref="episodeModal" v-slot="{ maxHeight }" :class="$style.voiceOverlay" preferType="popup" :anchorElement="episodeAnchor" @click="episodeModal?.close()" @esc="episodeModal?.close()" @closed="episodeMenuOpen = false">
 			<section :class="$style.episodeMenu" :style="maxHeight == null ? undefined : { maxHeight: `min(${maxHeight}px, 55dvh)` }" role="dialog" aria-modal="true" :aria-label="i18n.ts.zalip.workEpisodes">
 				<label :class="$style.menuSearch"><i class="ti ti-search" aria-hidden="true"></i><input v-model="episodeQuery" type="search" :placeholder="i18n.ts.zalip.playerEpisodeSearch" :aria-label="i18n.ts.zalip.playerEpisodeSearch" @keydown.esc.stop.prevent="episodeModal?.close()"></label>
@@ -158,8 +180,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, nextTick, onBeforeUnmount, ref, useTemplateRef, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onDeactivated, ref, useTemplateRef, watch } from 'vue';
 import MkModal from '@/components/MkModal.vue';
+import MkPullToRefresh from '@/components/MkPullToRefresh.vue';
+import { prefer } from '@/preferences.js';
 import { getEpisodeProgress } from '@/utility/zalip-episode-progress.js';
 import { $i } from '@/i.js';
 import { i18n } from '@/i18n.js';
@@ -249,11 +273,17 @@ const voiceAnchor = ref<HTMLElement | null>(null);
 const episodeAnchor = ref<HTMLElement | null>(null);
 const voiceModal = useTemplateRef('voiceModal');
 const episodeModal = useTemplateRef('episodeModal');
+const workModal = useTemplateRef('workModal');
+const moreTrigger = useTemplateRef('moreTrigger');
+const workMenuOpen = ref(false);
+const workMenuLists = ref(false);
+const libraryStatuses = ['planned', 'watching', 'on_hold', 'completed', 'dropped'] as const;
 const watchFrame = useTemplateRef('watchFrame');
 const voicePanelPosition = ref<{ top: string; left: string; width: string; height: string }>();
 const episodeQuery = ref('');
 const props = defineProps<{ slug: string }>();
 const work = ref<ZalipWork | null>(null);
+const workSubtitle = computed(() => [work.value?.originalTitle, work.value?.releaseYear].filter(Boolean).join(', '));
 const pending = ref(true);
 const saving = ref(false);
 const libraryStatus = ref<LibraryStatus | null>(null);
@@ -264,7 +294,6 @@ const isFavorite = ref(false);
 const releaseSubscribed = ref(false);
 // Menu switches must remain clickable when selected. `active` menu buttons intentionally do not.
 const favoriteSwitch = computed({ get: () => isFavorite.value, set: () => { void toggleFavorite(); } });
-const releaseSwitch = computed({ get: () => releaseSubscribed.value, set: () => { void toggleReleaseSubscription(); } });
 const episodic = computed(() => work.value?.kind === 'series' || !!work.value?.seasons.length);
 const showReleaseSubscription = computed(() => episodic.value || releaseSubscribed.value || allohaPlayback.value?.available !== true);
 const releaseSubscriptionLabel = computed(() => episodic.value ? i18n.ts.zalip.subscribeEpisodes : i18n.ts.zalip.subscribePremiere);
@@ -291,7 +320,16 @@ const episodeRequestId = ref(0);
 const selectedEpisodeId = ref<string | null>(null);
 const ratingDialogOpen = ref(false);
 const ratingError = ref<string | null>(null);
+onDeactivated(() => {
+	// Cached pages remain mounted; their body teleports must not trap the next page.
+	workMenuOpen.value = false;
+	ratingDialogOpen.value = false;
+	episodeMenuOpen.value = false;
+	voiceMenuOpen.value = false;
+});
 const episodeDrag = useZalipHorizontalDrag();
+const episodeRail = useTemplateRef('episodeRail');
+let episodeSwipeStart: { x: number; y: number } | null = null;
 const selectedEpisode = computed(() => episodes.value.find(episode => episode.id === selectedEpisodeId.value) ?? null);
 
 const filteredEpisodes = computed(() => episodes.value.filter(episode => `${episode.episodeNumber} ${episode.title}`.toLocaleLowerCase('ru').includes(episodeQuery.value.trim().toLocaleLowerCase('ru'))));
@@ -439,7 +477,7 @@ async function load(): Promise<void> {
 		allohaPlayback.value = playback;
 		selectedAllohaTranslationId.value = playback?.translations[0]?.id ?? null;
 		const initialSeason = work.value.seasons.find(season => season.seasonNumber > 0) ?? work.value.seasons[0];
-		if (initialSeason != null) void selectSeason(initialSeason);
+		if (initialSeason != null) await selectSeason(initialSeason);
 	} catch {
 		work.value = null;
 		discussionNoteId.value = null;
@@ -447,6 +485,38 @@ async function load(): Promise<void> {
 		pending.value = false;
 	}
 }
+
+async function refreshWork(): Promise<void> {
+	if (saving.value || pending.value || workMenuOpen.value || ratingDialogOpen.value) return;
+	await load();
+}
+
+function startEpisodeSwipe(event: TouchEvent): void {
+	episodeSwipeStart = null;
+	if (event.touches.length !== 1 || (event.target instanceof Element && event.target.closest('button, a, input'))) return;
+	episodeSwipeStart = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+}
+
+function finishEpisodeSwipe(event: TouchEvent): void {
+	const start = episodeSwipeStart;
+	episodeSwipeStart = null;
+	if (start == null || event.changedTouches.length !== 1) return;
+	const dx = event.changedTouches[0].clientX - start.x;
+	const dy = event.changedTouches[0].clientY - start.y;
+	if (Math.abs(dx) >= 45 && Math.abs(dx) > Math.abs(dy) * 1.5) selectRelativeEpisode(dx < 0 ? 1 : -1);
+}
+
+watch([selectedEpisodeId, episodesPending, playerView, episodeRail], async () => {
+	await nextTick();
+	const rail = episodeRail.value;
+	const selected = rail?.querySelector<HTMLElement>('[aria-pressed="true"]');
+	if (!rail || !selected) return;
+	const rect = rail.getBoundingClientRect();
+	const tile = selected.getBoundingClientRect();
+	// Scroll only the horizontal rail; scrollIntoView would also jump the whole page.
+	const left = rail.scrollLeft + tile.left - rect.left - (rect.width - tile.width) / 2;
+	rail.scrollTo({ left: Math.max(0, left), behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+}, { flush: 'post' });
 
 async function loadSeason(season: ZalipSeason): Promise<void> {
 	if (work.value == null) return;
@@ -532,12 +602,13 @@ async function markEpisodeWatched(): Promise<void> {
 	}
 }
 
-function showWorkMenu(event: MouseEvent): void {
-	void os.popupMenu([
-		{ type: 'switch', text: i18n.ts.zalip.favoriteTitle, icon: 'ti ti-heart', ref: favoriteSwitch, disabled: saving },
-		...(showReleaseSubscription.value ? [{ type: 'switch' as const, text: releaseSubscriptionLabel.value, icon: 'ti ti-bell', ref: releaseSwitch, disabled: saving }] : []),
-		{ text: i18n.ts.zalip.discussTitle, icon: 'ti ti-messages', action: focusDiscussion },
-	], event.currentTarget);
+function showWorkMenu(): void {
+	workMenuLists.value = false;
+	workMenuOpen.value = true;
+}
+
+function closeWorkMenu(): void {
+	if (!saving.value) workModal.value?.close();
 }
 
 function openAllohaPlayer(): void {
@@ -641,13 +712,13 @@ async function showLibraryMenu(event: MouseEvent): Promise<void> {
 			type: 'switch',
 			text: i18n.ts.zalip.favoriteTitle,
 			caption: i18n.ts.zalip.favoriteCaption,
-			icon: isFavorite.value ? 'ti ti-heart-filled' : 'ti ti-heart',
+			icon: 'ti ti-bookmark',
 			ref: favoriteSwitch,
 			disabled: saving,
 		},
 		null,
 		{ type: 'label', text: i18n.ts.zalip.libraryStatusHeading },
-		...(['planned', 'watching', 'on_hold', 'completed', 'dropped'] as const).map(status => ({
+		...libraryStatuses.map(status => ({
 			type: 'switch' as const,
 			text: libraryStatusText(status),
 			caption: computed(() => libraryStatus.value === status ? i18n.ts.zalip.libraryRemoveStatusHint : libraryStatusCaption(status)),
@@ -777,6 +848,9 @@ definePage(() => ({
 .original { color: var(--zalip-social-muted); font-size: 13px; line-height: 1.5; }
 .ratings { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 20px 0 24px; }
 .compactFacts { display: none; }
+.mobilePosterFallback { display: none; }
+.missingArtwork { display: grid; place-content: center; justify-items: center; gap: 14px; width: min(220px, 65%); min-height: 240px; box-sizing: border-box; padding: 20px; border-radius: 16px; background: var(--zalip-social-raised); text-align: center; font-weight: 700; }
+.missingArtwork i { font-size: 48px; color: var(--MI_THEME-accent); }
 .communityRating { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .communityRating > i { color: var(--MI_THEME-accent); font-size: 23px; }
 .communityRating strong { font-size: 22px; }
@@ -804,6 +878,8 @@ definePage(() => ({
 .playerTabActive { color: var(--zalip-social-fg); background: var(--zalip-accent-wash); border-color: var(--zalip-accent-border); }
 .subscriptionBar { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; margin: 0 0 16px; }
 .subscriptionBar small { flex: 1 1 180px; color: var(--zalip-social-muted); font-size: 11px; line-height: 1.5; }
+.availableNotice { display: flex; align-items: center; gap: 8px; margin: 0 0 16px; font-size: 12px; color: var(--zalip-social-muted); }
+.availableNotice i { color: var(--MI_THEME-accent); }
 .subscribeButton { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 10px 14px; border: 1px solid var(--zalip-social-border); border-radius: 99px; color: var(--zalip-social-fg); font-size: 12px; }
 .subscribeButton i { flex-shrink: 0; }
 .subscribeButton.subscribed { color: var(--MI_THEME-accent); background: var(--zalip-accent-soft); border-color: var(--zalip-accent-border); }
@@ -840,7 +916,13 @@ definePage(() => ({
 .episodeTile small { display: block; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--zalip-social-muted); font-size: 11px; }
 .selectedEpisodeTile .episodeThumb { outline: 2px solid var(--MI_THEME-accent); outline-offset: -2px; }
 .episodeRailState { color: var(--zalip-social-muted); font-size: 13px; }
-.episodeGuide { margin: 28px 0; }
+.episodeGuide { display: flex; align-items: start; gap: 18px; margin: 28px 0; touch-action: pan-y; }
+.episodeGuideStill { width: 32%; max-width: 240px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 12px; }
+.episodeGuideContent { min-width: 0; flex: 1; }
+.guideNavigation { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.guideNavigation span { color: var(--zalip-social-muted); font-size: 11px; }
+.guideNavigation button { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 99px; background: var(--zalip-social-raised); }
+.guideNavigation button:disabled { opacity: .35; }
 .episodeGuideContent > p:first-child { margin: 0 0 12px; font-weight: 700; font-size: 16px; color: var(--zalip-social-fg); }
 .episodeGuideContent h2 { font-size: 15px; margin: 0 0 8px; }
 .episodeGuideContent > span, .episodeGuideContent > p { font-size: 13px; color: var(--zalip-social-muted); line-height: 1.6; }
@@ -877,7 +959,30 @@ definePage(() => ({
 .voiceList button span { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
 .voiceList small { color: var(--zalip-social-muted); font-size: 11px; }
 .voiceList .menuSelected, .episodeChoices .menuSelected { background: var(--zalip-accent-soft); color: var(--MI_THEME-accent); }
+.workSheet { position: relative; box-sizing: border-box; width: min(520px, 100%); max-height: calc(100dvh - 24px); margin: auto; padding: 24px; overflow-y: auto; overscroll-behavior: contain; border-radius: 24px; background: var(--zalip-social-panel); color: var(--zalip-social-fg); box-shadow: 0 12px 50px var(--MI_THEME-shadow); }
+.sheetHandle { width: 36px; height: 4px; margin: -12px auto 22px; border-radius: 99px; background: var(--zalip-social-subtle); }
+.sheetClose { position: absolute; top: 16px; right: 16px; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--zalip-social-raised); color: var(--zalip-social-muted); }
+.sheetTitle { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: 18px; padding: 16px 24px 24px 0; }
+.sheetTitle h2 { margin: 0 0 6px; font-size: 21px; line-height: 1.2; overflow-wrap: anywhere; }
+.sheetTitle p { margin: 0; font-size: 13px; color: var(--zalip-social-muted); }
+.sheetPoster { position: relative; display: grid; place-items: center; width: 72px; aspect-ratio: 2 / 3; background: var(--zalip-social-raised); }
+.sheetPoster img { width: 100%; height: 100%; object-fit: cover; }
+.sheetPoster span { position: absolute; top: 5px; left: 4px; padding: 3px 6px; border-radius: 4px; background: var(--MI_THEME-accent); color: var(--MI_THEME-fgOnAccent); font-size: 11px; font-weight: 750; }
+.sheetRows { border-top: 1px solid var(--zalip-social-border); }
+.sheetRow { display: grid; grid-template-columns: 26px minmax(0, 1fr) 20px; align-items: center; gap: 14px; width: 100%; min-height: 64px; padding: 14px 0; text-align: left; border-bottom: 1px solid var(--zalip-social-border); font-size: 16px; font-weight: 600; }
+.sheetRow:last-child { border-bottom: 0; }
+.sheetRow > i { display: grid; place-items: center; width: 26px; height: 26px; font-size: 24px; line-height: 1; }
+.sheetRow > i::before, .sheetClose i::before { font-size: 1em; line-height: 1; }
+.sheetRow > i:last-child:not(:first-child) { width: 20px; height: 20px; font-size: 18px; }
+.sheetRow small { display: block; margin-top: 4px; font-size: 11px; font-weight: 400; color: var(--zalip-social-muted); }
+.sheetRow[aria-pressed=true] { color: var(--MI_THEME-accent); }
+.sheetRow:hover { background: var(--zalip-social-hover); }
+.sheetRow:focus-visible, .sheetClose:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: -2px; }
 @container (max-width: 600px) {
+	.mobilePosterFallback { display: flex; justify-content: center; padding: 20px 16px 4px; }
+	.mobilePosterFallback > img { display: block; width: min(220px, 65%); aspect-ratio: 2 / 3; object-fit: cover; border-radius: 14px; }
+	.episodeGuide { flex-direction: column; gap: 12px; }
+	.episodeGuideStill { width: 100%; max-width: none; }
 	.heroInner { padding: 18px 18px 12px; }
 	.breadcrumb, .sidebar, .kind, .facts { display: none; }
 	.titleLogo { justify-content: center; height: auto; min-height: 56px; margin: 0 0 16px; }
@@ -914,6 +1019,7 @@ definePage(() => ({
 	.playerState { padding: 12px; font-size: 12px; }
 }
 @media (max-width: 600px) {
+	.workSheet { width: 100%; max-height: calc(100dvh - 24px); padding: 24px 20px max(20px, env(safe-area-inset-bottom)); border-radius: 24px 24px 0 0; }
 	.voiceDrawer { position: fixed; inset: 0 0 0 auto; width: min(360px, 90vw); max-height: none; height: 100dvh; padding: 18px 16px max(24px, env(safe-area-inset-bottom)); border-radius: 0; overscroll-behavior: contain; }
 }
 </style>

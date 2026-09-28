@@ -18,6 +18,13 @@ vi.mock('@/components/MkModal.vue', () => ({
 afterEach(cleanup);
 
 describe('Zalip rating dialog', () => {
+	it('shows the title, original name and poster with a community rating', () => {
+		const view = render(ZalipRatingDialog, { props: { title: 'Movie', subtitle: 'Original, 2026', posterUrl: '/poster.jpg', communityRating: 7.2 } });
+		expect(view.getByRole('heading', { name: 'Movie' })).toBeTruthy();
+		expect(view.getByText('Original, 2026')).toBeTruthy();
+		expect(view.getByText('7.2')).toBeTruthy();
+		expect(view.container.querySelector('img')?.getAttribute('src')).toBe('/poster.jpg');
+	});
 	it('offers ten values and disables saving until one is chosen', async () => {
 		const view = render(ZalipRatingDialog);
 		const stars = view.getAllByRole('button', { pressed: false });

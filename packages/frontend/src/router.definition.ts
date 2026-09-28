@@ -45,6 +45,7 @@ export const ROUTE_DEF = [{
 	component: PageTimeline,
 }, {
 	path: '/library',
+	query: { filter: 'filter' },
 	component: page(() => import('@/pages/zalip/library.vue')),
 	loginRequired: true,
 }, {

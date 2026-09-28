@@ -5105,7 +5105,7 @@ declare module '../api.js' {
     ): Promise<SwitchCaseResponseType<E, P>>;
 
     /**
-     * List recent episode arrivals only for works the signed-in user follows in Zalip.
+     * List catalogue episode arrivals and film/episode playback availability for titles followed by the signed-in user.
      *
      * **Credential required**: *Yes* / **Permission**: *read:account*
      */

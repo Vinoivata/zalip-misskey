@@ -4188,7 +4188,7 @@ export type paths = {
     '/zalip/releases/subscribed': {
         /**
          * zalip/releases/subscribed
-         * @description List recent episode arrivals only for works the signed-in user follows in Zalip.
+         * @description List catalogue episode arrivals and film/episode playback availability for titles followed by the signed-in user.
          *
          *     **Credential required**: *Yes* / **Permission**: *read:account*
          */
@@ -39191,15 +39191,17 @@ export interface operations {
                         /** Format: misskey:id */
                         id: string;
                         createdAt: string;
+                        /** @enum {string} */
+                        source: 'catalogue' | 'playback';
                         work: {
                             [key: string]: unknown;
                         };
                         season: {
                             [key: string]: unknown;
-                        };
+                        } | null;
                         episode: {
                             [key: string]: unknown;
-                        };
+                        } | null;
                     }[];
                 };
             };

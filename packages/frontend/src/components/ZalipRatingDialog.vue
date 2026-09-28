@@ -4,12 +4,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<MkModal ref="modal" :preferType="'dialog'" :zPriority="'high'" @click="dismiss" @closed="emit('closed')" @esc="dismiss">
+<MkModal ref="modal" :preferType="mobile ? 'drawer' : 'dialog'" :zPriority="'high'" @click="dismiss" @closed="emit('closed')" @esc="dismiss">
 	<section :class="$style.root" :style="{ '--rating-color': ratingColor }" role="dialog" aria-modal="true" :aria-labelledby="titleId">
+		<div :class="$style.handle" aria-hidden="true"></div>
 		<header :class="$style.header">
 			<h2 :id="titleId">{{ ratingDialogTitle }}</h2>
 			<button type="button" class="_button" :class="$style.close" :disabled="saving" :aria-label="i18n.ts.close" @click="dismiss"><i class="ti ti-x"></i></button>
 		</header>
+		<div v-if="title" :class="$style.workHeader"><div :class="$style.poster"><img v-if="posterUrl" :src="posterUrl" alt=""><i v-else class="ti ti-movie" aria-hidden="true"></i><span v-if="communityRating != null">{{ communityRating.toFixed(1) }}</span></div><div><h3>{{ title }}</h3><p v-if="subtitle">{{ subtitle }}</p></div></div>
 
 		<div :class="$style.score" aria-live="polite" aria-atomic="true">
 			<strong :class="$style.number">{{ displayedRating }}</strong>
@@ -46,7 +48,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, ref, useId, useTemplateRef, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, useId, useTemplateRef, watch } from 'vue';
 import MkModal from '@/components/MkModal.vue';
 import { i18n } from '@/i18n.js';
 
@@ -54,6 +56,10 @@ const props = withDefaults(defineProps<{
 	initialRating?: number;
 	saving?: boolean;
 	error?: string | null;
+	title?: string;
+	subtitle?: string;
+	posterUrl?: string;
+	communityRating?: number | null;
 }>(), {
 	initialRating: 0,
 	saving: false,
@@ -67,6 +73,13 @@ const emit = defineEmits<{
 }>();
 
 const modal = useTemplateRef('modal');
+const mobileQuery = window.matchMedia('(max-width: 600px)');
+const mobile = ref(mobileQuery.matches);
+
+function updateMobile(): void { mobile.value = mobileQuery.matches; }
+
+mobileQuery.addEventListener('change', updateMobile);
+onBeforeUnmount(() => mobileQuery.removeEventListener('change', updateMobile));
 const titleId = useId();
 const ratings = Array.from({ length: 10 }, (_, index) => index + 1);
 const selectedRating = ref(0);
@@ -136,6 +149,14 @@ function save(): void {
 	box-shadow: 0 24px 70px var(--MI_THEME-shadow);
 }
 
+.handle { display: none; width: 36px; height: 4px; margin: -10px auto 18px; border-radius: 99px; background: var(--MI_THEME-fgTransparentWeak); }
+.workHeader { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 16px; margin-top: 18px; padding-bottom: 18px; border-bottom: 1px solid var(--MI_THEME-divider); }
+.workHeader h3 { margin: 0 0 5px; font-size: 20px; line-height: 1.2; }
+.workHeader p { margin: 0; font-size: 13px; color: var(--MI_THEME-fgTransparentWeak); }
+.poster { position: relative; display: grid; place-items: center; width: 64px; aspect-ratio: 2 / 3; background: var(--MI_THEME-panelHighlight); }
+.poster img { width: 100%; height: 100%; object-fit: cover; }
+.poster span { position: absolute; top: 4px; left: 4px; padding: 3px 5px; border-radius: 4px; background: var(--MI_THEME-accent); color: var(--MI_THEME-fgOnAccent); font-size: 11px; font-weight: 700; }
+
 .header {
 	display: flex;
 	align-items: center;
@@ -153,9 +174,9 @@ function save(): void {
 	display: grid;
 	flex: 0 0 auto;
 	place-items: center;
-	width: 54px;
-	height: 54px;
-	border-radius: 16px;
+	width: 34px;
+	height: 34px;
+	border-radius: 50%;
 	background: var(--MI_THEME-panelHighlight);
 	color: var(--MI_THEME-fg);
 	font-size: 1.5rem;
@@ -209,6 +230,7 @@ function save(): void {
 .star i {
 	display: block;
 }
+.star i::before, .close i::before { font-size: 1em; }
 
 .star:hover, .star:focus-visible {
 	transform: translateY(-3px) scale(1.08);
@@ -255,9 +277,9 @@ function save(): void {
 
 .error { color: var(--MI_THEME-error); margin: 14px 0 0; text-align: center; }
 
-@media (max-width: 480px) {
-	.root { width: min(100vw - 24px, 600px); padding: 20px 18px 18px; border-radius: 22px; }
-	.close { width: 50px; height: 50px; border-radius: 15px; }
+@media (max-width: 600px) {
+	.root { width: 100%; padding: 24px 20px max(20px, env(safe-area-inset-bottom)); border-radius: 24px 24px 0 0; }
+	.handle { display: block; }
 	.score { min-height: 142px; }
 	.actions button { min-height: 52px; border-radius: 15px; font-size: 0.93rem; }
 }

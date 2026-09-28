@@ -19,6 +19,7 @@ export type Keys = (
 	'hashtags' |
 	'colorScheme' |
 	'zalipCatalogueView' |
+	'zalipLibraryView' |
 	'useSystemFont' |
 	'fontSize' |
 	'ui' |

@@ -213,8 +213,10 @@ export class ZalipAllohaService {
 
 		const targets = await this.zalipCatalogService.listAllohaSyncTargets(MAX_SYNC_TARGETS);
 		const newlyMappedWorkIds = new Set<string>();
+		const availableWorkIds = new Set<string>();
 		let available = 0;
 		let detailFailures = 0;
+		let events = 0;
 		for (const target of targets) {
 			const detail = await this.getDetail(target, token);
 			// A broken response for one title must not prevent availability events for
@@ -231,19 +233,27 @@ export class ZalipAllohaService {
 					iframe: detail.iframe,
 					translations: detail.translations,
 				};
-			if (source.isAvailable) available++;
-			const result = await this.zalipCatalogService.upsertAllohaSource({ workId: target.workId, ...source });
+			if (source.isAvailable) {
+				available++;
+				availableWorkIds.add(target.workId);
+			}
+			const result = await this.zalipCatalogService.upsertAllohaSource({ workId: target.workId, ...source, recordMovieAvailability: target.tmdbMediaType === 'movie' });
 			if (result.created) newlyMappedWorkIds.add(target.workId);
+			if (result.movieEventCreated) events++;
 		}
 
 		const latest = await this.getRecentAvailability(token);
-		if (latest == null) return { kind: 'upstream-failure' };
+		if (latest == null) {
+			// Retrying durable deliveries must not depend on the current upstream feed.
+			await this.zalipCatalogService.dispatchPendingAllohaAvailabilityNotifications();
+			return { kind: 'upstream-failure' };
+		}
 
-		let events = 0;
 		for (const item of latest) {
 			const tmdbId = positiveInteger(item.ids?.tmdb);
 			if (tmdbId == null) continue;
 			for (const target of targets) {
+				if (target.tmdbMediaType === 'movie' || !availableWorkIds.has(target.workId)) continue;
 				if (target.tmdbId !== tmdbId || !matchesTargetCategory(target, item.category)) continue;
 				const recorded = await this.zalipCatalogService.recordAllohaAvailability({
 					workId: target.workId,
