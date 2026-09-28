@@ -4,19 +4,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<PageWithHeader>
+<PageWithHeader hideHeader>
 	<component :is="prefer.s.enablePullToRefresh ? MkPullToRefresh : 'div'" :refresher="loadLibrary">
+		<MkZalipSectionHeader :title="props.filter === 'favorites' ? i18n.ts.zalip.bookmarksHeading : i18n.ts.zalip.libraryHeading" :description="props.filter === 'favorites' ? i18n.ts.zalip.bookmarksDescription : i18n.ts.zalip.libraryDescription"/>
+		<MkZalipBookmarkTabs active="content"/>
 		<div class="_spacer" style="--MI_SPACER-w: 980px;">
 			<div :class="$style.page">
-				<div :class="$style.heading">
-					<div>
-						<p :class="$style.eyebrow"><i class="ti ti-bookmark"></i> {{ i18n.ts.zalip.libraryEyebrow }}</p>
-						<h1>{{ i18n.ts.zalip.libraryHeading }}</h1>
-						<p :class="$style.description">{{ i18n.ts.zalip.libraryDescription }}</p>
-					</div>
-					<MkA to="/my/favorites" :class="$style.browse"><i class="ti ti-message-bookmark" aria-hidden="true"></i> {{ i18n.ts.zalip.postBookmarks }}</MkA>
-				</div>
-
 				<div v-if="pending" :class="$style.empty"><i class="ti ti-loader-2 ti-spin"></i> {{ i18n.ts.zalip.libraryLoading }}</div>
 				<div v-else-if="loadError"><p role="alert">{{ i18n.ts.zalip.libraryLoadFailed }}</p><MkError @retry="loadLibrary"/></div>
 				<div v-else-if="entries.length === 0" :class="$style.empty">
@@ -76,6 +69,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script lang="ts" setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import MkPullToRefresh from '@/components/MkPullToRefresh.vue';
+import MkZalipSectionHeader from '@/components/MkZalipSectionHeader.vue';
+import MkZalipBookmarkTabs from '@/components/MkZalipBookmarkTabs.vue';
 import { prefer } from '@/preferences.js';
 import { miLocalStorage } from '@/local-storage.js';
 import { definePage } from '@/page.js';
@@ -185,7 +180,7 @@ async function loadLibrary(): Promise<void> {
 onMounted(loadLibrary);
 
 definePage(() => ({
-	title: i18n.ts.zalip.libraryHeading,
+	title: props.filter === 'favorites' ? i18n.ts.zalip.bookmarksHeading : i18n.ts.zalip.libraryHeading,
 	icon: 'ti ti-bookmark',
 }));
 </script>
@@ -195,37 +190,7 @@ definePage(() => ({
 	padding: 24px var(--MI-margin) 52px;
 }
 
-.heading {
-	display: flex;
-	align-items: end;
-	justify-content: space-between;
-	gap: 16px;
-	margin-bottom: 24px;
-}
-
-.eyebrow {
-	display: flex;
-	align-items: center;
-	gap: 7px;
-	margin: 0 0 8px;
-	font-size: 0.72rem;
-	font-weight: 700;
-	letter-spacing: 0.1em;
-	color: var(--MI_THEME-accent);
-}
-
-.heading h1 {
-	margin: 0;
-	font-size: 2rem;
-}
-
-.description {
-	max-width: 620px;
-	margin: 8px 0 0;
-	color: var(--MI_THEME-fgTransparentWeak);
-}
-
-.browse, .start {
+.start {
 	display: inline-flex;
 	align-items: center;
 	gap: 8px;
@@ -504,14 +469,7 @@ definePage(() => ({
 
 @media (max-width: 600px) {
 	.page { padding: 12px 0 32px; }
-	.heading { align-items: start; }
-	.heading { flex-wrap: wrap; }
-	.heading > div { min-width: 0; }
-	.description { display: none; }
-	.browse { font-size: 0.8rem; }
 	.summary { display: none; }
-	.heading h1 { font-size: 1.5rem; }
-	.eyebrow { display: none; }
 	.grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px 10px; }
 	.listView { grid-template-columns: 1fr; }
 	.listView .card { grid-template-columns: minmax(88px, 29%) minmax(0, 1fr); gap: 14px; }

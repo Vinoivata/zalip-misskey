@@ -46,6 +46,7 @@
 - Fix: Align Zalip mobile account tiles, open appearance without blocking the page, show unread navigation badges, match thread and feed widths, and support pull-to-refresh on home and chat.
 - Fix: Refine the mobile title summary and rating badge, show the selected library icon, enable reversible favorites and release subscriptions beside the player, and normalize account menu icon alignment.
 - Fix: Clarify title bookmarks and watch lists, add responsive title action sheets and poster fallback, synchronize episode navigation, and support title refresh and compact library views.
+- Enhance: Add a swipeable, color-coded personal rating screen with equally rated library titles and unify post/content bookmark navigation.
 
 ### Server
 - Fix: Allow clearing a Zalip library status without removing personal ratings, watch progress, favorites or release subscriptions.

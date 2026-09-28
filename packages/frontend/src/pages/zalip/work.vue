@@ -10,7 +10,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div v-if="pending" :class="$style.state"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i> Загружаем тайтл…</div>
 			<div v-else-if="work == null" :class="$style.state"><i class="ti ti-movie-off" aria-hidden="true"></i> Тайтл не найден или ещё не опубликован.</div>
 			<article v-else :class="$style.work">
-
 				<section :class="[$style.hero, { [$style.hasLogo]: work.logoPath }]">
 					<div v-if="work.backdropPath" :class="$style.heroBackground" aria-hidden="true"><img :src="tmdbBackdrop(work.backdropPath)" alt=""></div>
 					<div v-else :class="$style.mobilePosterFallback"><img v-if="work.posterPath" :src="tmdbImage(work.posterPath)" :alt="work.title"><div v-else :class="$style.missingArtwork"><i class="ti ti-movie" aria-hidden="true"></i><span>{{ work.title }}</span></div></div>
@@ -53,7 +52,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</div>
 				<p v-if="work.description" :class="$style.description">{{ work.description }}</p>
 				<div :class="$style.content">
-
 					<section ref="playerSection" :class="$style.player" :aria-label="i18n.ts.zalip.playerTab">
 						<div :class="$style.playerTabs">
 							<button type="button" class="_button" :class="[$style.playerTab, { [$style.playerTabActive]: playerView === 'player' }]" :aria-pressed="playerView === 'player'" @click="playerView = 'player'"><i class="ti ti-list" aria-hidden="true"></i><span>{{ work.seasons.length ? i18n.ts.zalip.workEpisodes : i18n.ts.zalip.playerTab }}</span></button>
@@ -135,7 +133,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</component>
 
 	<Teleport to="body">
-		<ZalipRatingDialog v-if="ratingDialogOpen" :initialRating="personalRating ?? 0" :saving="saving" :error="ratingError" :title="work?.title" :subtitle="workSubtitle" :posterUrl="work?.posterPath ? tmdbImage(work.posterPath) : undefined" :communityRating="work?.communityRating" @save="savePersonalRating" @later="closeRatingDialog" @closed="closeRatingDialog"/>
+		<ZalipRatingDialog v-if="ratingDialogOpen" :initialRating="personalRating ?? 0" :saving="saving" :error="ratingError" :title="work?.title" :subtitle="work?.releaseYear?.toString()" :posterUrl="work?.posterPath ? tmdbImage(work.posterPath) : undefined" :workId="work?.id" :ratedWorks="ratingLibrary" :relatedPending="ratingLibraryPending" :relatedError="ratingLibraryError" @save="savePersonalRating" @retry="loadRatingLibrary" @closed="closeRatingDialog"/>
 		<MkModal v-if="workMenuOpen && work" ref="workModal" :preferType="viewportWidth <= 600 ? 'drawer' : 'dialog'" :returnFocusTo="moreTrigger" @click="closeWorkMenu" @esc="closeWorkMenu" @closed="workMenuOpen = false">
 			<section :class="$style.workSheet" role="dialog" aria-modal="true" :aria-label="i18n.ts.zalip.more">
 				<div :class="$style.sheetHandle" aria-hidden="true"></div>
@@ -181,6 +179,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script lang="ts" setup>
 import { computed, nextTick, onBeforeUnmount, onDeactivated, ref, useTemplateRef, watch } from 'vue';
+import type { RatedLibraryEntry } from '@/components/ZalipRatingDialog.vue';
 import MkModal from '@/components/MkModal.vue';
 import MkPullToRefresh from '@/components/MkPullToRefresh.vue';
 import { prefer } from '@/preferences.js';
@@ -319,6 +318,10 @@ const episodesPending = ref(false);
 const episodeRequestId = ref(0);
 const selectedEpisodeId = ref<string | null>(null);
 const ratingDialogOpen = ref(false);
+const ratingLibrary = ref<RatedLibraryEntry[]>([]);
+const ratingLibraryPending = ref(false);
+const ratingLibraryError = ref(false);
+let ratingLibraryRequest = 0;
 const ratingError = ref<string | null>(null);
 onDeactivated(() => {
 	// Cached pages remain mounted; their body teleports must not trap the next page.
@@ -785,6 +788,21 @@ async function choosePersonalRating(): Promise<void> {
 	if (saving.value) return;
 	ratingDialogOpen.value = true;
 	ratingError.value = null;
+	void loadRatingLibrary();
+}
+
+async function loadRatingLibrary(): Promise<void> {
+	const request = ++ratingLibraryRequest;
+	ratingLibraryPending.value = true;
+	ratingLibraryError.value = false;
+	try {
+		const entries = await misskeyApiZalip<RatedLibraryEntry[]>('zalip/library/list');
+		if (request === ratingLibraryRequest) ratingLibrary.value = entries;
+	} catch {
+		if (request === ratingLibraryRequest) ratingLibraryError.value = true;
+	} finally {
+		if (request === ratingLibraryRequest) ratingLibraryPending.value = false;
+	}
 }
 
 function closeRatingDialog(): void {

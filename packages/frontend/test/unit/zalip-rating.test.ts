@@ -7,43 +7,105 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/vue';
 import { defineComponent, h } from 'vue';
 import ZalipRatingDialog from '@/components/ZalipRatingDialog.vue';
+import { i18n } from '@/i18n.js';
 
 vi.mock('@/components/MkModal.vue', () => ({
 	default: defineComponent({
 		emits: ['click', 'closed', 'esc'],
-		setup(_, { slots }) { return () => h('div', slots.default?.()); },
+		setup(_, { slots, expose, emit }) { expose({ close: () => emit('closed') }); return () => h('div', slots.default?.()); },
 	}),
 }));
-
 afterEach(cleanup);
 
 describe('Zalip rating dialog', () => {
-	it('shows the title, original name and poster with a community rating', () => {
-		const view = render(ZalipRatingDialog, { props: { title: 'Movie', subtitle: 'Original, 2026', posterUrl: '/poster.jpg', communityRating: 7.2 } });
+	it('shows a centered title, year and poster without confusing the personal and community ratings', () => {
+		const view = render(ZalipRatingDialog, { props: { title: 'Movie', subtitle: '2026', posterUrl: '/poster.jpg' } });
 		expect(view.getByRole('heading', { name: 'Movie' })).toBeTruthy();
-		expect(view.getByText('Original, 2026')).toBeTruthy();
-		expect(view.getByText('7.2')).toBeTruthy();
+		expect(view.getByText('2026')).toBeTruthy();
 		expect(view.container.querySelector('img')?.getAttribute('src')).toBe('/poster.jpg');
+		expect(view.emitted().save).toBeUndefined();
 	});
-	it('offers ten values and disables saving until one is chosen', async () => {
+	it('offers ten values and saves only after explicit confirmation', async () => {
 		const view = render(ZalipRatingDialog);
-		const stars = view.getAllByRole('button', { pressed: false });
-		expect(stars).toHaveLength(10);
-		const submit = view.container.querySelector('footer button:last-child') as HTMLButtonElement;
-		expect(submit.disabled).toBe(true);
-		await fireEvent.click(stars[7]);
-		expect(submit.disabled).toBe(false);
+		const numbers = view.getAllByRole('radio');
+		expect(numbers).toHaveLength(10);
+		expect(view.getByRole('radio', { checked: true }).textContent).toBe('7');
+		await fireEvent.click(numbers[7]);
+		expect(view.emitted().save).toBeUndefined();
 		expect(view.getByRole('dialog').style.getPropertyValue('--rating-color')).toBe('var(--MI_THEME-success)');
-		await fireEvent.click(submit);
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip.ratingSubmit }));
 		expect(view.emitted().save).toEqual([[8]]);
-		// The caller, not the click handler, closes only after persistence succeeds.
-		expect(view.getByRole('dialog')).toBeTruthy();
+		expect(view.emitted().closed).toBeUndefined();
+	});
+	it('supports keyboard navigation, score colors and endpoints', async () => {
+		const view = render(ZalipRatingDialog, { props: { initialRating: 5 } });
+		const rail = view.getByRole('radiogroup');
+		expect(view.getByRole('dialog').style.getPropertyValue('--rating-color')).toBe('var(--MI_THEME-fgTransparentWeak)');
+		await fireEvent.keyDown(rail, { key: 'ArrowLeft' });
+		expect(view.getByRole('radio', { checked: true }).textContent).toBe('4');
+		expect(view.getByRole('dialog').style.getPropertyValue('--rating-color')).toBe('var(--MI_THEME-error)');
+		await fireEvent.keyDown(rail, { key: 'Home' });
+		await fireEvent.keyDown(rail, { key: 'ArrowLeft' });
+		expect(view.getByRole('radio', { checked: true }).textContent).toBe('1');
+		await fireEvent.keyDown(rail, { key: 'End' });
+		await fireEvent.keyDown(rail, { key: 'ArrowRight' });
+		expect(view.getByRole('radio', { checked: true }).textContent).toBe('10');
+	});
+	it('selects the nearest score when the native touch rail scrolls', async () => {
+		const view = render(ZalipRatingDialog);
+		const rail = view.getByRole('radiogroup');
+		Object.defineProperty(rail.firstElementChild!, 'offsetWidth', { configurable: true, value: 104 });
+		vi.spyOn(rail.firstElementChild!, 'getBoundingClientRect').mockReturnValue({ width: 93.6 } as DOMRect);
+		rail.scrollLeft = 728;
+		await fireEvent.scroll(rail);
+		expect(view.getByRole('radio', { checked: true }).textContent).toBe('8');
+		rail.scrollLeft = 2000;
+		await fireEvent.scroll(rail);
+		expect(view.getByRole('radio', { checked: true }).textContent).toBe('10');
+	});
+	it('filters other titles by the personal score as the selection changes', async () => {
+		const view = render(ZalipRatingDialog, { props: { initialRating: 8, workId: 'current', ratedWorks: [
+			{ personalRating: 8, work: { id: 'current', title: 'Current title', posterPath: null } },
+			{ personalRating: 8, work: { id: 'eight', title: 'Eight title', posterPath: '/eight.jpg' } },
+			{ personalRating: 7, work: { id: 'seven', title: 'Seven title', posterPath: null } },
+			{ personalRating: null, work: { id: 'none', title: 'Unrated title', posterPath: null } },
+		] } });
+		expect(view.getByText('Eight title')).toBeTruthy();
+		expect(view.queryByText('Current title')).toBeNull();
+		expect(view.queryByText('Seven title')).toBeNull();
+		expect(view.queryByText('Unrated title')).toBeNull();
+		await fireEvent.click(view.getAllByRole('radio')[6]);
+		expect(view.getByText('Seven title')).toBeTruthy();
+		expect(view.queryByText('Eight title')).toBeNull();
+		await fireEvent.click(view.getAllByRole('radio')[0]);
+		expect(view.getByText(i18n.ts.zalip.ratingNoSimilarTitles)).toBeTruthy();
 	});
 
-	it('keeps all stars disabled while saving and exposes a recoverable error', () => {
+	it('stops a mouse drag released outside the rail without changing the score on return', async () => {
+		const view = render(ZalipRatingDialog, { props: { initialRating: 8 } });
+		const rail = view.getByRole('radiogroup');
+		await fireEvent.pointerDown(rail, { pointerType: 'mouse', pointerId: 1, button: 0, buttons: 1, clientX: 200 });
+		await fireEvent.pointerUp(window, { pointerType: 'mouse', pointerId: 1, button: 0, buttons: 0 });
+		await fireEvent.pointerMove(rail, { pointerType: 'mouse', pointerId: 1, buttons: 0, clientX: 100 });
+		expect(view.getByRole('radio', { checked: true }).textContent).toBe('8');
+		expect(view.emitted().save).toBeUndefined();
+	});
+	it('keeps controls locked while saving, and retains recoverable errors', async () => {
 		const view = render(ZalipRatingDialog, { props: { initialRating: 3, saving: true, error: 'Retry saving' } });
-		expect(view.getByRole('dialog').style.getPropertyValue('--rating-color')).toBe('var(--MI_THEME-error)');
-		expect(view.getAllByRole('button').every(button => (button as HTMLButtonElement).disabled)).toBe(true);
+		expect([...view.getAllByRole('button'), ...view.getAllByRole('radio')].every(button => (button as HTMLButtonElement).disabled)).toBe(true);
+		await fireEvent.keyDown(view.getByRole('radiogroup'), { key: 'End' });
+		expect(view.getByRole('radio', { checked: true }).textContent).toBe('3');
 		expect(view.getByRole('alert').textContent).toBe('Retry saving');
+		await view.rerender({ saving: false });
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.close }));
+		expect(view.emitted().closed).toHaveLength(1);
+		expect(view.emitted().save).toBeUndefined();
+	});
+	it('reports loading and offers retry if the rated library fails', async () => {
+		const view = render(ZalipRatingDialog, { props: { relatedPending: true } });
+		expect(view.getByText(i18n.ts.zalip.libraryLoading)).toBeTruthy();
+		await view.rerender({ relatedPending: false, relatedError: true });
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.retry }));
+		expect(view.emitted().retry).toHaveLength(1);
 	});
 });

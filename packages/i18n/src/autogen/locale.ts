@@ -1706,6 +1706,10 @@ export interface Locale extends ILocale {
          */
         "postBookmarks": string;
         /**
+         * Контент
+         */
+        "bookmarkContentTab": string;
+        /**
          * Мои подписки
          */
         "librarySubscriptions": string;
@@ -1998,7 +2002,7 @@ export interface Locale extends ILocale {
          */
         "chatUnavailable": string;
         /**
-         * Сохранённые записи — чтобы вернуться к ним позже.
+         * Сохранённые записи и контент — всё в одном месте.
          */
         "bookmarksDescription": string;
         /**
@@ -2566,7 +2570,7 @@ export interface Locale extends ILocale {
          */
         "ratingClear": string;
         /**
-         * Оцени тайтл
+         * Оценить
          */
         "ratingDialogTitle": string;
         /**
@@ -2574,9 +2578,21 @@ export interface Locale extends ILocale {
          */
         "ratingLater": string;
         /**
-         * Оценить
+         * Поставить оценку
          */
         "ratingSubmit": string;
+        /**
+         * Сдвиньте шкалу, чтобы выбрать оценку
+         */
+        "ratingSwipeHint": string;
+        /**
+         * Ваши тайтлы на {rating}
+         */
+        "ratingYourTitles": ParameterizedString<"rating">;
+        /**
+         * У вас пока нет других тайтлов с такой оценкой.
+         */
+        "ratingNoSimilarTitles": string;
         /**
          * Ужасно
          */
