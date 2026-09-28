@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <MkModal ref="modal" :preferType="mobile ? 'drawer' : 'dialog'" :zPriority="'high'" @click="dismiss" @closed="emit('closed')" @esc="dismiss">
-	<section :class="$style.root" :style="{ '--rating-color': ratingColor }" role="dialog" aria-modal="true" :aria-labelledby="titleId">
+	<section :class="[$style.root, { [$style.withWork]: title }]" :style="{ '--rating-color': ratingColor }" role="dialog" aria-modal="true" :aria-labelledby="titleId">
 		<header :class="$style.header">
 			<h2 :id="titleId">{{ i18n.ts.zalip.ratingDialogTitle }}</h2>
 			<button type="button" class="_button" :class="$style.close" :disabled="saving" :aria-label="i18n.ts.close" @click="dismiss"><i class="ti ti-x" aria-hidden="true"></i></button>
@@ -16,11 +16,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 		<div :class="$style.picker">
 			<div :class="$style.selection" aria-hidden="true"></div>
+			<button v-if="!mobile" type="button" class="_button" :class="[$style.step, $style.previous]" :disabled="saving || selectedRating === 1" :aria-label="i18n.ts.zalip.ratingDecrease" @click="selectRating(selectedRating - 1)"><i class="ti ti-chevron-left" aria-hidden="true"></i></button>
 			<div ref="rail" :class="[$style.rail, { [$style.dragging]: dragging, [$style.locked]: saving }]" role="radiogroup" :aria-label="i18n.ts.zalip.ratingTitle" :aria-describedby="hintId" @scroll="onScroll" @keydown="onKeydown" @pointerdown="startDrag" @pointermove="moveDrag" @pointerup="endDrag" @pointercancel="endDrag" @lostpointercapture="endDrag">
 				<button v-for="rating in ratings" :key="rating" type="button" role="radio" class="_button" :class="$style.number" :aria-checked="selectedRating === rating" :tabindex="selectedRating === rating ? 0 : -1" :disabled="saving" :aria-label="i18n.tsx.zalip.ratingValue({ rating: rating.toString() })" @click="selectRating(rating)">{{ rating }}</button>
 			</div>
+			<button v-if="!mobile" type="button" class="_button" :class="[$style.step, $style.next]" :disabled="saving || selectedRating === 10" :aria-label="i18n.ts.zalip.ratingIncrease" @click="selectRating(selectedRating + 1)"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
 		</div>
-		<p :id="hintId" :class="$style.hint">{{ i18n.ts.zalip.ratingSwipeHint }}</p>
+		<p :id="hintId" :class="$style.hint">{{ mobile ? i18n.ts.zalip.ratingSwipeHint : i18n.ts.zalip.ratingDesktopHint }}</p>
 		<div :class="$style.actions"><button type="button" class="_button" :class="$style.submit" :disabled="saving" @click="save"><i v-if="saving" class="ti ti-loader-2 ti-spin" aria-hidden="true"></i>{{ i18n.ts.zalip.ratingSubmit }}</button></div>
 		<p v-if="error" :class="$style.error" role="alert">{{ error }}</p>
 		<section :class="$style.related" :aria-labelledby="relatedId" :aria-busy="relatedPending">
@@ -101,7 +103,7 @@ function onScroll(): void {
 
 function selectRating(rating: number): void {
 	if (props.saving || Date.now() < suppressClickUntil) return;
-	selectedRating.value = rating;
+	selectedRating.value = Math.max(1, Math.min(10, rating));
 	centerSelection();
 }
 
@@ -206,6 +208,12 @@ onBeforeUnmount(() => {
 .workHeader h3 { margin: 18px 0 0; font-size: 19px; line-height: 1.3; }
 .workHeader p { margin: 5px 0 0; color: var(--MI_THEME-fgTransparentWeak); font-size: 16px; }
 .picker { position: relative; margin-top: 22px; }
+.step { position: absolute; top: 50%; z-index: 1; transform: translateY(-50%); display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--MI_THEME-panelHighlight); color: var(--MI_THEME-fg); font-size: 20px; }
+.step:hover:not(:disabled) { color: var(--rating-color); }
+.step:disabled { opacity: 0.3; cursor: default; }
+.step:focus-visible { outline: 2px solid var(--rating-color); outline-offset: 3px; }
+.previous { left: 4px; }
+.next { right: 4px; }
 .selection { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 136px; height: 136px; border-radius: 50%; background: var(--MI_THEME-bg); pointer-events: none; }
 .rail { position: relative; display: flex; overflow-x: auto; padding-inline: calc(50% - 52px); scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; user-select: none; cursor: grab; }
 .rail::-webkit-scrollbar, .relatedRail::-webkit-scrollbar { display: none; }
@@ -227,6 +235,29 @@ onBeforeUnmount(() => {
 .relatedCard figcaption { margin-top: 8px; font-size: 12px; line-height: 1.35; }
 .empty { margin: 0; padding: 0 28px 12px; color: var(--MI_THEME-fgTransparentWeak); text-align: center; font-size: 13px; line-height: 1.5; }
 .retry { padding: 8px 18px; border-radius: 99px; background: var(--MI_THEME-panelHighlight); color: var(--MI_THEME-fg); }
+@media (min-width: 601px) {
+	.root { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto auto auto 1fr; width: 860px; padding-bottom: 28px; }
+	.root.withWork { grid-template-columns: minmax(180px, 30%) minmax(0, 1fr); }
+	.root > * { min-width: 0; }
+	.header { grid-column: 1 / -1; grid-row: 1; }
+	.workHeader { grid-column: 1; grid-row: 2 / 7; align-content: start; padding: 18px 24px 0; border-right: 1px solid var(--MI_THEME-divider); }
+	.poster { width: min(100%, 190px); border-radius: 12px; }
+	.workHeader h3 { overflow-wrap: anywhere; }
+	.picker, .hint, .actions, .error, .related { grid-column: -2 / -1; }
+	.picker { grid-row: 2; margin: 0 24px; }
+	.hint { grid-row: 3; margin: 8px 24px 18px; }
+	.actions { grid-row: 4; }
+	.error { grid-row: 5; }
+	.related { grid-row: 6; min-height: 234px; margin: 26px 24px 0; }
+	.related h3 { margin: 0 0 16px; }
+	.relatedRail { gap: 14px; padding: 0 0 10px; scrollbar-width: thin; scrollbar-color: var(--MI_THEME-divider) transparent; }
+	.relatedRail::-webkit-scrollbar { display: block; height: 6px; }
+	.relatedRail::-webkit-scrollbar-thumb { border-radius: 99px; background: var(--MI_THEME-divider); }
+	.relatedCard { flex-basis: 96px; }
+	.relatedPoster { border-radius: 8px; }
+	.relatedCard figcaption { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+	.empty { padding: 14px 12px; }
+}
 @media (max-width: 600px) { .root { width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; } }
 @media (prefers-reduced-motion: reduce) { .number { transition: none; } }
 </style>

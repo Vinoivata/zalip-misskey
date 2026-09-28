@@ -19,3 +19,15 @@ export const Error = { ...Default, args: { ...Default.args, error: 'Unable to sa
 export const LowRating = { ...Default, args: { ...Default.args, initialRating: 3 } } satisfies StoryObj<typeof ZalipRatingDialog>;
 export const Loading = { ...Default, args: { ...Default.args, relatedPending: true } } satisfies StoryObj<typeof ZalipRatingDialog>;
 export const LibraryError = { ...Default, args: { ...Default.args, relatedError: true } } satisfies StoryObj<typeof ZalipRatingDialog>;
+export const DesktopLibrary = {
+	...Default,
+	args: {
+		...Default.args,
+		title: 'A long movie title that wraps across multiple lines',
+		ratedWorks: Array.from({ length: 8 }, (_, index) => ({ personalRating: 8, work: { id: `example-${index}`, title: `Another movie with a longer title ${index + 1}`, posterPath: null } })),
+	},
+	parameters: {
+		...Default.parameters,
+		viewport: { defaultViewport: 'desktop', viewports: { desktop: { name: 'Desktop', styles: { width: '1280px', height: '720px' } } } },
+	},
+} satisfies StoryObj<typeof ZalipRatingDialog>;

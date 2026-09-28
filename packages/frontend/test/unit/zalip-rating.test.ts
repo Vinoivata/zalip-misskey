@@ -15,7 +15,7 @@ vi.mock('@/components/MkModal.vue', () => ({
 		setup(_, { slots, expose, emit }) { expose({ close: () => emit('closed') }); return () => h('div', slots.default?.()); },
 	}),
 }));
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe('Zalip rating dialog', () => {
 	it('shows a centered title, year and poster without confusing the personal and community ratings', () => {
@@ -50,6 +50,34 @@ describe('Zalip rating dialog', () => {
 		await fireEvent.keyDown(rail, { key: 'End' });
 		await fireEvent.keyDown(rail, { key: 'ArrowRight' });
 		expect(view.getByRole('radio', { checked: true }).textContent).toBe('10');
+	});
+	it('steps through desktop ratings without saving and disables the endpoint arrows', async () => {
+		const view = render(ZalipRatingDialog, { props: { initialRating: 1 } });
+		const previous = view.getByRole('button', { name: i18n.ts.zalip.ratingDecrease }) as HTMLButtonElement;
+		const next = view.getByRole('button', { name: i18n.ts.zalip.ratingIncrease }) as HTMLButtonElement;
+		expect(previous.disabled).toBe(true);
+		expect(next.disabled).toBe(false);
+		await fireEvent.click(next);
+		expect(view.getByRole('radio', { checked: true }).textContent).toBe('2');
+		expect(previous.disabled).toBe(false);
+		await fireEvent.click(previous);
+		expect(view.getByRole('radio', { checked: true }).textContent).toBe('1');
+		await fireEvent.keyDown(view.getByRole('radiogroup'), { key: 'End' });
+		expect(next.disabled).toBe(true);
+		await fireEvent.click(previous);
+		expect(view.getByRole('radio', { checked: true }).textContent).toBe('9');
+		expect(view.emitted().save).toBeUndefined();
+		expect(view.getByText(i18n.ts.zalip.ratingDesktopHint)).toBeTruthy();
+	});
+	it('keeps the mobile swipe hint without desktop arrow controls', () => {
+		const mediaQuery = window.matchMedia('(max-width: 600px)');
+		Object.defineProperty(mediaQuery, 'matches', { configurable: true, value: true });
+		vi.spyOn(window, 'matchMedia').mockReturnValue(mediaQuery);
+		const view = render(ZalipRatingDialog);
+		expect(view.queryByRole('button', { name: i18n.ts.zalip.ratingDecrease })).toBeNull();
+		expect(view.queryByRole('button', { name: i18n.ts.zalip.ratingIncrease })).toBeNull();
+		expect(view.getByText(i18n.ts.zalip.ratingSwipeHint)).toBeTruthy();
+		expect(view.getAllByRole('radio')).toHaveLength(10);
 	});
 	it('selects the nearest score when the native touch rail scrolls', async () => {
 		const view = render(ZalipRatingDialog);

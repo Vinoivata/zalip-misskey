@@ -2586,6 +2586,18 @@ export interface Locale extends ILocale {
          */
         "ratingSwipeHint": string;
         /**
+         * Перетащите шкалу или используйте стрелки
+         */
+        "ratingDesktopHint": string;
+        /**
+         * Уменьшить оценку
+         */
+        "ratingDecrease": string;
+        /**
+         * Увеличить оценку
+         */
+        "ratingIncrease": string;
+        /**
          * Ваши тайтлы на {rating}
          */
         "ratingYourTitles": ParameterizedString<"rating">;
