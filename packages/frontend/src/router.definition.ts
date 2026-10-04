@@ -65,6 +65,7 @@ export const ROUTE_DEF = [{
 	component: page(() => import('@/pages/zalip/credits.vue')),
 }, {
 	path: '/zalip/:slug',
+	name: 'zalipWork',
 	component: page(() => import('@/pages/zalip/work.vue')),
 }, {
 	path: '/@:username/pages/:pageName(*)',

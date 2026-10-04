@@ -1015,6 +1015,14 @@ definePage(() => ({
 	.heroBackground::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 40%, var(--zalip-social-panel) 100%); }
 	.hasBackdrop .heroInner { position: relative; margin-top: -32px; }
 	.hasBackdrop.hasLogo .heroInner { margin-top: -48px; }
+	// Keep light artwork in full color; reveal the page from the lower edge
+	// instead of bleaching the entire image and drawing the logo over it.
+	:global(html[data-color-scheme=light]) .heroBackground {
+		opacity: 1;
+		mask-image: linear-gradient(to bottom, currentColor max(0px, calc(var(--zalip-hero-reveal, 100%) - 24px)), transparent var(--zalip-hero-reveal, 100%));
+	}
+	:global(html[data-color-scheme=light]) .heroBackground::after { display: none; }
+	:global(html[data-color-scheme=light]) .hasBackdrop .heroInner { margin-top: 0; }
 	.hero::after { display: none; }
 	.info { width: 100%; text-align: center; }
 	.info h1 { font-size: clamp(25px, 7cqi, 36px); line-height: 1.15; margin-bottom: 16px; }
@@ -1045,6 +1053,7 @@ definePage(() => ({
 }
 @media (prefers-reduced-motion: reduce) {
 	.heroBackground { transform: none; opacity: 1; }
+	:global(html[data-color-scheme=light]) .heroBackground { mask-image: none; }
 }
 @media (max-width: 600px) {
 	.workSheet { width: 100%; max-height: calc(100dvh - 24px); padding: 24px 20px max(20px, env(safe-area-inset-bottom)); border-radius: 24px 24px 0 0; }

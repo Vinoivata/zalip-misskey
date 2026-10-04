@@ -27,12 +27,15 @@ export function useZalipHeroScroll(hero: Readonly<Ref<HTMLElement | null>>, artw
 		let frame: number | null = null;
 		let lastShift = '';
 		let lastOpacity = '';
+		let lastReveal = '';
 
 		function reset(): void {
 			element.style.removeProperty('--zalip-hero-shift');
 			element.style.removeProperty('--zalip-hero-opacity');
+			element.style.removeProperty('--zalip-hero-reveal');
 			lastShift = '';
 			lastOpacity = '';
+			lastReveal = '';
 		}
 
 		function update(): void {
@@ -43,7 +46,10 @@ export function useZalipHeroScroll(hero: Readonly<Ref<HTMLElement | null>>, artw
 			}
 			// The hero can be below site chrome or a pull-to-refresh indicator.
 			// Measure its untransformed box, not the moving artwork, to avoid feedback.
-			const top = container ? container.getBoundingClientRect().top + container.clientTop : 0;
+			// scroll-padding-top is the stable inset below site chrome. Unlike the
+			// auto-hiding header's live position, it does not jump during a swipe.
+			const inset = Number.parseFloat(window.getComputedStyle(container ?? window.document.documentElement).scrollPaddingTop) || 0;
+			const top = (container ? container.getBoundingClientRect().top + container.clientTop : 0) + inset;
 			const distance = Math.max(0, top - element.getBoundingClientRect().top);
 			const height = cover.offsetHeight;
 			if (height <= 0) {
@@ -54,11 +60,14 @@ export function useZalipHeroScroll(hero: Readonly<Ref<HTMLElement | null>>, artw
 			const eased = progress * progress * (3 - 2 * progress);
 			const shift = `${Math.min(distance, height).toFixed(2)}px`;
 			const opacity = (1 - eased).toFixed(3);
+			const reveal = `${Math.max(0, height - distance).toFixed(2)}px`;
 			// No Vue updates (or player rerenders) for each scroll frame.
 			if (shift !== lastShift) element.style.setProperty('--zalip-hero-shift', shift);
 			if (opacity !== lastOpacity) element.style.setProperty('--zalip-hero-opacity', opacity);
+			if (reveal !== lastReveal) element.style.setProperty('--zalip-hero-reveal', reveal);
 			lastShift = shift;
 			lastOpacity = opacity;
+			lastReveal = reveal;
 		}
 
 		function schedule(): void {

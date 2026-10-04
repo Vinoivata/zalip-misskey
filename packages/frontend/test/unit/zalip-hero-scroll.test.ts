@@ -41,7 +41,7 @@ function flushFrame() {
 	for (const callback of pending) callback(0);
 }
 
-async function fixture(nested = true) {
+async function fixture(nested = true, headerInset = 0) {
 	const host = document.createElement('div');
 	document.body.appendChild(host);
 	const hero = ref<HTMLElement | null>(null);
@@ -60,9 +60,10 @@ async function fixture(nested = true) {
 	const app = createApp({ render: () => h('div', { style: nested ? 'overflow-y: auto' : '' }, [h(KeepAlive, null, { default: () => visible.value ? h(Child) : h(Other) })]) });
 	app.mount(host);
 	const container = host.firstElementChild as HTMLElement;
+	container.style.scrollPaddingTop = `${headerInset}px`;
 	container.getBoundingClientRect = () => ({ top } as DOMRect);
 	function measure() {
-		hero.value!.getBoundingClientRect = () => ({ top: (nested ? top : 0) - scroll } as DOMRect);
+		hero.value!.getBoundingClientRect = () => ({ top: (nested ? top + headerInset : 0) - scroll } as DOMRect);
 		if (artwork.value) Object.defineProperty(artwork.value, 'offsetHeight', { configurable: true, get: () => height });
 	}
 	await nextTick();
@@ -76,12 +77,31 @@ async function fixture(nested = true) {
 		hero, artwork, visible, hasArtwork, key, container, measure, unmount,
 		shift: () => hero.value!.style.getPropertyValue('--zalip-hero-shift'),
 		opacity: () => Number(hero.value!.style.getPropertyValue('--zalip-hero-opacity')),
+		reveal: () => hero.value!.style.getPropertyValue('--zalip-hero-reveal'),
 		scroll: (value: number) => { scroll = value; (nested ? container : window).dispatchEvent(new Event('scroll')); flushFrame(); },
 		resize: (value: number) => { height = value; top = 85; resizeCallbacks.at(-1)!([], {} as ResizeObserver); flushFrame(); },
 	};
 }
 
 describe('Zalip title cover scroll', () => {
+	it('starts at the mobile header boundary instead of waiting for the screen edge', async () => {
+		const view = await fixture(true, 53);
+		expect(view.opacity()).toBe(1);
+		view.scroll(20);
+		expect(view.shift()).toBe('20.00px');
+		expect(view.opacity()).toBeLessThan(1);
+		expect(view.reveal()).toBe('220.00px');
+		// Hiding the header must not reset the scroll origin partway through.
+		view.container.style.setProperty('--zalip-chrome-top', '0px');
+		view.scroll(90);
+		expect(view.opacity()).toBe(0.5);
+		view.scroll(240);
+		expect(view.reveal()).toBe('0.00px');
+		view.scroll(0);
+		expect(view.reveal()).toBe('240.00px');
+		expect(view.shift()).toBe('0.00px');
+	});
+
 	it('fades the cover behind the rising title and restores it on reverse scrolling', async () => {
 		const view = await fixture();
 		expect(view.opacity()).toBe(1);
@@ -124,6 +144,7 @@ describe('Zalip title cover scroll', () => {
 		const view = await fixture();
 		view.scroll(90);
 		expect(view.shift()).toBe('');
+		expect(view.reveal()).toBe('');
 		motion.matches = false;
 		motion.dispatchEvent(new Event('change'));
 		flushFrame();
