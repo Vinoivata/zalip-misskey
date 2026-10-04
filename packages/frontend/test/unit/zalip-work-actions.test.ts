@@ -32,6 +32,8 @@ let workKind = 'movie';
 let available = false;
 let failUpdate = false;
 let withEpisodes = false;
+let posterPath: string | null;
+let backdropPath: string | null;
 const testEpisodes = [1, 2, 3].map(n => ({ id: `ep${n}`, episodeNumber: n, title: `Episode ${n}`, stillPath: `/frame${n}.jpg`, description: `Description ${n}`, airDate: `2026-09-0${n}`, runtimeMinutes: 40, discussionNoteId: null }));
 const scrollTo = vi.fn();
 
@@ -56,10 +58,12 @@ beforeEach(() => {
 	failUpdate = false;
 	workKind = 'movie';
 	withEpisodes = false;
+	posterPath = '/poster.jpg';
+	backdropPath = null;
 	HTMLElement.prototype.scrollTo = scrollTo;
 	entry = { status: 'watching', episodesWatched: 4, personalRating: 8, isFavorite: false, isReleaseSubscribed: false, work: { id: title.id } };
 	vi.mocked(misskeyApiZalip).mockImplementation(async (endpoint, data) => {
-		if (endpoint === 'zalip/works/show') return { ...title, kind: workKind, posterPath: '/poster.jpg', backdropPath: null, seasons: withEpisodes ? [{ id: 'season', seasonNumber: 1, title: 'Season 1', episodeCount: 3 }] : [] };
+		if (endpoint === 'zalip/works/show') return { ...title, kind: workKind, posterPath, backdropPath, seasons: withEpisodes ? [{ id: 'season', seasonNumber: 1, title: 'Season 1', episodeCount: 3 }] : [] };
 		if (endpoint === 'zalip/seasons/episodes') return testEpisodes;
 		if (endpoint === 'zalip/discussions/show') return { noteId: null };
 		if (endpoint === 'zalip/library/list') return [entry];
@@ -195,14 +199,35 @@ describe('Zalip work actions', () => {
 		expect(entry.isFavorite).toBe(true);
 	});
 
-	it('renders a mobile poster fallback without a backdrop and restores the repost icon', async () => {
+	it('renders the mobile poster without a backdrop and restores the repost icon', async () => {
 		const view = setup();
 		const repost = await view.findByRole('button', { name: i18n.ts.zalip.workRepost });
 		expect(repost.querySelector('.ti-repeat')).toBeTruthy();
-		expect(view.container.querySelector('[class*=mobilePosterFallback] img')?.getAttribute('src')).toContain('/poster.jpg');
+		expect(view.container.querySelector('[class*=mobilePosterImage]')?.getAttribute('src')).toContain('/poster.jpg');
 		await fireEvent.click(view.getByRole('button', { name: 'test-refresh' }));
 		await view.findByRole('button', { name: i18n.ts.zalip.workRepost });
 		expect(vi.mocked(misskeyApiZalip).mock.calls.filter(([endpoint]) => endpoint === 'zalip/works/show')).toHaveLength(2);
+	});
+
+	it.each([
+		['/poster.jpg', '/backdrop.jpg'],
+		['/poster.jpg', null],
+		[null, '/backdrop.jpg'],
+		[null, null],
+	])('keeps responsive artwork and the missing-art fallback for poster %s and backdrop %s', async (poster, backdrop) => {
+		posterPath = poster;
+		backdropPath = backdrop;
+		const view = setup();
+		await view.findByRole('heading', { name: title.title, level: 1 });
+		const hero = view.container.querySelector('article > section')!;
+		const portrait = hero.querySelector('[class*=mobilePosterImage]');
+		const background = hero.querySelector('[class*=backdropImage]');
+		if (poster) expect(portrait?.getAttribute('src')).toContain(poster);
+		else expect(portrait).toBeNull();
+		if (backdrop) expect(background?.getAttribute('src')).toContain(backdrop);
+		else expect(background).toBeNull();
+		expect(!!hero.querySelector('[class*=missingArtwork]')).toBe(!poster && !backdrop);
+		expect(!!hero.querySelector('[class*=posterOnlyBackground]')).toBe(!!poster && !backdrop);
 	});
 
 	it('synchronizes dropdown, frame, metadata and rail, with horizontal swipes ignoring vertical movement', async () => {

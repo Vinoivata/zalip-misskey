@@ -50,6 +50,7 @@
 - Enhance: Adapt the Zalip rating dialog to a compact two-column desktop layout with mouse-friendly rating arrows while preserving the mobile screen.
 - Enhance: Fade the Zalip title cover behind the rising logo while scrolling, with reversible mobile motion, subtle desktop parallax, and reduced-motion support.
 - Fix: Start the Zalip cover transition at the header boundary and preserve full-color artwork in the light mobile theme without a white wash.
+- Enhance: Show a full-width portrait poster in the mobile title hero, restore the original gradient and scroll fade in both themes, and retain desktop backdrops.
 
 ### Server
 - Fix: Allow clearing a Zalip library status without removing personal ratings, watch progress, favorites or release subscriptions.

@@ -27,15 +27,12 @@ export function useZalipHeroScroll(hero: Readonly<Ref<HTMLElement | null>>, artw
 		let frame: number | null = null;
 		let lastShift = '';
 		let lastOpacity = '';
-		let lastReveal = '';
 
 		function reset(): void {
 			element.style.removeProperty('--zalip-hero-shift');
 			element.style.removeProperty('--zalip-hero-opacity');
-			element.style.removeProperty('--zalip-hero-reveal');
 			lastShift = '';
 			lastOpacity = '';
-			lastReveal = '';
 		}
 
 		function update(): void {
@@ -60,14 +57,11 @@ export function useZalipHeroScroll(hero: Readonly<Ref<HTMLElement | null>>, artw
 			const eased = progress * progress * (3 - 2 * progress);
 			const shift = `${Math.min(distance, height).toFixed(2)}px`;
 			const opacity = (1 - eased).toFixed(3);
-			const reveal = `${Math.max(0, height - distance).toFixed(2)}px`;
 			// No Vue updates (or player rerenders) for each scroll frame.
 			if (shift !== lastShift) element.style.setProperty('--zalip-hero-shift', shift);
 			if (opacity !== lastOpacity) element.style.setProperty('--zalip-hero-opacity', opacity);
-			if (reveal !== lastReveal) element.style.setProperty('--zalip-hero-reveal', reveal);
 			lastShift = shift;
 			lastOpacity = opacity;
-			lastReveal = reveal;
 		}
 
 		function schedule(): void {

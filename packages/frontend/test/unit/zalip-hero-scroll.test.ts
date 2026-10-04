@@ -77,7 +77,6 @@ async function fixture(nested = true, headerInset = 0) {
 		hero, artwork, visible, hasArtwork, key, container, measure, unmount,
 		shift: () => hero.value!.style.getPropertyValue('--zalip-hero-shift'),
 		opacity: () => Number(hero.value!.style.getPropertyValue('--zalip-hero-opacity')),
-		reveal: () => hero.value!.style.getPropertyValue('--zalip-hero-reveal'),
 		scroll: (value: number) => { scroll = value; (nested ? container : window).dispatchEvent(new Event('scroll')); flushFrame(); },
 		resize: (value: number) => { height = value; top = 85; resizeCallbacks.at(-1)!([], {} as ResizeObserver); flushFrame(); },
 	};
@@ -90,15 +89,14 @@ describe('Zalip title cover scroll', () => {
 		view.scroll(20);
 		expect(view.shift()).toBe('20.00px');
 		expect(view.opacity()).toBeLessThan(1);
-		expect(view.reveal()).toBe('220.00px');
 		// Hiding the header must not reset the scroll origin partway through.
 		view.container.style.setProperty('--zalip-chrome-top', '0px');
 		view.scroll(90);
 		expect(view.opacity()).toBe(0.5);
 		view.scroll(240);
-		expect(view.reveal()).toBe('0.00px');
+		expect(view.opacity()).toBe(0);
 		view.scroll(0);
-		expect(view.reveal()).toBe('240.00px');
+		expect(view.opacity()).toBe(1);
 		expect(view.shift()).toBe('0.00px');
 	});
 
@@ -131,6 +129,18 @@ describe('Zalip title cover scroll', () => {
 		expect(view.shift()).toBe('');
 	});
 
+	it('fades a full-width portrait using its actual height below the mobile header', async () => {
+		const view = await fixture(true, 53);
+		view.resize(585);
+		view.scroll(585 * 0.375);
+		expect(view.opacity()).toBe(0.5);
+		view.scroll(585 * 0.75);
+		expect(view.opacity()).toBe(0);
+		view.scroll(0);
+		expect(view.opacity()).toBe(1);
+		expect(view.shift()).toBe('0.00px');
+	});
+
 	it('coalesces scroll events into one animation frame', async () => {
 		const view = await fixture();
 		for (let i = 0; i < 12; i++) view.container.dispatchEvent(new Event('scroll'));
@@ -144,7 +154,6 @@ describe('Zalip title cover scroll', () => {
 		const view = await fixture();
 		view.scroll(90);
 		expect(view.shift()).toBe('');
-		expect(view.reveal()).toBe('');
 		motion.matches = false;
 		motion.dispatchEvent(new Event('change'));
 		flushFrame();
@@ -155,7 +164,7 @@ describe('Zalip title cover scroll', () => {
 		expect(view.shift()).toBe('');
 	});
 
-	it('leaves poster-only titles untouched and reconnects when artwork or route changes', async () => {
+	it('leaves titles without artwork untouched and reconnects when artwork or route changes', async () => {
 		const view = await fixture();
 		view.hasArtwork.value = false;
 		await nextTick();

@@ -10,9 +10,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div v-if="pending" :class="$style.state"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i> Загружаем тайтл…</div>
 			<div v-else-if="work == null" :class="$style.state"><i class="ti ti-movie-off" aria-hidden="true"></i> Тайтл не найден или ещё не опубликован.</div>
 			<article v-else :class="$style.work">
-				<section ref="hero" :class="[$style.hero, { [$style.hasLogo]: work.logoPath, [$style.hasBackdrop]: work.backdropPath }]">
-					<div v-if="work.backdropPath" ref="heroArtwork" :class="$style.heroBackground" aria-hidden="true"><img :src="tmdbBackdrop(work.backdropPath)" alt=""></div>
-					<div v-else :class="$style.mobilePosterFallback"><img v-if="work.posterPath" :src="tmdbImage(work.posterPath)" :alt="work.title"><div v-else :class="$style.missingArtwork"><i class="ti ti-movie" aria-hidden="true"></i><span>{{ work.title }}</span></div></div>
+				<section ref="hero" :class="[$style.hero, { [$style.hasLogo]: work.logoPath, [$style.hasBackdrop]: work.backdropPath, [$style.hasPoster]: work.posterPath }]">
+					<div v-if="work.backdropPath || work.posterPath" ref="heroArtwork" :class="[$style.heroBackground, { [$style.posterOnlyBackground]: !work.backdropPath }]" aria-hidden="true">
+						<img v-if="work.backdropPath" :class="$style.backdropImage" :src="tmdbBackdrop(work.backdropPath)" alt="">
+						<img v-if="work.posterPath" :class="$style.mobilePosterImage" :src="tmdbImage(work.posterPath)" width="500" height="750" alt="">
+					</div>
+					<div v-else :class="$style.mobilePosterFallback"><div :class="$style.missingArtwork"><i class="ti ti-movie" aria-hidden="true"></i><span>{{ work.title }}</span></div></div>
 					<div :class="$style.heroInner">
 						<nav :class="$style.breadcrumb" :aria-label="i18n.ts.zalip.catalogueHeading"><MkA to="/catalog">{{ i18n.ts.zalip.catalogueHeading }}</MkA><i class="ti ti-chevron-right" aria-hidden="true"></i><span>{{ work.title }}</span></nav>
 						<div v-if="work.logoPath" :class="$style.titleLogo"><img :src="tmdbImage(work.logoPath)" :alt="work.title"></div>
@@ -848,6 +851,7 @@ definePage(() => ({
 .hero { position: relative; isolation: isolate; overflow: hidden; }
 .heroBackground { position: absolute; z-index: -2; inset: 0; pointer-events: none; opacity: var(--zalip-hero-opacity, 1); transform: translate3d(0, calc(var(--zalip-hero-shift, 0px) * .35), 0); }
 .heroBackground img { width: 100%; height: 100%; object-fit: cover; object-position: center top; }
+.posterOnlyBackground, .mobilePosterImage { display: none; }
 .hero::after { content: ''; position: absolute; z-index: -1; inset: 0; background: linear-gradient(0deg, var(--zalip-social-panel) 0%, color-mix(in srgb, var(--zalip-social-panel) 78%, transparent) 35%, color-mix(in srgb, var(--zalip-social-panel) 45%, transparent) 100%); }
 .heroInner { padding: 24px 28px 28px; }
 .breadcrumb { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; color: var(--zalip-social-muted); }
@@ -1002,7 +1006,6 @@ definePage(() => ({
 .sheetRow:focus-visible, .sheetClose:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: -2px; }
 @container (max-width: 600px) {
 	.mobilePosterFallback { display: flex; justify-content: center; padding: 20px 16px 4px; }
-	.mobilePosterFallback > img { display: block; width: min(220px, 65%); aspect-ratio: 2 / 3; object-fit: cover; border-radius: 14px; }
 	.episodeGuide { flex-direction: column; gap: 12px; }
 	.episodeGuideStill { width: 100%; max-width: none; }
 	.heroInner { padding: 18px 18px 12px; }
@@ -1013,16 +1016,17 @@ definePage(() => ({
 	.heroBackground { position: relative; inset: auto; aspect-ratio: 16 / 9; transform: translate3d(0, var(--zalip-hero-shift, 0px), 0); }
 	.heroBackground img { display: block; object-position: center; }
 	.heroBackground::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 40%, var(--zalip-social-panel) 100%); }
-	.hasBackdrop .heroInner { position: relative; margin-top: -32px; }
-	.hasBackdrop.hasLogo .heroInner { margin-top: -48px; }
-	// Keep light artwork in full color; reveal the page from the lower edge
-	// instead of bleaching the entire image and drawing the logo over it.
-	:global(html[data-color-scheme=light]) .heroBackground {
-		opacity: 1;
-		mask-image: linear-gradient(to bottom, currentColor max(0px, calc(var(--zalip-hero-reveal, 100%) - 24px)), transparent var(--zalip-hero-reveal, 100%));
+	.hasBackdrop .heroInner, .hasPoster .heroInner { position: relative; margin-top: -32px; }
+	.hasBackdrop.hasLogo .heroInner, .hasPoster.hasLogo .heroInner { margin-top: -48px; }
+	// Full-width portrait artwork shares the original gradient and scroll fade
+	// in both themes; desktop keeps its landscape backdrop.
+	.hasPoster .heroBackground {
+		display: block;
+		width: 100%;
+		aspect-ratio: auto;
 	}
-	:global(html[data-color-scheme=light]) .heroBackground::after { display: none; }
-	:global(html[data-color-scheme=light]) .hasBackdrop .heroInner { margin-top: 0; }
+	.hasPoster .heroBackground .backdropImage { display: none; }
+	.hasPoster .heroBackground .mobilePosterImage { display: block; height: auto; object-fit: contain; }
 	.hero::after { display: none; }
 	.info { width: 100%; text-align: center; }
 	.info h1 { font-size: clamp(25px, 7cqi, 36px); line-height: 1.15; margin-bottom: 16px; }
@@ -1053,7 +1057,6 @@ definePage(() => ({
 }
 @media (prefers-reduced-motion: reduce) {
 	.heroBackground { transform: none; opacity: 1; }
-	:global(html[data-color-scheme=light]) .heroBackground { mask-image: none; }
 }
 @media (max-width: 600px) {
 	.workSheet { width: 100%; max-height: calc(100dvh - 24px); padding: 24px 20px max(20px, env(safe-area-inset-bottom)); border-radius: 24px 24px 0 0; }
