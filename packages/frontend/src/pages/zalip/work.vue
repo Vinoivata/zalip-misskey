@@ -10,8 +10,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div v-if="pending" :class="$style.state"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i> Загружаем тайтл…</div>
 			<div v-else-if="work == null" :class="$style.state"><i class="ti ti-movie-off" aria-hidden="true"></i> Тайтл не найден или ещё не опубликован.</div>
 			<article v-else :class="$style.work">
-				<section :class="[$style.hero, { [$style.hasLogo]: work.logoPath }]">
-					<div v-if="work.backdropPath" :class="$style.heroBackground" aria-hidden="true"><img :src="tmdbBackdrop(work.backdropPath)" alt=""></div>
+				<section ref="hero" :class="[$style.hero, { [$style.hasLogo]: work.logoPath, [$style.hasBackdrop]: work.backdropPath }]">
+					<div v-if="work.backdropPath" ref="heroArtwork" :class="$style.heroBackground" aria-hidden="true"><img :src="tmdbBackdrop(work.backdropPath)" alt=""></div>
 					<div v-else :class="$style.mobilePosterFallback"><img v-if="work.posterPath" :src="tmdbImage(work.posterPath)" :alt="work.title"><div v-else :class="$style.missingArtwork"><i class="ti ti-movie" aria-hidden="true"></i><span>{{ work.title }}</span></div></div>
 					<div :class="$style.heroInner">
 						<nav :class="$style.breadcrumb" :aria-label="i18n.ts.zalip.catalogueHeading"><MkA to="/catalog">{{ i18n.ts.zalip.catalogueHeading }}</MkA><i class="ti ti-chevron-right" aria-hidden="true"></i><span>{{ work.title }}</span></nav>
@@ -191,6 +191,7 @@ import { definePage } from '@/page.js';
 import ZalipDiscussionPanel from '@/components/ZalipDiscussionPanel.vue';
 import ZalipRatingDialog from '@/components/ZalipRatingDialog.vue';
 import { useZalipHorizontalDrag } from '@/composables/use-zalip-horizontal-drag.js';
+import { useZalipHeroScroll } from '@/composables/use-zalip-hero-scroll.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { pleaseLogin } from '@/utility/please-login.js';
 
@@ -282,6 +283,9 @@ const voicePanelPosition = ref<{ top: string; left: string; width: string; heigh
 const episodeQuery = ref('');
 const props = defineProps<{ slug: string }>();
 const work = ref<ZalipWork | null>(null);
+const hero = useTemplateRef('hero');
+const heroArtwork = useTemplateRef('heroArtwork');
+useZalipHeroScroll(hero, heroArtwork);
 const workSubtitle = computed(() => [work.value?.originalTitle, work.value?.releaseYear].filter(Boolean).join(', '));
 const pending = ref(true);
 const saving = ref(false);
@@ -842,7 +846,7 @@ definePage(() => ({
 .work, .content { min-width: 0; }
 .state { display: grid; place-content: center; gap: 12px; min-height: 300px; text-align: center; color: var(--zalip-social-muted); }
 .hero { position: relative; isolation: isolate; overflow: hidden; }
-.heroBackground { position: absolute; z-index: -2; inset: 0; }
+.heroBackground { position: absolute; z-index: -2; inset: 0; pointer-events: none; opacity: var(--zalip-hero-opacity, 1); transform: translate3d(0, calc(var(--zalip-hero-shift, 0px) * .35), 0); }
 .heroBackground img { width: 100%; height: 100%; object-fit: cover; object-position: center top; }
 .hero::after { content: ''; position: absolute; z-index: -1; inset: 0; background: linear-gradient(0deg, var(--zalip-social-panel) 0%, color-mix(in srgb, var(--zalip-social-panel) 78%, transparent) 35%, color-mix(in srgb, var(--zalip-social-panel) 45%, transparent) 100%); }
 .heroInner { padding: 24px 28px 28px; }
@@ -1006,8 +1010,11 @@ definePage(() => ({
 	.titleLogo { justify-content: center; height: auto; min-height: 56px; margin: 0 0 16px; }
 	.titleLogo img { width: auto; max-width: 86%; max-height: 100px; }
 	.heroContent { display: block; margin-top: 0; }
-	.heroBackground { position: relative; inset: auto; aspect-ratio: 16 / 9; }
+	.heroBackground { position: relative; inset: auto; aspect-ratio: 16 / 9; transform: translate3d(0, var(--zalip-hero-shift, 0px), 0); }
 	.heroBackground img { display: block; object-position: center; }
+	.heroBackground::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 40%, var(--zalip-social-panel) 100%); }
+	.hasBackdrop .heroInner { position: relative; margin-top: -32px; }
+	.hasBackdrop.hasLogo .heroInner { margin-top: -48px; }
 	.hero::after { display: none; }
 	.info { width: 100%; text-align: center; }
 	.info h1 { font-size: clamp(25px, 7cqi, 36px); line-height: 1.15; margin-bottom: 16px; }
@@ -1035,6 +1042,9 @@ definePage(() => ({
 	.episodeTile { flex-basis: 112px; }
 	.playOverlay { width: 58px; height: 58px; }
 	.playerState { padding: 12px; font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.heroBackground { transform: none; opacity: 1; }
 }
 @media (max-width: 600px) {
 	.workSheet { width: 100%; max-height: calc(100dvh - 24px); padding: 24px 20px max(20px, env(safe-area-inset-bottom)); border-radius: 24px 24px 0 0; }
