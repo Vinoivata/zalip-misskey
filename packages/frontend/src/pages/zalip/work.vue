@@ -10,9 +10,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div v-if="pending" :class="$style.state"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i> Загружаем тайтл…</div>
 			<div v-else-if="work == null" :class="$style.state"><i class="ti ti-movie-off" aria-hidden="true"></i> Тайтл не найден или ещё не опубликован.</div>
 			<article v-else :class="$style.work">
-				<section :class="[$style.hero, { [$style.hasLogo]: work.logoPath }]">
+				<section :class="[$style.hero, { [$style.hasLogo]: work.logoPath, [$style.hasMobilePoster]: work.posterPath }]">
 					<div v-if="work.backdropPath" :class="$style.heroBackground" aria-hidden="true"><img :src="tmdbBackdrop(work.backdropPath)" alt=""></div>
-					<div v-else :class="$style.mobilePosterFallback"><img v-if="work.posterPath" :src="tmdbImage(work.posterPath)" :alt="work.title"><div v-else :class="$style.missingArtwork"><i class="ti ti-movie" aria-hidden="true"></i><span>{{ work.title }}</span></div></div>
+					<div :class="$style.mobileArtwork">
+						<div v-if="work.backdropPath || work.posterPath" :class="$style.mobileArtworkBackdrop" aria-hidden="true"><img :src="work.backdropPath ? tmdbBackdrop(work.backdropPath) : tmdbImage(work.posterPath!)" alt=""></div>
+						<img v-if="work.posterPath" :class="$style.mobileArtworkPoster" :src="tmdbImage(work.posterPath)" :alt="work.title" width="500" height="750">
+						<div v-else-if="!work.backdropPath" :class="$style.missingArtwork"><i class="ti ti-movie" aria-hidden="true"></i><span>{{ work.title }}</span></div>
+					</div>
 					<div :class="$style.heroInner">
 						<nav :class="$style.breadcrumb" :aria-label="i18n.ts.zalip.catalogueHeading"><MkA to="/catalog">{{ i18n.ts.zalip.catalogueHeading }}</MkA><i class="ti ti-chevron-right" aria-hidden="true"></i><span>{{ work.title }}</span></nav>
 						<div v-if="work.logoPath" :class="$style.titleLogo"><img :src="tmdbImage(work.logoPath)" :alt="work.title"></div>
@@ -866,7 +870,7 @@ definePage(() => ({
 .original { color: var(--zalip-social-muted); font-size: 13px; line-height: 1.5; }
 .ratings { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 20px 0 24px; }
 .compactFacts { display: none; }
-.mobilePosterFallback { display: none; }
+.mobileArtwork { display: none; }
 .missingArtwork { display: grid; place-content: center; justify-items: center; gap: 14px; width: min(220px, 65%); min-height: 240px; box-sizing: border-box; padding: 20px; border-radius: 16px; background: var(--zalip-social-raised); text-align: center; font-weight: 700; }
 .missingArtwork i { font-size: 48px; color: var(--MI_THEME-accent); }
 .communityRating { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
@@ -997,8 +1001,15 @@ definePage(() => ({
 .sheetRow:hover { background: var(--zalip-social-hover); }
 .sheetRow:focus-visible, .sheetClose:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: -2px; }
 @container (max-width: 600px) {
-	.mobilePosterFallback { display: flex; justify-content: center; padding: 20px 16px 4px; }
-	.mobilePosterFallback > img { display: block; width: min(220px, 65%); aspect-ratio: 2 / 3; object-fit: cover; border-radius: 14px; }
+	.mobileArtwork { position: relative; display: grid; place-items: center; aspect-ratio: 16 / 9; }
+	.mobileArtworkBackdrop { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+	.mobileArtworkBackdrop img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; }
+	.mobileArtworkPoster { position: relative; z-index: 2; display: block; width: min(250px, 68%); height: auto; aspect-ratio: 2 / 3; object-fit: cover; border-radius: var(--MI-radius); box-shadow: 0 8px 24px var(--MI_THEME-shadow); }
+	.hasMobilePoster .mobileArtwork { aspect-ratio: auto; padding-top: 32px; }
+	.hasMobilePoster .mobileArtworkBackdrop { bottom: -28px; }
+	.hasMobilePoster .mobileArtworkBackdrop img { filter: blur(8px); transform: scale(1.1); }
+	.hasMobilePoster .mobileArtworkPoster { margin-bottom: -28px; }
+	.hasMobilePoster .heroInner { position: relative; padding-top: 52px; border-radius: 28px 28px 0 0; background: var(--zalip-social-panel); }
 	.episodeGuide { flex-direction: column; gap: 12px; }
 	.episodeGuideStill { width: 100%; max-width: none; }
 	.heroInner { padding: 18px 18px 12px; }
@@ -1006,8 +1017,7 @@ definePage(() => ({
 	.titleLogo { justify-content: center; height: auto; min-height: 56px; margin: 0 0 16px; }
 	.titleLogo img { width: auto; max-width: 86%; max-height: 100px; }
 	.heroContent { display: block; margin-top: 0; }
-	.heroBackground { position: relative; inset: auto; aspect-ratio: 16 / 9; }
-	.heroBackground img { display: block; object-position: center; }
+	.heroBackground { display: none; }
 	.hero::after { display: none; }
 	.info { width: 100%; text-align: center; }
 	.info h1 { font-size: clamp(25px, 7cqi, 36px); line-height: 1.15; margin-bottom: 16px; }

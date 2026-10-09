@@ -203,7 +203,7 @@ describe('Zalip work actions', () => {
 		const view = setup();
 		const repost = await view.findByRole('button', { name: i18n.ts.zalip.workRepost });
 		expect(repost.querySelector('.ti-repeat')).toBeTruthy();
-		expect(view.container.querySelector('[class*=mobilePosterFallback] img')?.getAttribute('src')).toContain('/poster.jpg');
+		expect(view.container.querySelector('[class*=mobileArtworkPoster]')?.getAttribute('src')).toContain('/poster.jpg');
 		await fireEvent.click(view.getByRole('button', { name: 'test-refresh' }));
 		await view.findByRole('button', { name: i18n.ts.zalip.workRepost });
 		expect(vi.mocked(misskeyApiZalip).mock.calls.filter(([endpoint]) => endpoint === 'zalip/works/show')).toHaveLength(2);
@@ -214,18 +214,22 @@ describe('Zalip work actions', () => {
 		['/poster.jpg', null],
 		[null, '/backdrop.jpg'],
 		[null, null],
-	])('prefers the static cover and uses a poster only when the cover is missing: poster %s, backdrop %s', async (poster, backdrop) => {
+	])('renders a mobile poster over the cover with safe fallbacks: poster %s, backdrop %s', async (poster, backdrop) => {
 		posterPath = poster;
 		backdropPath = backdrop;
 		const view = setup();
 		await view.findByRole('heading', { name: title.title, level: 1 });
 		const hero = view.container.querySelector('article > section')!;
-		const portrait = hero.querySelector('[class*=mobilePosterFallback] img');
+		const portrait = hero.querySelector('[class*=mobileArtworkPoster]');
 		const background = hero.querySelector('[class*=heroBackground] img');
-		if (poster && !backdrop) expect(portrait?.getAttribute('src')).toContain(poster);
+		const mobileBackground = hero.querySelector('[class*=mobileArtworkBackdrop] img');
+		if (poster) expect(portrait?.getAttribute('src')).toContain(poster);
 		else expect(portrait).toBeNull();
 		if (backdrop) expect(background?.getAttribute('src')).toContain(backdrop);
 		else expect(background).toBeNull();
+		if (backdrop || poster) expect(mobileBackground?.getAttribute('src')).toContain(backdrop || poster);
+		else expect(mobileBackground).toBeNull();
+		expect(portrait?.getAttribute('alt') ?? title.title).toBe(title.title);
 		expect(!!hero.querySelector('[class*=missingArtwork]')).toBe(!poster && !backdrop);
 		expect(hero.getAttribute('style')).toBeNull();
 	});

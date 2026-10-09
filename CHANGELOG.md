@@ -52,6 +52,7 @@
 - Fix: Start the Zalip cover transition at the header boundary and preserve full-color artwork in the light mobile theme without a white wash.
 - Enhance: Show a full-width portrait poster in the mobile title hero, restore the original gradient and scroll fade in both themes, and retain desktop backdrops.
 - Fix: Restore the static mobile title cover with the logo below it, removing experimental portrait artwork, scroll fading and parallax while retaining the missing-cover poster fallback.
+- Enhance: Frame the mobile title poster over a softly blurred cover without changing title controls or desktop layout, and restore mobile header auto-hiding on title pages.
 
 ### Server
 - Fix: Allow clearing a Zalip library status without removing personal ratings, watch progress, favorites or release subscriptions.

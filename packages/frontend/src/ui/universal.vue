@@ -68,12 +68,10 @@ const XAnnouncements = defineAsyncComponent(() => import('@/ui/_common_/announce
 
 const isRoot = computed(() => mainRouter.currentRoute.value.name === 'index');
 const isThread = computed(() => mainRouter.currentRoute.value.name === 'note');
-const isWork = computed(() => mainRouter.currentRoute.value.name === 'zalipWork');
 const isChatRoom = computed(() => /^\/chat\/(user|room)\//.test(mainRouter.currentRoute.value.path));
 const isSocial = computed(() => isThread.value || ['/', '/timeline', '/my/favorites', '/my/notifications', '/chat'].includes(mainRouter.currentRoute.value.path) || isChatRoom.value);
 const chromeHidden = ref(false);
-// A title cover collapses below this header; keep its boundary visible.
-const headerHidden = computed(() => chromeHidden.value && !isThread.value && !isWork.value);
+const headerHidden = computed(() => chromeHidden.value && !isThread.value);
 let lastScroll = 0;
 let scrollTravel = 0;
 let scrollElement: HTMLElement | null = null;
