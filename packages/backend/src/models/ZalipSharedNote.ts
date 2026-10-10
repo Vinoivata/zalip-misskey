@@ -13,20 +13,22 @@ import { MiZalipWork } from './ZalipWork.js';
  * The note owns reactions, replies, renotes and moderation; this relation only supplies UI context.
  */
 @Entity('zalip_shared_note')
-@Index(['workId', 'createdAt'])
+@Index('IDX_zalip_shared_note_work_created', ['workId', 'createdAt'])
 export class MiZalipSharedNote {
-	@PrimaryColumn({ ...id(), comment: 'The ordinary local Misskey note ID.' })
+	/** The ordinary local Misskey note ID. */
+	@PrimaryColumn({ ...id(), primaryKeyConstraintName: 'PK_zalip_shared_note_note' })
 	public noteId: MiNote['id'];
 
 	@ManyToOne(() => MiNote, { onDelete: 'CASCADE' })
-	@JoinColumn({ name: 'noteId' })
+	@JoinColumn({ name: 'noteId', foreignKeyConstraintName: 'FK_zalip_shared_note_note' })
 	public note: MiNote | null;
 
-	@Column({ ...id(), comment: 'The canonical published Zalip work ID.' })
+	/** The canonical published Zalip work ID. */
+	@Column(id())
 	public workId: MiZalipWork['id'];
 
 	@ManyToOne(() => MiZalipWork, { onDelete: 'CASCADE' })
-	@JoinColumn({ name: 'workId' })
+	@JoinColumn({ name: 'workId', foreignKeyConstraintName: 'FK_zalip_shared_note_work' })
 	public work: MiZalipWork | null;
 
 	@Column('timestamp with time zone')

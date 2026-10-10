@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryColumn } from 'typeorm';
+import { Check, Column, Entity, Index, JoinColumn, ManyToOne, PrimaryColumn } from 'typeorm';
 import { id } from './util/id.js';
 import { MiUser } from './User.js';
 import { MiZalipWork } from './ZalipWork.js';
@@ -13,20 +13,26 @@ export type ZalipLibraryStatus = typeof zalipLibraryStatuses[number];
 
 /** Personal state belongs directly to the signed-in Misskey user, never to a copied account. */
 @Entity('zalip_library_entry')
-@Index(['userId', 'status', 'updatedAt'])
+@Index('IDX_zalip_library_user_status_updated', ['userId', 'status', 'updatedAt'])
+@Index('IDX_zalip_library_user_release_subscription', ['userId', 'isReleaseSubscribed'])
+@Check('CHK_zalip_library_status', '"status" IN (\'watching\', \'planned\', \'completed\', \'on_hold\', \'dropped\')')
+@Check('CHK_zalip_library_episodes', '"episodesWatched" >= 0')
+@Check('CHK_zalip_library_rating', '"personalRating" IS NULL OR ("personalRating" >= 1 AND "personalRating" <= 10)')
 export class MiZalipLibraryEntry {
-	@PrimaryColumn({ ...id(), comment: 'The owner Misskey user ID.' })
+	/** The owner Misskey user ID. */
+	@PrimaryColumn({ ...id(), primaryKeyConstraintName: 'PK_zalip_library_entry' })
 	public userId: MiUser['id'];
 
 	@ManyToOne(() => MiUser, { onDelete: 'CASCADE' })
-	@JoinColumn()
+	@JoinColumn({ name: 'userId', foreignKeyConstraintName: 'FK_zalip_library_user' })
 	public user: MiUser | null;
 
-	@PrimaryColumn({ ...id(), comment: 'The canonical Zalip work ID.' })
+	/** The canonical Zalip work ID. */
+	@PrimaryColumn({ ...id(), primaryKeyConstraintName: 'PK_zalip_library_entry' })
 	public workId: MiZalipWork['id'];
 
 	@ManyToOne(() => MiZalipWork, { onDelete: 'CASCADE' })
-	@JoinColumn()
+	@JoinColumn({ name: 'workId', foreignKeyConstraintName: 'FK_zalip_library_work' })
 	public work: MiZalipWork | null;
 
 	@Column('varchar', { length: 16, nullable: true })

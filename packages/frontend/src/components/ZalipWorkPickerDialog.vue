@@ -53,6 +53,7 @@ import { nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from
 import MkModalWindow from '@/components/MkModalWindow.vue';
 import type { ZalipWorkShare } from '@/types/post-form.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
+import { importerImageUrl } from '@/utility/zalip-importer.js';
 
 type SearchResult = ZalipWorkShare & {
 	originalTitle: string | null;
@@ -82,8 +83,8 @@ function kindLabel(kind: ZalipWorkShare['kind']): string {
 	return ({ movie: 'Фильм', series: 'Сериал', anime: 'Аниме', animation: 'Анимация' })[kind];
 }
 
-function posterUrl(path: string): string {
-	return `https://image.tmdb.org/t/p/w185${path}`;
+function posterUrl(path: string): string | undefined {
+	return importerImageUrl(path, 'w185') ?? undefined;
 }
 
 async function search(term: string): Promise<void> {

@@ -12,17 +12,18 @@ import { MiZalipWork } from './ZalipWork.js';
  * availabilityKey is never nullable so a unique index deduplicates films as well as episodes.
  */
 @Entity('zalip_alloha_availability_event')
-@Index(['workId', 'availabilityKey'], { unique: true })
-@Index(['createdAt'])
+@Index('IDX_zalip_alloha_availability_unique', ['workId', 'availabilityKey'], { unique: true })
+@Index('IDX_zalip_alloha_availability_created', ['createdAt'])
 export class MiZalipAllohaAvailabilityEvent {
-	@PrimaryColumn(id())
+	@PrimaryColumn({ ...id(), primaryKeyConstraintName: 'PK_zalip_alloha_availability_event_id' })
 	public id: string;
 
-	@Column({ ...id(), comment: 'The canonical Zalip work ID.' })
+	/** The canonical Zalip work ID. */
+	@Column(id())
 	public workId: MiZalipWork['id'];
 
 	@ManyToOne(() => MiZalipWork, { onDelete: 'CASCADE' })
-	@JoinColumn({ name: 'workId' })
+	@JoinColumn({ name: 'workId', foreignKeyConstraintName: 'FK_zalip_alloha_availability_work' })
 	public work: MiZalipWork | null;
 
 	@Column('varchar', { length: 64 })

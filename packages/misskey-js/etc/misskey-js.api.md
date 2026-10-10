@@ -2206,6 +2206,34 @@ declare namespace entities {
         ZalipAdminEpisodesCreateResponse,
         ZalipAdminEpisodesDiscussionsCreateRequest,
         ZalipAdminEpisodesDiscussionsCreateResponse,
+        ZalipAdminImporterPreviewRequest,
+        ZalipAdminImporterPreviewResponse,
+        ZalipAdminImporterRunsActionRequest,
+        ZalipAdminImporterRunsActionResponse,
+        ZalipAdminImporterRunsCreateRequest,
+        ZalipAdminImporterRunsCreateResponse,
+        ZalipAdminImporterRunsListRequest,
+        ZalipAdminImporterRunsListResponse,
+        ZalipAdminImporterRunsShowRequest,
+        ZalipAdminImporterRunsShowResponse,
+        ZalipAdminImporterSchedulesListRequest,
+        ZalipAdminImporterSchedulesListResponse,
+        ZalipAdminImporterSchedulesRunRequest,
+        ZalipAdminImporterSchedulesRunResponse,
+        ZalipAdminImporterSchedulesSaveRequest,
+        ZalipAdminImporterSchedulesSaveResponse,
+        ZalipAdminImporterSearchRequest,
+        ZalipAdminImporterSearchResponse,
+        ZalipAdminImporterSourcesRequest,
+        ZalipAdminImporterSourcesResponse,
+        ZalipAdminImporterTaxonomyLinkRequest,
+        ZalipAdminImporterTaxonomyLinkResponse,
+        ZalipAdminImporterTaxonomyListRequest,
+        ZalipAdminImporterTaxonomyListResponse,
+        ZalipAdminImporterTaxonomySaveRequest,
+        ZalipAdminImporterTaxonomySaveResponse,
+        ZalipAdminImporterTaxonomyShowRequest,
+        ZalipAdminImporterTaxonomyShowResponse,
         ZalipAdminSeasonsCreateRequest,
         ZalipAdminSeasonsCreateResponse,
         ZalipAdminSeasonsImportTmdbRequest,
@@ -2235,6 +2263,8 @@ declare namespace entities {
         ZalipLibraryUpdateResponse,
         ZalipPlaybackAllohaShowRequest,
         ZalipPlaybackAllohaShowResponse,
+        ZalipPlaybackSourcesRequest,
+        ZalipPlaybackSourcesResponse,
         ZalipReleasesListRequest,
         ZalipReleasesListResponse,
         ZalipReleasesSubscribedRequest,
@@ -2243,6 +2273,10 @@ declare namespace entities {
         ZalipSeasonsEpisodesResponse,
         ZalipSharesCreateRequest,
         ZalipSharesCreateResponse,
+        ZalipTaxonomyListRequest,
+        ZalipTaxonomyListResponse,
+        ZalipTaxonomyShowRequest,
+        ZalipTaxonomyShowResponse,
         ZalipWorksListRequest,
         ZalipWorksListResponse,
         ZalipWorksSearchRequest,
@@ -3840,6 +3874,90 @@ type ZalipAdminEpisodesDiscussionsCreateRequest = operations['zalip___admin___ep
 type ZalipAdminEpisodesDiscussionsCreateResponse = operations['zalip___admin___episodes___discussions___create']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
+type ZalipAdminImporterPreviewRequest = operations['zalip___admin___importer___preview']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterPreviewResponse = operations['zalip___admin___importer___preview']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterRunsActionRequest = operations['zalip___admin___importer___runs___action']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterRunsActionResponse = operations['zalip___admin___importer___runs___action']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterRunsCreateRequest = operations['zalip___admin___importer___runs___create']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterRunsCreateResponse = operations['zalip___admin___importer___runs___create']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterRunsListRequest = operations['zalip___admin___importer___runs___list']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterRunsListResponse = operations['zalip___admin___importer___runs___list']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterRunsShowRequest = operations['zalip___admin___importer___runs___show']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterRunsShowResponse = operations['zalip___admin___importer___runs___show']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterSchedulesListRequest = operations['zalip___admin___importer___schedules___list']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterSchedulesListResponse = operations['zalip___admin___importer___schedules___list']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterSchedulesRunRequest = operations['zalip___admin___importer___schedules___run']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterSchedulesRunResponse = operations['zalip___admin___importer___schedules___run']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterSchedulesSaveRequest = operations['zalip___admin___importer___schedules___save']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterSchedulesSaveResponse = operations['zalip___admin___importer___schedules___save']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterSearchRequest = operations['zalip___admin___importer___search']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterSearchResponse = operations['zalip___admin___importer___search']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterSourcesRequest = operations['zalip___admin___importer___sources']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterSourcesResponse = operations['zalip___admin___importer___sources']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterTaxonomyLinkRequest = operations['zalip___admin___importer___taxonomy___link']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterTaxonomyLinkResponse = operations['zalip___admin___importer___taxonomy___link']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterTaxonomyListRequest = operations['zalip___admin___importer___taxonomy___list']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterTaxonomyListResponse = operations['zalip___admin___importer___taxonomy___list']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterTaxonomySaveRequest = operations['zalip___admin___importer___taxonomy___save']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterTaxonomySaveResponse = operations['zalip___admin___importer___taxonomy___save']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterTaxonomyShowRequest = operations['zalip___admin___importer___taxonomy___show']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterTaxonomyShowResponse = operations['zalip___admin___importer___taxonomy___show']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
 type ZalipAdminSeasonsCreateRequest = operations['zalip___admin___seasons___create']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
@@ -3927,6 +4045,12 @@ type ZalipPlaybackAllohaShowRequest = operations['zalip___playback___alloha___sh
 type ZalipPlaybackAllohaShowResponse = operations['zalip___playback___alloha___show']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
+type ZalipPlaybackSourcesRequest = operations['zalip___playback___sources']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipPlaybackSourcesResponse = operations['zalip___playback___sources']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
 type ZalipReleasesListRequest = operations['zalip___releases___list']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
@@ -3949,6 +4073,18 @@ type ZalipSharesCreateRequest = operations['zalip___shares___create']['requestBo
 
 // @public (undocumented)
 type ZalipSharesCreateResponse = operations['zalip___shares___create']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipTaxonomyListRequest = operations['zalip___taxonomy___list']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipTaxonomyListResponse = operations['zalip___taxonomy___list']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipTaxonomyShowRequest = operations['zalip___taxonomy___show']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipTaxonomyShowResponse = operations['zalip___taxonomy___show']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
 type ZalipWorksListRequest = operations['zalip___works___list']['requestBody']['content']['application/json'];

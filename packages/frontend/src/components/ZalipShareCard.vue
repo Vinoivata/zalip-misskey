@@ -21,6 +21,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script lang="ts" setup>
 import { computed } from 'vue';
 import { i18n } from '@/i18n.js';
+import { importerImageUrl } from '@/utility/zalip-importer.js';
 type ZalipShare = {
 	slug: string;
 	kind: 'movie' | 'series' | 'anime' | 'animation';
@@ -39,8 +40,8 @@ const props = defineProps<{
 const kindLabel = computed(() => ({ movie: i18n.ts.zalip.searchMovies, series: i18n.ts.zalip.searchSeries, anime: i18n.ts.zalip.searchAnime, animation: i18n.ts.zalip.searchAnimation })[props.share.kind]);
 const kindIcon = computed(() => ({ movie: 'ti ti-movie', series: 'ti ti-device-tv', anime: 'ti ti-sparkles', animation: 'ti ti-mood-smile' })[props.share.kind]);
 
-function posterUrl(path: string): string {
-	return `https://image.tmdb.org/t/p/w342${path}`;
+function posterUrl(path: string): string | undefined {
+	return importerImageUrl(path, 'w342') ?? undefined;
 }
 </script>
 

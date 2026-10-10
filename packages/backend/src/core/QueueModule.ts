@@ -21,6 +21,7 @@ import {
 import type { Provider } from '@nestjs/common';
 
 export type SystemQueue = Bull.Queue<Record<string, unknown>>;
+export type ZalipImportQueue = Bull.Queue<{ runId: string }>;
 export type EndedPollNotificationQueue = Bull.Queue<EndedPollNotificationJobData>;
 export type PostScheduledNoteQueue = Bull.Queue<PostScheduledNoteJobData>;
 export type DeliverQueue = Bull.Queue<DeliverJobData>;
@@ -38,6 +39,12 @@ function createQueue<T extends object>(queueName: string, config: Config): Bull.
 const $system: Provider = {
 	provide: 'queue:system',
 	useFactory: (config: Config) => createQueue<Record<string, unknown>>(QUEUE.SYSTEM, config),
+	inject: [DI.config],
+};
+
+const $zalipImport: Provider = {
+	provide: 'queue:zalipImport',
+	useFactory: (config: Config) => createQueue<{ runId: string }>(QUEUE.ZALIP_IMPORT, config),
 	inject: [DI.config],
 };
 
@@ -100,6 +107,7 @@ const $systemWebhookDeliver: Provider = {
 	],
 	providers: [
 		$system,
+		$zalipImport,
 		$endedPollNotification,
 		$postScheduledNote,
 		$deliver,
@@ -112,6 +120,7 @@ const $systemWebhookDeliver: Provider = {
 	],
 	exports: [
 		$system,
+		$zalipImport,
 		$endedPollNotification,
 		$postScheduledNote,
 		$deliver,
@@ -126,6 +135,7 @@ const $systemWebhookDeliver: Provider = {
 export class QueueModule implements OnApplicationShutdown {
 	constructor(
 		@Inject('queue:system') public systemQueue: SystemQueue,
+		@Inject('queue:zalipImport') public zalipImportQueue: ZalipImportQueue,
 		@Inject('queue:endedPollNotification') public endedPollNotificationQueue: EndedPollNotificationQueue,
 		@Inject('queue:postScheduledNote') public postScheduledNoteQueue: PostScheduledNoteQueue,
 		@Inject('queue:deliver') public deliverQueue: DeliverQueue,
@@ -143,6 +153,7 @@ export class QueueModule implements OnApplicationShutdown {
 		// And then close all queues
 		await Promise.all([
 			this.systemQueue.close(),
+			this.zalipImportQueue.close(),
 			this.endedPollNotificationQueue.close(),
 			this.postScheduledNoteQueue.close(),
 			this.deliverQueue.close(),

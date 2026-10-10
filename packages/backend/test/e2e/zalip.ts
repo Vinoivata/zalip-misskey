@@ -11,6 +11,13 @@ import { MiZalipAllohaAvailabilityEvent } from '@/models/ZalipAllohaAvailability
 import { api, castAsError, initTestDb, signup } from '../utils.js';
 import type * as misskey from 'misskey-js';
 
+type ImporterTaxonomyEntry = { id: string; name: string; data: Record<string, unknown> };
+type ImporterTaxonomyShow = { entry: ImporterTaxonomyEntry; works: { id: string }[] };
+type ImporterTaxonomyLinks = { entries: { entry: ImporterTaxonomyEntry }[] };
+type ImporterProviderStatus = { source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps'; configured: boolean };
+type ImporterAdminEndpoint = Extract<keyof misskey.Endpoints, `zalip/admin/importer/${string}`>;
+type ImporterPermissionCase = { [E in ImporterAdminEndpoint]: [E, misskey.Endpoints[E]['req']] }[ImporterAdminEndpoint];
+
 describe('Zalip discussions', () => {
 	let admin: misskey.entities.SignupResponse;
 	let viewer: misskey.entities.SignupResponse;
@@ -131,5 +138,104 @@ describe('Zalip discussions', () => {
 
 		assert.strictEqual(response.status, 404);
 		assert.strictEqual(castAsError(response.body).error.code, 'NO_SUCH_ZALIP_EPISODE');
+	});
+
+	test('importer endpoints reject anonymous and non-administrator callers before provider access', async () => {
+		const ref = { source: 'tmdb', externalId: '123', mediaType: 'movie' } as const;
+		const cases: ImporterPermissionCase[] = [
+			['zalip/admin/importer/sources', {}],
+			['zalip/admin/importer/search', { source: 'tmdb', query: 'offline permission test' }],
+			['zalip/admin/importer/preview', { ref }],
+			['zalip/admin/importer/runs/create', { refs: [ref], mode: 'import' }],
+			['zalip/admin/importer/runs/list', {}],
+			['zalip/admin/importer/runs/show', { runId: 'run01' }],
+			['zalip/admin/importer/runs/action', { runId: 'run01', action: 'pause' }],
+			['zalip/admin/importer/schedules/list', {}],
+			['zalip/admin/importer/schedules/save', { name: 'Offline profile', enabled: false, source: 'tmdb', mode: 'metadata', intervalMinutes: 60 }],
+			['zalip/admin/importer/schedules/run', { profileId: 'profile01' }],
+			['zalip/admin/importer/taxonomy/list', {}],
+			['zalip/admin/importer/taxonomy/show', { entryId: 'entry01' }],
+			['zalip/admin/importer/taxonomy/save', { type: 'genre', name: 'Offline genre' }],
+			['zalip/admin/importer/taxonomy/link', { entryId: 'entry01', workId: 'work01' }],
+		];
+		for (const [endpoint, params] of cases) {
+			const anonymous = await api(endpoint, params);
+			assert.strictEqual(anonymous.status, 401, endpoint);
+			const denied = await api(endpoint, params, viewer);
+			assert.strictEqual(denied.status, 403, endpoint);
+			assert.strictEqual(castAsError(denied.body).error.code, 'ZALIP_ADMIN_REQUIRED');
+		}
+	});
+
+	test('taxonomy editorial entries and draft membership stay private until a work is published', async () => {
+		const created = await api('zalip/admin/importer/taxonomy/save', {
+			type: 'category', name: 'Importer private category', slug: 'importer-private-category',
+			description: 'Editorial description', data: { rules: { kinds: ['movie'] } },
+		}, admin);
+		assert.strictEqual(created.status, 200);
+		const entryId = (created.body as ImporterTaxonomyEntry).id;
+		const before = await api('zalip/taxonomy/show', { entryId });
+		assert.strictEqual(before.status, 404);
+		const privateEntry = await api('zalip/admin/importer/taxonomy/show', { entryId }, admin);
+		assert.strictEqual(privateEntry.status, 200);
+		assert.strictEqual((privateEntry.body as ImporterTaxonomyShow).entry.name, 'Importer private category');
+		const changed = await api('zalip/admin/importer/taxonomy/save', {
+			entryId, type: 'category', name: 'Edited private category', description: 'Updated editorial description',
+		}, admin);
+		assert.strictEqual(changed.status, 200);
+		assert.strictEqual((changed.body as ImporterTaxonomyEntry).id, entryId);
+
+		const work = await api('zalip/admin/works/create', { slug: 'importer-private-taxonomy-work', kind: 'movie', title: 'Private taxonomy movie' }, admin);
+		assert.strictEqual(work.status, 200);
+		const linkedWorkId = work.body.id;
+		const linked = await api('zalip/admin/importer/taxonomy/link', { entryId, workId: linkedWorkId }, admin);
+		assert.strictEqual(linked.status, 200);
+		const publicDraft = await api('zalip/taxonomy/show', { workId: linkedWorkId });
+		assert.strictEqual(publicDraft.status, 404);
+		const adminDraft = await api('zalip/admin/importer/taxonomy/show', { workId: linkedWorkId }, admin);
+		assert.strictEqual(adminDraft.status, 200);
+		assert.strictEqual((adminDraft.body as ImporterTaxonomyLinks).entries.some(link => link.entry.id === entryId), true);
+		const privateList = await api('zalip/taxonomy/list', { type: 'category', query: 'Edited private category' });
+		assert.strictEqual(privateList.status, 200);
+		assert.strictEqual((privateList.body as { entries: ImporterTaxonomyEntry[] }).entries.some(entry => entry.id === entryId), false);
+
+		await api('zalip/admin/works/update-state', { workId: linkedWorkId, publicationState: 'published' }, admin);
+		const published = await api('zalip/taxonomy/show', { entryId });
+		assert.strictEqual(published.status, 200);
+		const publishedBody = published.body as ImporterTaxonomyShow;
+		assert.strictEqual(publishedBody.works.some(item => item.id === linkedWorkId), true);
+		assert.strictEqual(publishedBody.entry.data.rules, undefined);
+		assert.strictEqual(publishedBody.entry.data._zalip, undefined);
+		const removed = await api('zalip/admin/importer/taxonomy/link', { entryId, workId: linkedWorkId, remove: true }, admin);
+		assert.strictEqual(removed.status, 200);
+		const after = await api('zalip/taxonomy/show', { entryId });
+		assert.strictEqual(after.status, 404);
+	});
+
+	test('playback sources require credentials and never expose unpublished titles', async () => {
+		const work = await api('zalip/admin/works/create', { slug: 'importer-private-playback', kind: 'movie', title: 'Private playback movie' }, admin);
+		assert.strictEqual(work.status, 200);
+		const anonymous = await api('zalip/playback/sources', { workId: work.body.id });
+		assert.strictEqual(anonymous.status, 401);
+		const unpublished = await api('zalip/playback/sources', { workId: work.body.id }, viewer);
+		assert.strictEqual(unpublished.status, 404);
+		assert.strictEqual(castAsError(unpublished.body).error.code, 'ZALIP_IMPORT_NOT_FOUND');
+		await api('zalip/admin/works/update-state', { workId: work.body.id, publicationState: 'published' }, admin);
+		const published = await api('zalip/playback/sources', { workId: work.body.id }, viewer);
+		assert.strictEqual(published.status, 200);
+		assert.deepStrictEqual(published.body.sources, []);
+	});
+
+	test('an unconfigured provider cannot create an import run or contact an upstream service', async () => {
+		const providers = await api('zalip/admin/importer/sources', {}, admin);
+		assert.strictEqual(providers.status, 200);
+		const unconfigured = (providers.body.sources as ImporterProviderStatus[]).find(source => !source.configured);
+		// CI has no provider credentials. Fail safely before queueing if a developer runs this with live keys.
+		assert.ok(unconfigured, 'This offline e2e case requires at least one unconfigured provider.');
+		const response = await api('zalip/admin/importer/runs/create', {
+			refs: [{ source: unconfigured.source, externalId: unconfigured.source === 'alloha' ? 'tmdb:movie:123' : '123', mediaType: 'movie' }], mode: 'import',
+		}, admin);
+		assert.strictEqual(response.status, 503);
+		assert.strictEqual(castAsError(response.body).error.code, 'ZALIP_IMPORT_NOT_CONFIGURED');
 	});
 });

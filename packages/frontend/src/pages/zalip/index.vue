@@ -75,6 +75,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, wa
 import { definePage } from '@/page.js';
 import { i18n } from '@/i18n.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
+import { importerImageUrl } from '@/utility/zalip-importer.js';
 import { useZalipHorizontalDrag } from '@/composables/use-zalip-horizontal-drag.js';
 import MkZalipFeed from '@/components/MkZalipFeed.vue';
 import MkZalipIcon from '@/components/MkZalipIcon.vue';
@@ -243,16 +244,16 @@ const showcaseItems = computed<ZalipShowcaseItem[]>(() => {
 const showcaseEyebrow = computed(() => isEpisodeShowcase.value ? i18n.ts.zalip.freshEpisodes : i18n.ts.zalip.newCatalogue);
 const showcaseTitle = computed(() => isEpisodeShowcase.value ? i18n.ts.zalip.freshEpisodesTitle : i18n.ts.zalip.newCatalogueTitle);
 
-function tmdbImage(path: string): string {
-	return `https://image.tmdb.org/t/p/w500${path}`;
+function tmdbImage(path: string): string | undefined {
+	return importerImageUrl(path) ?? undefined;
 }
 
-function tmdbBackdrop(path: string): string {
-	return `https://image.tmdb.org/t/p/w1280${path}`;
+function tmdbBackdrop(path: string): string | undefined {
+	return importerImageUrl(path, 'w1280') ?? undefined;
 }
 
-function tmdbLogo(path: string): string {
-	return `https://image.tmdb.org/t/p/w500${path}`;
+function tmdbLogo(path: string): string | undefined {
+	return importerImageUrl(path) ?? undefined;
 }
 
 function kindLabel(kind: WorkKind): string {

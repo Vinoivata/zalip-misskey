@@ -88,6 +88,7 @@ import type { ZalipSearchTab } from '@/utility/zalip-search.js';
 import MkModalWindow from '@/components/MkModalWindow.vue';
 import { i18n } from '@/i18n.js';
 import { misskeyApi, misskeyApiZalip } from '@/utility/misskey-api.js';
+import { importerImageUrl } from '@/utility/zalip-importer.js';
 
 type WorkKind = 'movie' | 'series' | 'anime' | 'animation';
 
@@ -157,8 +158,8 @@ function dismissDialog(): void {
 	dialog.value?.close();
 }
 
-function posterUrl(path: string): string {
-	return `https://image.tmdb.org/t/p/w185${path}`;
+function posterUrl(path: string): string | undefined {
+	return importerImageUrl(path, 'w185') ?? undefined;
 }
 
 function kindLabel(kind: WorkKind): string {

@@ -61,6 +61,17 @@ export const ROUTE_DEF = [{
 	component: page(() => import('@/pages/zalip/editor.vue')),
 	loginRequired: true,
 }, {
+	path: '/zalip/importer',
+	component: page(() => import('@/pages/zalip/importer.vue')),
+	loginRequired: true,
+}, {
+	path: '/zalip/taxonomy',
+	query: { type: 'type', q: 'query' },
+	component: page(() => import('@/pages/zalip/taxonomy.vue')),
+}, {
+	path: '/zalip/taxonomy/:type/:slug',
+	component: page(() => import('@/pages/zalip/taxonomy.vue')),
+}, {
 	path: '/zalip/credits',
 	component: page(() => import('@/pages/zalip/credits.vue')),
 }, {

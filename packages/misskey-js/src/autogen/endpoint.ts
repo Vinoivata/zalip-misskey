@@ -672,6 +672,34 @@ import type {
 	ZalipAdminEpisodesCreateResponse,
 	ZalipAdminEpisodesDiscussionsCreateRequest,
 	ZalipAdminEpisodesDiscussionsCreateResponse,
+	ZalipAdminImporterPreviewRequest,
+	ZalipAdminImporterPreviewResponse,
+	ZalipAdminImporterRunsActionRequest,
+	ZalipAdminImporterRunsActionResponse,
+	ZalipAdminImporterRunsCreateRequest,
+	ZalipAdminImporterRunsCreateResponse,
+	ZalipAdminImporterRunsListRequest,
+	ZalipAdminImporterRunsListResponse,
+	ZalipAdminImporterRunsShowRequest,
+	ZalipAdminImporterRunsShowResponse,
+	ZalipAdminImporterSchedulesListRequest,
+	ZalipAdminImporterSchedulesListResponse,
+	ZalipAdminImporterSchedulesRunRequest,
+	ZalipAdminImporterSchedulesRunResponse,
+	ZalipAdminImporterSchedulesSaveRequest,
+	ZalipAdminImporterSchedulesSaveResponse,
+	ZalipAdminImporterSearchRequest,
+	ZalipAdminImporterSearchResponse,
+	ZalipAdminImporterSourcesRequest,
+	ZalipAdminImporterSourcesResponse,
+	ZalipAdminImporterTaxonomyLinkRequest,
+	ZalipAdminImporterTaxonomyLinkResponse,
+	ZalipAdminImporterTaxonomyListRequest,
+	ZalipAdminImporterTaxonomyListResponse,
+	ZalipAdminImporterTaxonomySaveRequest,
+	ZalipAdminImporterTaxonomySaveResponse,
+	ZalipAdminImporterTaxonomyShowRequest,
+	ZalipAdminImporterTaxonomyShowResponse,
 	ZalipAdminSeasonsCreateRequest,
 	ZalipAdminSeasonsCreateResponse,
 	ZalipAdminSeasonsImportTmdbRequest,
@@ -701,6 +729,8 @@ import type {
 	ZalipLibraryUpdateResponse,
 	ZalipPlaybackAllohaShowRequest,
 	ZalipPlaybackAllohaShowResponse,
+	ZalipPlaybackSourcesRequest,
+	ZalipPlaybackSourcesResponse,
 	ZalipReleasesListRequest,
 	ZalipReleasesListResponse,
 	ZalipReleasesSubscribedRequest,
@@ -709,6 +739,10 @@ import type {
 	ZalipSeasonsEpisodesResponse,
 	ZalipSharesCreateRequest,
 	ZalipSharesCreateResponse,
+	ZalipTaxonomyListRequest,
+	ZalipTaxonomyListResponse,
+	ZalipTaxonomyShowRequest,
+	ZalipTaxonomyShowResponse,
 	ZalipWorksListRequest,
 	ZalipWorksListResponse,
 	ZalipWorksSearchRequest,
@@ -1160,6 +1194,20 @@ export type Endpoints = {
 	'zalip/admin/discussions/create': { req: ZalipAdminDiscussionsCreateRequest; res: ZalipAdminDiscussionsCreateResponse };
 	'zalip/admin/episodes/create': { req: ZalipAdminEpisodesCreateRequest; res: ZalipAdminEpisodesCreateResponse };
 	'zalip/admin/episodes/discussions/create': { req: ZalipAdminEpisodesDiscussionsCreateRequest; res: ZalipAdminEpisodesDiscussionsCreateResponse };
+	'zalip/admin/importer/preview': { req: ZalipAdminImporterPreviewRequest; res: ZalipAdminImporterPreviewResponse };
+	'zalip/admin/importer/runs/action': { req: ZalipAdminImporterRunsActionRequest; res: ZalipAdminImporterRunsActionResponse };
+	'zalip/admin/importer/runs/create': { req: ZalipAdminImporterRunsCreateRequest; res: ZalipAdminImporterRunsCreateResponse };
+	'zalip/admin/importer/runs/list': { req: ZalipAdminImporterRunsListRequest; res: ZalipAdminImporterRunsListResponse };
+	'zalip/admin/importer/runs/show': { req: ZalipAdminImporterRunsShowRequest; res: ZalipAdminImporterRunsShowResponse };
+	'zalip/admin/importer/schedules/list': { req: ZalipAdminImporterSchedulesListRequest; res: ZalipAdminImporterSchedulesListResponse };
+	'zalip/admin/importer/schedules/run': { req: ZalipAdminImporterSchedulesRunRequest; res: ZalipAdminImporterSchedulesRunResponse };
+	'zalip/admin/importer/schedules/save': { req: ZalipAdminImporterSchedulesSaveRequest; res: ZalipAdminImporterSchedulesSaveResponse };
+	'zalip/admin/importer/search': { req: ZalipAdminImporterSearchRequest; res: ZalipAdminImporterSearchResponse };
+	'zalip/admin/importer/sources': { req: ZalipAdminImporterSourcesRequest; res: ZalipAdminImporterSourcesResponse };
+	'zalip/admin/importer/taxonomy/link': { req: ZalipAdminImporterTaxonomyLinkRequest; res: ZalipAdminImporterTaxonomyLinkResponse };
+	'zalip/admin/importer/taxonomy/list': { req: ZalipAdminImporterTaxonomyListRequest; res: ZalipAdminImporterTaxonomyListResponse };
+	'zalip/admin/importer/taxonomy/save': { req: ZalipAdminImporterTaxonomySaveRequest; res: ZalipAdminImporterTaxonomySaveResponse };
+	'zalip/admin/importer/taxonomy/show': { req: ZalipAdminImporterTaxonomyShowRequest; res: ZalipAdminImporterTaxonomyShowResponse };
 	'zalip/admin/seasons/create': { req: ZalipAdminSeasonsCreateRequest; res: ZalipAdminSeasonsCreateResponse };
 	'zalip/admin/seasons/import-tmdb': { req: ZalipAdminSeasonsImportTmdbRequest; res: ZalipAdminSeasonsImportTmdbResponse };
 	'zalip/admin/works/create': { req: ZalipAdminWorksCreateRequest; res: ZalipAdminWorksCreateResponse };
@@ -1176,10 +1224,13 @@ export type Endpoints = {
 	'zalip/library/list': { req: EmptyRequest; res: ZalipLibraryListResponse };
 	'zalip/library/update': { req: ZalipLibraryUpdateRequest; res: ZalipLibraryUpdateResponse };
 	'zalip/playback/alloha/show': { req: ZalipPlaybackAllohaShowRequest; res: ZalipPlaybackAllohaShowResponse };
+	'zalip/playback/sources': { req: ZalipPlaybackSourcesRequest; res: ZalipPlaybackSourcesResponse };
 	'zalip/releases/list': { req: ZalipReleasesListRequest; res: ZalipReleasesListResponse };
 	'zalip/releases/subscribed': { req: ZalipReleasesSubscribedRequest; res: ZalipReleasesSubscribedResponse };
 	'zalip/seasons/episodes': { req: ZalipSeasonsEpisodesRequest; res: ZalipSeasonsEpisodesResponse };
 	'zalip/shares/create': { req: ZalipSharesCreateRequest; res: ZalipSharesCreateResponse };
+	'zalip/taxonomy/list': { req: ZalipTaxonomyListRequest; res: ZalipTaxonomyListResponse };
+	'zalip/taxonomy/show': { req: ZalipTaxonomyShowRequest; res: ZalipTaxonomyShowResponse };
 	'zalip/works/list': { req: ZalipWorksListRequest; res: ZalipWorksListResponse };
 	'zalip/works/search': { req: ZalipWorksSearchRequest; res: ZalipWorksSearchResponse };
 	'zalip/works/show': { req: ZalipWorksShowRequest; res: ZalipWorksShowResponse };

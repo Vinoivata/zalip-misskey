@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
+import { Check, Column, Entity, Index, PrimaryColumn } from 'typeorm';
 import { id } from './util/id.js';
 
 export const zalipWorkKinds = ['movie', 'series', 'anime', 'animation'] as const;
@@ -20,11 +20,18 @@ export type ZalipTmdbMediaType = typeof zalipTmdbMediaTypes[number];
  * remains stable when its metadata source or later availability provider changes.
  */
 @Entity('zalip_work')
-@Index(['slug'], { unique: true })
-@Index(['publicationState', 'publishedAt'])
-@Index(['tmdbMediaType', 'tmdbId'], { unique: true })
+@Index('IDX_zalip_work_slug', ['slug'], { unique: true })
+@Index('IDX_zalip_work_publication_published', ['publicationState', 'publishedAt'])
+@Index('IDX_zalip_work_tmdb', ['tmdbMediaType', 'tmdbId'], { unique: true })
+// PostgreSQL GIN is maintained by the immutable ZalipWorkGenreIndex migration.
+@Index('IDX_zalip_work_genres_gin', { synchronize: false })
+@Check('CHK_zalip_work_kind', '"kind" IN (\'movie\', \'series\', \'anime\', \'animation\')')
+@Check('CHK_zalip_work_publication_state', '"publicationState" IN (\'draft\', \'published\', \'archived\')')
+@Check('CHK_zalip_work_release_year', '"releaseYear" IS NULL OR "releaseYear" >= 1888')
+@Check('CHK_zalip_work_tmdb_type', '"tmdbMediaType" IS NULL OR "tmdbMediaType" IN (\'movie\', \'tv\')')
+@Check('CHK_zalip_work_tmdb_id', '"tmdbId" IS NULL OR "tmdbId" > 0')
 export class MiZalipWork {
-	@PrimaryColumn(id())
+	@PrimaryColumn({ ...id(), primaryKeyConstraintName: 'PK_zalip_work_id' })
 	public id: string;
 
 	@Column('timestamp with time zone')
@@ -58,7 +65,7 @@ export class MiZalipWork {
 	public releaseYear: number | null;
 
 	/** Provider-supplied genre labels, normalized on import for catalogue display and filtering. */
-	@Column('jsonb', { default: () => "'[]'::jsonb" })
+	@Column('jsonb', { default: [] })
 	public genres: string[];
 
 	/** Runtime in minutes for a film, or the representative episode runtime for a series. */
@@ -82,9 +89,13 @@ export class MiZalipWork {
 	public logoPath: string | null;
 
 	/** Curated still/backdrop paths fetched from TMDB; actual image bytes remain with TMDB. */
-	@Column('jsonb', { default: () => "'[]'::jsonb" })
+	@Column('jsonb', { default: [] })
 	public galleryPaths: string[];
 
 	@Column('varchar', { length: 32, nullable: true })
 	public trailerYoutubeKey: string | null;
+
+	/** Private importer ownership state; never expose raw snapshots or provider credentials. */
+	@Column('jsonb', { default: {} })
+	public importData: Record<string, unknown>;
 }

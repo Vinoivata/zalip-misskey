@@ -16,7 +16,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<template v-else>
 					<header :class="$style.header">
 						<div><p :class="$style.eyebrow"><i class="ti ti-pencil"></i> {{ i18n.ts.controlPanel }}</p><h1>{{ i18n.ts.zalip.editorTitle }}</h1><p>{{ i18n.ts.zalip.editorHint }}</p></div>
-						<MkA to="/" :class="$style.back"><i class="ti ti-arrow-left"></i> К кино</MkA>
+						<div :class="$style.sectionActions"><MkA to="/zalip/importer" :class="$style.back"><i class="ti ti-database-import" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.manageImport }}</MkA><MkA to="/" :class="$style.back"><i class="ti ti-arrow-left"></i> К кино</MkA></div>
 					</header>
 
 					<section :class="$style.create">

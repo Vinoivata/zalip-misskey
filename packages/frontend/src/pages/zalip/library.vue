@@ -75,6 +75,7 @@ import { prefer } from '@/preferences.js';
 import { miLocalStorage } from '@/local-storage.js';
 import { definePage } from '@/page.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
+import { importerImageUrl } from '@/utility/zalip-importer.js';
 import { i18n } from '@/i18n.js';
 
 type WorkKind = 'movie' | 'series' | 'anime' | 'animation';
@@ -151,8 +152,8 @@ const statusCounts = computed(() => ({
 	dropped: entries.value.filter(entry => entry.status === 'dropped').length,
 }));
 
-function tmdbImage(path: string): string {
-	return `https://image.tmdb.org/t/p/w500${path}`;
+function tmdbImage(path: string): string | undefined {
+	return importerImageUrl(path) ?? undefined;
 }
 
 function kindLabel(kind: WorkKind): string {

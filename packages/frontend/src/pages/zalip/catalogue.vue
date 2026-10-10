@@ -122,6 +122,7 @@ import { definePage } from '@/page.js';
 import { i18n } from '@/i18n.js';
 import { useRouter } from '@/router.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
+import { importerImageUrl } from '@/utility/zalip-importer.js';
 import { miLocalStorage } from '@/local-storage.js';
 import { $i } from '@/i.js';
 
@@ -249,8 +250,8 @@ function pluralTitles(count: number): string {
 	return i18n.ts.zalip.catalogueTitleMany;
 }
 
-function tmdbImage(path: string): string {
-	return `https://image.tmdb.org/t/p/w500${path}`;
+function tmdbImage(path: string): string | undefined {
+	return importerImageUrl(path) ?? undefined;
 }
 
 function kindLabel(kind: WorkKind): string {

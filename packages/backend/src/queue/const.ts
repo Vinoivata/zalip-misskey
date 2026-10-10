@@ -11,6 +11,7 @@ export const QUEUE = {
 	DELIVER: 'deliver',
 	INBOX: 'inbox',
 	SYSTEM: 'system',
+	ZALIP_IMPORT: 'zalipImport',
 	ENDED_POLL_NOTIFICATION: 'endedPollNotification',
 	POST_SCHEDULED_NOTE: 'postScheduledNote',
 	DB: 'db',

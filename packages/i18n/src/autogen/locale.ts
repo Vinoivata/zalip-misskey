@@ -1269,6 +1269,888 @@ export interface Locale extends ILocale {
      */
     "start": string;
     "zalip": {
+        "_importer": {
+            /**
+             * Настройки недоступны
+             */
+            "configurationUnknown": string;
+            /**
+             * Защита выбранных полей применяется ко всему запуску импорта.
+             */
+            "protectionScope": string;
+            /**
+             * Импортер доступен только администраторам
+             */
+            "adminOnly": string;
+            /**
+             * Права проверяются сервером для каждого действия.
+             */
+            "permissionsHint": string;
+            /**
+             * Управление контентом
+             */
+            "title": string;
+            /**
+             * Управление контентом Zalip
+             */
+            "pageTitle": string;
+            /**
+             * Новые тайтлы сохраняются в черновики. Публикация — отдельно в редакторе.
+             */
+            "draftsHint": string;
+            /**
+             * Редактор тайтлов
+             */
+            "editor": string;
+            /**
+             * Источники данных
+             */
+            "sources": string;
+            /**
+             * Проверяем настройки…
+             */
+            "checkingSettings": string;
+            /**
+             * Настроен
+             */
+            "configured": string;
+            /**
+             * Не настроен
+             */
+            "notConfigured": string;
+            /**
+             * Повторить
+             */
+            "retry": string;
+            /**
+             * Ключи хранятся только на сервере. «Настроен» означает наличие конфигурации, а не проверку доступности API.
+             */
+            "configurationHint": string;
+            /**
+             * Разделы импортера
+             */
+            "sections": string;
+            /**
+             * Поиск в источнике
+             */
+            "searchHeading": string;
+            /**
+             * Выберите результат для предпросмотра или отметьте несколько для пакетного импорта.
+             */
+            "searchHint": string;
+            /**
+             * Источник
+             */
+            "source": string;
+            /**
+             * Тип
+             */
+            "type": string;
+            /**
+             * Фильм
+             */
+            "movie": string;
+            /**
+             * Сериал
+             */
+            "series": string;
+            /**
+             * Аниме
+             */
+            "anime": string;
+            /**
+             * Анимация
+             */
+            "animation": string;
+            /**
+             * Название или поисковый запрос
+             */
+            "query": string;
+            /**
+             * Например, Интерстеллар
+             */
+            "queryPlaceholder": string;
+            /**
+             * Ищем…
+             */
+            "searching": string;
+            /**
+             * Найти
+             */
+            "find": string;
+            /**
+             * Настройте хотя бы один источник с поиском. Alloha можно подключить по ID или через сопоставление с другими источниками.
+             */
+            "noSearchSource": string;
+            /**
+             * Год не указан
+             */
+            "unknownYear": string;
+            /**
+             * Предпросмотр
+             */
+            "preview": string;
+            /**
+             * Ничего не найдено. Попробуйте другое название или добавьте по ID.
+             */
+            "searchEmpty": string;
+            /**
+             * Назад
+             */
+            "previous": string;
+            /**
+             * Далее
+             */
+            "next": string;
+            /**
+             * Импортировать выбранные
+             */
+            "importSelected": string;
+            /**
+             * Очистить выбор
+             */
+            "clearSelection": string;
+            /**
+             * Добавление по ID
+             */
+            "byId": string;
+            /**
+             * Один ID на строку, до 100 за запуск. Для TMDB и Кинопоиска также поддерживаются ссылки на карточки.
+             */
+            "byIdHint": string;
+            /**
+             * Тип для числовых ID
+             */
+            "idMediaType": string;
+            /**
+             * ID или ссылки
+             */
+            "references": string;
+            /**
+             * Категории для импортируемых тайтлов
+             */
+            "importCategories": string;
+            /**
+             * Предпросмотр первого
+             */
+            "previewFirst": string;
+            /**
+             * Добавить в очередь
+             */
+            "enqueue": string;
+            /**
+             * Предпросмотр импорта
+             */
+            "previewHeading": string;
+            /**
+             * Закрыть предпросмотр
+             */
+            "closePreview": string;
+            /**
+             * Получаем и сопоставляем данные источников…
+             */
+            "previewLoading": string;
+            /**
+             * Обновление существующего тайтла
+             */
+            "existingWork": string;
+            /**
+             * Новый черновик
+             */
+            "newDraft": string;
+            /**
+             * Создатели, студии и подборки
+             */
+            "peopleAndCollections": string;
+            /**
+             * Изменения полей
+             */
+            "changes": string;
+            /**
+             * Отметьте поля, которые нужно защитить от автоматических обновлений. Уже защищённые поля не перезаписываются.
+             */
+            "locksHint": string;
+            /**
+             * Защищено
+             */
+            "protected": string;
+            /**
+             * Сейчас
+             */
+            "before": string;
+            /**
+             * Из источников
+             */
+            "after": string;
+            /**
+             * Изменений метаданных нет. Импорт может обновить связи с источниками.
+             */
+            "noChanges": string;
+            /**
+             * Обновить через очередь
+             */
+            "enqueueUpdate": string;
+            /**
+             * Создать черновик через очередь
+             */
+            "enqueueDraft": string;
+            /**
+             * Автоматической публикации нет.
+             */
+            "noPublishing": string;
+            /**
+             * Задания импорта
+             */
+            "runsHeading": string;
+            /**
+             * Обработка продолжается на сервере после закрытия страницы.
+             */
+            "runsHint": string;
+            /**
+             * Обновить
+             */
+            "refresh": string;
+            /**
+             * Загружаем задания…
+             */
+            "runsLoading": string;
+            /**
+             * Заданий пока нет.
+             */
+            "noRuns": string;
+            /**
+             * Импорт
+             */
+            "import": string;
+            /**
+             * Обновление
+             */
+            "update": string;
+            /**
+             * Пауза
+             */
+            "pause": string;
+            /**
+             * Продолжить
+             */
+            "resume": string;
+            /**
+             * Повторить ошибки
+             */
+            "retryFailed": string;
+            /**
+             * Отменить
+             */
+            "cancel": string;
+            /**
+             * Справочники и подборки
+             */
+            "taxonomyHeading": string;
+            /**
+             * Единые сущности для всего каталога, без повторов в карточках.
+             */
+            "taxonomyHint": string;
+            /**
+             * Публичные страницы
+             */
+            "publicPages": string;
+            /**
+             * Справочник
+             */
+            "directory": string;
+            /**
+             * Название
+             */
+            "name": string;
+            /**
+             * Поиск по справочнику
+             */
+            "taxonomySearchPlaceholder": string;
+            /**
+             * Создать
+             */
+            "create": string;
+            /**
+             * Загружаем справочник…
+             */
+            "taxonomyLoading": string;
+            /**
+             * В этом справочнике пока ничего нет.
+             */
+            "taxonomyEmpty": string;
+            /**
+             * Показано до 100 записей. Уточните поиск, чтобы найти нужную.
+             */
+            "taxonomyLimit": string;
+            /**
+             * Редактирование записи
+             */
+            "editEntry": string;
+            /**
+             * Новая запись
+             */
+            "newEntry": string;
+            /**
+             * URL-идентификатор
+             */
+            "slug": string;
+            /**
+             * Автоматически, если оставить пустым
+             */
+            "slugPlaceholder": string;
+            /**
+             * Изображение (URL)
+             */
+            "imageUrl": string;
+            /**
+             * Родительская категория
+             */
+            "parentCategory": string;
+            /**
+             * Без родителя
+             */
+            "noParent": string;
+            /**
+             * Описание
+             */
+            "description": string;
+            /**
+             * Сохранить
+             */
+            "save": string;
+            /**
+             * Публичная страница
+             */
+            "publicPage": string;
+            /**
+             * Автоматическое назначение категории
+             */
+            "categoryRules": string;
+            /**
+             * Назначать по правилам при импорте и обновлении
+             */
+            "enableCategoryRules": string;
+            /**
+             * Тип произведения
+             */
+            "workType": string;
+            /**
+             * Жанры через запятую
+             */
+            "ruleGenres": string;
+            /**
+             * Драма, комедия
+             */
+            "ruleGenresPlaceholder": string;
+            /**
+             * Страны через запятую
+             */
+            "ruleCountries": string;
+            /**
+             * Япония, Южная Корея
+             */
+            "ruleCountriesPlaceholder": string;
+            /**
+             * Год от
+             */
+            "yearFrom": string;
+            /**
+             * Год до
+             */
+            "yearTo": string;
+            /**
+             * Разрешить все тайтлы, если условия не заданы
+             */
+            "ruleAll": string;
+            /**
+             * Разные условия должны совпасть одновременно. Внутри списка жанров или стран достаточно одного совпадения. Ручные связи сохраняются.
+             */
+            "rulesHint": string;
+            /**
+             * Сохранить категорию и правила
+             */
+            "saveRules": string;
+            /**
+             * Связанные тайтлы
+             */
+            "linkedWorks": string;
+            /**
+             * ID тайтла Zalip
+             */
+            "workId": string;
+            /**
+             * ID из редактора
+             */
+            "workIdPlaceholder": string;
+            /**
+             * Роль (для создателя)
+             */
+            "role": string;
+            /**
+             * Например, Director
+             */
+            "rolePlaceholder": string;
+            /**
+             * Персонаж
+             */
+            "character": string;
+            /**
+             * Порядок
+             */
+            "position": string;
+            /**
+             * Связать с тайтлом
+             */
+            "linkWork": string;
+            /**
+             * Убрать
+             */
+            "unlink": string;
+            /**
+             * Расписания фоновых задач
+             */
+            "schedulesHeading": string;
+            /**
+             * Обновление выполняется порциями. Публикация новых тайтлов не запускается автоматически.
+             */
+            "schedulesHint": string;
+            /**
+             * Новое расписание
+             */
+            "newSchedule": string;
+            /**
+             * Включено
+             */
+            "enabled": string;
+            /**
+             * Выключено
+             */
+            "disabled": string;
+            /**
+             * Править
+             */
+            "edit": string;
+            /**
+             * Запустить
+             */
+            "run": string;
+            /**
+             * Расписаний пока нет.
+             */
+            "noSchedules": string;
+            /**
+             * Настройки расписания
+             */
+            "editSchedule": string;
+            /**
+             * Задача
+             */
+            "task": string;
+            /**
+             * Метаданные существующих тайтлов
+             */
+            "metadataMode": string;
+            /**
+             * Доступность просмотра
+             */
+            "availabilityMode": string;
+            /**
+             * Подборка источника
+             */
+            "collectionMode": string;
+            /**
+             * Интервал, минут
+             */
+            "interval": string;
+            /**
+             * ID подборки во внешнем источнике
+             */
+            "collectionId": string;
+            /**
+             * Категории
+             */
+            "categories": string;
+            /**
+             * Защищённые поля
+             */
+            "lockedFields": string;
+            /**
+             * Включить автоматические запуски
+             */
+            "enableSchedule": string;
+            /**
+             * Сохранить расписание
+             */
+            "saveSchedule": string;
+            /**
+             * Задания
+             */
+            "runs": string;
+            /**
+             * Справочники
+             */
+            "directories": string;
+            /**
+             * Расписания
+             */
+            "schedules": string;
+            /**
+             * Выбранный источник не настроен на сервере.
+             */
+            "sourceNotConfigured": string;
+            /**
+             * Этот источник не поддерживает импорт подборок.
+             */
+            "collectionsUnsupported": string;
+            /**
+             * Проверка доступности просмотра предназначена для Alloha и Collaps.
+             */
+            "availabilityUnsupported": string;
+            /**
+             * Источник не настроен на сервере. Добавьте ключ в серверную конфигурацию.
+             */
+            "errorConfiguration": string;
+            /**
+             * Материал не найден. Проверьте ID, источник и тип произведения.
+             */
+            "errorNotFound": string;
+            /**
+             * Найдены противоречащие связи источников. Проверьте существующий тайтл перед повторным импортом.
+             */
+            "errorConflict": string;
+            /**
+             * Лимит источника исчерпан. Повторите позже; задания сохраняются на сервере.
+             */
+            "errorQuota": string;
+            /**
+             * Для этого действия нужны права администратора.
+             */
+            "errorPermissions": string;
+            /**
+             * Не удалось выполнить действие. Проверьте данные и подключение к серверу, затем повторите.
+             */
+            "errorGeneric": string;
+            /**
+             * Метаданные
+             */
+            "metadata": string;
+            /**
+             * Укажите от 1 до 100 ID, по одному на строку.
+             */
+            "errorBatchSize": string;
+            /**
+             * Проверьте ID и ссылки. Поддерживаются ID выбранного источника и ссылки на карточки TMDB/Кинопоиска.
+             */
+            "errorReferences": string;
+            /**
+             * Задание создано. Новые тайтлы появятся в редакторе как черновики.
+             */
+            "runCreated": string;
+            /**
+             * Отменить задание?
+             */
+            "cancelRunTitle": string;
+            /**
+             * Уже сохранённые материалы останутся в каталоге. Оставшиеся не будут обработаны.
+             */
+            "cancelRunText": string;
+            /**
+             * Проверьте диапазон годов: от 1888 до 3000, начало не позже конца.
+             */
+            "invalidYears": string;
+            /**
+             * Запись справочника сохранена.
+             */
+            "entrySaved": string;
+            /**
+             * Связь с тайтлом сохранена.
+             */
+            "linkSaved": string;
+            /**
+             * Убрать связь?
+             */
+            "unlinkTitle": string;
+            /**
+             * Расписание сохранено.
+             */
+            "scheduleSaved": string;
+            /**
+             * Задание расписания добавлено в очередь.
+             */
+            "scheduleEnqueued": string;
+            /**
+             * Оригинальное название
+             */
+            "originalTitle": string;
+            /**
+             * Год
+             */
+            "year": string;
+            /**
+             * Длительность
+             */
+            "runtime": string;
+            /**
+             * Жанры
+             */
+            "genres": string;
+            /**
+             * Страны
+             */
+            "countries": string;
+            /**
+             * Постер
+             */
+            "poster": string;
+            /**
+             * Обложка
+             */
+            "backdrop": string;
+            /**
+             * Логотип
+             */
+            "logo": string;
+            /**
+             * Кадры
+             */
+            "gallery": string;
+            /**
+             * Трейлер
+             */
+            "trailer": string;
+            /**
+             * Внешние рейтинги
+             */
+            "ratings": string;
+            /**
+             * Возраст
+             */
+            "ageRating": string;
+            /**
+             * Создатели
+             */
+            "people": string;
+            /**
+             * Студии
+             */
+            "studios": string;
+            /**
+             * Подборки
+             */
+            "collections": string;
+            /**
+             * Сезоны и серии
+             */
+            "seasonsAndEpisodes": string;
+            /**
+             * Плееры
+             */
+            "players": string;
+            /**
+             * В очереди
+             */
+            "queued": string;
+            /**
+             * Ожидает
+             */
+            "pending": string;
+            /**
+             * Выполняется
+             */
+            "running": string;
+            /**
+             * Приостановлено
+             */
+            "paused": string;
+            /**
+             * Завершено
+             */
+            "completed": string;
+            /**
+             * Ошибка
+             */
+            "failed": string;
+            /**
+             * Отменено
+             */
+            "cancelled": string;
+            /**
+             * Пропущено
+             */
+            "skipped": string;
+            /**
+             * Готово
+             */
+            "succeeded": string;
+            /**
+             * Кинопоиск
+             */
+            "sourceKinopoisk": string;
+            /**
+             * КАТАЛОГ ZALIP
+             */
+            "catalogueEyebrow": string;
+            /**
+             * Создатели, студии и тематические подборки нашего каталога.
+             */
+            "directoryDescription": string;
+            /**
+             * К справочнику
+             */
+            "backDirectory": string;
+            /**
+             * К тайтлам
+             */
+            "backWorks": string;
+            /**
+             * Справочники каталога
+             */
+            "catalogueDirectories": string;
+            /**
+             * Поиск по справочнику
+             */
+            "directorySearch": string;
+            /**
+             * Имя или название
+             */
+            "directorySearchPlaceholder": string;
+            /**
+             * Загружаем…
+             */
+            "loading": string;
+            /**
+             * Фильмография
+             */
+            "filmography": string;
+            /**
+             * Произведения студии
+             */
+            "studioWorks": string;
+            /**
+             * Тайтлы
+             */
+            "works": string;
+            /**
+             * Опубликованных тайтлов пока нет.
+             */
+            "noPublishedWorks": string;
+            /**
+             * Ничего не найдено. Попробуйте изменить запрос.
+             */
+            "directoryNoResults": string;
+            /**
+             * Показать ещё
+             */
+            "showMore": string;
+            /**
+             * Запись не найдена.
+             */
+            "entryNotFound": string;
+            /**
+             * Не удалось открыть запись. Она могла быть удалена или временно недоступна.
+             */
+            "entryLoadFailed": string;
+            /**
+             * Не удалось загрузить справочник. Попробуйте ещё раз.
+             */
+            "directoryLoadFailed": string;
+            /**
+             * Управление импортом
+             */
+            "manageImport": string;
+            /**
+             * Лимит: {count} запросов / сутки
+             */
+            "dailyLimit": ParameterizedString<"count">;
+            /**
+             * Выбрать {name}
+             */
+            "selectWork": ParameterizedString<"name">;
+            /**
+             * Страница {page}
+             */
+            "searchPage": ParameterizedString<"page">;
+            /**
+             * Выбрано: {count} / 100
+             */
+            "selectedCount": ParameterizedString<"count">;
+            /**
+             * Создатели: {count}
+             */
+            "peopleCount": ParameterizedString<"count">;
+            /**
+             * Студии: {count}
+             */
+            "studiosCount": ParameterizedString<"count">;
+            /**
+             * Подборки: {count}
+             */
+            "collectionsCount": ParameterizedString<"count">;
+            /**
+             * Сезоны: {count}
+             */
+            "seasonsCount": ParameterizedString<"count">;
+            /**
+             * Плееры: {count}
+             */
+            "playersCount": ParameterizedString<"count">;
+            /**
+             * Ошибок: {count}
+             */
+            "failedCount": ParameterizedString<"count">;
+            /**
+             * Прогресс {id}
+             */
+            "runProgress": ParameterizedString<"id">;
+            /**
+             * Тайтл: {id}
+             */
+            "itemWorkId": ParameterizedString<"id">;
+            /**
+             * Убрать связь с {name}
+             */
+            "unlinkWork": ParameterizedString<"name">;
+            /**
+             * каждые {count} мин.
+             */
+            "intervalSummary": ParameterizedString<"count">;
+            /**
+             * Последний запуск: {last} · Следующий: {next}
+             */
+            "scheduleDates": ParameterizedString<"last" | "next">;
+            /**
+             * «{name}» будет убран из этой записи справочника. Сам тайтл не удаляется.
+             */
+            "unlinkText": ParameterizedString<"name">;
+            /**
+             * {type} в каталоге Zalip
+             */
+            "catalogueEntity": ParameterizedString<"type">;
+            /**
+             * Страны
+             */
+            "workCountries": string;
+            /**
+             * Возраст
+             */
+            "workAgeRating": string;
+            /**
+             * Источники просмотра
+             */
+            "workSources": string;
+            /**
+             * Создатели и подборки
+             */
+            "workCredits": string;
+            /**
+             * Озвучка
+             */
+            "workVoiceovers": string;
+            /**
+             * Озвучка и качество выбираются внутри плеера.
+             */
+            "nativeVoicesHint": string;
+        };
         /**
          * Добавить контент
          */

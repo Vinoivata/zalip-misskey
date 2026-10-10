@@ -31,6 +31,7 @@ import { MiZalipReleaseEvent } from '@/models/ZalipReleaseEvent.js';
 import { MiZalipSharedNote } from '@/models/ZalipSharedNote.js';
 import { NotificationService } from '@/core/NotificationService.js';
 import { MemorySingleCache } from '@/misc/cache.js';
+import { readImportState } from './zalip-importer/policy.js';
 
 // A wide multi-select makes it possible to build genuinely narrow cinema shelves
 // without turning the filter into an arbitrary UI-only limit.
@@ -105,6 +106,9 @@ export type PackedZalipSeason = {
 export type PackedZalipWorkDetail = PackedZalipWork & {
 	galleryPaths: string[];
 	seasons: PackedZalipSeason[];
+	countries?: string[];
+	externalRatings?: { source: string; value: number; votes: number | null }[];
+	ageRating?: string | null;
 };
 
 export type PackedZalipEpisode = {
@@ -314,6 +318,9 @@ export class ZalipCatalogService {
 		return {
 			...(await this.packWorksWithCommunityRatings([work]))[0]!,
 			galleryPaths: work.galleryPaths,
+			countries: readImportState(work.importData).countries,
+			externalRatings: readImportState(work.importData).ratings,
+			ageRating: readImportState(work.importData).ageRating,
 			seasons: seasons.map(season => this.packSeason(season)),
 		};
 	}
@@ -838,6 +845,8 @@ export class ZalipCatalogService {
 		const work = await repository.findOneBy({ id: workId });
 		if (work == null) return null;
 
+		// Imported titles are refreshed through the provenance-aware importer, not the legacy cron.
+		if (work.importData?.values && Object.keys(work.importData.values).length > 0) return work;
 		work.posterPath = input.posterPath;
 		work.backdropPath = input.backdropPath;
 		work.logoPath = input.logoPath;
@@ -873,6 +882,9 @@ export class ZalipCatalogService {
 			const season = await seasons.findOneBy({ id: seasonId });
 			if (season == null) return { added: 0, updated: 0, total: 0 };
 			const work = await manager.getRepository(MiZalipWork).findOneBy({ id: season.workId });
+			if (work?.importData?.values && Object.keys(work.importData.values).length > 0) {
+				return { added: 0, updated: 0, total: await manager.getRepository(MiZalipEpisode).countBy({ seasonId }) };
+			}
 			const previousEpisodeCount = season.episodeCount;
 
 			const repository = manager.getRepository(MiZalipEpisode);

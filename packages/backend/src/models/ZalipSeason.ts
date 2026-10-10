@@ -3,21 +3,24 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryColumn } from 'typeorm';
+import { Check, Column, Entity, JoinColumn, ManyToOne, PrimaryColumn, Unique } from 'typeorm';
 import { id } from './util/id.js';
 import { MiZalipWork } from './ZalipWork.js';
 
 @Entity('zalip_season')
-@Index(['workId', 'seasonNumber'], { unique: true })
+@Unique('UQ_zalip_season_work_number', ['workId', 'seasonNumber'])
+@Check('CHK_zalip_season_number', '"seasonNumber" >= 0')
+@Check('CHK_zalip_season_episode_count', '"episodeCount" IS NULL OR "episodeCount" >= 0')
 export class MiZalipSeason {
-	@PrimaryColumn(id())
+	@PrimaryColumn({ ...id(), primaryKeyConstraintName: 'PK_zalip_season' })
 	public id: string;
 
-	@Column({ ...id(), comment: 'The parent canonical Zalip work ID.' })
+	/** The parent canonical Zalip work ID. */
+	@Column(id())
 	public workId: MiZalipWork['id'];
 
 	@ManyToOne(() => MiZalipWork, { onDelete: 'CASCADE' })
-	@JoinColumn({ name: 'workId' })
+	@JoinColumn({ name: 'workId', foreignKeyConstraintName: 'FK_zalip_season_work' })
 	public work: MiZalipWork | null;
 
 	@Column('integer')
@@ -47,4 +50,7 @@ export class MiZalipSeason {
 
 	@Column('timestamp with time zone')
 	public updatedAt: Date;
+
+	@Column('jsonb', { default: {} })
+	public importValues: Record<string, unknown>;
 }

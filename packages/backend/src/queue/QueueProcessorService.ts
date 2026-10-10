@@ -47,6 +47,7 @@ import { CleanProcessorService } from './processors/CleanProcessorService.js';
 import { AggregateRetentionProcessorService } from './processors/AggregateRetentionProcessorService.js';
 import { CleanRemoteNotesProcessorService } from './processors/CleanRemoteNotesProcessorService.js';
 import { SyncZalipAllohaProcessorService } from './processors/SyncZalipAllohaProcessorService.js';
+import { ZalipImporterService } from '@/core/ZalipImporterService.js';
 import { QueueLoggerService } from './QueueLoggerService.js';
 import { QUEUE, baseWorkerOptions } from './const.js';
 
@@ -80,6 +81,7 @@ function getJobInfo(job: Bull.Job | undefined, increment = false): string {
 export class QueueProcessorService implements OnApplicationShutdown {
 	private logger: Logger;
 	private systemQueueWorker: Bull.Worker;
+	private zalipImportQueueWorker: Bull.Worker;
 	private dbQueueWorker: Bull.Worker;
 	private deliverQueueWorker: Bull.Worker;
 	private inboxQueueWorker: Bull.Worker;
@@ -132,8 +134,16 @@ export class QueueProcessorService implements OnApplicationShutdown {
 		private cleanProcessorService: CleanProcessorService,
 		private cleanRemoteNotesProcessorService: CleanRemoteNotesProcessorService,
 		private syncZalipAllohaProcessorService: SyncZalipAllohaProcessorService,
+		private zalipImporterService: ZalipImporterService,
 	) {
 		this.logger = this.queueLoggerService.logger;
+		this.zalipImportQueueWorker = new Bull.Worker<{ runId: string }>(QUEUE.ZALIP_IMPORT, job => this.zalipImporterService.processRun(job.data.runId), {
+			...baseWorkerOptions(this.config, QUEUE.ZALIP_IMPORT),
+			autorun: false,
+			concurrency: 1,
+		});
+		// Database/network errors here must not leak upstream URLs or credentials into queue logs.
+		this.zalipImportQueueWorker.on('error', () => this.logger.warn('Zalip importer worker unavailable.'));
 
 		function renderError(e?: Error) {
 			// 何故かeがundefinedで来ることがある
@@ -176,6 +186,7 @@ export class QueueProcessorService implements OnApplicationShutdown {
 					case 'clean': return this.cleanProcessorService.process();
 					case 'cleanRemoteNotes': return this.cleanRemoteNotesProcessorService.process(job);
 					case 'syncZalipAlloha': return this.syncZalipAllohaProcessorService.process();
+					case 'syncZalipImporterSchedules': return this.zalipImporterService.tickSchedules();
 					default: throw new Error(`unrecognized job type ${job.name} for system`);
 				}
 			};
@@ -549,6 +560,7 @@ export class QueueProcessorService implements OnApplicationShutdown {
 	public async start(): Promise<void> {
 		await Promise.all([
 			this.systemQueueWorker.run(),
+			this.zalipImportQueueWorker.run(),
 			this.dbQueueWorker.run(),
 			this.deliverQueueWorker.run(),
 			this.inboxQueueWorker.run(),
@@ -565,6 +577,7 @@ export class QueueProcessorService implements OnApplicationShutdown {
 	public async stop(): Promise<void> {
 		await Promise.all([
 			this.systemQueueWorker.close(),
+			this.zalipImportQueueWorker.close(),
 			this.dbQueueWorker.close(),
 			this.deliverQueueWorker.close(),
 			this.inboxQueueWorker.close(),

@@ -34,12 +34,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 								<div :class="$style.ratings">
 									<span v-if="work.communityRating != null" :class="$style.communityRating" :aria-label="i18n.tsx.zalip.communityRating({ rating: work.communityRating.toFixed(1) })"><i class="ti ti-star" aria-hidden="true"></i><strong>{{ work.communityRating.toFixed(1) }}</strong><small>{{ i18n.tsx.zalip.workRatingCount({ count: work.ratingCount }) }}</small></span>
 									<span v-else :class="$style.original">{{ i18n.ts.zalip.workNoRating }}</span>
+									<span v-for="rating in work.externalRatings ?? []" :key="rating.source" :class="$style.original">{{ rating.source.toUpperCase() }} {{ rating.value.toFixed(1) }}</span>
 									<span v-if="work.originalTitle && work.originalTitle !== work.title" :class="$style.original">{{ work.originalTitle }}</span>
 								</div>
 								<div :class="$style.compactFacts"><p>{{ [work.releaseYear, ...work.genres].filter(Boolean).join(', ') }}</p><p>{{ [kindLabel(work.kind), work.runtimeMinutes ? runtimeLabel(work.runtimeMinutes, work.kind) : null].filter(Boolean).join(' · ') }}</p></div>
 								<dl :class="$style.facts">
 									<template v-if="work.releaseYear"><dt>{{ i18n.ts.zalip.workYear }}</dt><dd>{{ work.releaseYear }}</dd></template>
 									<dt>{{ i18n.ts.zalip.workType }}</dt><dd>{{ kindLabel(work.kind) }}</dd>
+									<template v-if="work.countries?.length"><dt>{{ i18n.ts.zalip._importer.workCountries }}</dt><dd>{{ work.countries.join(', ') }}</dd></template>
+									<template v-if="work.ageRating"><dt>{{ i18n.ts.zalip._importer.workAgeRating }}</dt><dd>{{ work.ageRating }}</dd></template>
 									<template v-if="work.runtimeMinutes"><dt>{{ i18n.ts.zalip.workDuration }}</dt><dd>{{ runtimeLabel(work.runtimeMinutes, work.kind) }}</dd></template>
 									<template v-if="work.seasons.length"><dt>{{ i18n.ts.zalip.workSeasons }}</dt><dd>{{ work.seasons.filter(season => season.seasonNumber > 0).length }}</dd></template>
 									<template v-if="work.genres.length"><dt>{{ i18n.ts.zalip.catalogueGenres }}</dt><dd :class="$style.genres"><MkA v-for="genre in work.genres" :key="genre" :to="genreLink(genre)">{{ genre }}</MkA></dd></template>
@@ -57,6 +60,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<p v-if="work.description" :class="$style.description">{{ work.description }}</p>
 				<div :class="$style.content">
 					<section ref="playerSection" :class="$style.player" :aria-label="i18n.ts.zalip.playerTab">
+						<div v-if="playbackSources.length" :class="$style.playerTabs" role="group" :aria-label="i18n.ts.zalip._importer.workSources"><button v-for="source in playbackSources" :key="source.source" type="button" class="_button" :class="[$style.playerTab, { [$style.playerTabActive]: selectedProvider === source.source }]" :aria-pressed="selectedProvider === source.source" @click="selectProvider(source.source)">{{ source.source.toUpperCase() }}</button></div>
+						<p v-if="importedPlayback" :class="$style.availableNotice">{{ i18n.ts.zalip._importer.nativeVoicesHint }}</p>
 						<div :class="$style.playerTabs">
 							<button type="button" class="_button" :class="[$style.playerTab, { [$style.playerTabActive]: playerView === 'player' }]" :aria-pressed="playerView === 'player'" @click="playerView = 'player'"><i class="ti ti-list" aria-hidden="true"></i><span>{{ work.seasons.length ? i18n.ts.zalip.workEpisodes : i18n.ts.zalip.playerTab }}</span></button>
 							<button v-if="work.trailerYoutubeKey" type="button" class="_button" :class="[$style.playerTab, { [$style.playerTabActive]: playerView === 'trailer' }]" :aria-pressed="playerView === 'trailer'" @click="openTrailer"><i class="ti ti-player-play" aria-hidden="true"></i><span>{{ i18n.ts.zalip.trailerTab }}</span></button>
@@ -84,7 +89,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 										<button type="button" class="_button" :disabled="nextEpisode == null" :aria-label="i18n.ts.zalip.playerNextEpisode" @click="selectRelativeEpisode(1)"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
 									</div>
 									<button v-if="$i && selectedEpisodeProgress != null" type="button" class="_button" :class="[$style.watched, { [$style.actionActive]: episodeWatched }]" :disabled="saving || episodeWatched" @click="markEpisodeWatched"><i :class="episodeWatched ? 'ti ti-eye-check' : 'ti ti-eye'" aria-hidden="true"></i>{{ episodeWatched ? i18n.ts.zalip.playerWatched : i18n.ts.zalip.playerMarkWatched }}</button>
-									<button v-if="$i && allohaPlayback?.available" type="button" class="_button" :class="$style.voiceButton" aria-haspopup="dialog" :aria-expanded="voiceMenuOpen" @click="openVoiceMenu"><span>{{ selectedVoiceLabel }}</span><i class="ti ti-volume" aria-hidden="true"></i></button>
+									<span v-if="$i && importedPlayback" :class="$style.voiceButton">{{ selectedProvider.toUpperCase() }}</span>
+									<button v-else-if="$i && allohaPlayback?.available && allohaPlayback.translations.length" type="button" class="_button" :class="$style.voiceButton" aria-haspopup="dialog" :aria-expanded="voiceMenuOpen" @click="openVoiceMenu"><span>{{ selectedVoiceLabel }}</span><i class="ti ti-volume" aria-hidden="true"></i></button>
 								</div>
 							</div>
 							<div v-if="work.seasons.length" :class="$style.playerEpisodes">
@@ -118,6 +124,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<a v-for="path in work.galleryPaths" :key="path" :href="tmdbBackdrop(path)" target="_blank" rel="noopener noreferrer" :aria-label="`Открыть кадр из ${work.title}`"><img :src="tmdbGalleryImage(path)" alt="" loading="lazy"></a>
 						</div>
 					</section>
+					<section v-if="catalogueLinks.length" :class="$style.gallery"><h2>{{ i18n.ts.zalip._importer.workCredits }}</h2><div :class="$style.genres"><MkA v-for="link in catalogueLinks" :key="`${link.entry.id}:${link.role}`" :to="`/zalip/taxonomy/${link.entry.type}/${link.entry.slug}`">{{ link.entry.name }}<small v-if="link.role"> · {{ link.role }}</small></MkA></div></section>
 					<section ref="discussionSection" :class="$style.discussionArea">
 						<div v-if="work.seasons.length" :class="$style.discussionScope" role="group" :aria-label="i18n.ts.zalip.discussionContext">
 							<button type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionScope === 'work' }]" :aria-pressed="discussionScope === 'work'" @click="selectDiscussionScope('work')"><i class="ti ti-movie" aria-hidden="true"></i> {{ i18n.ts.zalip.workDiscussionScope }}</button>
@@ -168,7 +175,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<MkModal v-if="voiceMenuOpen" ref="voiceModal" :class="$style.voiceOverlay" preferType="dialog" :returnFocusTo="voiceAnchor" @click="voiceModal?.close()" @esc="voiceModal?.close()" @closed="voiceMenuOpen = false">
 			<section :class="$style.voiceDrawer" :style="viewportWidth <= 600 ? undefined : voicePanelPosition" role="dialog" aria-modal="true" :aria-label="i18n.ts.zalip.playerVoices">
 				<header><h2>{{ i18n.ts.zalip.playerTab }}</h2><button type="button" class="_button" :aria-label="i18n.ts.close" @click="voiceModal?.close()"><i class="ti ti-x" aria-hidden="true"></i></button></header>
-				<span :class="$style.providerPill">ALLOHA</span>
+				<span :class="$style.providerPill">{{ selectedProvider.toUpperCase() }}</span>
+				<p v-if="playbackSources.length">{{ i18n.ts.zalip._importer.workVoiceovers }}</p>
 				<h3>{{ i18n.ts.zalip.playerVoices }}</h3>
 				<label :class="$style.menuSearch"><i class="ti ti-search" aria-hidden="true"></i><input v-model="voiceQuery" type="search" :placeholder="i18n.ts.zalip.playerVoiceSearch" :aria-label="i18n.ts.zalip.playerVoiceSearch" @keydown.esc.stop.prevent="voiceModal?.close()"></label>
 				<div :class="$style.voiceList">
@@ -184,6 +192,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script lang="ts" setup>
 import { computed, nextTick, onBeforeUnmount, onDeactivated, ref, useTemplateRef, watch } from 'vue';
 import type { RatedLibraryEntry } from '@/components/ZalipRatingDialog.vue';
+import type { TaxonomyEntry } from '@/utility/zalip-importer.js';
 import MkModal from '@/components/MkModal.vue';
 import MkPullToRefresh from '@/components/MkPullToRefresh.vue';
 import { prefer } from '@/preferences.js';
@@ -197,6 +206,7 @@ import ZalipRatingDialog from '@/components/ZalipRatingDialog.vue';
 import { useZalipHorizontalDrag } from '@/composables/use-zalip-horizontal-drag.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { pleaseLogin } from '@/utility/please-login.js';
+import { importerImageUrl } from '@/utility/zalip-importer.js';
 
 type ZalipWork = {
 	id: string;
@@ -207,6 +217,9 @@ type ZalipWork = {
 	description: string | null;
 	releaseYear: number | null;
 	genres: string[];
+	countries?: string[];
+	ageRating?: string | null;
+	externalRatings?: { source: string; value: number; votes: number | null }[];
 	runtimeMinutes: number | null;
 	posterPath: string | null;
 	backdropPath: string | null;
@@ -261,6 +274,18 @@ type AllohaPlayback = {
 	lastCheckedAt: string | null;
 };
 
+type PlaybackSource = { source: 'alloha' | 'collaps'; iframe: string; quality: string | null; translations: { id: string; name: string }[]; episodes: { seasonNumber: number; episodeNumber: number }[] };
+type CatalogLink = { entry: TaxonomyEntry; role: string; character: string | null; position: number };
+const playbackSources = ref<PlaybackSource[]>([]);
+const selectedProvider = ref<'alloha' | 'collaps'>('alloha');
+const catalogueLinks = ref<CatalogLink[]>([]);
+
+function selectProvider(source: 'alloha' | 'collaps'): void {
+	selectedProvider.value = source;
+	selectedAllohaTranslationId.value = null;
+	allohaPlayerOpen.value = false;
+}
+
 const viewportWidth = ref(window.innerWidth);
 
 function updateViewport(): void {
@@ -301,14 +326,21 @@ const episodic = computed(() => work.value?.kind === 'series' || !!work.value?.s
 const showReleaseSubscription = computed(() => episodic.value || releaseSubscribed.value || allohaPlayback.value?.available !== true);
 const releaseSubscriptionLabel = computed(() => episodic.value ? i18n.ts.zalip.subscribeEpisodes : i18n.ts.zalip.subscribePremiere);
 const playerView = ref<'player' | 'trailer'>('player');
-const allohaPlayback = ref<AllohaPlayback | null>(null);
+const legacyPlayback = ref<AllohaPlayback | null>(null);
+const importedPlayback = computed(() => playbackSources.value.find(item => item.source === selectedProvider.value));
+const allohaPlayback = computed<AllohaPlayback | null>(() => {
+	const source = importedPlayback.value;
+	if (!source) return legacyPlayback.value;
+	// Provider-native controls select voices inside the embed; legacy Alloha URLs remain supported.
+	return { available: true, iframe: source.iframe, translations: [], lastCheckedAt: null };
+});
 const allohaPlayerOpen = ref(false);
 const selectedAllohaTranslationId = ref<number | null>(null);
 const voiceQuery = ref('');
 const filteredTranslations = computed(() => (allohaPlayback.value?.translations ?? []).filter(translation => translation.name.toLocaleLowerCase('ru').includes(voiceQuery.value.trim().toLocaleLowerCase('ru'))));
 const selectedVoiceLabel = computed(() => {
 	const translation = allohaPlayback.value?.translations.find(item => item.id === selectedAllohaTranslationId.value);
-	return translation?.name ?? 'Alloha';
+	return translation?.name ?? selectedProvider.value.toUpperCase();
 });
 const discussionNoteId = ref<string | null>(null);
 const discussionError = ref<string | null>(null);
@@ -364,6 +396,7 @@ const activeAllohaIframeKey = computed(() => [
 	selectedSeasonNumber.value ?? 'movie',
 	selectedEpisode.value?.id ?? 'title',
 	selectedAllohaTranslationId.value ?? 'default',
+	selectedProvider.value,
 ].join(':'));
 const selectedEpisodeIndex = computed(() => selectedEpisode.value == null ? -1 : episodes.value.findIndex(episode => episode.id === selectedEpisode.value?.id));
 const previousEpisode = computed(() => selectedEpisodeIndex.value > 0 ? episodes.value[selectedEpisodeIndex.value - 1] ?? null : null);
@@ -379,15 +412,15 @@ const activeDiscussionEmptyText = computed(() => discussionScope.value === 'epis
 	: i18n.ts.zalip.emptyWorkDiscussion);
 
 function tmdbImage(path: string): string {
-	return `https://image.tmdb.org/t/p/w500${path}`;
+	return importerImageUrl(path, 'w500') ?? '';
 }
 
 function tmdbBackdrop(path: string): string {
-	return `https://image.tmdb.org/t/p/w1280${path}`;
+	return importerImageUrl(path, 'w1280') ?? '';
 }
 
 function tmdbGalleryImage(path: string): string {
-	return `https://image.tmdb.org/t/p/w780${path}`;
+	return importerImageUrl(path, 'w780') ?? '';
 }
 
 function youtubeEmbed(key: string): string {
@@ -457,7 +490,10 @@ async function load(): Promise<void> {
 	isFavorite.value = false;
 	releaseSubscribed.value = false;
 	playerView.value = 'player';
-	allohaPlayback.value = null;
+	legacyPlayback.value = null;
+	playbackSources.value = [];
+	catalogueLinks.value = [];
+	selectedProvider.value = 'alloha';
 	allohaPlayerOpen.value = false;
 	selectedAllohaTranslationId.value = null;
 	discussionError.value = null;
@@ -469,10 +505,12 @@ async function load(): Promise<void> {
 	episodeRequestId.value++;
 	try {
 		work.value = await misskeyApiZalip<ZalipWork>('zalip/works/show', { slug: props.slug });
-		const [discussion, entries, playback] = await Promise.all([
+		const [discussion, entries, playback, sources, links] = await Promise.all([
 			misskeyApiZalip<{ noteId: string | null }>('zalip/discussions/show', { workId: work.value.id }),
 			$i ? misskeyApiZalip<LibraryEntry[]>('zalip/library/list') : Promise.resolve([]),
 			$i ? misskeyApiZalip<AllohaPlayback>('zalip/playback/alloha/show', { slug: work.value.slug }).catch(() => null) : Promise.resolve(null),
+			$i ? misskeyApiZalip<{ sources: PlaybackSource[] }>('zalip/playback/sources', { workId: work.value.id }).catch(() => ({ sources: [] })) : Promise.resolve({ sources: [] }),
+			misskeyApiZalip<{ entries: CatalogLink[] }>('zalip/taxonomy/show', { workId: work.value.id }).catch(() => ({ entries: [] })),
 		]);
 		discussionNoteId.value = discussion.noteId;
 		const entry = entries.find(candidate => candidate.work?.id === work.value?.id);
@@ -481,7 +519,10 @@ async function load(): Promise<void> {
 		personalRating.value = entry?.personalRating ?? null;
 		isFavorite.value = entry?.isFavorite ?? false;
 		releaseSubscribed.value = entry?.isReleaseSubscribed ?? false;
-		allohaPlayback.value = playback;
+		legacyPlayback.value = playback;
+		playbackSources.value = sources.sources;
+		selectedProvider.value = sources.sources[0]?.source ?? 'alloha';
+		catalogueLinks.value = links.entries;
 		selectedAllohaTranslationId.value = playback?.translations[0]?.id ?? null;
 		const initialSeason = work.value.seasons.find(season => season.seasonNumber > 0) ?? work.value.seasons[0];
 		if (initialSeason != null) await selectSeason(initialSeason);

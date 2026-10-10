@@ -22,7 +22,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<section v-if="works.length" :class="$style.panel">
 		<h2>{{ i18n.ts.zalip.discoverTitles }}</h2>
 		<MkA v-for="work in works" :key="work.id" :to="`/zalip/${work.slug}`" :class="$style.work">
-			<img v-if="work.posterPath" :src="`https://image.tmdb.org/t/p/w185${work.posterPath}`" alt="" loading="lazy">
+			<img v-if="importerImageUrl(work.posterPath)" :src="importerImageUrl(work.posterPath, 'w185')!" alt="" loading="lazy">
 			<i v-else class="ti ti-movie" :class="$style.placeholder"></i>
 			<span><strong>{{ work.title }}</strong><small>{{ kindLabels[work.kind] }}<template v-if="work.releaseYear"> · {{ work.releaseYear }}</template></small></span>
 		</MkA>
@@ -37,6 +37,7 @@ import { $i } from '@/i.js';
 import { i18n } from '@/i18n.js';
 import { navbarItemDef } from '@/navbar.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
+import { importerImageUrl } from '@/utility/zalip-importer.js';
 import { pleaseLogin } from '@/utility/please-login.js';
 import { openZalipSignup } from '@/utility/zalip-signup.js';
 

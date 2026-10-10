@@ -30,6 +30,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { onMounted, ref } from 'vue';
 import { definePage } from '@/page.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
+import { importerImageUrl } from '@/utility/zalip-importer.js';
 import { i18n } from '@/i18n.js';
 
 type ReleaseEvent = {
@@ -45,8 +46,8 @@ const events = ref<ReleaseEvent[]>([]);
 const pending = ref(true);
 const loadError = ref(false);
 
-function tmdbImage(path: string): string {
-	return `https://image.tmdb.org/t/p/w500${path}`;
+function tmdbImage(path: string): string | undefined {
+	return importerImageUrl(path) ?? undefined;
 }
 
 function releaseLabel(event: ReleaseEvent): string {

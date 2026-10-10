@@ -24,16 +24,17 @@ export type ZalipAllohaTranslation = {
  * authenticated Zalip users who explicitly open the player.
  */
 @Entity('zalip_alloha_source')
-@Index(['workId'], { unique: true })
+@Index('IDX_zalip_alloha_source_work', ['workId'], { unique: true })
 export class MiZalipAllohaSource {
-	@PrimaryColumn(id())
+	@PrimaryColumn({ ...id(), primaryKeyConstraintName: 'PK_zalip_alloha_source_id' })
 	public id: string;
 
-	@Column({ ...id(), comment: 'The canonical Zalip work ID.' })
+	/** The canonical Zalip work ID. */
+	@Column(id())
 	public workId: MiZalipWork['id'];
 
 	@ManyToOne(() => MiZalipWork, { onDelete: 'CASCADE' })
-	@JoinColumn({ name: 'workId' })
+	@JoinColumn({ name: 'workId', foreignKeyConstraintName: 'FK_zalip_alloha_source_work' })
 	public work: MiZalipWork | null;
 
 	@Column('varchar', { length: 24 })
@@ -45,7 +46,7 @@ export class MiZalipAllohaSource {
 	@Column('varchar', { length: 2048, nullable: true })
 	public iframe: string | null;
 
-	@Column('jsonb', { default: () => "'[]'::jsonb" })
+	@Column('jsonb', { default: [] })
 	public translations: ZalipAllohaTranslation[];
 
 	@Column('timestamp with time zone')

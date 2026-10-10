@@ -16,6 +16,11 @@ example `/opt/zalip/secrets/zalip.env`, and pass it to Compose with
 server-side `web` container; it is not a client build variable and must never be copied to a
 repository, browser bundle, URL, log or database record.
 
+The content importer uses the same server-only environment file for Kinopoisk,
+Alloha and Collaps. See [IMPORTER.md](./IMPORTER.md) for setup, first-run checks,
+draft publication and schedule behavior. No provider key belongs in a frontend
+build variable.
+
 Before `up -d`, make and verify a PostgreSQL dump. Build the `web` image first; only then recreate
 the `web` service. After it is healthy, verify `/api/meta`, the cinema home, a public title route,
 the signed-in library route, and the Source link. Record the exact commit deployed and preserve

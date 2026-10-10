@@ -53,6 +53,7 @@
 - Enhance: Show a full-width portrait poster in the mobile title hero, restore the original gradient and scroll fade in both themes, and retain desktop backdrops.
 - Fix: Restore the static mobile title cover with the logo below it, removing experimental portrait artwork, scroll fading and parallax while retaining the missing-cover poster fallback.
 - Enhance: Frame the mobile title poster over a softly blurred cover without changing title controls or desktop layout, and restore mobile header auto-hiding on title pages.
+- Feat: Add a Zalip importer console with previews, batch jobs, directories and schedules, public filmographies and selectable playback sources.
 
 ### Server
 - Fix: Allow clearing a Zalip library status without removing personal ratings, watch progress, favorites or release subscriptions.
@@ -68,6 +69,7 @@
 - Fix: VDSのDNS設定によってTMDBインポートがループバックへ接続してしまう問題を修正
 - Enhance: ZALIP作品一覧APIで一度に指定できるジャンルを24件に拡張
 - Fix: Include film playback arrivals in subscription updates, atomically record movie availability notifications, retry delivery during upstream failures, and rotate provider checks across the catalogue.
+- Feat: Add provenance-aware draft imports from TMDB, Kinopoisk, Alloha and Collaps with canonical identities, taxonomy, resumable queues and quota-aware scheduled updates.
 
 ## 2026.7.0
 

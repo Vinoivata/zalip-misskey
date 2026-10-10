@@ -97,6 +97,11 @@ import { MiZalipReleaseEvent } from '@/models/ZalipReleaseEvent.js';
 import { MiZalipSeason } from '@/models/ZalipSeason.js';
 import { MiZalipSharedNote } from '@/models/ZalipSharedNote.js';
 import { MiZalipWork } from '@/models/ZalipWork.js';
+import { MiZalipCatalogEntry } from '@/models/ZalipCatalogEntry.js';
+import { MiZalipCatalogRelation } from '@/models/ZalipCatalogRelation.js';
+import { MiZalipExternalIdentity } from '@/models/ZalipExternalIdentity.js';
+import { MiZalipImportRun, MiZalipImportItem } from '@/models/ZalipImportRun.js';
+import { MiZalipImportProfile } from '@/models/ZalipImportProfile.js';
 
 pg.types.setTypeParser(20, Number);
 
@@ -231,6 +236,12 @@ export const entities = [
 	MiZalipAllohaSource,
 	MiZalipAllohaAvailabilityEvent,
 	MiZalipWork,
+	MiZalipCatalogEntry,
+	MiZalipCatalogRelation,
+	MiZalipExternalIdentity,
+	MiZalipImportRun,
+	MiZalipImportItem,
+	MiZalipImportProfile,
 	MiZalipSeason,
 	MiZalipEpisode,
 	MiZalipEpisodeNoteContext,

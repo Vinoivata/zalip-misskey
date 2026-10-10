@@ -31,7 +31,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div v-else-if="relatedError" :class="$style.empty"><p role="alert">{{ i18n.ts.zalip.libraryLoadFailed }}</p><button type="button" class="_button" :class="$style.retry" :disabled="saving" @click="emit('retry')">{{ i18n.ts.retry }}</button></div>
 			<div v-else-if="similarWorks.length" :class="$style.relatedRail">
 				<figure v-for="entry in similarWorks" :key="entry.work.id" :class="$style.relatedCard">
-					<div :class="$style.relatedPoster"><img v-if="entry.work.posterPath" :src="`https://image.tmdb.org/t/p/w342${entry.work.posterPath}`" alt="" loading="lazy"><i v-else class="ti ti-movie" aria-hidden="true"></i></div>
+					<div :class="$style.relatedPoster"><img v-if="importerImageUrl(entry.work.posterPath)" :src="importerImageUrl(entry.work.posterPath, 'w342')!" alt="" loading="lazy"><i v-else class="ti ti-movie" aria-hidden="true"></i></div>
 					<figcaption>{{ entry.work.title }}</figcaption>
 				</figure>
 			</div>
@@ -52,6 +52,7 @@ export type RatedLibraryEntry = {
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, useTemplateRef, watch } from 'vue';
 import MkModal from '@/components/MkModal.vue';
 import { i18n } from '@/i18n.js';
+import { importerImageUrl } from '@/utility/zalip-importer.js';
 
 const props = withDefaults(defineProps<{
 	initialRating?: number;

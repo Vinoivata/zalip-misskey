@@ -71,6 +71,7 @@
 		"wanakana": "5.3.1"
 	},
 	"devDependencies": {
+		"@oxc-project/types": "0.139.0",
 		"@misskey-dev/emoji-assets": "17.0.3",
 		"@misskey-dev/summaly": "5.5.1",
 		"@playwright/test": "1.61.1",
@@ -123,7 +124,7 @@
 		"msw": "2.15.0",
 		"msw-storybook-addon": "2.0.7",
 		"nodemon": "3.1.14",
-		"oxc-walker": "1.0.0",
+		"oxc-walker": "1.1.1",
 		"playwright": "1.61.1",
 		"prettier": "3.9.5",
 		"react": "19.2.7",

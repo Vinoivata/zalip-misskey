@@ -10,6 +10,7 @@
 		"./*": "./js/*"
 	},
 	"devDependencies": {
+		"@oxc-project/types": "0.139.0",
 		"@types/estree": "1.0.9",
 		"@types/node": "26.1.1",
 		"@typescript-eslint/eslint-plugin": "8.63.0",
@@ -19,7 +20,7 @@
 	"dependencies": {
 		"i18n": "workspace:*",
 		"magic-string": "0.30.21",
-		"oxc-walker": "1.0.0",
+		"oxc-walker": "1.1.1",
 		"rolldown": "1.1.5",
 		"vite": "8.1.4"
 	}
