@@ -6,10 +6,14 @@
 import { describe, expect, test, vi } from 'vitest';
 import { ZalipTaxonomyService } from '@/core/ZalipTaxonomyService.js';
 import { MiZalipCatalogEntry } from '@/models/ZalipCatalogEntry.js';
+import { MiZalipCatalogRelation } from '@/models/ZalipCatalogRelation.js';
 import { MiZalipWork } from '@/models/ZalipWork.js';
 import type { ImportRecord } from '@/core/zalip-importer/types.js';
 import {
 	getZalipCatalogEditorialData,
+	getZalipCollectionSettings,
+	decodeZalipCatalogCursor,
+	encodeZalipCatalogCursor,
 	matchesZalipCategoryRules,
 	mergeZalipCatalogEntry,
 	normalizeZalipCategoryRules,
@@ -148,6 +152,120 @@ describe('Zalip catalogue normalization and ownership', () => {
 		const service = new ZalipTaxonomyService({ transaction: async (action: (manager: unknown) => Promise<unknown>) => action(manager) } as never, {} as never);
 		await service.saveEntry({ type: 'person', name: before.name, data: { birthday: '1970-01-01' } }, before.id);
 		expect(getZalipCatalogEditorialData(repository.save.mock.calls[0][0].data)).toEqual({ manualFields: ['data.birthday'], fieldSources: { name: 'tmdb', description: 'tmdb', imageUrl: 'tmdb', 'data.birthday': 'manual' } });
+	});
+});
+
+describe('collection semantics and visibility', () => {
+	test('projects separate semantic defaults without altering provenance or private facts', () => {
+		const service = new ZalipTaxonomyService({} as never, {} as never);
+		const existing = entry({ type: 'collection', data: { collectionKind: 'provider', raw: 'private' } });
+		expect(service.packEntry(existing).data).toEqual({ collectionKind: 'provider', semanticKind: 'theme', isEnabled: true });
+		expect(existing.data).toEqual({ collectionKind: 'provider', raw: 'private' });
+		expect(service.packEntry(entry({ type: 'collection', data: { semanticKind: 'franchise', isEnabled: false } }), true).data).toEqual({ semanticKind: 'franchise', isEnabled: false });
+		expect(getZalipCollectionSettings({ semanticKind: 'unknown' })).toEqual({ semanticKind: 'theme', isEnabled: true });
+	});
+
+	test('each semantic setting can be editorially protected without freezing other facts', () => {
+		const before = entry({ type: 'collection', data: { semanticKind: 'theme', isEnabled: true, collectionKind: 'provider' } });
+		const edited = mergeZalipCatalogEntry(before, { type: 'collection', name: before.name, data: { semanticKind: 'franchise', isEnabled: false } }, 'manual', { protectOnlyChangedBaseFields: true });
+		const refreshed = mergeZalipCatalogEntry(edited, { type: 'collection', name: 'Provider', data: { semanticKind: 'platform', isEnabled: true, originalName: 'New fact' } }, 'collaps');
+		expect(refreshed.data).toMatchObject({ semanticKind: 'franchise', isEnabled: false, collectionKind: 'provider', originalName: 'New fact' });
+		expect(getZalipCatalogEditorialData(refreshed.data).manualFields).toEqual(['data.semanticKind', 'data.isEnabled']);
+	});
+
+	test('rejects invalid semantic values and noncollection settings before opening a transaction', async () => {
+		const db = { transaction: vi.fn() };
+		const service = new ZalipTaxonomyService(db as never, {} as never);
+		for (const input of [
+			{ type: 'collection', data: { semanticKind: 'provider' } },
+			{ type: 'collection', data: { semanticKind: null } },
+			{ type: 'collection', data: { isEnabled: 'false' } },
+			{ type: 'person', data: { isEnabled: false } },
+			{ type: 'genre', data: { semanticKind: 'theme' } },
+		] as const) await expect(service.saveEntry({ name: 'Name', ...input })).rejects.toThrow('INVALID_COLLECTION_DATA');
+		expect(db.transaction).not.toHaveBeenCalled();
+	});
+
+	test('disabled collection membership is hidden publicly but retained for administrators', async () => {
+		const collections = [entry({ id: 'disabled', type: 'collection', data: { isEnabled: false } }), entry({ id: 'enabled', type: 'collection' })];
+		const relations = { find: vi.fn().mockResolvedValue(collections.map((item, i) => ({ id: `link${i}`, entryId: item.id, workId: 'work', role: '', position: i, source: 'manual', entry: item }))) };
+		const works = { findOneBy: vi.fn().mockResolvedValue({ publicationState: 'published' }) };
+		const service = new ZalipTaxonomyService({ getRepository: (model: unknown) => model === MiZalipWork ? works : relations } as never, {} as never);
+		expect((await service.listWorkEntries('work')).map(link => link.entry.id)).toEqual(['enabled']);
+		expect((await service.listWorkEntries('work', { publishedOnly: false })).map(link => link.entry.id)).toEqual(['disabled', 'enabled']);
+	});
+});
+
+describe('scoped catalogue cursor pagination', () => {
+	const relations = Array.from({ length: 103 }, (_, i) => ({
+		id: `relation${String(i).padStart(3, '0')}`, entryId: 'entry', workId: `work${i}`, role: i === 102 ? 'director' : 'actor', position: Math.floor(i / 2), character: null, source: 'tmdb',
+		work: { id: `work${i}`, slug: `work-${i}`, title: `Movie ${i}`, releaseYear: 2026, genres: [], publicationState: 'published' },
+	})) as unknown as MiZalipCatalogRelation[];
+
+	function fixture(value = entry()) {
+		let cursor: { cursorPosition: number; cursorId: string } | undefined;
+		let limit = 0;
+		const query = {
+			innerJoinAndSelect: vi.fn(), where: vi.fn(), andWhere: vi.fn((_sql, params) => { if (params?.cursorId) cursor = params; return query; }),
+			orderBy: vi.fn(), addOrderBy: vi.fn(), take: vi.fn(value => { limit = value; return query; }),
+			getExists: vi.fn().mockResolvedValue(true),
+			getMany: vi.fn(async () => relations.filter(item => !cursor || item.position > cursor.cursorPosition || (item.position === cursor.cursorPosition && item.id > cursor.cursorId)).slice(0, limit)),
+		};
+		for (const key of ['innerJoinAndSelect', 'where', 'orderBy', 'addOrderBy'] as const) query[key].mockReturnValue(query);
+		const entries = { findOneBy: vi.fn().mockResolvedValue(value) };
+		const service = new ZalipTaxonomyService({ getRepository: (model: unknown) => model === MiZalipCatalogEntry ? entries : { createQueryBuilder: () => query } } as never, {} as never);
+		return { service, query, entries };
+	}
+
+	test('returns all rows beyond the previous first100 cap, with stable same-position continuation', async () => {
+		const { service, query } = fixture();
+		const first = await service.showEntry({ entryId: 'entry' });
+		expect(first.works).toHaveLength(100);
+		expect(first.nextCursor).toEqual(expect.any(String));
+		if (!first.nextCursor) throw new Error('Missing continuation');
+		expect(decodeZalipCatalogCursor(first.nextCursor, 'entry', true)).toEqual({ position: relations[99].position, id: relations[99].id });
+		const second = await service.showEntry({ entryId: 'entry', cursor: first.nextCursor });
+		expect(second.works.map(work => work.id)).toEqual(['work100', 'work101', 'work102']);
+		expect(second.nextCursor).toBeNull();
+		expect(query.orderBy).toHaveBeenCalledWith('relation.position', 'ASC');
+		expect(query.addOrderBy).toHaveBeenCalledWith('relation.id', 'ASC');
+		expect(query.take).toHaveBeenCalledWith(101);
+	});
+
+	test('filters overlapping sources in SQL before keyset filtering and row limiting', async () => {
+		const { service, query } = fixture();
+		const cursor = encodeZalipCatalogCursor('entry', true, { position: 1, id: 'relation001' });
+		await service.showEntry({ entryId: 'entry', cursor, limit: 2 });
+		const dedupIndex = query.andWhere.mock.calls.findIndex(([sql]) => String(sql).includes('NOT EXISTS'));
+		const cursorIndex = query.andWhere.mock.calls.findIndex(([sql]) => String(sql).includes('cursorPosition'));
+		expect(dedupIndex).toBeGreaterThanOrEqual(0);
+		expect(dedupIndex).toBeLessThan(cursorIndex);
+		expect(query.andWhere.mock.calls[dedupIndex][0]).toContain('preferred.source = \'manual\' AND relation.source <> \'manual\'');
+		expect(query.andWhere.mock.calls[dedupIndex][0]).toContain('preferred."workId" = relation."workId" AND preferred.role = relation.role');
+		expect(query.andWhere.mock.invocationCallOrder[dedupIndex]).toBeLessThan(query.take.mock.invocationCallOrder[0]);
+	});
+
+	test('empty final pages retain a public entry, while unpublished directories remain undiscoverable', async () => {
+		const { service, query } = fixture();
+		const cursor = encodeZalipCatalogCursor('entry', true, { position: 100000, id: 'zzzz' });
+		await expect(service.showEntry({ entryId: 'entry', cursor })).resolves.toMatchObject({ works: [], nextCursor: null, entry: { id: 'entry' } });
+		query.getExists.mockResolvedValue(false);
+		await expect(service.showEntry({ entryId: 'entry' })).rejects.toThrow('NO_SUCH_CATALOG_ENTRY');
+	});
+
+	test('public lookup refuses disabled collections before any relation query', async () => {
+		const { service, query } = fixture(entry({ type: 'collection', data: { isEnabled: false } }));
+		await expect(service.showEntry({ entryId: 'entry' })).rejects.toThrow('NO_SUCH_CATALOG_ENTRY');
+		expect(query.getExists).not.toHaveBeenCalled();
+		await expect(service.showEntry({ entryId: 'entry', publishedOnly: false, limit: 1 })).resolves.toMatchObject({ entry: { data: { isEnabled: false } } });
+	});
+
+	test('bounded canonical cursors bind identity and public/admin visibility without leaking extra JSON', () => {
+		const cursor = encodeZalipCatalogCursor('entry', true, { position: 7, id: 'relation01' });
+		expect(decodeZalipCatalogCursor(cursor, 'entry', true)).toEqual({ position: 7, id: 'relation01' });
+		for (const value of ['', 'a'.repeat(257), cursor + '=', Buffer.from('{}').toString('base64url'), Buffer.from(JSON.stringify([1, 'entry', true, -1, 'relation01'])).toString('base64url'), Buffer.from(JSON.stringify([1, 'entry', true, 0, 'x; DROP TABLE work'])).toString('base64url')]) expect(() => decodeZalipCatalogCursor(value, 'entry', true)).toThrow('INVALID_CATALOG_CURSOR');
+		expect(() => decodeZalipCatalogCursor(cursor, 'other', true)).toThrow('INVALID_CATALOG_CURSOR');
+		expect(() => decodeZalipCatalogCursor(cursor, 'entry', false)).toThrow('INVALID_CATALOG_CURSOR');
 	});
 });
 
@@ -338,7 +456,7 @@ describe('Zalip catalogue membership', () => {
 			create: vi.fn(value => value), save: vi.fn(), delete: vi.fn(),
 		};
 		const entries = { findBy: vi.fn().mockResolvedValue([newEntry]), existsBy: vi.fn().mockResolvedValue(true) };
-		const works = { existsBy: vi.fn().mockResolvedValue(true) };
+		const works = { existsBy: vi.fn().mockResolvedValue(true), findOne: vi.fn().mockResolvedValue({ id: 'work', importData: {} }) };
 		const manager = {
 			query: vi.fn(),
 			getRepository: (model: unknown) => model === MiZalipWork ? works : model === MiZalipCatalogEntry ? entries : relations,
@@ -352,9 +470,21 @@ describe('Zalip catalogue membership', () => {
 		const { service, relations, manager } = membershipFixture();
 		await service.replaceImportedWorkRelations('work', 'tmdb', [{ entryId: 'new' }], { complete: true, types: ['genre'] });
 		expect(manager.query).toHaveBeenCalledWith('SELECT pg_advisory_xact_lock(hashtext($1))', ['zalip-catalog-membership:work']);
+		expect(manager.query.mock.calls.map(([, parameters]) => parameters)).toEqual([['zalip-catalog-directories'], ['zalip-catalog-membership:work']]);
 		expect(relations.find).toHaveBeenCalledWith({ where: { workId: 'work', source: 'tmdb' }, relations: { entry: true } });
 		expect(relations.delete).toHaveBeenCalledWith(expect.objectContaining({ id: expect.objectContaining({ _value: ['provider'] }) }));
 		expect(relations.save).toHaveBeenCalledWith(expect.objectContaining({ entryId: 'new', workId: 'work', source: 'tmdb' }));
+	});
+
+	test('link and unlink acquire the directory lock before membership, serializing with entry deletion', async () => {
+		const { service, relations, manager } = membershipFixture();
+		await service.linkWork({ entryId: 'new', workId: 'work', role: 'part', position: 2 }, 'collaps');
+		expect(manager.query.mock.calls.map(([, parameters]) => parameters)).toEqual([['zalip-catalog-directories'], ['zalip-catalog-membership:work']]);
+		expect(relations.save).toHaveBeenCalledWith(expect.objectContaining({ entryId: 'new', workId: 'work', source: 'collaps', role: 'part', position: 2 }));
+		manager.query.mockClear();
+		await service.unlinkWork({ entryId: 'new', workId: 'work', role: ' part ' }, 'collaps');
+		expect(manager.query.mock.calls.map(([, parameters]) => parameters)).toEqual([['zalip-catalog-directories'], ['zalip-catalog-membership:work']]);
+		expect(relations.delete).toHaveBeenCalledWith({ entryId: 'new', workId: 'work', role: 'part', source: 'collaps' });
 	});
 
 	test('partial updates never remove existing source links', async () => {
@@ -363,6 +493,33 @@ describe('Zalip catalogue membership', () => {
 		expect(relations.find).not.toHaveBeenCalled();
 		expect(relations.delete).not.toHaveBeenCalled();
 		expect(relations.save).toHaveBeenCalledOnce();
+	});
+
+	test.each(['collections', 'categories'] as const)('rechecks %s editorial protection under the work row lock before linking', async protectedField => {
+		const { service, relations, works, manager } = membershipFixture();
+		works.findOne.mockResolvedValue({ id: 'work', importData: { locks: [protectedField] } });
+		await expect(service.linkWork({ entryId: 'new', workId: 'work' }, 'collaps', protectedField)).resolves.toBe(false);
+		expect(manager.query.mock.calls.map(([, parameters]) => parameters)).toEqual([['zalip-catalog-directories'], ['zalip-catalog-membership:work']]);
+		expect(works.findOne).toHaveBeenCalledExactlyOnceWith({ where: { id: 'work' }, lock: { mode: 'pessimistic_write' } });
+		expect(relations.save).not.toHaveBeenCalled();
+		expect(relations.delete).not.toHaveBeenCalled();
+	});
+
+	test('unlocked maintenance links return success while manual membership remains unrestricted', async () => {
+		const { service, relations, works } = membershipFixture();
+		await expect(service.linkWork({ entryId: 'new', workId: 'work' }, 'collaps', 'collections')).resolves.toBe(true);
+		works.findOne.mockResolvedValue({ id: 'work', importData: { locks: ['collections'] } });
+		await expect(service.linkWork({ entryId: 'new', workId: 'work' })).resolves.toBe(true);
+		expect(works.findOne).toHaveBeenCalledOnce();
+		expect(relations.save).toHaveBeenCalledTimes(2);
+	});
+
+	test('unknown locked work or invalid protection field fails before relation writes', async () => {
+		const { service, relations, works } = membershipFixture();
+		works.findOne.mockResolvedValue(null);
+		await expect(service.linkWork({ entryId: 'new', workId: 'work' }, 'collaps', 'collections')).rejects.toThrow('NO_SUCH_WORK');
+		await expect(service.linkWork({ entryId: 'new', workId: 'work' }, 'collaps', 'invalid' as 'collections')).rejects.toThrow('INVALID_CATALOG_LINK');
+		expect(relations.save).not.toHaveBeenCalled();
 	});
 
 	test('replacement of genres cannot remove credits owned by the same source', async () => {
@@ -401,9 +558,11 @@ describe('Zalip catalogue membership', () => {
 		for (const key of ['andWhere', 'orderBy', 'addOrderBy', 'take', 'skip'] as const) query[key].mockReturnValue(query);
 		const service = new ZalipTaxonomyService({ getRepository: () => ({ createQueryBuilder: () => query }) } as never, {} as never);
 		await service.listEntries({ type: 'person' });
+		expect(query.andWhere).toHaveBeenCalledWith(expect.stringContaining('entry.data->\'isEnabled\' IS DISTINCT FROM \'false\'::jsonb'), { collectionType: 'collection' });
 		expect(query.andWhere).toHaveBeenCalledWith(expect.stringContaining('work."publicationState" = :publicationState'), { publicationState: 'published' });
 		query.andWhere.mockClear();
 		await service.listEntries({ type: 'person', publishedOnly: false });
+		expect(query.andWhere).not.toHaveBeenCalledWith(expect.stringContaining('isEnabled'), expect.anything());
 		expect(query.andWhere).not.toHaveBeenCalledWith(expect.stringContaining('publicationState'), expect.anything());
 	});
 

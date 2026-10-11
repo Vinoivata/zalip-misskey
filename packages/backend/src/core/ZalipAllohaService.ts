@@ -5,8 +5,9 @@
 
 import { Injectable } from '@nestjs/common';
 import { HttpRequestService } from '@/core/HttpRequestService.js';
-import { StatusError } from '@/misc/status-error.js';
 import { ZalipCatalogService, type ZalipAllohaSyncTarget } from '@/core/ZalipCatalogService.js';
+import { ZalipImporterSourceSettingsService } from '@/core/ZalipImporterSourceSettingsService.js';
+import { configuredImportPlayerUrl, createConfiguredImportTransport, createImportRequest, ImportProviderError, type ImportProviderConfig } from '@/core/zalip-importer/providers.js';
 import type { ZalipAllohaTranslation } from '@/models/ZalipAllohaSource.js';
 
 type AllohaCategory = {
@@ -55,8 +56,6 @@ export type ZalipAllohaSyncResult =
 	| { kind: 'not-configured'; }
 	| { kind: 'upstream-failure'; };
 
-const ALLOHA_API_ORIGIN = 'https://apbugall.org';
-const DEFAULT_IFRAME_HOSTS = ['ascorbic-as.stravers.live'];
 const MAX_SYNC_TARGETS = 100;
 const MAX_LATEST_PAGES = 10;
 
@@ -80,27 +79,6 @@ function episodeNumber(value: unknown): number | null {
 	return parsed != null && parsed <= 100000 ? parsed : null;
 }
 
-function configuredIframeHosts(): Set<string> {
-	const configured = process.env.ZALIP_ALLOHA_IFRAME_HOSTS
-		?.split(',')
-		.map(host => host.trim().toLowerCase())
-		.filter(host => /^[a-z0-9.-]+$/.test(host));
-	return new Set(configured != null && configured.length > 0 ? configured : DEFAULT_IFRAME_HOSTS);
-}
-
-/** Rejects malformed, non-HTTPS and non-configured provider player URLs before caching them. */
-function validatedIframe(value: unknown): string | null {
-	const iframe = nonEmptyString(value, 2048);
-	if (iframe == null) return null;
-	try {
-		const parsed = new URL(iframe);
-		if (parsed.protocol !== 'https:' || parsed.username !== '' || parsed.password !== '') return null;
-		return configuredIframeHosts().has(parsed.hostname.toLowerCase()) ? parsed.toString() : null;
-	} catch {
-		return null;
-	}
-}
-
 function providerCategory(target: ZalipAllohaSyncTarget): string {
 	return target.tmdbMediaType === 'movie' ? 'movie' : 'serial';
 }
@@ -113,7 +91,7 @@ function matchesTargetCategory(target: ZalipAllohaSyncTarget, category: unknown)
 	return slug != null && slug !== 'movie';
 }
 
-function parseTranslations(value: unknown): ZalipAllohaTranslation[] {
+function parseTranslations(value: unknown, config: ImportProviderConfig): ZalipAllohaTranslation[] {
 	if (!Array.isArray(value)) return [];
 	const translations: ZalipAllohaTranslation[] = [];
 	const seen = new Set<number>();
@@ -122,7 +100,7 @@ function parseTranslations(value: unknown): ZalipAllohaTranslation[] {
 		const response = item as AllohaTranslationResponse;
 		const id = positiveInteger(response.id);
 		const name = nonEmptyString(response.name, 256);
-		const iframe = validatedIframe(response.iframe);
+		const iframe = configuredImportPlayerUrl(response.iframe, 'alloha', config);
 		if (id == null || name == null || iframe == null || seen.has(id)) continue;
 		const resolutions = Array.isArray(response.resolutions)
 			? [...new Set(response.resolutions.map(value => nonEmptyString(value, 32)).filter((value): value is string => value != null))].slice(0, 12)
@@ -140,60 +118,47 @@ function parseTranslations(value: unknown): ZalipAllohaTranslation[] {
 	return translations;
 }
 
-function parseDetail(response: AllohaDetailResponse): AllohaProviderDetail | null {
+function parseDetail(response: AllohaDetailResponse, config: ImportProviderConfig): AllohaProviderDetail | null {
 	const detail = response.data;
 	if (detail == null || typeof detail !== 'object') return null;
 	const category = nonEmptyString(detail.category?.slug, 24);
 	if (category == null) return null;
 	return {
 		category,
-		iframe: validatedIframe(detail.iframe),
-		translations: parseTranslations(detail.translations),
+		iframe: configuredImportPlayerUrl(detail.iframe, 'alloha', config),
+		translations: parseTranslations(detail.translations, config),
 	};
 }
 
 @Injectable()
 export class ZalipAllohaService {
 	constructor(
-		private httpRequestService: HttpRequestService,
+		_httpRequestService: HttpRequestService,
 		private zalipCatalogService: ZalipCatalogService,
+		private sourceSettings: ZalipImporterSourceSettingsService,
 	) {
 	}
 
-	private get accessToken(): string | null {
-		const token = process.env.ZALIP_ALLOHA_API_TOKEN?.trim();
-		return token != null && token !== '' ? token : null;
-	}
-
-	private async getDetail(target: ZalipAllohaSyncTarget, token: string): Promise<AllohaProviderDetail | 'not-found' | 'failure'> {
-		const url = new URL(`/v2/movies/tmdb/${target.tmdbId}`, ALLOHA_API_ORIGIN);
-		url.searchParams.set('category', providerCategory(target));
+	private async getDetail(target: ZalipAllohaSyncTarget, request: ReturnType<typeof createImportRequest>, config: ImportProviderConfig): Promise<AllohaProviderDetail | 'not-found' | 'failure'> {
 		try {
-			const response = await this.httpRequestService.getJson<AllohaDetailResponse>(url.toString(), 'application/json, */*', {
-				Authorization: `Bearer ${token}`,
-			});
-			const detail = parseDetail(response);
-			return detail ?? 'failure';
+			const response = await request(`/v2/movies/tmdb/${target.tmdbId}`, { category: providerCategory(target) }) as AllohaDetailResponse;
+			const detail = parseDetail(response, config);
+			return detail && matchesTargetCategory(target, { slug: detail.category }) ? detail : 'failure';
 		} catch (err) {
-			return err instanceof StatusError && err.statusCode === 404 ? 'not-found' : 'failure';
+			return err instanceof ImportProviderError && err.code === 'not-found' ? 'not-found' : 'failure';
 		}
 	}
 
-	private async getRecentAvailability(token: string): Promise<AllohaLatestItem[] | null> {
+	private async getRecentAvailability(request: ReturnType<typeof createImportRequest>): Promise<AllohaLatestItem[] | null> {
 		const result: AllohaLatestItem[] = [];
 		for (let page = 1; page <= MAX_LATEST_PAGES; page++) {
-			const url = new URL('/v2/movies/latest', ALLOHA_API_ORIGIN);
-			url.searchParams.set('days', '1');
-			url.searchParams.set('page', page.toString());
 			let response: AllohaLatestResponse;
 			try {
-				response = await this.httpRequestService.getJson<AllohaLatestResponse>(url.toString(), 'application/json, */*', {
-					Authorization: `Bearer ${token}`,
-				});
+				response = await request('/v2/movies/latest', { days: '1', page: page.toString() }) as AllohaLatestResponse;
 			} catch {
 				return null;
 			}
-			if (!Array.isArray(response.data)) return null;
+			if (response == null || typeof response !== 'object' || !Array.isArray(response.data)) return null;
 			for (const item of response.data) {
 				if (typeof item === 'object' && item != null) result.push(item as AllohaLatestItem);
 			}
@@ -208,8 +173,16 @@ export class ZalipAllohaService {
 	 * notify people already following the title in their single Zalip library.
 	 */
 	public async sync(): Promise<ZalipAllohaSyncResult> {
-		const token = this.accessToken;
-		if (token == null) return { kind: 'not-configured' };
+		// One immutable snapshot per pass: configuration changes take effect on the next sync.
+		let config: ImportProviderConfig;
+		let request: ReturnType<typeof createImportRequest>;
+		try {
+			config = await this.sourceSettings.getRuntime();
+			if (!config.allohaApiToken?.trim()) return { kind: 'not-configured' };
+			request = createImportRequest('alloha', config.allohaApiToken, createConfiguredImportTransport(config), config.apiOrigins?.alloha);
+		} catch {
+			return { kind: 'upstream-failure' };
+		}
 
 		const targets = await this.zalipCatalogService.listAllohaSyncTargets(MAX_SYNC_TARGETS);
 		const newlyMappedWorkIds = new Set<string>();
@@ -218,7 +191,7 @@ export class ZalipAllohaService {
 		let detailFailures = 0;
 		let events = 0;
 		for (const target of targets) {
-			const detail = await this.getDetail(target, token);
+			const detail = await this.getDetail(target, request, config);
 			// A broken response for one title must not prevent availability events for
 			// every other title from reaching subscribers.
 			if (detail === 'failure') {
@@ -242,7 +215,7 @@ export class ZalipAllohaService {
 			if (result.movieEventCreated) events++;
 		}
 
-		const latest = await this.getRecentAvailability(token);
+		const latest = await this.getRecentAvailability(request);
 		if (latest == null) {
 			// Retrying durable deliveries must not depend on the current upstream feed.
 			await this.zalipCatalogService.dispatchPendingAllohaAvailabilityNotifications();

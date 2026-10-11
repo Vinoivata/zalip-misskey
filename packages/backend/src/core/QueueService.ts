@@ -87,6 +87,9 @@ const REPEATABLE_SYSTEM_JOB_DEF = [{
 	name: 'syncZalipImporterSchedules',
 	pattern: '*/5 * * * *',
 }, {
+	name: 'syncZalipImporterMaintenance',
+	pattern: '*/5 * * * *',
+}, {
 	name: 'cleanRemoteNotes',
 	// 毎日午前4時に起動(最も人の少ない時間帯)
 	pattern: '0 4 * * *',

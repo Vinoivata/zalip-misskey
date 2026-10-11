@@ -172,7 +172,7 @@ describe('Zalip discussions', () => {
 			assert.strictEqual(anonymous.status, 401, endpoint);
 			const denied = await api(endpoint, params, viewer);
 			assert.strictEqual(denied.status, 403, endpoint);
-			assert.strictEqual(castAsError(denied.body).error.code, 'ZALIP_ADMIN_REQUIRED');
+			assert.strictEqual(castAsError(denied.body as Record<string, unknown>).error.code, 'ZALIP_ADMIN_REQUIRED');
 		}
 	});
 

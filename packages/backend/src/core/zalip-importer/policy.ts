@@ -28,8 +28,12 @@ export function normalizeImportOptions(input?: ImportOptions): ImportOptions {
 	}
 	if (input.filters !== undefined) {
 		const filters = input.filters;
-		if (!filters || typeof filters !== 'object' || Array.isArray(filters) || Object.keys(filters).some(key => !['mediaTypes', 'kinds', 'yearFrom', 'yearTo', 'genres', 'countries', 'ratingMin'].includes(key))) throw new Error('INVALID_IMPORT_OPTIONS');
+		if (!filters || typeof filters !== 'object' || Array.isArray(filters) || Object.keys(filters).some(key => !['mediaTypes', 'kinds', 'yearFrom', 'yearTo', 'genres', 'countries', 'ratingMin', 'requirePlayer'].includes(key))) throw new Error('INVALID_IMPORT_OPTIONS');
 		const normalized: ImportFilters = {};
+		if (filters.requirePlayer !== undefined) {
+			if (typeof filters.requirePlayer !== 'boolean') throw new Error('INVALID_IMPORT_OPTIONS');
+			normalized.requirePlayer = filters.requirePlayer;
+		}
 		if (filters.mediaTypes !== undefined) {
 			if (!Array.isArray(filters.mediaTypes) || filters.mediaTypes.length > 2 || filters.mediaTypes.some(type => !['movie', 'tv'].includes(type))) throw new Error('INVALID_IMPORT_OPTIONS');
 			normalized.mediaTypes = (['movie', 'tv'] as const).filter(type => filters.mediaTypes!.includes(type));
@@ -76,6 +80,10 @@ export function matchesImportFilters(record: ImportRecord, filters?: ImportFilte
 		if (!rating || rating.value < filters.ratingMin) return false;
 	}
 	return true;
+}
+
+export function matchesCreatePlayerFilter(record: ImportRecord, existing: boolean, filters?: ImportFilters): boolean {
+	return existing || filters?.requirePlayer !== true || record.players.length > 0;
 }
 
 export function selectedImportSources(primary: ImportSource, options: ImportOptions): ImportSource[] {

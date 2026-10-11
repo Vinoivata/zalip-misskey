@@ -23,8 +23,18 @@ services:
       context: ${ZALIP_RELEASE_DIR:?Set ZALIP_RELEASE_DIR to the immutable release checkout}
     environment:
       ZALIP_TMDB_API_KEY: ${ZALIP_TMDB_API_KEY:-}
-      # Kept in the server-only env file. Never expose provider credentials to clients.
+      # API credentials stay server-side except for the administrator settings UI.
       ZALIP_ALLOHA_API_TOKEN: ${ZALIP_ALLOHA_API_TOKEN:-}
+      # This explicit public token is included in Alloha iframe URLs.
+      ZALIP_ALLOHA_PLAYER_TOKEN: ${ZALIP_ALLOHA_PLAYER_TOKEN:-}
+      # Persist separately from the database: 32 random bytes in base64.
+      ZALIP_IMPORTER_SETTINGS_KEY: ${ZALIP_IMPORTER_SETTINGS_KEY:-}
+      ZALIP_TMDB_API_ORIGIN: ${ZALIP_TMDB_API_ORIGIN:-}
+      ZALIP_KINOPOISK_API_ORIGIN: ${ZALIP_KINOPOISK_API_ORIGIN:-}
+      ZALIP_ALLOHA_API_ORIGIN: ${ZALIP_ALLOHA_API_ORIGIN:-}
+      ZALIP_COLLAPS_API_ORIGIN: ${ZALIP_COLLAPS_API_ORIGIN:-}
+      ZALIP_ALLOHA_PLAYER_ORIGIN: ${ZALIP_ALLOHA_PLAYER_ORIGIN:-}
+      ZALIP_COLLAPS_PLAYER_ORIGIN: ${ZALIP_COLLAPS_PLAYER_ORIGIN:-}
       # Optional exact iframe host allowlist; the application uses its safe default if empty.
       ZALIP_ALLOHA_IFRAME_HOSTS: ${ZALIP_ALLOHA_IFRAME_HOSTS:-}
       ZALIP_KINOPOISK_API_KEY: ${ZALIP_KINOPOISK_API_KEY:-}

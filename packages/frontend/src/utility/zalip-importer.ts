@@ -6,11 +6,18 @@
 import { i18n } from '@/i18n.js';
 
 export type ImportSource = 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+export type ImportPlayerSource = 'alloha' | 'collaps';
+export type ImportPlaybackProvider = { source: ImportPlayerSource; label: string; enabled: boolean; position: 0 | 1 };
 export type ImportMediaType = 'movie' | 'tv';
 export type ImportRef = { source: ImportSource; externalId: string; mediaType: ImportMediaType };
 export type ImportSearchItem = { ref: ImportRef; title: string; originalTitle: string | null; releaseYear: number | null; posterUrl: string | null };
 export type ImportSourceStatus = { source: ImportSource; configured: boolean; capabilities: { search: boolean; collections: boolean; updates: boolean }; dailyLimit: number | null };
 export type ImportSourceCheck = { source: ImportSource; configured: boolean; checkedAt: string; latencyMs: number; ok: boolean; error: string | null; cached: boolean };
+export type ImportCredentialOrigin = 'environment' | 'database' | 'none';
+export type ImportServiceSettings = { source: ImportSource; apiOrigin: string; playerOrigin: string | null; apiToken: string | null; apiTokenSet: boolean; apiTokenOrigin: ImportCredentialOrigin; playerToken: string | null; playerTokenSet: boolean; playerTokenOrigin: ImportCredentialOrigin; updatedAt: string | null };
+export type ImportServiceSettingsResponse = { encryptionReady: boolean; sources: ImportServiceSettings[] };
+export type ImportServiceForm = { apiOrigin: string; playerOrigin: string; apiToken: string; playerToken: string; clearApiToken: boolean; clearPlayerToken: boolean };
+export type ImportServiceSave = { source: ImportSource; apiOrigin: string; playerOrigin?: string; apiToken?: string; playerToken?: string; clearApiToken?: boolean; clearPlayerToken?: boolean };
 export type ImportRecord = {
 	ref: ImportRef;
 	identities: { provider: string; externalId: string; entityType: ImportMediaType }[];
@@ -38,9 +45,9 @@ export type ImportRecord = {
 	warnings: string[];
 };
 export type ImportField = typeof importerFields[number];
-export type ImportFilters = { mediaTypes?: ImportMediaType[]; kinds?: ('movie' | 'series' | 'anime' | 'animation')[]; yearFrom?: number; yearTo?: number; genres?: string[]; countries?: string[]; ratingMin?: number };
+export type ImportFilters = { mediaTypes?: ImportMediaType[]; kinds?: ('movie' | 'series' | 'anime' | 'animation')[]; yearFrom?: number; yearTo?: number; genres?: string[]; countries?: string[]; ratingMin?: number; requirePlayer?: boolean };
 export type ImportOptions = { sources?: ImportSource[]; fields?: ImportField[]; fieldSources?: Partial<Record<ImportField, ImportSource>>; filters?: ImportFilters; artwork?: 'remote' | 'local-webp' };
-export type ImportSelection = { sources: ImportSource[]; fields: ImportField[]; fieldSources: Partial<Record<ImportField, ImportSource | ''>>; artwork: 'remote' | 'local-webp'; filters: { mediaTypes: ImportMediaType[]; kinds: NonNullable<ImportFilters['kinds']>; yearFrom: string; yearTo: string; genres: string; countries: string; ratingMin: string } };
+export type ImportSelection = { sources: ImportSource[]; fields: ImportField[]; fieldSources: Partial<Record<ImportField, ImportSource | ''>>; artwork: 'remote' | 'local-webp'; filters: { mediaTypes: ImportMediaType[]; kinds: NonNullable<ImportFilters['kinds']>; yearFrom: string; yearTo: string; genres: string; countries: string; ratingMin: string; requirePlayer: boolean } };
 export type ImportPreview = { record: ImportRecord; workId: string | null; changes: { field: string; before: unknown; after: unknown; protected: boolean; selected?: boolean }[]; warnings: string[]; locks?: string[]; options?: ImportOptions; matchesFilters?: boolean };
 export type ImportWorkState = { workId: string; title: string; locks: string[]; fields: { field: string; source: string | null; editorial: boolean }[] };
 export type ImportRun = { id: string; state: string; mode: 'import' | 'sync' | 'availability'; createdAt: string; updatedAt: string; total: number; completed: number; failed: number; error: string | null; profileId: string | null };
@@ -49,6 +56,12 @@ export type TaxonomyType = 'person' | 'studio' | 'genre' | 'category' | 'collect
 export type TaxonomyEntry = { id: string; type: TaxonomyType; slug: string; name: string; description: string | null; imageUrl: string | null; parentId: string | null; externalIds?: Record<string, unknown>; data?: Record<string, unknown> };
 export type TaxonomyWork = { id: string; slug: string; title: string; originalTitle?: string | null; releaseYear: number | null; posterPath: string | null; kind: string; role?: string | null; character?: string | null; position?: number };
 export type ImportProfile = { id: string; name: string; enabled: boolean; source: ImportSource; mode: 'metadata' | 'availability' | 'collection' | 'discovery'; intervalMinutes: number; collectionId: string | null; lockedFields: string[]; categoryIds: string[]; lastRunAt: string | null; nextRunAt: string | null; lastError: string | null; options?: ImportOptions };
+export type ImportMaintenanceKind = 'collections-dictionary' | 'collection-backfill' | 'person-enrichment';
+export type ImportMaintenanceSource = 'collaps' | 'tmdb' | 'kinopoisk';
+export type ImportMaintenanceOptions = { collectionIds?: string[] };
+export type ImportMaintenanceCursor = { page: number; offset: number; activeEntryId: string | null; entryAfterId: string | null; collectionIndex: number };
+export type ImportMaintenanceRun = { id: string; kind: ImportMaintenanceKind; source: ImportMaintenanceSource; state: string; createdAt: string; updatedAt: string; finishedAt: string | null; profileId: string | null; options: ImportMaintenanceOptions; batchLimit: number; timeBudgetSeconds: number; cursor: ImportMaintenanceCursor; stats: { processed: number; created: number; updated: number; linked: number; skipped: number; failed: number }; error: string | null; warnings: string[]; retryAfter: string | null };
+export type ImportMaintenanceProfile = { id: string; name: string; kind: ImportMaintenanceKind; source: ImportMaintenanceSource; enabled: boolean; options: ImportMaintenanceOptions; intervalMinutes: number; batchLimit: number; timeBudgetSeconds: number; cursor: ImportMaintenanceCursor; lastRunAt: string | null; nextRunAt: string | null; lastError: string | null };
 
 export const importerSources: ImportSource[] = ['tmdb', 'kinopoisk', 'alloha', 'collaps'];
 export const importerFields = ['title', 'originalTitle', 'description', 'releaseYear', 'runtimeMinutes', 'kind', 'genres', 'countries', 'posterUrl', 'backdropUrl', 'logoUrl', 'galleryUrls', 'trailerYoutubeKey', 'ratings', 'ageRating', 'credits', 'companies', 'collections', 'seasons', 'players'] as const;
@@ -74,7 +87,7 @@ export function importerSelection(options?: ImportOptions): ImportSelection {
 		fields: fields ? importerFields.filter(field => fields.includes(field)) : [...importerFields],
 		fieldSources: { ...Object.fromEntries(importerFields.map(field => [field, ''])), ...Object.fromEntries(Object.entries(options?.fieldSources ?? {}).filter(([field, source]) => importerFields.includes(field as ImportField) && importerSources.includes(source))) },
 		artwork: options?.artwork === 'local-webp' ? 'local-webp' : 'remote',
-		filters: { mediaTypes: [...options?.filters?.mediaTypes ?? []], kinds: [...options?.filters?.kinds ?? []], yearFrom: options?.filters?.yearFrom == null ? '' : String(options.filters.yearFrom), yearTo: options?.filters?.yearTo == null ? '' : String(options.filters.yearTo), genres: options?.filters?.genres?.join(', ') ?? '', countries: options?.filters?.countries?.join(', ') ?? '', ratingMin: options?.filters?.ratingMin == null ? '' : String(options.filters.ratingMin) },
+		filters: { mediaTypes: [...options?.filters?.mediaTypes ?? []], kinds: [...options?.filters?.kinds ?? []], yearFrom: options?.filters?.yearFrom == null ? '' : String(options.filters.yearFrom), yearTo: options?.filters?.yearTo == null ? '' : String(options.filters.yearTo), genres: options?.filters?.genres?.join(', ') ?? '', countries: options?.filters?.countries?.join(', ') ?? '', ratingMin: options?.filters?.ratingMin == null ? '' : String(options.filters.ratingMin), requirePlayer: options?.filters?.requirePlayer === true },
 	};
 }
 
@@ -90,6 +103,7 @@ export function importerOptions(selection: ImportSelection): ImportOptions {
 		...(list(filterForm.genres).length ? { genres: list(filterForm.genres) } : {}),
 		...(list(filterForm.countries).length ? { countries: list(filterForm.countries) } : {}),
 		...(filterForm.ratingMin !== '' ? { ratingMin: Number(filterForm.ratingMin) } : {}),
+		...(filterForm.requirePlayer ? { requirePlayer: true } : {}),
 	};
 	return {
 		sources: importerSources.filter(source => selection.sources.includes(source)),
@@ -109,6 +123,121 @@ export function importerFiltersValid(selection: ImportSelection): boolean {
 export function importerWorkIds(value: string): string[] | null {
 	const ids = [...new Set(value.split(/[\s,]+/u).map(id => id.trim()).filter(Boolean))];
 	return ids.length > 0 && ids.length <= 100 && ids.every(id => /^[a-zA-Z0-9]{1,32}$/u.test(id)) ? ids : null;
+}
+
+/** Credentials are intentionally visible only in the native administrator's secure settings UI. */
+export function importerServiceForm(settings: ImportServiceSettings): ImportServiceForm {
+	return { apiOrigin: settings.apiOrigin, playerOrigin: settings.playerOrigin ?? '', apiToken: settings.apiToken ?? '', playerToken: settings.playerToken ?? '', clearApiToken: false, clearPlayerToken: false };
+}
+
+/** Preserve the comparison baseline whenever its unsaved form is preserved too. */
+export function importerServiceSettingsUpdate(previous: ImportServiceSettingsResponse | null, result: ImportServiceSettingsResponse, savedSource?: ImportSource): ImportServiceSettingsResponse {
+	return {
+		encryptionReady: result.encryptionReady,
+		sources: result.sources.map(entry => {
+			const baseline = savedSource && entry.source !== savedSource ? previous?.sources.find(item => item.source === entry.source) ?? entry : entry;
+			return { ...baseline };
+		}),
+	};
+}
+
+/** This is syntax validation only; the server also rejects private/reserved hosts and DNS targets. */
+export function importerServiceOrigin(value: string): string | null {
+	try {
+		const raw = value.trim();
+		if (raw.length > 1024 || /\s/u.test(raw) || raw.includes('?') || raw.includes('#')) return null;
+		const url = new URL(raw);
+		const authority = /^https:\/\/([^/]+)/iu.exec(raw)?.[1];
+		if (!authority || authority.includes(':') || url.protocol !== 'https:' || url.username || url.password || url.port || url.search || url.hash || url.pathname !== '/' || !url.hostname.includes('.') || url.hostname.endsWith('.') || /^\[|^[\d.]+$/u.test(url.hostname) || url.hostname === 'localhost' || /\.(?:localhost|local|internal|lan|home|invalid|test|example)$/iu.test(url.hostname)) return null;
+		return url.origin;
+	} catch { return null; }
+}
+
+/** Address-only edits do not migrate an unchanged environment credential into the database. */
+export function importerServiceRequest(settings: ImportServiceSettings, form: ImportServiceForm): ImportServiceSave | null {
+	if (!importerSources.includes(settings.source)) return null;
+	const apiOrigin = importerServiceOrigin(form.apiOrigin);
+	const hasPlayer = settings.source === 'alloha' || settings.source === 'collaps';
+	const playerOrigin = hasPlayer ? importerServiceOrigin(form.playerOrigin) : null;
+	if (!apiOrigin || (hasPlayer && !playerOrigin)) return null;
+	const apiToken = form.apiToken.trim();
+	const playerToken = form.playerToken.trim();
+	// eslint-disable-next-line no-control-regex
+	const invalidToken = /[\s\u0000-\u001f\u007f-\u009f]/u;
+	if ([apiToken, ...(settings.source === 'alloha' ? [playerToken] : [])].some(token => token.length > 4096 || invalidToken.test(token))) return null;
+	if ((form.clearApiToken && apiToken) || (settings.source === 'alloha' && form.clearPlayerToken && playerToken)) return null;
+	if (settings.source === 'alloha' && playerToken && playerToken !== settings.playerToken && !/^[A-Za-z0-9_-]{8,512}$/u.test(playerToken)) return null;
+	return {
+		source: settings.source, apiOrigin,
+		...(playerOrigin ? { playerOrigin } : {}),
+		...(form.clearApiToken ? { clearApiToken: true } : apiToken && apiToken !== settings.apiToken ? { apiToken } : {}),
+		...(settings.source === 'alloha' ? form.clearPlayerToken ? { clearPlayerToken: true } : playerToken && playerToken !== settings.playerToken ? { playerToken } : {} : {}),
+	};
+}
+
+export function importerCredentialOriginLabel(origin: ImportCredentialOrigin): string { return ({ environment: i18n.ts.zalip._importer.credentialEnvironment, database: i18n.ts.zalip._importer.credentialDatabase, none: i18n.ts.zalip._importer.credentialMissing })[origin]; }
+
+/** Persist presentation settings, not provider IDs or iframe credentials. */
+export function importerPlaybackSettings(providers: ImportPlaybackProvider[]): { providers: ImportPlaybackProvider[] } | null {
+	if (providers.length !== 2 || new Set(providers.map(provider => provider.source)).size !== 2 || !providers.some(provider => provider.source === 'alloha') || !providers.some(provider => provider.source === 'collaps') || new Set(providers.map(provider => provider.position)).size !== 2) return null;
+	const snapshot = providers.map(provider => ({ source: provider.source, label: provider.label.trim(), enabled: provider.enabled, position: provider.position }));
+	// Reject C0/C1 control characters, matching the server's display-label validation.
+	// eslint-disable-next-line no-control-regex
+	const controlCharacters = /[\u0000-\u001f\u007f-\u009f]/u;
+	if (snapshot.some(provider => !provider.label || provider.label.length > 40 || controlCharacters.test(provider.label) || typeof provider.enabled !== 'boolean' || ![0, 1].includes(provider.position))) return null;
+	return { providers: snapshot.sort((a, b) => a.position - b.position) };
+}
+
+/** Page by effective work/role, retaining existing cards on a retry. */
+export function taxonomyAppendWorks(previous: TaxonomyWork[], next: TaxonomyWork[]): TaxonomyWork[] {
+	const seen = new Set(previous.map(work => `${work.id}:${work.role ?? ''}`));
+	return [...previous, ...next.filter(work => { const key = `${work.id}:${work.role ?? ''}`; if (seen.has(key)) return false; seen.add(key); return true; })];
+}
+
+export function importerCollectionIds(value: string): string[] | null {
+	const ids = [...new Set(value.split(/[\s,]+/u).map(id => id.trim()).filter(Boolean))];
+	return ids.length <= 100 && ids.every(id => /^[1-9][0-9]{0,15}$/u.test(id)) ? ids : null;
+}
+
+export function importerMaintenanceRequest(form: { kind: ImportMaintenanceKind; source: ImportMaintenanceSource; collectionIds: string; batchLimit: number; timeBudgetSeconds: number }): { kind: ImportMaintenanceKind; source: ImportMaintenanceSource; options?: ImportMaintenanceOptions; batchLimit: number; timeBudgetSeconds: number } | null {
+	if (!Number.isInteger(form.batchLimit) || form.batchLimit < 20 || form.batchLimit > 50 || !Number.isInteger(form.timeBudgetSeconds) || form.timeBudgetSeconds < 10 || form.timeBudgetSeconds > 120) return null;
+	if (form.kind === 'person-enrichment' ? !['tmdb', 'kinopoisk'].includes(form.source) : !['collections-dictionary', 'collection-backfill'].includes(form.kind) || form.source !== 'collaps') return null;
+	const ids = form.kind === 'collection-backfill' ? importerCollectionIds(form.collectionIds) : [];
+	if (ids === null) return null;
+	return { kind: form.kind, source: form.source, batchLimit: form.batchLimit, timeBudgetSeconds: form.timeBudgetSeconds, ...(ids.length ? { options: { collectionIds: ids } } : {}) };
+}
+
+export function importerMaintenanceLabel(kind: ImportMaintenanceKind): string {
+	return ({ 'collections-dictionary': i18n.ts.zalip._importer.dictionaryMaintenance, 'collection-backfill': i18n.ts.zalip._importer.collectionBackfill, 'person-enrichment': i18n.ts.zalip._importer.personMaintenance })[kind];
+}
+
+export type ImporterRequestState = { revision: number; loading: boolean; error: string };
+
+export function importerRequestState(): ImporterRequestState { return { revision: 0, loading: false, error: '' }; }
+
+export function importerRequestStart(state: ImporterRequestState): number { state.loading = true; state.error = ''; return ++state.revision; }
+
+export function importerRequestCurrent(state: ImporterRequestState, revision: number): boolean { return state.revision === revision; }
+
+export function importerRequestFinish(state: ImporterRequestState, revision: number): void { if (importerRequestCurrent(state, revision)) state.loading = false; }
+
+/** An action result supersedes pending reads; invalidate their spinner and error atomically. */
+export function importerRequestInvalidate(state: ImporterRequestState): void { state.revision++; state.loading = false; state.error = ''; }
+
+/** A mutation may start while a list refresh is waiting. Recheck before starting its detail read. */
+export async function importerRefreshSequence(refreshList: () => Promise<void>, refreshCurrent: () => Promise<void>, ready: () => boolean): Promise<void> {
+	if (!ready()) return;
+	await refreshList();
+	if (!ready()) return;
+	await refreshCurrent();
+}
+
+/** Collection presentation fields remain independent from imported collection provenance. */
+export function taxonomyCollectionChanges(form: { semanticKind: 'theme' | 'platform' | 'franchise'; isEnabled: boolean }, original: Record<string, unknown>): Record<string, string | boolean> {
+	const changes: Record<string, string | boolean> = {};
+	if (form.semanticKind !== (original.semanticKind ?? 'theme')) changes.semanticKind = form.semanticKind;
+	if (form.isEnabled !== (original.isEnabled !== false)) changes.isEnabled = form.isEnabled;
+	return changes;
 }
 
 /** Public profiles never render arbitrary imported data keys or executable links. */
@@ -161,6 +290,8 @@ export function importerFieldLabel(field: string): string {
 /** Translate closed warning codes only; never expose raw provider text, URLs or credentials. */
 export function importerWarningLabel(value: unknown): string {
 	if (typeof value !== 'string') return i18n.ts.zalip._importer.warningGeneric;
+	const maintenance: Record<string, string> = { 'dictionary-pagination-uncertain': i18n.ts.zalip._importer.warningDictionaryPagination, 'collection-identity-conflict': i18n.ts.zalip._importer.warningCollectionConflict, 'collection-field-locked': i18n.ts.zalip._importer.warningCollectionLocked, 'person-id-missing': i18n.ts.zalip._importer.warningPersonIdMissing };
+	if (Object.hasOwn(maintenance, value)) return maintenance[value];
 	const artwork = /^artwork-local-unavailable:(posterUrl|backdropUrl|logoUrl|galleryUrls)$/u.exec(value);
 	if (artwork) return i18n.tsx.zalip._importer.warningArtworkLocal({ field: importerFieldLabel(artwork[1]) });
 	const provider = /^(tmdb|kinopoisk|alloha|collaps):(not-configured|not-found|quota-exceeded|rate-limited|upstream-failure|invalid-ref|unsupported|malformed-response|NO_SUCH_WORK|IMPORT_IDENTITY_CONFLICT|IMPORT_INVALID_RECORD|ZALIP_CATALOG_ENTRY_NOT_FOUND|import-failed)$/u.exec(value);

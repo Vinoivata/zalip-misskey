@@ -13,13 +13,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<form :class="$style.search" @submit.prevent="applySearch"><i class="ti ti-search" aria-hidden="true"></i><input v-model.trim="queryInput" type="search" maxlength="200" :aria-label="i18n.ts.zalip._importer.directorySearch" :placeholder="i18n.ts.zalip._importer.directorySearchPlaceholder"><button type="submit" class="_button" :class="$style.button">{{ i18n.ts.zalip._importer.find }}</button></form>
 			</template>
 			<div v-if="loading && !entries.length && !entry" :class="$style.empty"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.loading }}</div>
-			<div v-else-if="loadError" :class="$style.empty" role="alert"><i class="ti ti-alert-circle" aria-hidden="true"></i><strong>{{ loadError }}</strong><button type="button" class="_button" :class="$style.button" @click="load(false)">{{ i18n.ts.zalip._importer.retry }}</button></div>
+			<div v-else-if="loadError && !entry && !entries.length" :class="$style.empty" role="alert"><i class="ti ti-alert-circle" aria-hidden="true"></i><strong>{{ loadError }}</strong><button type="button" class="_button" :class="$style.button" @click="load(false)">{{ i18n.ts.zalip._importer.retry }}</button></div>
 			<template v-else-if="entry">
 				<section :class="$style.hero"><div v-if="importerImageUrl(entry.imageUrl)" :class="[$style.entityArtwork, { [$style.portrait]: currentType === 'person' }]"><img :src="importerImageUrl(entry.imageUrl)!" :alt="entry.name"></div><div :class="$style.heroInformation"><dl v-if="facts.length" :class="$style.facts"><div v-for="fact in facts" :key="fact.key"><dt>{{ taxonomyFactLabel(fact.key) }}</dt><dd><a v-if="fact.href" :href="fact.href" target="_blank" rel="noopener noreferrer">{{ fact.value }}<i class="ti ti-external-link" aria-hidden="true"></i></a><template v-else>{{ fact.value }}</template></dd></div></dl><p v-if="biography" :class="$style.description">{{ biography }}</p><p v-else :class="$style.muted">{{ i18n.tsx.zalip._importer.catalogueEntity({ type: taxonomyTypeLabel(entry.type) }) }}</p></div></section>
 				<section><h2>{{ currentType === 'person' ? i18n.ts.zalip._importer.filmography : currentType === 'studio' ? i18n.ts.zalip._importer.studioWorks : i18n.ts.zalip._importer.works }}</h2><p v-if="!works.length" :class="$style.empty">{{ i18n.ts.zalip._importer.noPublishedWorks }}</p><div v-else :class="$style.works"><MkA v-for="work in works" :key="`${work.id}:${work.role ?? ''}`" :to="`/zalip/${work.slug}`" :class="$style.work"><div :class="$style.poster"><img v-if="importerImageUrl(work.posterPath)" :src="importerImageUrl(work.posterPath)!" alt="" loading="lazy"><i v-else class="ti ti-movie" aria-hidden="true"></i></div><div><h3>{{ work.title }}</h3><p>{{ [work.releaseYear, kindLabel(work.kind)].filter(Boolean).join(' · ') }}</p><p v-if="work.role || work.character" :class="$style.role">{{ [work.role, work.character].filter(Boolean).join(' · ') }}</p></div></MkA></div></section>
 			</template>
 			<template v-else-if="!props.slug"><div v-if="entries.length" :class="$style.entries"><MkA v-for="item in entries" :key="item.id" :to="`/zalip/taxonomy/${item.type}/${item.slug}`" :class="$style.entry"><div :class="$style.entryArtwork"><img v-if="importerImageUrl(item.imageUrl)" :src="importerImageUrl(item.imageUrl)!" alt="" loading="lazy"><i v-else :class="typeIcon" aria-hidden="true"></i></div><div><h2>{{ item.name }}</h2><p v-if="item.description">{{ item.description }}</p></div><i class="ti ti-chevron-right" aria-hidden="true"></i></MkA></div><p v-else :class="$style.empty">{{ i18n.ts.zalip._importer.directoryNoResults }}</p><button v-if="hasMore" type="button" class="_button" :class="[$style.button, $style.more]" :disabled="loading" @click="load(true)">{{ loading ? i18n.ts.zalip._importer.loading : i18n.ts.zalip._importer.showMore }}</button></template>
 			<p v-else :class="$style.empty">{{ i18n.ts.zalip._importer.entryNotFound }}</p>
+			<p v-if="loadError && (entry || entries.length)" :class="$style.loadError" role="alert">{{ loadError }} <button type="button" class="_textButton" :disabled="loading" @click="load(true)">{{ i18n.ts.zalip._importer.retry }}</button></p>
+			<button v-if="entry && worksCursor" type="button" class="_button" :class="[$style.button, $style.more]" :disabled="loading" @click="load(true)">{{ loading ? i18n.ts.zalip._importer.loading : i18n.ts.zalip._importer.showMore }}</button>
 		</main>
 	</div>
 </PageWithHeader>
@@ -29,7 +31,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed, onMounted, ref, watch } from 'vue';
 import type { TaxonomyEntry, TaxonomyType, TaxonomyWork } from '@/utility/zalip-importer.js';
 import { i18n } from '@/i18n.js';
-import { importerImageUrl, taxonomyFactLabel, taxonomyFacts, taxonomyTypeLabel, taxonomyTypes } from '@/utility/zalip-importer.js';
+import { importerImageUrl, taxonomyAppendWorks, taxonomyFactLabel, taxonomyFacts, taxonomyTypeLabel, taxonomyTypes } from '@/utility/zalip-importer.js';
 import { useRouter } from '@/router.js';
 import { definePage } from '@/page.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
@@ -42,6 +44,7 @@ const queryInput = ref(props.query);
 const entries = ref<TaxonomyEntry[]>([]);
 const entry = ref<TaxonomyEntry | null>(null);
 const works = ref<TaxonomyWork[]>([]);
+const worksCursor = ref<string | null>(null);
 const loading = ref(false);
 const loadError = ref('');
 const hasMore = ref(false);
@@ -56,15 +59,17 @@ function applySearch(): void { router.push('/zalip/taxonomy', { query: { type: c
 
 async function load(append: boolean): Promise<void> {
 	if (append && loading.value) return;
+	if (append && props.slug && !worksCursor.value) return;
 	const revision = ++requestRevision;
 	loading.value = true;
 	loadError.value = '';
 	try {
 		if (props.slug) {
-			const result = await misskeyApiZalip<{ entry: TaxonomyEntry; works: TaxonomyWork[] }>('zalip/taxonomy/show', { type: currentType.value, slug: props.slug });
+			const result = await misskeyApiZalip<{ entry: TaxonomyEntry; works: TaxonomyWork[]; nextCursor: string | null }>('zalip/taxonomy/show', { type: currentType.value, slug: props.slug, limit: PAGE_SIZE, ...(append && worksCursor.value ? { cursor: worksCursor.value } : {}) });
 			if (revision !== requestRevision) return;
 			entry.value = result.entry;
-			works.value = result.works;
+			works.value = append ? taxonomyAppendWorks(works.value, result.works) : result.works;
+			worksCursor.value = result.nextCursor ?? null;
 		} else {
 			const result = await misskeyApiZalip<{ entries: TaxonomyEntry[] }>('zalip/taxonomy/list', { type: currentType.value, query: props.query, limit: PAGE_SIZE, offset: append ? entries.value.length : 0 });
 			if (revision !== requestRevision) return;
@@ -76,7 +81,7 @@ async function load(append: boolean): Promise<void> {
 	} finally { if (revision === requestRevision) loading.value = false; }
 }
 
-watch(() => [props.type, props.slug, props.query], () => { entry.value = null; entries.value = []; works.value = []; queryInput.value = props.query; void load(false); });
+watch(() => [props.type, props.slug, props.query], () => { entry.value = null; entries.value = []; works.value = []; worksCursor.value = null; hasMore.value = false; queryInput.value = props.query; void load(false); });
 onMounted(() => void load(false));
 definePage(() => ({ title: entry.value?.name ?? taxonomyTypeLabel(currentType.value), icon: typeIcon.value }));
 </script>
@@ -129,6 +134,7 @@ definePage(() => ({ title: entry.value?.name ?? taxonomyTypeLabel(currentType.va
 .empty { display: grid; justify-items: center; gap: 12px; padding: 50px 20px; color: var(--MI_THEME-fgTransparentWeak); text-align: center; }
 .empty > i { font-size: 2rem; color: var(--MI_THEME-accent); }
 .more { margin: 24px auto 0; display: flex; width: fit-content; }
+.loadError { margin-top: 20px; color: var(--MI_THEME-error); font-size: .85rem; line-height: 1.6; }
 @media (max-width: 650px) { .page { padding-top: 12px; } .heading { align-items: start; } .heading h1 { font-size: 1.4rem; } .heading .button { padding: 9px; font-size: .75rem; } .entries { grid-template-columns: 1fr; } .hero { gap: 16px; padding: 16px; } .entityArtwork.portrait { width: 100px; } .description { font-size: .9rem; } .works { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 10px; } .tabs a { font-size: .82rem; } }
 @media (max-width: 650px) { .hero { flex-wrap: wrap; } .heroInformation { flex-basis: 100%; } .facts { gap: 12px; } }
 </style>

@@ -18,7 +18,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<article v-for="source in importerSources" :key="source" :class="$style.source">
 						<strong>{{ importerSourceLabel(source) }}</strong><span :class="{ [$style.connected]: sourceStatus(source)?.configured }">{{ sourcesLoading ? i18n.ts.zalip._importer.checkingSettings : sourcesError ? i18n.ts.zalip._importer.configurationUnknown : sourceStatus(source)?.configured ? i18n.ts.zalip._importer.configured : i18n.ts.zalip._importer.notConfigured }}</span>
 						<small v-if="sourceStatus(source)?.dailyLimit">{{ i18n.tsx.zalip._importer.dailyLimit({ count: String(sourceStatus(source)?.dailyLimit) }) }}</small>
-						<button type="button" class="_button" :class="$style.button" :disabled="sourceChecking[source] || !sourceStatus(source)?.configured" @click="checkSource(source)"><i :class="sourceChecking[source] ? 'ti ti-loader-2 ti-spin' : 'ti ti-plug-connected'" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.checkSource }}</button>
+						<button type="button" class="_button" :class="$style.button" :disabled="busy || sourceChecking[source] || !sourceStatus(source)?.configured" @click="checkSource(source)"><i :class="sourceChecking[source] ? 'ti ti-loader-2 ti-spin' : 'ti ti-plug-connected'" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.checkSource }}</button>
 						<template v-if="sourceChecks[source]"><small :class="{ [$style.error]: !sourceChecks[source]!.ok }" role="status">{{ sourceChecks[source]!.ok ? i18n.ts.zalip._importer.sourceHealthy : i18n.ts.zalip._importer.sourceCheckFailed }}</small><small>{{ i18n.tsx.zalip._importer.sourceChecked({ date: dateLabel(sourceChecks[source]!.checkedAt), latency: String(sourceChecks[source]!.latencyMs) }) }}<span v-if="sourceChecks[source]!.cached"> · {{ i18n.ts.zalip._importer.cachedCheck }}</span></small></template>
 						<small v-if="sourceCheckErrors[source]" :class="$style.error" role="alert">{{ sourceCheckErrors[source] }}</small>
 					</article>
@@ -36,6 +36,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<summary>{{ i18n.ts.zalip._importer.importOptions }}</summary>
 					<p :class="$style.hint">{{ i18n.ts.zalip._importer.optionsHint }}</p>
 					<div :class="$style.form"><label><span>{{ i18n.ts.zalip._importer.artworkStorage }}</span><select v-model="currentSelection.artwork" :disabled="busy || profileOptionsLocked"><option value="remote">{{ i18n.ts.zalip._importer.artworkRemote }}</option><option value="local-webp">{{ i18n.ts.zalip._importer.artworkLocal }}</option></select></label><p :class="$style.hint">{{ i18n.ts.zalip._importer.artworkStorageHint }}</p></div>
+					<label :class="$style.check"><input v-model="currentSelection.filters.requirePlayer" type="checkbox" :disabled="busy || profileOptionsLocked">{{ i18n.ts.zalip._importer.requirePlayer }}</label><p :class="$style.hint">{{ i18n.ts.zalip._importer.requirePlayerHint }}</p>
 					<fieldset :class="$style.locks"><legend>{{ i18n.ts.zalip._importer.enrichmentSources }}</legend><label v-for="source in importerSources" :key="source"><input v-model="currentSelection.sources" type="checkbox" :value="source" :disabled="busy || profileOptionsLocked || !sourceStatus(source)?.configured">{{ importerSourceLabel(source) }}</label></fieldset>
 					<h3 :class="$style.optionsHeading">{{ i18n.ts.zalip._importer.selectedFields }}</h3>
 					<details v-for="group in importerFieldGroups" :key="group.id" :class="$style.fieldGroup">
@@ -136,6 +137,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<h2>{{ taxonomyForm.id ? i18n.ts.zalip._importer.editEntry : i18n.ts.zalip._importer.newEntry }}</h2>
 						<form :class="$style.form" @submit.prevent="saveTaxonomy"><label><span>{{ i18n.ts.zalip._importer.type }}</span><select v-model="taxonomyForm.type" :disabled="busy || (!!taxonomyForm.id)"><option v-for="type in taxonomyTypes" :key="type" :value="type">{{ taxonomyTypeLabel(type) }}</option></select></label><label><span>{{ i18n.ts.zalip._importer.name }}</span><input v-model.trim="taxonomyForm.name" required maxlength="256" :disabled="busy"></label><label><span>{{ i18n.ts.zalip._importer.slug }}</span><input v-model.trim="taxonomyForm.slug" maxlength="160" :placeholder="i18n.ts.zalip._importer.slugPlaceholder" :disabled="busy"></label><label><span>{{ i18n.ts.zalip._importer.imageUrl }}</span><input v-model.trim="taxonomyForm.imageUrl" type="url" maxlength="1024" :disabled="busy"></label><label v-if="taxonomyForm.type === 'category'" :class="$style.wide"><span>{{ i18n.ts.zalip._importer.parentCategory }}</span><select v-model="taxonomyForm.parentId" :disabled="busy"><option value="">{{ i18n.ts.zalip._importer.noParent }}</option><option v-for="entry in categories.filter(category => category.id !== taxonomyForm.id)" :key="entry.id" :value="entry.id">{{ entry.name }}</option></select></label><label :class="$style.wide"><span>{{ i18n.ts.zalip._importer.description }}</span><textarea v-model="taxonomyForm.description" rows="4" maxlength="8192" :disabled="busy"></textarea></label><div :class="[$style.actions, $style.wide]"><button type="submit" class="_button" :class="$style.primary" :disabled="busy || !taxonomyForm.name"><i class="ti ti-device-floppy" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.save }}</button><MkA v-if="taxonomyForm.id && taxonomyForm.slug" :to="`/zalip/taxonomy/${taxonomyForm.type}/${taxonomyForm.slug}`" :class="$style.button">{{ i18n.ts.zalip._importer.publicPage }}</MkA></div></form>
 						<details v-if="taxonomyForm.type === 'person'" :class="$style.fieldGroup" open><summary>{{ i18n.ts.zalip._importer.personFacts }}</summary><div :class="$style.form"><label v-for="key in personFactKeys" :key="key"><span>{{ taxonomyFactLabel(key) }}</span><input v-model.trim="personFacts[key]" :type="key === 'homepage' ? 'url' : 'text'" :maxlength="key === 'birthday' || key === 'deathday' ? 32 : key === 'homepage' ? 1024 : 256" :disabled="busy"></label><label :class="$style.wide"><span>{{ i18n.ts.zalip._importer.aliases }}</span><textarea v-model="personFacts.aliases" rows="3" maxlength="7710" :placeholder="i18n.ts.zalip._importer.aliasesHint" :disabled="busy"></textarea></label><label :class="$style.wide"><span>{{ i18n.ts.zalip._importer.biography }}</span><textarea v-model="personFacts.biography" rows="6" maxlength="16384" :disabled="busy"></textarea></label></div><div :class="$style.actions"><button type="button" class="_button" :class="$style.primary" :disabled="busy || !taxonomyForm.name" @click="saveTaxonomy">{{ i18n.ts.zalip._importer.save }}</button></div><template v-if="taxonomyForm.id"><p :class="$style.hint">{{ i18n.ts.zalip._importer.personEnrichmentHint }}</p><div :class="$style.actions"><button v-for="source in personSources" :key="source" type="button" class="_button" :class="$style.button" :disabled="busy || taxonomyDirty" @click="enrichPerson(source)"><i class="ti ti-refresh" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.personEnrichment }} · {{ importerSourceLabel(source) }}</button></div></template></details>
+						<details v-if="taxonomyForm.type === 'collection'" :class="$style.fieldGroup" open><summary>{{ i18n.ts.zalip._importer.collectionPresentation }}</summary><div :class="$style.form"><label><span>{{ i18n.ts.zalip._importer.collectionSemanticKind }}</span><select v-model="collectionForm.semanticKind" :disabled="busy"><option value="theme">{{ i18n.ts.zalip._importer.collectionTheme }}</option><option value="platform">{{ i18n.ts.zalip._importer.collectionPlatform }}</option><option value="franchise">{{ i18n.ts.zalip._importer.collectionFranchise }}</option></select></label><label :class="$style.check"><input v-model="collectionForm.isEnabled" type="checkbox" :disabled="busy">{{ i18n.ts.zalip._importer.collectionPublicEnabled }}</label></div><p :class="$style.hint">{{ i18n.ts.zalip._importer.collectionPresentationHint }}</p><button type="button" class="_button" :class="$style.primary" :disabled="busy || !taxonomyForm.name" @click="saveTaxonomy">{{ i18n.ts.zalip._importer.save }}</button></details>
+						<div v-if="taxonomyForm.type === 'collection' && collectionCollapsId" :class="$style.actions"><span :class="$style.hint">{{ i18n.tsx.zalip._importer.collectionSourceId({ id: collectionCollapsId }) }}</span><button type="button" class="_button" :class="$style.button" :disabled="busy || taxonomyDirty || !collectionForm.isEnabled || !sourceStatus('collaps')?.configured" @click="prepareCollectionBackfill"><i class="ti ti-link" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.prepareCollectionBackfill }}</button></div>
 						<fieldset v-if="taxonomyForm.type === 'category'" :class="$style.categoryRules">
 							<legend>{{ i18n.ts.zalip._importer.categoryRules }}</legend>
 							<label :class="$style.check"><input v-model="categoryRules.enabled" type="checkbox" :disabled="busy">{{ i18n.ts.zalip._importer.enableCategoryRules }}</label>
@@ -152,10 +155,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 						</fieldset>
 						<details v-if="taxonomyForm.id && taxonomyForm.type === 'category'" :class="$style.fieldGroup"><summary>{{ i18n.ts.zalip._importer.recalculate }}</summary><p :class="$style.hint">{{ i18n.ts.zalip._importer.recalculateHint }}</p><div :class="$style.form"><label><span>{{ i18n.ts.zalip._importer.task }}</span><select v-model="recalculateForm.mode" :disabled="busy" @change="resetRecalculate"><option value="selected">{{ i18n.ts.zalip._importer.recalculateSelected }}</option><option value="catalogue">{{ i18n.ts.zalip._importer.recalculateCatalogue }}</option></select></label><label v-if="recalculateForm.mode === 'selected'" :class="$style.wide"><span>{{ i18n.ts.zalip._importer.recalculateWorkIds }}</span><textarea v-model="recalculateForm.workIds" rows="3" maxlength="3300" :disabled="busy"></textarea></label></div><div :class="$style.actions"><button type="button" class="_button" :class="$style.button" :disabled="busy || taxonomyDirty" @click="recalculateCategory(false)">{{ i18n.ts.zalip._importer.recalculate }}</button><button v-if="recalculateForm.mode === 'catalogue' && recalculateCursor" type="button" class="_button" :class="$style.button" :disabled="busy || taxonomyDirty" @click="recalculateCategory(true)">{{ i18n.ts.zalip._importer.recalculateContinue }}</button></div><p v-if="recalculateResult" :class="$style.hint" role="status">{{ i18n.tsx.zalip._importer.recalculateResult({ processed: String(recalculateResult.processed), matched: String(recalculateResult.matched), skipped: String(recalculateResult.skipped) }) }}<span v-if="recalculateForm.mode === 'catalogue' && !recalculateCursor"> · {{ i18n.ts.zalip._importer.recalculateDone }}</span></p></details>
 						<template v-if="taxonomyForm.id"><h3>{{ i18n.ts.zalip._importer.linkedWorks }}</h3><form :class="$style.form" @submit.prevent="linkTaxonomy"><label><span>{{ i18n.ts.zalip._importer.workId }}</span><input v-model.trim="membership.workId" required maxlength="32" :placeholder="i18n.ts.zalip._importer.workIdPlaceholder" :disabled="busy"></label><label><span>{{ i18n.ts.zalip._importer.role }}</span><input v-model.trim="membership.role" maxlength="64" :placeholder="i18n.ts.zalip._importer.rolePlaceholder" :disabled="busy"></label><label><span>{{ i18n.ts.zalip._importer.character }}</span><input v-model.trim="membership.character" maxlength="256" :disabled="busy"></label><label><span>{{ i18n.ts.zalip._importer.position }}</span><input v-model.number="membership.position" type="number" min="0" max="100000" :disabled="busy"></label><button type="submit" class="_button" :class="$style.button" :disabled="busy || taxonomyWorksLoading"><i class="ti ti-link" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.linkWork }}</button></form><p v-if="taxonomyWorksLoading" :class="$style.hint" role="status">{{ i18n.ts.zalip._importer.loading }}</p><div :class="$style.rows"><article v-for="work in taxonomyWorks" :key="`${work.id}:${work.role ?? ''}`" :class="$style.itemRow"><div><strong>{{ work.title }}</strong><small>{{ [work.releaseYear, work.role, work.character].filter(Boolean).join(' · ') }}</small></div><button type="button" class="_button" :class="$style.danger" :disabled="busy || taxonomyWorksLoading" :aria-label="i18n.tsx.zalip._importer.unlinkWork({ name: work.title })" @click="unlinkTaxonomy(work)"><i class="ti ti-unlink" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.unlink }}</button></article></div></template>
+						<p v-if="taxonomyForm.id && taxonomyWorksError" :class="$style.error" role="alert">{{ taxonomyWorksError }} <button type="button" class="_textButton" :disabled="busy || taxonomyWorksLoading" @click="loadTaxonomyWorks(taxonomyForm.id, taxonomyWorksRetryAppend)">{{ i18n.ts.zalip._importer.retry }}</button></p><button v-if="taxonomyForm.id && taxonomyWorksCursor" type="button" class="_button" :class="$style.button" :disabled="busy || taxonomyWorksLoading" @click="loadTaxonomyWorks(taxonomyForm.id, true)">{{ i18n.ts.zalip._importer.showMore }}</button>
 					</section>
 				</template>
 
-				<template v-else>
+				<template v-else-if="tab === 'schedules'">
 					<section :class="$style.panel">
 						<div :class="$style.sectionHeading"><div><h2>{{ i18n.ts.zalip._importer.schedulesHeading }}</h2><p>{{ i18n.ts.zalip._importer.schedulesHint }}</p></div><button type="button" class="_button" :class="$style.primary" :disabled="busy" @click="resetProfile()"><i class="ti ti-plus" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.newSchedule }}</button></div>
 						<p v-if="profilesError" :class="$style.error" role="alert">{{ profilesError }}</p><p :class="$style.hint">{{ i18n.ts.zalip._importer.activeProfileHint }}</p>
@@ -163,6 +167,85 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</section>
 					<section :class="$style.panel"><h2>{{ profileForm.id ? i18n.ts.zalip._importer.editSchedule : i18n.ts.zalip._importer.newSchedule }}</h2>
 						<form :class="$style.form" @submit.prevent="saveProfile"><label><span>{{ i18n.ts.zalip._importer.name }}</span><input v-model.trim="profileForm.name" required maxlength="120" :disabled="busy"></label><label><span>{{ i18n.ts.zalip._importer.source }}</span><select v-model="profileForm.source" :disabled="busy || profileOptionsLocked"><option v-for="source in importerSources" :key="source" :value="source" :disabled="!sourceStatus(source)?.configured">{{ importerSourceLabel(source) }}</option></select></label><label><span>{{ i18n.ts.zalip._importer.task }}</span><select v-model="profileForm.mode" :disabled="busy || profileOptionsLocked"><option value="metadata">{{ i18n.ts.zalip._importer.metadataMode }}</option><option value="availability">{{ i18n.ts.zalip._importer.availabilityMode }}</option><option value="collection">{{ i18n.ts.zalip._importer.collectionMode }}</option><option value="discovery" :disabled="profileForm.source !== 'collaps' || !sourceStatus('collaps')?.capabilities.updates">{{ i18n.ts.zalip._importer.discoveryMode }}</option></select></label><label><span>{{ i18n.ts.zalip._importer.interval }}</span><input v-model.number="profileForm.intervalMinutes" type="number" required min="15" max="43200" :disabled="busy"></label><label v-if="profileForm.mode === 'collection'" :class="$style.wide"><span>{{ i18n.ts.zalip._importer.collectionId }}</span><input v-model.trim="profileForm.collectionId" required maxlength="100" pattern="[A-Za-z0-9_-]+" :disabled="busy || profileOptionsLocked"></label><label :class="$style.wide"><span>{{ i18n.ts.zalip._importer.categories }}</span><select v-model="profileForm.categoryIds" multiple size="3" :disabled="busy"><option v-for="entry in categories" :key="entry.id" :value="entry.id">{{ entry.name }}</option></select></label><details :class="[$style.fieldGroup, $style.wide]"><summary>{{ i18n.ts.zalip._importer.lockedFields }}</summary><fieldset v-for="group in importerFieldGroups" :key="group.id" :class="[$style.locks, $style.lockGroup]"><legend>{{ importerGroupLabel(group.id) }}</legend><label v-for="field in group.fields" :key="field"><input v-model="profileForm.lockedFields" type="checkbox" :value="field" :disabled="busy">{{ importerFieldLabel(field) }}</label></fieldset></details><label :class="[$style.check, $style.wide]"><input v-model="profileForm.enabled" type="checkbox" :disabled="busy">{{ i18n.ts.zalip._importer.enableSchedule }}</label><p v-if="profileCapabilityWarning" :class="[$style.hint, $style.wide]">{{ profileCapabilityWarning }}</p><button type="submit" class="_button" :class="$style.primary" :disabled="busy || !profileForm.name || !!profileCapabilityWarning"><i class="ti ti-device-floppy" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.saveSchedule }}</button></form>
+					</section>
+				</template>
+
+				<template v-else-if="tab === 'maintenance'">
+					<details :class="[$style.panel, $style.details]" open>
+						<summary>{{ i18n.ts.zalip._importer.playbackSettings }}</summary>
+						<p :class="$style.hint">{{ i18n.ts.zalip._importer.playbackSettingsHint }}</p>
+						<p v-if="playbackSettingsLoading" :class="$style.hint" role="status">{{ i18n.ts.zalip._importer.loading }}</p>
+						<p v-if="playbackSettingsError" :class="$style.error" role="alert">{{ playbackSettingsError }} <button type="button" class="_textButton" :disabled="playbackSettingsLoading || busy" @click="loadPlaybackSettings">{{ i18n.ts.zalip._importer.retry }}</button></p>
+						<form v-if="playbackProviders.length" @submit.prevent="savePlaybackSettings">
+							<div v-for="(provider, index) in playbackProviders" :key="provider.source" :class="$style.playerSettingsRow">
+								<label :class="$style.grow"><span>{{ importerSourceLabel(provider.source) }} · {{ i18n.ts.zalip._importer.playerLabel }}</span><input v-model="provider.label" required maxlength="40" :disabled="busy || playbackSettingsLoading"></label>
+								<label :class="$style.check"><input v-model="provider.enabled" type="checkbox" :disabled="busy || playbackSettingsLoading">{{ i18n.ts.zalip._importer.enabled }}</label>
+								<div :class="$style.actions"><button type="button" class="_button" :class="$style.button" :disabled="busy || playbackSettingsLoading || index === 0" :aria-label="i18n.tsx.zalip._importer.movePlayerUp({ name: provider.label })" @click="movePlayer(index, -1)"><i class="ti ti-arrow-up" aria-hidden="true"></i></button><button type="button" class="_button" :class="$style.button" :disabled="busy || playbackSettingsLoading || index === playbackProviders.length - 1" :aria-label="i18n.tsx.zalip._importer.movePlayerDown({ name: provider.label })" @click="movePlayer(index, 1)"><i class="ti ti-arrow-down" aria-hidden="true"></i></button></div>
+							</div>
+							<button type="submit" class="_button" :class="$style.primary" :disabled="busy || playbackSettingsLoading || !importerPlaybackSettings(playbackProviders)">{{ i18n.ts.zalip._importer.save }}</button>
+						</form>
+					</details>
+					<section :class="$style.panel">
+						<h2>{{ i18n.ts.zalip._importer.maintenanceHeading }}</h2><p :class="$style.hint">{{ i18n.ts.zalip._importer.maintenanceHint }}</p>
+						<form :class="$style.form" @submit.prevent="createMaintenance">
+							<label><span>{{ i18n.ts.zalip._importer.task }}</span><select v-model="maintenanceForm.kind" :disabled="busy"><option v-for="kind in maintenanceKinds" :key="kind" :value="kind">{{ importerMaintenanceLabel(kind) }}</option></select></label>
+							<label><span>{{ i18n.ts.zalip._importer.source }}</span><select v-model="maintenanceForm.source" :disabled="busy"><option v-for="source in maintenanceSources(maintenanceForm.kind)" :key="source" :value="source" :disabled="!sourceStatus(source)?.configured">{{ importerSourceLabel(source) }}</option></select></label>
+							<label v-if="maintenanceForm.kind === 'collection-backfill'" :class="$style.wide"><span>{{ i18n.ts.zalip._importer.maintenanceCollectionIds }}</span><textarea v-model="maintenanceForm.collectionIds" rows="3" maxlength="1700" :disabled="busy"></textarea></label>
+							<p :class="[$style.hint, $style.wide]">{{ maintenanceHint(maintenanceForm.kind) }}</p>
+							<label><span>{{ i18n.ts.zalip._importer.maintenanceBatch }}</span><input v-model.number="maintenanceForm.batchLimit" type="number" required min="20" max="50" :disabled="busy"></label><label><span>{{ i18n.ts.zalip._importer.maintenanceBudget }}</span><input v-model.number="maintenanceForm.timeBudgetSeconds" type="number" required min="10" max="120" :disabled="busy"></label>
+							<p v-if="!sourceStatus(maintenanceForm.source)?.configured" :class="[$style.hint, $style.wide]">{{ i18n.ts.zalip._importer.sourceNotConfigured }}</p>
+							<button type="submit" class="_button" :class="$style.primary" :disabled="busy || !sourceStatus(maintenanceForm.source)?.configured || !importerMaintenanceRequest(maintenanceForm)"><i class="ti ti-player-play" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.maintenanceStart }}</button>
+						</form>
+					</section>
+					<section :class="$style.panel">
+						<div :class="$style.sectionHeading"><h2>{{ i18n.ts.zalip._importer.maintenanceRuns }}</h2><button type="button" class="_button" :class="$style.button" :disabled="maintenanceLoading" @click="refreshMaintenance">{{ i18n.ts.zalip._importer.refresh }}</button></div>
+						<p v-if="maintenanceError" :class="$style.error" role="alert">{{ maintenanceError }}</p><p v-if="maintenanceLoading && !maintenanceRuns.length" :class="$style.hint" role="status">{{ i18n.ts.zalip._importer.loading }}</p><p v-if="!maintenanceLoading && !maintenanceRuns.length && !maintenanceError" :class="$style.hint">{{ i18n.ts.zalip._importer.noRuns }}</p>
+						<div :class="$style.rows"><button v-for="run in maintenanceRuns" :key="run.id" type="button" class="_button" :class="[$style.runRow, { [$style.selectedRow]: selectedMaintenance?.id === run.id }]" :disabled="busy" @click="loadMaintenanceRun(run.id)"><div><strong>{{ importerMaintenanceLabel(run.kind) }} · {{ importerStateLabel(run.state) }}</strong><small>{{ importerSourceLabel(run.source) }} · {{ dateLabel(run.createdAt) }}</small></div><span>{{ i18n.tsx.zalip._importer.maintenanceProcessed({ count: String(run.stats.processed) }) }}</span></button></div>
+						<p v-if="maintenanceRunLoading" :class="$style.hint" role="status">{{ i18n.ts.zalip._importer.loading }}</p><p v-if="maintenanceRunError" :class="$style.error" role="alert">{{ maintenanceRunError }} <button type="button" class="_textButton" :disabled="maintenanceRunLoading" @click="retryMaintenanceRun">{{ i18n.ts.zalip._importer.retry }}</button></p>
+						<article v-if="selectedMaintenance" :class="$style.fieldGroup">
+							<div :class="$style.sectionHeading"><div><h3>{{ importerMaintenanceLabel(selectedMaintenance.kind) }} · {{ importerStateLabel(selectedMaintenance.state) }}</h3><small>{{ selectedMaintenance.id }}</small></div><div :class="$style.actions"><button v-if="['paused', 'failed'].includes(selectedMaintenance.state)" type="button" class="_button" :class="$style.button" :disabled="busy || maintenanceRunLoading" @click="maintenanceAction('resume')">{{ i18n.ts.zalip._importer.resume }}</button><button v-if="['queued', 'running', 'paused'].includes(selectedMaintenance.state)" type="button" class="_button" :class="$style.danger" :disabled="busy || maintenanceRunLoading" @click="maintenanceAction('cancel')">{{ i18n.ts.zalip._importer.cancel }}</button></div></div>
+							<p :class="$style.hint" role="status">{{ i18n.tsx.zalip._importer.maintenanceStats({ processed: String(selectedMaintenance.stats.processed), created: String(selectedMaintenance.stats.created), updated: String(selectedMaintenance.stats.updated), linked: String(selectedMaintenance.stats.linked), skipped: String(selectedMaintenance.stats.skipped), failed: String(selectedMaintenance.stats.failed) }) }}</p><p :class="$style.hint">{{ i18n.ts.zalip._importer.maintenanceProgressHint }}</p>
+							<p v-if="selectedMaintenance.retryAfter" :class="$style.hint">{{ i18n.tsx.zalip._importer.maintenanceRetryAfter({ date: dateLabel(selectedMaintenance.retryAfter) }) }}</p><p v-if="selectedMaintenance.error" :class="$style.error">{{ safeMaintenanceError(selectedMaintenance.error) }}</p>
+							<ul v-if="maintenanceWarnings.length" :class="$style.warnings" :aria-label="i18n.ts.zalip._importer.warningsTitle"><li v-for="warning in maintenanceWarnings" :key="warning">{{ warning }}</li></ul>
+						</article>
+					</section>
+					<details :class="[$style.panel, $style.details]">
+						<summary>{{ i18n.ts.zalip._importer.maintenanceSchedules }}</summary><p :class="$style.hint">{{ i18n.ts.zalip._importer.maintenanceSchedulesHint }}</p>
+						<div :class="$style.actions"><button type="button" class="_button" :class="$style.button" :disabled="busy || maintenanceProfilesLoading" @click="loadMaintenanceProfiles">{{ i18n.ts.zalip._importer.refresh }}</button><button type="button" class="_button" :class="$style.primary" :disabled="busy" @click="resetMaintenanceProfile">{{ i18n.ts.zalip._importer.newSchedule }}</button></div>
+						<p v-if="maintenanceProfilesError" :class="$style.error" role="alert">{{ maintenanceProfilesError }}</p><p v-if="maintenanceProfilesLoading" :class="$style.hint" role="status">{{ i18n.ts.zalip._importer.loading }}</p>
+						<div :class="$style.rows"><article v-for="profile in maintenanceProfiles" :key="profile.id" :class="$style.itemRow"><div :class="$style.grow"><strong>{{ profile.name }}</strong><small>{{ importerMaintenanceLabel(profile.kind) }} · {{ importerSourceLabel(profile.source) }} · {{ profile.enabled ? i18n.ts.zalip._importer.enabled : i18n.ts.zalip._importer.disabled }}</small><small>{{ i18n.tsx.zalip._importer.scheduleDates({ last: dateLabel(profile.lastRunAt), next: dateLabel(profile.nextRunAt) }) }}</small><p v-if="profile.lastError" :class="$style.error">{{ safeMaintenanceError(profile.lastError) }}</p></div><div :class="$style.actions"><button type="button" class="_button" :class="$style.button" :disabled="busy" @click="editMaintenanceProfile(profile)">{{ i18n.ts.zalip._importer.edit }}</button><button type="button" class="_button" :class="$style.button" :disabled="busy || (!profile.enabled && !sourceStatus(profile.source)?.configured)" @click="maintenanceProfileAction(profile, profile.enabled ? 'disable' : 'enable')">{{ profile.enabled ? i18n.ts.zalip._importer.disableProfile : i18n.ts.zalip._importer.enableProfile }}</button></div></article></div>
+						<form :class="$style.form" @submit.prevent="saveMaintenanceProfile">
+							<label><span>{{ i18n.ts.zalip._importer.name }}</span><input v-model.trim="maintenanceProfileForm.name" required maxlength="120" :disabled="busy"></label><label><span>{{ i18n.ts.zalip._importer.task }}</span><select v-model="maintenanceProfileForm.kind" :disabled="busy || maintenanceProfileLocked"><option v-for="kind in maintenanceKinds" :key="kind" :value="kind">{{ importerMaintenanceLabel(kind) }}</option></select></label>
+							<label><span>{{ i18n.ts.zalip._importer.source }}</span><select v-model="maintenanceProfileForm.source" :disabled="busy || maintenanceProfileLocked"><option v-for="source in maintenanceSources(maintenanceProfileForm.kind)" :key="source" :value="source" :disabled="!sourceStatus(source)?.configured">{{ importerSourceLabel(source) }}</option></select></label><label><span>{{ i18n.ts.zalip._importer.interval }}</span><input v-model.number="maintenanceProfileForm.intervalMinutes" type="number" required min="60" max="10080" :disabled="busy"></label>
+							<label v-if="maintenanceProfileForm.kind === 'collection-backfill'" :class="$style.wide"><span>{{ i18n.ts.zalip._importer.maintenanceCollectionIds }}</span><textarea v-model="maintenanceProfileForm.collectionIds" rows="3" maxlength="1700" :disabled="busy || maintenanceProfileLocked"></textarea></label>
+							<label><span>{{ i18n.ts.zalip._importer.maintenanceBatch }}</span><input v-model.number="maintenanceProfileForm.batchLimit" type="number" required min="20" max="50" :disabled="busy || maintenanceProfileLocked"></label><label><span>{{ i18n.ts.zalip._importer.maintenanceBudget }}</span><input v-model.number="maintenanceProfileForm.timeBudgetSeconds" type="number" required min="10" max="120" :disabled="busy || maintenanceProfileLocked"></label>
+							<p :class="[$style.hint, $style.wide]">{{ maintenanceHint(maintenanceProfileForm.kind) }}</p><p v-if="maintenanceProfileLocked" :class="[$style.hint, $style.wide]">{{ i18n.ts.zalip._importer.activeProfileHint }}</p>
+							<button type="submit" class="_button" :class="$style.primary" :disabled="busy || !maintenanceProfileForm.name || !sourceStatus(maintenanceProfileForm.source)?.configured || !importerMaintenanceRequest(maintenanceProfileForm)">{{ i18n.ts.zalip._importer.saveSchedule }}</button>
+						</form>
+					</details>
+				</template>
+				<template v-else-if="tab === 'sources'">
+					<section :class="$style.panel">
+						<h2>{{ i18n.ts.zalip._importer.serviceSettings }}</h2><p :class="$style.hint">{{ i18n.ts.zalip._importer.serviceSettingsHint }}</p><p :class="$style.hint">{{ i18n.ts.zalip._importer.sourceOriginHint }}</p>
+						<p v-if="serviceSettingsLoading" :class="$style.hint" role="status">{{ i18n.ts.zalip._importer.loading }}</p><p v-if="serviceSettingsError" :class="$style.error" role="alert">{{ serviceSettingsError }} <button type="button" class="_textButton" :disabled="serviceSettingsLoading" @click="loadServiceSettings">{{ i18n.ts.zalip._importer.retry }}</button></p>
+						<template v-if="serviceSettings">
+							<p v-if="!serviceSettings.encryptionReady" :class="$style.error" role="alert">{{ i18n.ts.zalip._importer.sourceSettingsEncryptionUnavailable }}</p>
+							<details v-for="entry in serviceSettings.sources" :key="entry.source" :class="$style.fieldGroup">
+								<summary>{{ importerSourceLabel(entry.source) }} · {{ entry.apiTokenSet ? i18n.ts.zalip._importer.configured : i18n.ts.zalip._importer.notConfigured }}</summary>
+								<form :class="$style.form" autocomplete="off" @submit.prevent="saveServiceSettings(entry.source)">
+									<label><span>{{ i18n.ts.zalip._importer.sourceApiOrigin }}</span><input v-model="serviceForms[entry.source].apiOrigin" type="url" required maxlength="1024" :disabled="busy || serviceSettingsLoading" :readonly="!serviceSettings.encryptionReady"></label>
+									<label v-if="entry.source === 'alloha' || entry.source === 'collaps'"><span>{{ i18n.ts.zalip._importer.sourcePlayerOrigin }}</span><input v-model="serviceForms[entry.source].playerOrigin" type="url" required maxlength="1024" :disabled="busy || serviceSettingsLoading" :readonly="!serviceSettings.encryptionReady"></label>
+									<label :class="$style.wide"><span>{{ i18n.ts.zalip._importer.sourceApiToken }}</span><input v-model="serviceForms[entry.source].apiToken" type="text" maxlength="4096" autocomplete="off" autocapitalize="off" :spellcheck="false" :disabled="busy || serviceSettingsLoading || serviceForms[entry.source].clearApiToken" :readonly="!serviceSettings.encryptionReady"><small>{{ i18n.tsx.zalip._importer.credentialOrigin({ origin: importerCredentialOriginLabel(entry.apiTokenOrigin) }) }}</small></label>
+									<label :class="[$style.check, $style.wide]"><input v-model="serviceForms[entry.source].clearApiToken" type="checkbox" :disabled="busy || serviceSettingsLoading || !serviceSettings.encryptionReady" @change="clearServiceToken(entry.source, 'api')">{{ i18n.ts.zalip._importer.clearSourceApiToken }}</label>
+									<template v-if="entry.source === 'alloha'">
+										<label :class="$style.wide"><span>{{ i18n.ts.zalip._importer.sourcePlayerToken }}</span><input v-model="serviceForms[entry.source].playerToken" type="text" maxlength="512" autocomplete="off" autocapitalize="off" :spellcheck="false" :disabled="busy || serviceSettingsLoading || serviceForms[entry.source].clearPlayerToken" :readonly="!serviceSettings.encryptionReady"><small>{{ i18n.tsx.zalip._importer.credentialOrigin({ origin: importerCredentialOriginLabel(entry.playerTokenOrigin) }) }}</small></label>
+										<label :class="[$style.check, $style.wide]"><input v-model="serviceForms[entry.source].clearPlayerToken" type="checkbox" :disabled="busy || serviceSettingsLoading || !serviceSettings.encryptionReady" @change="clearServiceToken(entry.source, 'player')">{{ i18n.ts.zalip._importer.clearSourcePlayerToken }}</label><p :class="[$style.hint, $style.wide]">{{ i18n.ts.zalip._importer.sourcePlayerTokenHint }}</p>
+									</template>
+									<p v-if="serviceSaveErrors[entry.source]" :class="[$style.error, $style.wide]" role="alert">{{ serviceSaveErrors[entry.source] }}</p>
+									<div :class="[$style.actions, $style.wide]"><button type="submit" class="_button" :class="$style.primary" :disabled="busy || serviceSettingsLoading || !serviceSettings.encryptionReady"><i class="ti ti-device-floppy" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.save }}</button><button type="button" class="_button" :class="$style.button" :disabled="busy || serviceSettingsLoading" @click="resetServiceForm(entry.source)">{{ i18n.ts.zalip._importer.resetSourceChanges }}</button></div>
+								</form>
+							</details>
+						</template>
 					</section>
 				</template>
 			</template>
@@ -173,16 +256,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script lang="ts" setup>
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, useTemplateRef, watch } from 'vue';
-import type { ImportField, ImportMediaType, ImportPreview, ImportProfile, ImportRef, ImportRun, ImportRunItem, ImportSearchItem, ImportSource, ImportSourceCheck, ImportSourceStatus, ImportWorkState, TaxonomyEntry, TaxonomyType, TaxonomyWork } from '@/utility/zalip-importer.js';
+import type { ImportField, ImportMaintenanceKind, ImportMaintenanceProfile, ImportMaintenanceRun, ImportMaintenanceSource, ImportMediaType, ImportPlaybackProvider, ImportPreview, ImportProfile, ImportRef, ImportRun, ImportRunItem, ImportSearchItem, ImportServiceForm, ImportServiceSave, ImportServiceSettingsResponse, ImportSource, ImportSourceCheck, ImportSourceStatus, ImportWorkState, TaxonomyEntry, TaxonomyType, TaxonomyWork } from '@/utility/zalip-importer.js';
 import { i18n } from '@/i18n.js';
-import { formatImporterValue, importerFieldGroups, importerFieldLabel, importerFiltersValid, importerGroupLabel, importerImageUrl, importerImdbId, importerOptions, importerProgress, importerReference, importerReferenceKey, importerSelection, importerSourceLabel, importerSources, importerStateLabel, importerWarningLabels, importerWorkIds, splitImporterReferenceLines, taxonomyBaseChanges, taxonomyFactLabel, taxonomyPersonChanges, taxonomyTypeLabel, taxonomyTypes } from '@/utility/zalip-importer.js';
+import { formatImporterValue, importerCredentialOriginLabel, importerFieldGroups, importerFieldLabel, importerFiltersValid, importerGroupLabel, importerImageUrl, importerImdbId, importerMaintenanceLabel, importerMaintenanceRequest, importerOptions, importerPlaybackSettings, importerProgress, importerReference, importerReferenceKey, importerRefreshSequence, importerRequestCurrent, importerRequestFinish, importerRequestInvalidate, importerRequestStart, importerRequestState, importerSelection, importerServiceForm, importerServiceRequest, importerServiceSettingsUpdate, importerSourceLabel, importerSources, importerStateLabel, importerWarningLabels, importerWorkIds, splitImporterReferenceLines, taxonomyAppendWorks, taxonomyBaseChanges, taxonomyCollectionChanges, taxonomyFactLabel, taxonomyPersonChanges, taxonomyTypeLabel, taxonomyTypes } from '@/utility/zalip-importer.js';
 import { iAmAdmin } from '@/i.js';
 import { definePage } from '@/page.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import * as os from '@/os.js';
 
-type Tab = 'import' | 'runs' | 'taxonomy' | 'schedules';
-const tabs: { id: Tab; title: string; icon: string }[] = [{ id: 'import', title: i18n.ts.zalip._importer.import, icon: 'ti ti-download' }, { id: 'runs', title: i18n.ts.zalip._importer.runs, icon: 'ti ti-list-check' }, { id: 'taxonomy', title: i18n.ts.zalip._importer.directories, icon: 'ti ti-tags' }, { id: 'schedules', title: i18n.ts.zalip._importer.schedules, icon: 'ti ti-clock' }];
+type Tab = 'import' | 'runs' | 'taxonomy' | 'schedules' | 'maintenance' | 'sources';
+const tabs: { id: Tab; title: string; icon: string }[] = [{ id: 'import', title: i18n.ts.zalip._importer.import, icon: 'ti ti-download' }, { id: 'runs', title: i18n.ts.zalip._importer.runs, icon: 'ti ti-list-check' }, { id: 'taxonomy', title: i18n.ts.zalip._importer.directories, icon: 'ti ti-tags' }, { id: 'schedules', title: i18n.ts.zalip._importer.schedules, icon: 'ti ti-clock' }, { id: 'maintenance', title: i18n.ts.zalip._importer.maintenance, icon: 'ti ti-tool' }, { id: 'sources', title: i18n.ts.zalip._importer.serviceSettings, icon: 'ti ti-key' }];
 const tab = ref<Tab>('import');
 const sources = ref<ImportSourceStatus[]>([]);
 const sourcesLoading = ref(true);
@@ -190,6 +273,12 @@ const sourcesError = ref('');
 const sourceChecks = reactive<Partial<Record<ImportSource, ImportSourceCheck>>>({});
 const sourceChecking = reactive<Partial<Record<ImportSource, boolean>>>({});
 const sourceCheckErrors = reactive<Partial<Record<ImportSource, string>>>({});
+const sourceCheckRevision = reactive<Partial<Record<ImportSource, number>>>({});
+const serviceSettings = ref<ImportServiceSettingsResponse | null>(null);
+const serviceSettingsLoading = ref(false);
+const serviceSettingsError = ref('');
+const serviceSaveErrors = reactive<Partial<Record<ImportSource, string>>>({});
+const serviceForms = reactive(Object.fromEntries(importerSources.map(source => [source, { apiOrigin: '', playerOrigin: '', apiToken: '', playerToken: '', clearApiToken: false, clearPlayerToken: false }])) as Record<ImportSource, ImportServiceForm>);
 const busy = ref(false);
 const message = ref('');
 const actionError = ref('');
@@ -232,6 +321,9 @@ const taxonomyQuery = ref('');
 const taxonomyEntries = ref<TaxonomyEntry[]>([]);
 const taxonomyWorks = ref<TaxonomyWork[]>([]);
 const taxonomyWorksLoading = ref(false);
+const taxonomyWorksCursor = ref<string | null>(null);
+const taxonomyWorksError = ref('');
+const taxonomyWorksRetryAppend = ref(false);
 const categories = ref<TaxonomyEntry[]>([]);
 const taxonomyLoading = ref(false);
 const taxonomyError = ref('');
@@ -241,6 +333,7 @@ const taxonomyBaseEntry = ref<TaxonomyEntry | null>(null);
 const taxonomyExternalIds = ref<Record<string, unknown>>({});
 const personFactKeys = ['originalName', 'birthday', 'deathday', 'placeOfBirth', 'homepage'] as const;
 const personFacts = reactive({ originalName: '', birthday: '', deathday: '', placeOfBirth: '', homepage: '', biography: '', aliases: '' });
+const collectionForm = reactive({ semanticKind: 'theme' as 'theme' | 'platform' | 'franchise', isEnabled: true });
 const recalculateForm = reactive({ mode: 'selected', workIds: '' });
 const recalculateCursor = ref<string | null>(null);
 const recalculateResult = ref<{ processed: number; matched: number; skipped: number; nextCursor: string | null } | null>(null);
@@ -251,6 +344,23 @@ const membership = reactive({ workId: '', role: '', character: '', position: 0 }
 const profiles = ref<ImportProfile[]>([]);
 const profilesError = ref('');
 const profileForm = reactive({ id: '', name: '', source: 'tmdb' as ImportSource, mode: 'metadata' as ImportProfile['mode'], intervalMinutes: 1440, enabled: false, collectionId: '', lockedFields: [] as string[], categoryIds: [] as string[] });
+const playbackProviders = ref<ImportPlaybackProvider[]>([]);
+const playbackSettingsLoading = ref(false);
+const playbackSettingsError = ref('');
+const maintenanceKinds: ImportMaintenanceKind[] = ['collections-dictionary', 'collection-backfill', 'person-enrichment'];
+const maintenanceForm = reactive({ kind: 'collections-dictionary' as ImportMaintenanceKind, source: 'collaps' as ImportMaintenanceSource, collectionIds: '', batchLimit: 20, timeBudgetSeconds: 60 });
+const maintenanceRuns = ref<ImportMaintenanceRun[]>([]);
+const maintenanceLoading = ref(false);
+const maintenanceError = ref('');
+const selectedMaintenance = ref<ImportMaintenanceRun | null>(null);
+const requestedMaintenanceId = ref<string | null>(null);
+const maintenanceRunRequest = reactive(importerRequestState());
+const maintenanceRunLoading = computed(() => maintenanceRunRequest.loading);
+const maintenanceRunError = computed(() => maintenanceRunRequest.error);
+const maintenanceProfiles = ref<ImportMaintenanceProfile[]>([]);
+const maintenanceProfilesLoading = ref(false);
+const maintenanceProfilesError = ref('');
+const maintenanceProfileForm = reactive({ id: '', name: '', kind: 'collections-dictionary' as ImportMaintenanceKind, source: 'collaps' as ImportMaintenanceSource, collectionIds: '', intervalMinutes: 1440, batchLimit: 20, timeBudgetSeconds: 60 });
 let pollTimer: number | null = null;
 let pollBusy = false;
 let searchRevision = 0;
@@ -269,9 +379,12 @@ const currentPrimarySources = computed(() => tab.value === 'schedules' ? [profil
 const previewStale = computed(() => !!preview.value && previewOptionsKey.value !== JSON.stringify(importerOptions(importSelection)));
 const previewWarnings = computed(() => importerWarningLabels(preview.value?.warnings));
 const runWarnings = computed(() => new Map(runItems.value.map(item => [item.id, importerWarningLabels(item.warnings)])));
+const maintenanceWarnings = computed(() => importerWarningLabels(selectedMaintenance.value?.warnings));
+const maintenanceProfileLocked = computed(() => !!maintenanceProfileForm.id && maintenanceRuns.value.some(run => run.profileId === maintenanceProfileForm.id && ['queued', 'running', 'paused'].includes(run.state)));
 const profileOptionsLocked = computed(() => tab.value === 'schedules' && profileActive(profileForm.id));
 const personSources = computed(() => importerSources.filter((source): source is 'tmdb' | 'kinopoisk' => (source === 'tmdb' || source === 'kinopoisk') && sourceStatus(source)?.configured === true && /^[1-9]\d*$/u.test(String(taxonomyExternalIds.value[source] ?? ''))));
 const taxonomyDirty = computed(() => taxonomySavedSnapshot.value !== taxonomySnapshot());
+const collectionCollapsId = computed(() => { const id = taxonomyExternalIds.value.collaps; return typeof id === 'string' && /^[1-9][0-9]{0,15}$/u.test(id) ? id : null; });
 const profileCapabilityWarning = computed(() => {
 	const source = sourceStatus(profileForm.source);
 	if (!source?.configured) return i18n.ts.zalip._importer.sourceNotConfigured;
@@ -324,10 +437,64 @@ function toggleFieldGroup(fields: ImportField[]): void {
 }
 
 async function checkSource(source: ImportSource): Promise<void> {
-	if (sourceChecking[source] || !sourceStatus(source)?.configured) return;
+	if (busy.value || sourceChecking[source] || !sourceStatus(source)?.configured) return;
+	const revision = (sourceCheckRevision[source] ?? 0) + 1;
+	sourceCheckRevision[source] = revision;
 	sourceChecking[source] = true;
 	sourceCheckErrors[source] = '';
-	try { sourceChecks[source] = await misskeyApiZalip<ImportSourceCheck>('zalip/admin/importer/sources/check', { source }); } catch (error) { sourceCheckErrors[source] = errorMessage(error); } finally { sourceChecking[source] = false; }
+	try { const result = await misskeyApiZalip<ImportSourceCheck>('zalip/admin/importer/sources/check', { source }); if (sourceCheckRevision[source] === revision) sourceChecks[source] = result; } catch (error) { if (sourceCheckRevision[source] === revision) sourceCheckErrors[source] = errorMessage(error); } finally { if (sourceCheckRevision[source] === revision) sourceChecking[source] = false; }
+}
+
+function applyServiceSettings(result: ImportServiceSettingsResponse, savedSource?: ImportSource): void {
+	if (result.sources.length !== importerSources.length || new Set(result.sources.map(entry => entry.source)).size !== importerSources.length || result.sources.some(entry => !importerSources.includes(entry.source))) throw new Error('invalid-settings');
+	serviceSettings.value = importerServiceSettingsUpdate(serviceSettings.value, result, savedSource);
+	for (const entry of result.sources) if (!savedSource || entry.source === savedSource) Object.assign(serviceForms[entry.source], importerServiceForm(entry));
+}
+
+async function loadServiceSettings(): Promise<void> {
+	if (serviceSettingsLoading.value) return;
+	serviceSettingsLoading.value = true;
+	serviceSettingsError.value = '';
+	try { applyServiceSettings(await misskeyApiZalip<ImportServiceSettingsResponse>('zalip/admin/importer/sources/settings/show')); } catch (error) { serviceSettingsError.value = errorMessage(error); } finally { serviceSettingsLoading.value = false; }
+}
+
+function resetServiceForm(source: ImportSource): void {
+	if (busy.value || serviceSettingsLoading.value) return;
+	const entry = serviceSettings.value?.sources.find(item => item.source === source);
+	if (entry) Object.assign(serviceForms[source], importerServiceForm(entry));
+	serviceSaveErrors[source] = '';
+}
+
+function clearServiceToken(source: ImportSource, type: 'api' | 'player'): void {
+	const form = serviceForms[source];
+	if (type === 'api' && form.clearApiToken) form.apiToken = '';
+	if (type === 'player' && form.clearPlayerToken) form.playerToken = '';
+}
+
+function serviceSettingsActionReady(source: ImportSource, request: ImportServiceSave): boolean {
+	const entry = serviceSettings.value?.sources.find(item => item.source === source);
+	return !actionBusy() && !serviceSettingsLoading.value && serviceSettings.value?.encryptionReady === true && !!entry && JSON.stringify(request) === JSON.stringify(importerServiceRequest(entry, serviceForms[source]));
+}
+
+async function saveServiceSettings(source: ImportSource): Promise<void> {
+	if (busy.value || serviceSettingsLoading.value || !serviceSettings.value?.encryptionReady) return;
+	const entry = serviceSettings.value.sources.find(item => item.source === source);
+	if (!entry) return;
+	const params = importerServiceRequest(entry, serviceForms[source]);
+	if (!params) { serviceSaveErrors[source] = i18n.ts.zalip._importer.invalidSourceSettings; return; }
+	if (params.clearApiToken || params.clearPlayerToken) {
+		const confirmation = await os.confirm({ type: 'warning', title: i18n.ts.zalip._importer.clearSourceTokenTitle, text: i18n.ts.zalip._importer.clearSourceTokenText });
+		if (confirmation.canceled || !serviceSettingsActionReady(source, params)) return;
+	}
+	busy.value = true;
+	serviceSaveErrors[source] = '';
+	try {
+		applyServiceSettings(await misskeyApiZalip<ImportServiceSettingsResponse>('zalip/admin/importer/sources/settings/save', params), source);
+		sourceCheckRevision[source] = (sourceCheckRevision[source] ?? 0) + 1;
+		delete sourceChecks[source]; sourceChecking[source] = false; sourceCheckErrors[source] = '';
+		await loadSources();
+		message.value = i18n.ts.zalip._importer.sourceSettingsSaved;
+	} catch (error) { serviceSaveErrors[source] = errorMessage(error); } finally { busy.value = false; }
 }
 
 async function loadWorkState(): Promise<void> {
@@ -484,7 +651,7 @@ async function loadTaxonomy(): Promise<void> {
 
 function resetRecalculate(): void { recalculateCursor.value = null; recalculateResult.value = null; }
 
-function taxonomySnapshot(): string { return JSON.stringify({ form: taxonomyForm, facts: personFacts, rules: categoryRules }); }
+function taxonomySnapshot(): string { return JSON.stringify({ form: taxonomyForm, facts: personFacts, rules: categoryRules, collection: collectionForm }); }
 
 function resetTaxonomyForm(): void {
 	if (busy.value) return;
@@ -492,10 +659,13 @@ function resetTaxonomyForm(): void {
 	taxonomyWorksLoading.value = false;
 	Object.assign(taxonomyForm, { id: '', type: taxonomyType.value, name: '', slug: '', description: '', imageUrl: '', parentId: '' });
 	taxonomyWorks.value = [];
+	taxonomyWorksCursor.value = null;
+	taxonomyWorksError.value = '';
 	taxonomyData.value = {};
 	taxonomyBaseEntry.value = null;
 	taxonomyExternalIds.value = {};
 	for (const key of Object.keys(personFacts) as (keyof typeof personFacts)[]) personFacts[key] = '';
+	Object.assign(collectionForm, { semanticKind: 'theme', isEnabled: true });
 	Object.assign(categoryRules, { enabled: false, all: false, kinds: [], genres: '', countries: '', yearFrom: '', yearTo: '' });
 	resetRecalculate();
 	taxonomySavedSnapshot.value = taxonomySnapshot();
@@ -504,6 +674,8 @@ function resetTaxonomyForm(): void {
 async function editTaxonomy(entry: TaxonomyEntry, fromSave = false): Promise<void> {
 	if (busy.value && !fromSave) return;
 	taxonomyWorks.value = [];
+	taxonomyWorksCursor.value = null;
+	taxonomyWorksError.value = '';
 	Object.assign(taxonomyForm, { id: entry.id, type: entry.type, name: entry.name, slug: entry.slug, description: entry.description ?? '', imageUrl: entry.imageUrl ?? '', parentId: entry.parentId ?? '' });
 	taxonomyData.value = { ...entry.data };
 	taxonomyBaseEntry.value = { ...entry };
@@ -513,16 +685,21 @@ async function editTaxonomy(entry: TaxonomyEntry, fromSave = false): Promise<voi
 	Object.assign(categoryRules, { enabled: !!rules && Object.keys(rules).length > 0, all: rules?.all === true, kinds: strings(rules?.kinds), genres: strings(rules?.genres).join(', '), countries: strings(rules?.countries).join(', '), yearFrom: typeof rules?.yearFrom === 'number' ? String(rules.yearFrom) : '', yearTo: typeof rules?.yearTo === 'number' ? String(rules.yearTo) : '' });
 	for (const key of [...personFactKeys, 'biography'] as const) personFacts[key] = typeof entry.data?.[key] === 'string' ? entry.data[key] as string : '';
 	personFacts.aliases = strings(entry.data?.aliases).join('\n');
+	Object.assign(collectionForm, { semanticKind: ['theme', 'platform', 'franchise'].includes(String(entry.data?.semanticKind)) ? entry.data?.semanticKind : 'theme', isEnabled: entry.data?.isEnabled !== false });
 	resetRecalculate();
 	taxonomySavedSnapshot.value = taxonomySnapshot();
 	Object.assign(membership, { workId: '', role: '', character: '', position: 0 });
 	await loadTaxonomyWorks(entry.id);
 }
 
-async function loadTaxonomyWorks(entryId: string): Promise<void> {
+async function loadTaxonomyWorks(entryId: string, append = false): Promise<void> {
+	if (append && (taxonomyWorksLoading.value || !taxonomyWorksCursor.value)) return;
+	const cursor = append ? taxonomyWorksCursor.value : null;
 	const revision = ++taxonomyWorksRevision;
 	taxonomyWorksLoading.value = true;
-	try { const result = await misskeyApiZalip<{ entry: TaxonomyEntry; works: TaxonomyWork[] }>('zalip/admin/importer/taxonomy/show', { entryId }); if (revision === taxonomyWorksRevision && entryId === taxonomyForm.id) taxonomyWorks.value = result.works; } catch (error) { if (revision === taxonomyWorksRevision && entryId === taxonomyForm.id) actionError.value = errorMessage(error); } finally { if (revision === taxonomyWorksRevision) taxonomyWorksLoading.value = false; }
+	taxonomyWorksError.value = '';
+	taxonomyWorksRetryAppend.value = append;
+	try { const result = await misskeyApiZalip<{ entry: TaxonomyEntry; works: TaxonomyWork[]; nextCursor: string | null }>('zalip/admin/importer/taxonomy/show', { entryId, limit: 50, ...(cursor ? { cursor } : {}) }); if (revision === taxonomyWorksRevision && entryId === taxonomyForm.id) { taxonomyWorks.value = append ? taxonomyAppendWorks(taxonomyWorks.value, result.works) : result.works; taxonomyWorksCursor.value = result.nextCursor ?? null; } } catch (error) { if (revision === taxonomyWorksRevision && entryId === taxonomyForm.id) taxonomyWorksError.value = errorMessage(error); } finally { if (revision === taxonomyWorksRevision) taxonomyWorksLoading.value = false; }
 }
 
 async function saveTaxonomy(): Promise<void> {
@@ -536,7 +713,7 @@ async function saveTaxonomy(): Promise<void> {
 	actionError.value = '';
 	try {
 		const list = (value: string) => Array.from(new Set(value.split(',').map(item => item.trim()).filter(Boolean)));
-		const data = taxonomyForm.type === 'category' ? { rules: categoryRules.enabled ? { all: categoryRules.all, kinds: [...categoryRules.kinds], genres: list(categoryRules.genres), countries: list(categoryRules.countries), yearFrom, yearTo } : {} } : taxonomyForm.type === 'person' ? taxonomyPersonChanges(personFacts, taxonomyData.value) : undefined;
+		const data = taxonomyForm.type === 'category' ? { rules: categoryRules.enabled ? { all: categoryRules.all, kinds: [...categoryRules.kinds], genres: list(categoryRules.genres), countries: list(categoryRules.countries), yearFrom, yearTo } : {} } : taxonomyForm.type === 'person' ? taxonomyPersonChanges(personFacts, taxonomyData.value) : taxonomyForm.type === 'collection' ? taxonomyCollectionChanges(collectionForm, taxonomyData.value) : undefined;
 		const entry = await misskeyApiZalip<TaxonomyEntry>('zalip/admin/importer/taxonomy/save', { entryId: taxonomyForm.id || undefined, type: taxonomyForm.type, name: taxonomyForm.name, ...taxonomyBaseChanges(taxonomyForm, taxonomyBaseEntry.value), ...(data ? { data } : {}) });
 		await editTaxonomy(entry, true);
 		await Promise.all([loadTaxonomy(), loadCategories()]);
@@ -623,17 +800,138 @@ async function runProfile(profile: ImportProfile): Promise<void> {
 	try { const result = await misskeyApiZalip<{ id: string; state: string }>('zalip/admin/importer/schedules/run', { profileId: profile.id }); tab.value = 'runs'; await Promise.all([loadRuns(), loadRun(result.id)]); message.value = i18n.ts.zalip._importer.scheduleEnqueued; } catch (error) { actionError.value = errorMessage(error); } finally { busy.value = false; }
 }
 
+function maintenanceSources(kind: ImportMaintenanceKind): ImportMaintenanceSource[] { return kind === 'person-enrichment' ? ['tmdb', 'kinopoisk'] : ['collaps']; }
+
+function prepareCollectionBackfill(): void {
+	if (busy.value || taxonomyDirty.value || !collectionForm.isEnabled || !collectionCollapsId.value || !sourceStatus('collaps')?.configured) return;
+	Object.assign(maintenanceForm, { kind: 'collection-backfill', source: 'collaps', collectionIds: collectionCollapsId.value });
+	tab.value = 'maintenance';
+}
+
+function maintenanceHint(kind: ImportMaintenanceKind): string { return ({ 'collections-dictionary': i18n.ts.zalip._importer.dictionaryMaintenanceHint, 'collection-backfill': i18n.ts.zalip._importer.collectionBackfillHint, 'person-enrichment': i18n.ts.zalip._importer.personMaintenanceHint })[kind]; }
+
+function safeMaintenanceError(code: string): string { return errorMessage({ code: code.toUpperCase() }); }
+
+async function loadPlaybackSettings(): Promise<void> {
+	if (playbackSettingsLoading.value) return;
+	playbackSettingsLoading.value = true;
+	playbackSettingsError.value = '';
+	try {
+		const result = await misskeyApiZalip<{ providers: ImportPlaybackProvider[] }>('zalip/admin/importer/playback-settings/show');
+		const snapshot = importerPlaybackSettings(result.providers);
+		if (!snapshot) throw new Error('invalid-settings');
+		playbackProviders.value = snapshot.providers;
+	} catch (error) { playbackSettingsError.value = errorMessage(error); } finally { playbackSettingsLoading.value = false; }
+}
+
+function movePlayer(index: number, delta: -1 | 1): void {
+	if (busy.value || playbackSettingsLoading.value) return;
+	const target = index + delta;
+	if (index < 0 || index >= playbackProviders.value.length || target < 0 || target >= playbackProviders.value.length) return;
+	const providers = [...playbackProviders.value];
+	[providers[index], providers[target]] = [providers[target], providers[index]];
+	playbackProviders.value = providers.map((provider, position) => ({ ...provider, position: position as 0 | 1 }));
+}
+
+function playbackSettingsActionReady(params: { providers: ImportPlaybackProvider[] }): boolean { return !actionBusy() && !playbackSettingsLoading.value && JSON.stringify(params) === JSON.stringify(importerPlaybackSettings(playbackProviders.value)); }
+
+async function savePlaybackSettings(): Promise<void> {
+	if (busy.value || playbackSettingsLoading.value) return;
+	const params = importerPlaybackSettings(playbackProviders.value);
+	if (!params) { actionError.value = i18n.ts.zalip._importer.invalidPlaybackSettings; return; }
+	if (params.providers.every(provider => !provider.enabled)) {
+		const confirmation = await os.confirm({ type: 'warning', title: i18n.ts.zalip._importer.disableAllPlayersTitle, text: i18n.ts.zalip._importer.disableAllPlayersText });
+		if (confirmation.canceled || !playbackSettingsActionReady(params)) return;
+	}
+	busy.value = true;
+	actionError.value = '';
+	try { const result = await misskeyApiZalip<{ providers: ImportPlaybackProvider[] }>('zalip/admin/importer/playback-settings/save', params); const snapshot = importerPlaybackSettings(result.providers); if (!snapshot) throw new Error('invalid-settings'); playbackProviders.value = snapshot.providers; message.value = i18n.ts.zalip._importer.playbackSettingsSaved; } catch (error) { actionError.value = errorMessage(error); } finally { busy.value = false; }
+}
+
+async function loadMaintenanceRuns(): Promise<void> {
+	if (maintenanceLoading.value) return;
+	maintenanceLoading.value = true;
+	maintenanceError.value = '';
+	try { maintenanceRuns.value = await misskeyApiZalip<ImportMaintenanceRun[]>('zalip/admin/importer/maintenance/list', { limit: 20 }); } catch (error) { maintenanceError.value = errorMessage(error); } finally { maintenanceLoading.value = false; }
+}
+
+async function loadMaintenanceRun(runId: string, polling = false, fromAction = false): Promise<void> {
+	if (busy.value && !fromAction) return;
+	if (polling && (maintenanceRunLoading.value || requestedMaintenanceId.value !== runId)) return;
+	if (!polling && requestedMaintenanceId.value !== runId) { requestedMaintenanceId.value = runId; selectedMaintenance.value = null; }
+	const revision = importerRequestStart(maintenanceRunRequest);
+	try { const result = await misskeyApiZalip<ImportMaintenanceRun>('zalip/admin/importer/maintenance/show', { runId }); if (importerRequestCurrent(maintenanceRunRequest, revision)) selectedMaintenance.value = result; } catch (error) { if (importerRequestCurrent(maintenanceRunRequest, revision)) maintenanceRunRequest.error = errorMessage(error); } finally { importerRequestFinish(maintenanceRunRequest, revision); }
+}
+
+async function retryMaintenanceRun(): Promise<void> { if (!busy.value && requestedMaintenanceId.value && !maintenanceRunLoading.value) await loadMaintenanceRun(requestedMaintenanceId.value); }
+
+async function refreshMaintenance(): Promise<void> { await importerRefreshSequence(loadMaintenanceRuns, async () => { if (requestedMaintenanceId.value) await loadMaintenanceRun(requestedMaintenanceId.value, true); }, () => !busy.value && tab.value === 'maintenance' && !window.document.hidden); }
+
+async function createMaintenance(): Promise<void> {
+	if (busy.value || !sourceStatus(maintenanceForm.source)?.configured) return;
+	const params = importerMaintenanceRequest(maintenanceForm);
+	if (!params) { actionError.value = i18n.ts.zalip._importer.invalidMaintenance; return; }
+	const confirmation = await os.confirm({ type: 'warning', title: i18n.ts.zalip._importer.maintenanceStartTitle, text: maintenanceHint(params.kind) });
+	if (confirmation.canceled || actionBusy() || JSON.stringify(params) !== JSON.stringify(importerMaintenanceRequest(maintenanceForm))) return;
+	busy.value = true;
+	actionError.value = '';
+	try { const result = await misskeyApiZalip<{ runId: string }>('zalip/admin/importer/maintenance/create', params); await Promise.all([loadMaintenanceRuns(), loadMaintenanceRun(result.runId, false, true)]); message.value = i18n.ts.zalip._importer.maintenanceCreated; } catch (error) { actionError.value = errorMessage(error); } finally { busy.value = false; }
+}
+
+function maintenanceActionReady(runId: string): boolean { return !actionBusy() && !maintenanceRunLoading.value && selectedMaintenance.value?.id === runId; }
+
+async function maintenanceAction(action: 'cancel' | 'resume'): Promise<void> {
+	if (busy.value || maintenanceRunLoading.value || !selectedMaintenance.value) return;
+	const runId = selectedMaintenance.value.id;
+	if (action === 'cancel') { const confirmation = await os.confirm({ type: 'warning', title: i18n.ts.zalip._importer.cancelRunTitle, text: i18n.ts.zalip._importer.maintenanceCancelText }); if (confirmation.canceled || !maintenanceActionReady(runId)) return; }
+	busy.value = true;
+	actionError.value = '';
+	try { const result = await misskeyApiZalip<ImportMaintenanceRun>('zalip/admin/importer/maintenance/action', { runId, action }); if (requestedMaintenanceId.value === runId) { importerRequestInvalidate(maintenanceRunRequest); selectedMaintenance.value = result; } await loadMaintenanceRuns(); } catch (error) { actionError.value = errorMessage(error); } finally { busy.value = false; }
+}
+
+async function loadMaintenanceProfiles(): Promise<void> {
+	if (maintenanceProfilesLoading.value) return;
+	maintenanceProfilesLoading.value = true;
+	maintenanceProfilesError.value = '';
+	try { maintenanceProfiles.value = await misskeyApiZalip<ImportMaintenanceProfile[]>('zalip/admin/importer/maintenance/schedules/list'); } catch (error) { maintenanceProfilesError.value = errorMessage(error); } finally { maintenanceProfilesLoading.value = false; }
+}
+
+function resetMaintenanceProfile(): void { if (!busy.value) Object.assign(maintenanceProfileForm, { id: '', name: '', kind: 'collections-dictionary', source: 'collaps', collectionIds: '', intervalMinutes: 1440, batchLimit: 20, timeBudgetSeconds: 60 }); }
+
+function editMaintenanceProfile(profile: ImportMaintenanceProfile): void { if (!busy.value) Object.assign(maintenanceProfileForm, { id: profile.id, name: profile.name, kind: profile.kind, source: profile.source, collectionIds: profile.options?.collectionIds?.join('\n') ?? '', intervalMinutes: profile.intervalMinutes, batchLimit: profile.batchLimit, timeBudgetSeconds: profile.timeBudgetSeconds }); }
+
+async function saveMaintenanceProfile(): Promise<void> {
+	if (busy.value || !sourceStatus(maintenanceProfileForm.source)?.configured) return;
+	const params = importerMaintenanceRequest(maintenanceProfileForm);
+	if (!params || !maintenanceProfileForm.name.trim() || maintenanceProfileForm.name.trim().length > 120 || !Number.isInteger(maintenanceProfileForm.intervalMinutes) || maintenanceProfileForm.intervalMinutes < 60 || maintenanceProfileForm.intervalMinutes > 10080) { actionError.value = i18n.ts.zalip._importer.invalidMaintenance; return; }
+	const request = { ...params, profileId: maintenanceProfileForm.id || undefined, name: maintenanceProfileForm.name.trim(), intervalMinutes: maintenanceProfileForm.intervalMinutes };
+	busy.value = true;
+	actionError.value = '';
+	try { const result = await misskeyApiZalip<ImportMaintenanceProfile>('zalip/admin/importer/maintenance/schedules/save', request); Object.assign(maintenanceProfileForm, { id: result.id, name: result.name }); await loadMaintenanceProfiles(); message.value = i18n.ts.zalip._importer.scheduleSaved; } catch (error) { actionError.value = errorMessage(error); } finally { busy.value = false; }
+}
+
+async function maintenanceProfileAction(profile: ImportMaintenanceProfile, action: 'enable' | 'disable'): Promise<void> {
+	if (busy.value) return;
+	const profileId = profile.id;
+	if (action === 'enable') { const confirmation = await os.confirm({ type: 'warning', title: i18n.ts.zalip._importer.maintenanceEnableTitle, text: i18n.ts.zalip._importer.maintenanceSchedulesHint }); if (confirmation.canceled || actionBusy() || !maintenanceProfiles.value.some(item => item.id === profileId && !item.enabled)) return; }
+	busy.value = true;
+	actionError.value = '';
+	try { await misskeyApiZalip('zalip/admin/importer/maintenance/schedules/action', { profileId, action }); await loadMaintenanceProfiles(); message.value = i18n.ts.zalip._importer.profileActionSaved; } catch (error) { actionError.value = errorMessage(error); } finally { busy.value = false; }
+}
+
 async function pollRuns(): Promise<void> {
-	if (!iAmAdmin || tab.value !== 'runs' || window.document.hidden || pollBusy) return;
+	if (!iAmAdmin || !['runs', 'maintenance'].includes(tab.value) || window.document.hidden || pollBusy || busy.value) return;
 	pollBusy = true;
-	try { await loadRuns(); if (selectedRun.value && ['queued', 'running'].includes(selectedRun.value.state)) await loadRun(selectedRun.value.id, true); } finally { pollBusy = false; }
+	try { if (tab.value === 'maintenance') { await importerRefreshSequence(loadMaintenanceRuns, async () => { if (selectedMaintenance.value && ['queued', 'running'].includes(selectedMaintenance.value.state)) await loadMaintenanceRun(selectedMaintenance.value.id, true); }, () => !busy.value && tab.value === 'maintenance' && !window.document.hidden); } else { await loadRuns(); if (!busy.value && tab.value === 'runs' && selectedRun.value && ['queued', 'running'].includes(selectedRun.value.state)) await loadRun(selectedRun.value.id, true); } } finally { pollBusy = false; }
 }
 
 function startPolling(): void { if (iAmAdmin && pollTimer === null) pollTimer = window.setInterval(() => void pollRuns(), 5000); }
 
 function stopPolling(): void { if (pollTimer !== null) window.clearInterval(pollTimer); pollTimer = null; }
 
-watch(tab, value => { actionError.value = ''; if (value === 'runs') void loadRuns(); if (value === 'taxonomy') void loadTaxonomy(); if (value === 'schedules') void loadProfiles(); });
+watch(tab, value => { actionError.value = ''; if (value === 'runs') void loadRuns(); if (value === 'taxonomy') void loadTaxonomy(); if (value === 'schedules') void loadProfiles(); if (value === 'maintenance') void Promise.all([playbackProviders.value.length ? Promise.resolve() : loadPlaybackSettings(), loadMaintenanceRuns(), loadMaintenanceProfiles()]); if (value === 'sources' && !serviceSettings.value) void loadServiceSettings(); });
+watch(() => maintenanceForm.kind, kind => { if (!maintenanceSources(kind).includes(maintenanceForm.source)) maintenanceForm.source = maintenanceSources(kind)[0]; });
+watch(() => maintenanceProfileForm.kind, kind => { if (!maintenanceSources(kind).includes(maintenanceProfileForm.source)) maintenanceProfileForm.source = maintenanceSources(kind)[0]; });
 onMounted(() => { if (iAmAdmin) { void Promise.all([loadSources(), loadCategories(), loadRuns(), loadProfiles()]); startPolling(); } });
 onActivated(startPolling);
 onDeactivated(stopPolling);
@@ -728,6 +1026,8 @@ definePage(() => ({ title: i18n.ts.zalip._importer.pageTitle, icon: 'ti ti-datab
 .entityImage i { color: var(--MI_THEME-accent); font-size: 1.3rem; }
 .locks { display: flex; flex-wrap: wrap; gap: 12px 18px; margin: 0; padding: 16px; border: 1px solid var(--MI_THEME-divider); border-radius: var(--MI-radius); }
 .categoryRules { display: grid; gap: 14px; margin: 24px 0; padding: 16px; border: 1px solid var(--MI_THEME-divider); border-radius: var(--MI-radius); }
+.playerSettingsRow { display: flex; align-items: end; flex-wrap: wrap; gap: 14px; margin: 16px 0; padding: 14px; border: 1px solid var(--MI_THEME-divider); border-radius: var(--MI-radius); }
+.playerSettingsRow .grow { min-width: 160px; }
 .locks label, .page .check { flex-direction: row; align-items: center; }
 .empty { padding: 50px 20px; text-align: center; color: var(--MI_THEME-fgTransparentWeak); }
 .empty i { font-size: 2rem; color: var(--MI_THEME-accent); }

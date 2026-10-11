@@ -21,18 +21,18 @@ export function remainingQuota(response: unknown): number | null {
 }
 
 /** Redis reservations cover all application workers and UI previews sharing this API key. */
-export function budgetedTransport(redis: Redis.Redis, transport: ImportTransport, key: string | undefined, dailyBudget = 350): ImportTransport {
+export function budgetedTransport(redis: Redis.Redis, transport: ImportTransport, key: string | undefined, dailyBudget = 350, apiOrigin = 'https://kinopoiskapiunofficial.tech'): ImportTransport {
 	const fingerprint = createHash('sha256').update(key ?? '').digest('hex').slice(0, 20);
 	const paced = pacedImportTransport(transport);
 	return async (url, headers) => {
-		if (new URL(url).origin !== 'https://kinopoiskapiunofficial.tech' || !key) return transport(url, headers);
+		if (new URL(url).origin !== apiOrigin || !key) return transport(url, headers);
 		const prefix = `zalip:import:kp:${fingerprint}`;
 		const quotaKey = `${prefix}:remaining`;
 		if (await redis.get(quotaKey) == null) {
 			const lock = await redis.set(`${prefix}:quota-lock`, '1', 'EX', 20, 'NX');
 			if (lock) {
 				try {
-					const quota = remainingQuota(await paced(`https://kinopoiskapiunofficial.tech/api/v1/api_keys/${encodeURIComponent(key)}`, { 'X-API-KEY': key }));
+					const quota = remainingQuota(await paced(`${apiOrigin}/api/v1/api_keys/${encodeURIComponent(key)}`, { 'X-API-KEY': key }));
 					await redis.set(quotaKey, quota == null ? dailyBudget : Math.max(0, quota - 20), 'EX', 3600);
 				} finally {
 					await redis.del(`${prefix}:quota-lock`);

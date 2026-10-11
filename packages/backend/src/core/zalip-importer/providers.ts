@@ -4,6 +4,10 @@
  */
 
 import fetch from 'node-fetch';
+import { lookup } from 'node:dns/promises';
+import { Agent as HttpsAgent } from 'node:https';
+import { isIP } from 'node:net';
+import ipaddr from 'ipaddr.js';
 import type { ExternalIdentity, ImportCredit, ImportEpisode, ImportField, ImportMediaType, ImportPlayer, ImportProvider, ImportProviderStatus, ImportRecord, ImportRef, ImportSearchPage, ImportSearchResult, ImportSource } from './types.js';
 
 export type ImportProviderErrorCode = 'not-configured' | 'not-found' | 'quota-exceeded' | 'rate-limited' | 'upstream-failure' | 'invalid-ref' | 'unsupported' | 'malformed-response';
@@ -20,10 +24,15 @@ export type ImportTransport = (url: string, headers: Record<string, string>) => 
 export type ImportProviderConfig = {
 	tmdbApiKey?: string;
 	allohaApiToken?: string;
+	/** Explicitly approved browser-facing embed token, separate from API authentication. */
+	allohaPlayerToken?: string;
 	kinopoiskApiKey?: string;
 	collapsApiToken?: string;
 	allohaIframeHosts?: string[];
 	collapsIframeHosts?: string[];
+	apiOrigins?: Partial<Record<ImportSource, string>>;
+	allohaPlayerOrigin?: string;
+	collapsPlayerOrigin?: string;
 };
 
 const origins: Record<ImportSource, string> = {
@@ -32,6 +41,34 @@ const origins: Record<ImportSource, string> = {
 	alloha: 'https://apbugall.org',
 	collaps: 'https://api.bhcesh.me',
 };
+export const defaultImportApiOrigins: Readonly<Record<ImportSource, string>> = Object.freeze({ ...origins });
+
+export function normalizeImportApiOrigin(value: string): string {
+	try {
+		const url = new URL(value);
+		if (value.length > 1024 || !/^https:\/\/[^\s/:@?#]+\/?$/iu.test(value) || url.protocol !== 'https:' || url.username || url.password || url.port || url.pathname !== '/' || url.search || url.hash || isIP(url.hostname) || !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/u.test(url.hostname) || !url.hostname.includes('.') || /(?:^|\.)(?:localhost|local|internal|test|invalid|example)$/u.test(url.hostname)) throw new Error();
+		return url.origin;
+	} catch { throw new ImportProviderError('invalid-ref'); }
+}
+
+export function importAddressOrigins(config: ImportProviderConfig): Record<ImportSource, string> {
+	return Object.fromEntries(Object.entries(origins).map(([source, fallback]) => [source, normalizeImportApiOrigin(config.apiOrigins?.[source as ImportSource] ?? fallback)])) as Record<ImportSource, string>;
+}
+
+/** Resolve and pin the very addresses used by the socket; never connect to local/reserved networks. */
+const importerHttpsAgent = new HttpsAgent({
+	keepAlive: true, maxSockets: 16,
+	lookup: (hostname, options, callback) => {
+		void lookup(hostname, { all: true, verbatim: true }).then(addresses => {
+			if (!addresses.length || addresses.some(row => ipaddr.process(row.address).range() !== 'unicast')) throw new Error('IMPORT_ADDRESS_REJECTED');
+			const family = typeof options === 'number' ? options : options.family;
+			const candidates = family ? addresses.filter(row => row.family === Number(family)) : addresses;
+			if (!candidates.length) throw new Error('IMPORT_ADDRESS_REJECTED');
+			if (typeof options === 'object' && options.all) callback(null, candidates);
+			else callback(null, candidates[0].address, candidates[0].family);
+		}).catch(() => callback(new Error('IMPORT_ADDRESS_REJECTED'), '', 4));
+	},
+});
 const MAX_SEASONS = 50;
 const MAX_EPISODES = 1000;
 const MAX_RESULTS = 100;
@@ -120,6 +157,46 @@ export function safeImportUrl(value: unknown, allowedHosts?: readonly string[]):
 	} catch {
 		return null;
 	}
+}
+
+/** Alloha requires a browser-visible embed token. Only explicit server configuration permits it. */
+export function safeAllohaPlayerUrl(value: unknown, allowedHosts: readonly string[], playerToken?: string): string | null {
+	if (!playerToken || !/^[A-Za-z0-9_-]{8,512}$/.test(playerToken)) return safeImportUrl(value, allowedHosts);
+	if (typeof value !== 'string') return null;
+	try {
+		const candidate = new URL(value);
+		// Never allow other credential query parameters or ambiguous duplicate token fields.
+		const tokenKeys = [...candidate.searchParams.keys()].filter(key => sensitiveQuery.test(key));
+		if (tokenKeys.some(key => key !== 'token') || tokenKeys.length > 1) return null;
+		candidate.searchParams.delete('token');
+		const safe = safeImportUrl(candidate.toString(), allowedHosts);
+		if (!safe) return null;
+		const result = new URL(safe);
+		// Rewrite, never forward the API response's credential; token_movie remains title-specific.
+		if (tokenKeys.length === 1 || result.searchParams.has('token_movie')) result.searchParams.set('token', playerToken);
+		return result.toString();
+	} catch {
+		return null;
+	}
+}
+
+export function rewriteImportPlayerOrigin(value: string, origin?: string): string {
+	if (!origin) return value;
+	const target = new URL(normalizeImportApiOrigin(origin));
+	const result = new URL(value);
+	result.protocol = target.protocol;
+	result.host = target.host;
+	return result.toString();
+}
+
+/** Cached player choices also adopt token/mirror changes without exposing server API credentials. */
+export function configuredImportPlayerUrl(value: unknown, source: 'alloha' | 'collaps', config: ImportProviderConfig): string | null {
+	const origin = source === 'alloha' ? config.allohaPlayerOrigin : config.collapsPlayerOrigin;
+	const extraHosts = source === 'alloha' ? config.allohaIframeHosts : config.collapsIframeHosts;
+	const hosts = configuredIframeHosts(extraHosts, source === 'alloha' ? 'ascorbic-as.stravers.live' : 'api.nextembed.ws');
+	if (origin) hosts.push(new URL(normalizeImportApiOrigin(origin)).hostname);
+	const safe = source === 'alloha' ? safeAllohaPlayerUrl(value, hosts, config.allohaPlayerToken) : safeImportUrl(value, hosts);
+	return safe ? rewriteImportPlayerOrigin(safe, origin) : null;
 }
 
 function imagePath(value: unknown): string | null {
@@ -326,7 +403,18 @@ export function normalizeKinopoiskRecord(value: unknown, staff: unknown = [], se
 }
 
 function collapsMediaType(item: JsonObject): ImportMediaType {
-	return /serial|show/.test(String(item.type).toLowerCase()) || array(item.seasons, 1).length > 0 ? 'tv' : 'movie';
+	return /serial|series|show/.test(String(item.type).toLowerCase()) || array(item.seasons, 1).length > 0 ? 'tv' : 'movie';
+}
+
+function maintenancePage(value: unknown, limit: number): { rows: unknown[]; hasMore: boolean } {
+	const response = object(value);
+	if (!Array.isArray(response.results) || response.results.length > limit) throw new ImportProviderError('malformed-response');
+	// Upstream next_page may contain a token. It is a boolean signal only, never a URL to follow/store.
+	return { rows: response.results, hasMore: response.next_page != null && response.next_page !== '' && response.next_page !== false };
+}
+
+function maintenanceLimit(limit: number): void {
+	if (!Number.isInteger(limit) || limit < 20 || limit > 50) throw new ImportProviderError('invalid-ref');
 }
 
 export function normalizeCollapsRecord(value: unknown, iframeHosts: readonly string[] = ['api.nextembed.ws']): ImportRecord {
@@ -392,7 +480,7 @@ export function normalizeCollapsRecord(value: unknown, iframeHosts: readonly str
 }
 
 /** Alloha's verified integration uses a typed TMDB reference, not an undocumented native-ID route. */
-export function normalizeAllohaRecord(value: unknown, ref: ImportRef, iframeHosts: readonly string[] = ['ascorbic-as.stravers.live']): ImportRecord {
+export function normalizeAllohaRecord(value: unknown, ref: ImportRef, iframeHosts: readonly string[] = ['ascorbic-as.stravers.live'], playerToken?: string): ImportRecord {
 	const item = object(object(value).data);
 	const match = /^tmdb:(movie|tv):(\d{1,16})$/.exec(ref.externalId);
 	const category = text(object(item.category).slug, 24);
@@ -405,9 +493,9 @@ export function normalizeAllohaRecord(value: unknown, ref: ImportRef, iframeHost
 	record.description = text(item.description, 8192);
 	record.releaseYear = year(item.year);
 	record.kind = mediaKind(ref.mediaType, [], [], category);
-	const iframeUrl = safeImportUrl(item.iframe, iframeHosts);
-	const translations = array(item.translations, 40).map(object).filter(voice => externalId(voice.id) != null && text(voice.name) != null && safeImportUrl(voice.iframe, iframeHosts) != null);
-	const fallbackIframe = iframeUrl ?? safeImportUrl(translations[0]?.iframe, iframeHosts);
+	const iframeUrl = safeAllohaPlayerUrl(item.iframe, iframeHosts, playerToken);
+	const translations = array(item.translations, 40).map(object).filter(voice => externalId(voice.id) != null && text(voice.name) != null && safeAllohaPlayerUrl(voice.iframe, iframeHosts, playerToken) != null);
+	const fallbackIframe = iframeUrl ?? safeAllohaPlayerUrl(translations[0]?.iframe, iframeHosts, playerToken);
 	if (fallbackIframe != null) record.players.push({ source: 'alloha', externalId: ref.externalId, iframeUrl: fallbackIframe, quality: text(translations[0]?.quality, 64), translations: translations.flatMap(voice => {
 		const id = externalId(voice.id);
 		const name = text(voice.name);
@@ -424,14 +512,19 @@ function retryAfter(value: string | null): number | undefined {
 }
 
 /** Fixed API origins, no redirects, bounded response size and timeout. Credentials never enter thrown errors. */
-export const defaultImportTransport: ImportTransport = async (url, headers) => {
+export function createConfiguredImportTransport(config: ImportProviderConfig): ImportTransport {
+	const allowed = new Set(Object.values(importAddressOrigins(config)));
+	return (url, headers) => performImportRequest(url, headers, allowed);
+}
+
+async function performImportRequest(url: string, headers: Record<string, string>, allowedOrigins: ReadonlySet<string>): Promise<unknown> {
 	let parsed: URL;
 	try { parsed = new URL(url); } catch { throw new ImportProviderError('invalid-ref'); }
-	if (!Object.values(origins).includes(parsed.origin) || parsed.username || parsed.password || parsed.hash) throw new ImportProviderError('invalid-ref');
+	if (!allowedOrigins.has(parsed.origin) || parsed.username || parsed.password || parsed.hash) throw new ImportProviderError('invalid-ref');
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), 12000);
 	try {
-		const response = await fetch(url, { headers: { Accept: 'application/json', ...headers }, redirect: 'error', size: 2 * 1024 * 1024, signal: controller.signal });
+		const response = await fetch(url, { headers: { Accept: 'application/json', ...headers }, redirect: 'error', size: 2 * 1024 * 1024, signal: controller.signal, agent: importerHttpsAgent });
 		if (response.status === 404) throw new ImportProviderError('not-found');
 		if (response.status === 401 || response.status === 403) throw new ImportProviderError('not-configured');
 		if (response.status === 402) throw new ImportProviderError('quota-exceeded', 86400000);
@@ -444,7 +537,9 @@ export const defaultImportTransport: ImportTransport = async (url, headers) => {
 	} finally {
 		clearTimeout(timer);
 	}
-};
+}
+
+export const defaultImportTransport: ImportTransport = (url, headers) => performImportRequest(url, headers, new Set(Object.values(origins)));
 
 function pageNumber(value = 1, maximum = 1000): number {
 	if (!Number.isInteger(value) || value < 1 || value > maximum) throw new ImportProviderError('invalid-ref');
@@ -474,11 +569,12 @@ function status(source: ImportSource, credential: string | undefined, search: bo
 	return { source, configured: !!credential?.trim(), capabilities: { search, collections, updates }, dailyLimit: null };
 }
 
-export function createImportRequest(source: ImportSource, credential: string | undefined, transport: ImportTransport) {
+export function createImportRequest(source: ImportSource, credential: string | undefined, transport: ImportTransport, apiOrigin = origins[source]) {
+	const origin = normalizeImportApiOrigin(apiOrigin);
 	return async (path: string, parameters: Record<string, string> = {}): Promise<unknown> => {
 		if (!credential?.trim()) throw new ImportProviderError('not-configured');
-		const url = new URL(path, origins[source]);
-		if (url.origin !== origins[source] || !path.startsWith('/') || path.startsWith('//')) throw new ImportProviderError('invalid-ref');
+		const url = new URL(path, origin);
+		if (url.origin !== origin || !path.startsWith('/') || path.startsWith('//')) throw new ImportProviderError('invalid-ref');
 		for (const [key, value] of Object.entries(parameters)) url.searchParams.set(key, value);
 		const headers: Record<string, string> = {};
 		if (source === 'kinopoisk') headers['X-API-KEY'] = credential.trim();
@@ -516,12 +612,15 @@ function configuredIframeHosts(values: readonly string[] | undefined, fallback: 
 /** Creates adapters with process-wide pacing. Persistence, daily budgets and durable retries belong to the runner. */
 export function createImportProviders(config: ImportProviderConfig, transport: ImportTransport = defaultImportTransport): Record<ImportSource, ImportProvider> {
 	const pacedTransport = pacedImportTransport(transport);
-	const tmdbRequest = createImportRequest('tmdb', config.tmdbApiKey, pacedTransport);
-	const kpRequest = createImportRequest('kinopoisk', config.kinopoiskApiKey, pacedTransport);
-	const allohaRequest = createImportRequest('alloha', config.allohaApiToken, pacedTransport);
-	const collapsRequest = createImportRequest('collaps', config.collapsApiToken, pacedTransport);
+	const addresses = importAddressOrigins(config);
+	const tmdbRequest = createImportRequest('tmdb', config.tmdbApiKey, pacedTransport, addresses.tmdb);
+	const kpRequest = createImportRequest('kinopoisk', config.kinopoiskApiKey, pacedTransport, addresses.kinopoisk);
+	const allohaRequest = createImportRequest('alloha', config.allohaApiToken, pacedTransport, addresses.alloha);
+	const collapsRequest = createImportRequest('collaps', config.collapsApiToken, pacedTransport, addresses.collaps);
 	const allohaHosts = configuredIframeHosts(config.allohaIframeHosts, 'ascorbic-as.stravers.live');
 	const collapsHosts = configuredIframeHosts(config.collapsIframeHosts, 'api.nextembed.ws');
+	if (config.allohaPlayerOrigin) allohaHosts.push(new URL(normalizeImportApiOrigin(config.allohaPlayerOrigin)).hostname);
+	if (config.collapsPlayerOrigin) collapsHosts.push(new URL(normalizeImportApiOrigin(config.collapsPlayerOrigin)).hostname);
 	const tmdb: ImportProvider = {
 		status: () => status('tmdb', config.tmdbApiKey, true, true, false),
 		async check() {
@@ -667,7 +766,9 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 			const match = /^tmdb:(movie|tv):(\d{1,16})$/.exec(ref.externalId);
 			if (ref.source !== 'alloha' || match == null || match[1] !== ref.mediaType || externalId(match[2]) == null) throw new ImportProviderError('invalid-ref');
 			const response = await allohaRequest(`/v2/movies/tmdb/${match[2]}`, { category: ref.mediaType === 'movie' ? 'movie' : 'serial' });
-			return normalizeAllohaRecord(response, ref, allohaHosts);
+			const record = normalizeAllohaRecord(response, ref, allohaHosts, config.allohaPlayerToken);
+			for (const player of record.players) player.iframeUrl = rewriteImportPlayerOrigin(player.iframeUrl, config.allohaPlayerOrigin);
+			return record;
 		},
 		async lookup(identities, mediaType) {
 			const id = keyFor(identities, 'tmdb', mediaType);
@@ -677,7 +778,7 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 	const collaps: ImportProvider = {
 		status: () => status('collaps', config.collapsApiToken, true, true, true),
 		async check() {
-			const response = object(await collapsRequest('/list', { page: '1', limit: '1', format: 'json' }));
+			const response = object(await collapsRequest('/list', { page: '1', limit: '20', format: 'json' }));
 			if (!Array.isArray(response.results)) throw new ImportProviderError('malformed-response');
 		},
 		async search(query, page = 1, mediaType) {
@@ -693,6 +794,7 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 			validRef(ref, 'collaps');
 			const response = await collapsRequest('/franchise/details', { id: ref.externalId, format: 'json' });
 			const result = normalizeCollapsRecord(response, collapsHosts);
+			for (const player of result.players) player.iframeUrl = rewriteImportPlayerOrigin(player.iframeUrl, config.collapsPlayerOrigin);
 			if (result.ref.externalId !== ref.externalId || result.ref.mediaType !== ref.mediaType) throw new ImportProviderError('malformed-response');
 			const details = object(object(response).result ?? object(response).data ?? response);
 			if (details.genre == null && details.genres == null) {
@@ -709,6 +811,7 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 			if (kpId == null && imdb == null) return null;
 			const response = await collapsRequest('/franchise/details', { ...(kpId == null ? {} : { kinopoisk_id: kpId }), ...(imdb == null ? {} : { imdb_id: imdb }), format: 'json' });
 			const result = normalizeCollapsRecord(response, collapsHosts);
+			for (const player of result.players) player.iframeUrl = rewriteImportPlayerOrigin(player.iframeUrl, config.collapsPlayerOrigin);
 			if (result.ref.mediaType !== mediaType) return null;
 			if (!result.identities.some(identity => (identity.provider === 'kinopoisk' && identity.externalId === kpId) || (identity.provider === 'imdb' && identity.externalId === imdb))) throw new ImportProviderError('malformed-response');
 			return result;
@@ -726,6 +829,35 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 			const response = object(await collapsRequest('/video/news', { page: String(page), limit: '20', format: 'json' }));
 			if (!Array.isArray(response.results)) throw new ImportProviderError('malformed-response');
 			return searchPage(response.results, page, response.next_page != null && response.next_page !== '' && response.next_page !== false, value => normalizeCollapsRecord(value, collapsHosts));
+		},
+		async collectionDictionary(page = 1, limit = 20) {
+			pageNumber(page);
+			maintenanceLimit(limit);
+			const { rows, hasMore } = maintenancePage(await collapsRequest('/collection', { page: String(page), limit: String(limit), format: 'json' }), limit);
+			const items = rows.map(raw => {
+				const row = object(raw);
+				const id = externalId(row.id);
+				if (!id) throw new ImportProviderError('malformed-response');
+				return { externalId: id, name: requireTitle(row.name) };
+			});
+			if (new Set(items.map(item => item.externalId)).size !== items.length || (hasMore && !items.length)) throw new ImportProviderError('malformed-response');
+			return { items, page, hasMore, warnings: [] };
+		},
+		async collectionMembers(externalIdValue, page = 1, limit = 20) {
+			const id = externalId(externalIdValue);
+			if (!id) throw new ImportProviderError('invalid-ref');
+			pageNumber(page);
+			maintenanceLimit(limit);
+			const { rows, hasMore } = maintenancePage(await collapsRequest('/list', { collection_id: id, page: String(page), limit: String(limit), join_seasons: 'false', format: 'json' }), limit);
+			const items = rows.map(raw => {
+				const row = object(raw);
+				const ownId = externalId(row.id);
+				if (!ownId || typeof row.type !== 'string' || !['films', 'movie', 'serials', 'series', 'cartoon', 'cartoon-serials', 'cartoon-series', 'show', 'anime', 'anime-serials', 'anime-series'].includes(row.type)) throw new ImportProviderError('malformed-response');
+				const mediaType = collapsMediaType(row);
+				return { externalId: ownId, mediaType, identities: [...identity('collaps', ownId, mediaType), ...identity('kinopoisk', row.kinopoisk_id, mediaType), ...identity('imdb', row.imdb_id, mediaType, true)] };
+			});
+			if (new Set(items.map(item => item.externalId)).size !== items.length || (hasMore && !items.length)) throw new ImportProviderError('malformed-response');
+			return { items, page, hasMore };
 		},
 	};
 	return { tmdb, kinopoisk, alloha, collaps };

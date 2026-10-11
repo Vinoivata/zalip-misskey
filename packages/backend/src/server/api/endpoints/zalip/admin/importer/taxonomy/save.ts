@@ -42,6 +42,8 @@ export const paramDef = {
 				aliases: { type: 'array', maxItems: 30, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 256 } },
 				identityQuality: { type: 'string', enum: ['verified', 'unresolved'] },
 				collectionKind: { type: 'string', enum: ['manual', 'provider', 'rules'] },
+				semanticKind: { type: 'string', enum: ['theme', 'platform', 'franchise'] },
+				isEnabled: { type: 'boolean' },
 				rules: {
 					type: 'object', additionalProperties: false,
 					properties: {
@@ -56,7 +58,7 @@ export const paramDef = {
 			},
 		},
 	},
-	required: ["type", "name"],
+	required: ['type', 'name'],
 } as const;
 
 @Injectable()

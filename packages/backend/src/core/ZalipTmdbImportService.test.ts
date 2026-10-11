@@ -4,10 +4,21 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { StatusError } from '@/misc/status-error.js';
+import { ImportProviderError, type ImportProviderConfig } from '@/core/zalip-importer/providers.js';
 import { ZalipTmdbImportService } from '@/core/ZalipTmdbImportService.js';
 
 const savedKey = process.env.ZALIP_TMDB_API_KEY;
+const isolated = vi.hoisted(() => ({ transport: vi.fn() }));
+vi.mock('@/core/HttpRequestService.js', () => ({ HttpRequestService: class {} }));
+vi.mock('@/core/ZalipCatalogService.js', () => ({ ZalipCatalogService: class {} }));
+vi.mock('@/core/ZalipImporterSourceSettingsService.js', () => ({ ZalipImporterSourceSettingsService: class {} }));
+vi.mock('@/core/zalip-importer/providers.js', async original => ({ ...await original<typeof import('@/core/zalip-importer/providers.js')>(), createConfiguredImportTransport: () => isolated.transport }));
+
+function service(httpRequestService: { getJson: (url: string) => Promise<unknown> }, catalog: unknown) {
+	isolated.transport.mockImplementation((url: string) => httpRequestService.getJson(url));
+	const settings = { getRuntime: vi.fn<() => Promise<ImportProviderConfig>>().mockImplementation(async () => ({ tmdbApiKey: process.env.ZALIP_TMDB_API_KEY })) };
+	return { instance: new ZalipTmdbImportService(httpRequestService as never, catalog as never, settings as never), settings };
+}
 
 afterEach(() => {
 	if (savedKey == null) {
@@ -22,9 +33,9 @@ describe('ZalipTmdbImportService', () => {
 		delete process.env.ZALIP_TMDB_API_KEY;
 		const httpRequestService = { getJson: vi.fn() };
 		const zalipCatalogService = { createTmdbDraft: vi.fn() };
-		const service = new ZalipTmdbImportService(httpRequestService as never, zalipCatalogService as never);
+		const { instance } = service(httpRequestService, zalipCatalogService);
 
-		await expect(service.importDraft('movie', 11)).resolves.toEqual({ kind: 'not-configured' });
+		await expect(instance.importDraft('movie', 11)).resolves.toEqual({ kind: 'not-configured' });
 		expect(httpRequestService.getJson).not.toHaveBeenCalled();
 	});
 
@@ -35,10 +46,10 @@ describe('ZalipTmdbImportService', () => {
 				id: 11,
 				title: 'Тестовый фильм',
 				original_title: 'Test Movie',
-			overview: 'Описание для проверки.',
-			release_date: '2025-04-12',
-			runtime: 118,
-			genres: [{ name: 'Драма' }, { name: 'Триллер' }, { name: 'Драма' }, { name: '' }],
+				overview: 'Описание для проверки.',
+				release_date: '2025-04-12',
+				runtime: 118,
+				genres: [{ name: 'Драма' }, { name: 'Триллер' }, { name: 'Драма' }, { name: '' }],
 				poster_path: '/poster.jpg',
 				backdrop_path: '/backdrop.jpg',
 				images: { logos: [{ file_path: '/fallback-logo.png', iso_639_1: null }, { file_path: '/english-logo.png', iso_639_1: 'en' }, { file_path: '/russian-logo.png', iso_639_1: 'ru' }] },
@@ -60,9 +71,9 @@ describe('ZalipTmdbImportService', () => {
 		};
 		const work = { id: 'test-work', slug: 'tmdb-movie-11', title: 'Тестовый фильм' };
 		const zalipCatalogService = { createTmdbDraft: vi.fn().mockResolvedValue(work) };
-		const service = new ZalipTmdbImportService(httpRequestService as never, zalipCatalogService as never);
+		const { instance } = service(httpRequestService, zalipCatalogService);
 
-		await expect(service.importDraft('movie', 11)).resolves.toEqual({ kind: 'created', work });
+		await expect(instance.importDraft('movie', 11)).resolves.toEqual({ kind: 'created', work });
 		expect(zalipCatalogService.createTmdbDraft).toHaveBeenCalledWith({
 			tmdbMediaType: 'movie',
 			tmdbId: 11,
@@ -101,9 +112,9 @@ describe('ZalipTmdbImportService', () => {
 			}),
 		};
 		const zalipCatalogService = { updateTmdbMedia: vi.fn().mockResolvedValue({ id: 'test-work' }) };
-		const service = new ZalipTmdbImportService(httpRequestService as never, zalipCatalogService as never);
+		const { instance } = service(httpRequestService, zalipCatalogService);
 
-		await expect(service.refreshMedia({ workId: 'test-work', tmdbMediaType: 'movie', tmdbId: 11 })).resolves.toEqual({ kind: 'updated' });
+		await expect(instance.refreshMedia({ workId: 'test-work', tmdbMediaType: 'movie', tmdbId: 11 })).resolves.toEqual({ kind: 'updated' });
 		expect(zalipCatalogService.updateTmdbMedia).toHaveBeenCalledWith('test-work', {
 			genres: ['Боевик'],
 			runtimeMinutes: null,
@@ -121,11 +132,11 @@ describe('ZalipTmdbImportService', () => {
 
 	it('maps a TMDB 404 to a safe editor-facing result', async () => {
 		process.env.ZALIP_TMDB_API_KEY = 'test-only-key';
-		const httpRequestService = { getJson: vi.fn().mockRejectedValue(new StatusError('not found', 404)) };
+		const httpRequestService = { getJson: vi.fn().mockRejectedValue(new ImportProviderError('not-found')) };
 		const zalipCatalogService = { createTmdbDraft: vi.fn() };
-		const service = new ZalipTmdbImportService(httpRequestService as never, zalipCatalogService as never);
+		const { instance } = service(httpRequestService, zalipCatalogService);
 
-		await expect(service.importDraft('tv', 999)).resolves.toEqual({ kind: 'not-found' });
+		await expect(instance.importDraft('tv', 999)).resolves.toEqual({ kind: 'not-found' });
 		expect(zalipCatalogService.createTmdbDraft).not.toHaveBeenCalled();
 	});
 
@@ -148,9 +159,9 @@ describe('ZalipTmdbImportService', () => {
 		};
 		const work = { id: 'test-tv-work' };
 		const zalipCatalogService = { createTmdbDraft: vi.fn().mockResolvedValue(work) };
-		const service = new ZalipTmdbImportService(httpRequestService as never, zalipCatalogService as never);
+		const { instance } = service(httpRequestService, zalipCatalogService);
 
-		await expect(service.importDraft('tv', 77)).resolves.toEqual({ kind: 'created', work });
+		await expect(instance.importDraft('tv', 77)).resolves.toEqual({ kind: 'created', work });
 		expect(zalipCatalogService.createTmdbDraft).toHaveBeenCalledWith(expect.objectContaining({
 			tmdbMediaType: 'tv',
 			genres: ['Анимация'],
@@ -180,10 +191,10 @@ describe('ZalipTmdbImportService', () => {
 			}),
 		};
 		const zalipCatalogService = { syncSeasonEpisodes: vi.fn().mockResolvedValue({ added: 2, updated: 0, total: 2 }) };
-		const service = new ZalipTmdbImportService(httpRequestService as never, zalipCatalogService as never);
+		const { instance } = service(httpRequestService, zalipCatalogService);
 		const target = { tmdbId: 77, seasonId: 'test-season', seasonNumber: 1 };
 
-		await expect(service.importSeasonEpisodes(target)).resolves.toEqual({ kind: 'synced', added: 2, updated: 0, total: 2 });
+		await expect(instance.importSeasonEpisodes(target)).resolves.toEqual({ kind: 'synced', added: 2, updated: 0, total: 2 });
 		expect(zalipCatalogService.syncSeasonEpisodes).toHaveBeenCalledWith('test-season', [
 			{
 				tmdbEpisodeId: 300,
@@ -210,5 +221,32 @@ describe('ZalipTmdbImportService', () => {
 		const requestUrl = new URL(httpRequestService.getJson.mock.calls[0][0]);
 		expect(requestUrl.pathname).toBe('/3/tv/77/season/1');
 		expect(requestUrl.searchParams.get('language')).toBe('ru-RU');
+	});
+
+	it('takes a fresh credential and HTTPS address snapshot for every legacy operation', async () => {
+		const http = { getJson: vi.fn().mockResolvedValueOnce({ id: 11, title: 'Synthetic movie' }).mockResolvedValueOnce({ id: 11 }).mockResolvedValueOnce({ season_number: 1, episodes: [] }) };
+		const catalog = { createTmdbDraft: vi.fn().mockResolvedValue('duplicate'), updateTmdbMedia: vi.fn().mockResolvedValue({ id: 'work' }), syncSeasonEpisodes: vi.fn().mockResolvedValue({ added: 0, updated: 0, total: 0 }) };
+		const { instance, settings } = service(http, catalog);
+		for (const suffix of ['one', 'two', 'three']) settings.getRuntime.mockResolvedValueOnce({ tmdbApiKey: `synthetic-key-${suffix}`, apiOrigins: { tmdb: `https://api-${suffix}.zalip.org` } });
+		await expect(instance.importDraft('movie', 11)).resolves.toEqual({ kind: 'duplicate' });
+		await expect(instance.refreshMedia({ workId: 'work', tmdbMediaType: 'movie', tmdbId: 11 })).resolves.toEqual({ kind: 'updated' });
+		await expect(instance.importSeasonEpisodes({ tmdbId: 11, seasonNumber: 1, seasonId: 'season' })).resolves.toMatchObject({ kind: 'synced' });
+		expect(settings.getRuntime).toHaveBeenCalledTimes(3);
+		for (const [index, suffix] of ['one', 'two', 'three'].entries()) {
+			const url = new URL(http.getJson.mock.calls[index][0]);
+			expect(url.origin).toBe(`https://api-${suffix}.zalip.org`);
+			expect(url.searchParams.get('api_key')).toBe(`synthetic-key-${suffix}`);
+		}
+	});
+
+	it('malformed upstream payloads cannot write metadata or throw raw exceptions', async () => {
+		const http = { getJson: vi.fn().mockResolvedValue(null) };
+		const catalog = { createTmdbDraft: vi.fn(), updateTmdbMedia: vi.fn(), syncSeasonEpisodes: vi.fn() };
+		const { instance, settings } = service(http, catalog);
+		settings.getRuntime.mockResolvedValue({ tmdbApiKey: 'synthetic-key' });
+		await expect(instance.importDraft('movie', 11)).resolves.toEqual({ kind: 'upstream-failure' });
+		await expect(instance.refreshMedia({ workId: 'work', tmdbMediaType: 'movie', tmdbId: 11 })).resolves.toEqual({ kind: 'upstream-failure' });
+		await expect(instance.importSeasonEpisodes({ tmdbId: 11, seasonNumber: 1, seasonId: 'season' })).resolves.toEqual({ kind: 'upstream-failure' });
+		for (const method of Object.values(catalog)) expect(method).not.toHaveBeenCalled();
 	});
 });

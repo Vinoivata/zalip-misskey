@@ -42,6 +42,9 @@ export type ImportRecord = {
 };
 export type ImportSearchResult = { ref: ImportRef; title: string; originalTitle: string | null; releaseYear: number | null; posterUrl: string | null };
 export type ImportSearchPage = { items: ImportSearchResult[]; page: number; hasMore: boolean };
+/** Maintenance resources have their own IDs and never masquerade as movie/TV references. */
+export type ImportCollectionDictionaryPage = { items: { externalId: string; name: string }[]; page: number; hasMore: boolean; warnings: string[] };
+export type ImportCollectionMembersPage = { items: { externalId: string; identities: ExternalIdentity[]; mediaType: ImportMediaType }[]; page: number; hasMore: boolean };
 export type ImportProviderStatus = { source: ImportSource; configured: boolean; capabilities: { search: boolean; collections: boolean; updates: boolean }; dailyLimit: number | null };
 export interface ImportProvider {
 	status(): ImportProviderStatus;
@@ -51,6 +54,8 @@ export interface ImportProvider {
 	lookup?(identities: ExternalIdentity[], mediaType: ImportMediaType, fields?: readonly ImportField[]): Promise<ImportRecord | null>;
 	collection?(externalId: string, page?: number): Promise<ImportSearchPage>;
 	updates?(page?: number): Promise<ImportSearchPage>;
+	collectionDictionary?(page?: number, limit?: number): Promise<ImportCollectionDictionaryPage>;
+	collectionMembers?(externalId: string, page?: number, limit?: number): Promise<ImportCollectionMembersPage>;
 }
 export const importFields = ['title', 'originalTitle', 'description', 'releaseYear', 'runtimeMinutes', 'kind', 'genres', 'countries', 'posterUrl', 'backdropUrl', 'logoUrl', 'galleryUrls', 'trailerYoutubeKey', 'ratings', 'ageRating', 'credits', 'companies', 'collections', 'seasons', 'players'] as const;
 export type ImportField = typeof importFields[number];
@@ -62,8 +67,18 @@ export type ImportFilters = {
 	genres?: string[];
 	countries?: string[];
 	ratingMin?: number;
+	/** Applies only when creating a new work, not when refreshing an existing one. */
+	requirePlayer?: boolean;
 };
 /** A persisted job policy contains no credentials or arbitrary provider parameters. */
 export type ImportOptions = { sources?: ImportSource[]; fields?: ImportField[]; fieldSources?: Partial<Record<ImportField, ImportSource>>; filters?: ImportFilters; artwork?: 'remote' | 'local-webp' };
 export type ImportWorkState = { locks: string[]; values: Record<string, unknown>; sources: Record<string, string>; countries: string[]; ratings: ImportRecord['ratings']; ageRating: string | null };
 export type ImportPreview = { record: ImportRecord; workId: string | null; options: ImportOptions; locks: string[]; matchesFilters: boolean; changes: { field: string; before: unknown; after: unknown; protected: boolean; selected: boolean }[]; warnings: string[] };
+
+export const maintenanceKinds = ['collections-dictionary', 'collection-backfill', 'person-enrichment'] as const;
+export type MaintenanceKind = typeof maintenanceKinds[number];
+export type MaintenanceSource = 'collaps' | 'tmdb' | 'kinopoisk';
+export type MaintenanceState = 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
+export type MaintenanceOptions = { collectionIds?: string[] };
+export type MaintenanceCursor = { page: number; offset: number; entryAfterId: string | null; activeEntryId: string | null; collectionIndex: number };
+export type MaintenanceStats = { processed: number; created: number; updated: number; linked: number; skipped: number; failed: number };

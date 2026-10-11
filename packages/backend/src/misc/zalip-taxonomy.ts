@@ -25,6 +25,38 @@ export type ZalipCategoryRules = {
 	yearTo?: number;
 };
 
+export const zalipCollectionSemanticKinds = ['theme', 'platform', 'franchise'] as const;
+export type ZalipCollectionSemanticKind = typeof zalipCollectionSemanticKinds[number];
+
+/** Semantic settings are separate from collectionKind, which records editorial/provider provenance. */
+export function getZalipCollectionSettings(data: Record<string, unknown>): { semanticKind: ZalipCollectionSemanticKind; isEnabled: boolean } {
+	return {
+		semanticKind: zalipCollectionSemanticKinds.includes(data.semanticKind as ZalipCollectionSemanticKind) ? data.semanticKind as ZalipCollectionSemanticKind : 'theme',
+		isEnabled: data.isEnabled !== false,
+	};
+}
+
+type CatalogCursor = { position: number; id: string };
+
+/** A scoped keyset cursor contains no provider credentials and is never interpreted as SQL. */
+export function encodeZalipCatalogCursor(entryId: string, publishedOnly: boolean, relation: CatalogCursor): string {
+	return Buffer.from(JSON.stringify([1, entryId, publishedOnly, relation.position, relation.id])).toString('base64url');
+}
+
+export function decodeZalipCatalogCursor(cursor: string, entryId: string, publishedOnly: boolean): CatalogCursor {
+	if (!cursor || cursor.length > 256 || !/^[a-zA-Z0-9_-]+$/u.test(cursor)) throw new Error('INVALID_CATALOG_CURSOR');
+	let value: unknown;
+	try {
+		const bytes = Buffer.from(cursor, 'base64url');
+		if (bytes.toString('base64url') !== cursor) throw new Error();
+		value = JSON.parse(bytes.toString('utf8'));
+	} catch {
+		throw new Error('INVALID_CATALOG_CURSOR');
+	}
+	if (!Array.isArray(value) || value.length !== 5 || value[0] !== 1 || value[1] !== entryId || value[2] !== publishedOnly || !Number.isInteger(value[3]) || value[3] < 0 || value[3] > 100000 || typeof value[4] !== 'string' || !/^[a-zA-Z0-9]{1,32}$/u.test(value[4])) throw new Error('INVALID_CATALOG_CURSOR');
+	return { position: value[3], id: value[4] };
+}
+
 /** A small explicit projection prevents arbitrary provider/editor JSON from becoming executable rules. */
 export function normalizeZalipCategoryRules(rules: unknown): ZalipCategoryRules | null {
 	if (!rules || typeof rules !== 'object' || Array.isArray(rules)) return null;

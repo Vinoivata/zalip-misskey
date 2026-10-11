@@ -46,6 +46,7 @@ export const importerOptionsProperty = {
 				genres: { type: 'array', uniqueItems: true, maxItems: 50, items: { type: 'string', minLength: 1, maxLength: 100 } },
 				countries: { type: 'array', uniqueItems: true, maxItems: 50, items: { type: 'string', minLength: 1, maxLength: 100 } },
 				ratingMin: { type: 'number', minimum: 0, maximum: 10 },
+				requirePlayer: { type: 'boolean' },
 			},
 		},
 	},
@@ -74,7 +75,7 @@ export async function assertImporterAdministrator(roleService: Pick<RoleService,
 }
 
 const missingResources = new Set(['NO_SUCH_CATALOG_ENTRY', 'NO_SUCH_WORK', 'NO_SUCH_IMPORT_RUN', 'NO_SUCH_IMPORT_PROFILE', 'ZALIP_CATALOG_ENTRY_NOT_FOUND']);
-const invalidResources = new Set(['INVALID_CATALOG_TYPE', 'INVALID_CATALOG_ENTRY', 'INVALID_CATALOG_IMAGE', 'INVALID_CATALOG_SOURCE', 'INVALID_CATALOG_PARENT', 'CATALOG_PARENT_CYCLE', 'INVALID_CATALOG_LOOKUP', 'INVALID_CATALOG_LINK', 'INVALID_CATALOG_RULES', 'INVALID_CATALOG_RECALCULATE', 'INVALID_EXTERNAL_IDS', 'CATALOG_DATA_TOO_LARGE', 'INVALID_IMPORT_RUN', 'EMPTY_IMPORT_RUN', 'INVALID_IMPORT_PROFILE', 'INVALID_IMPORT_ACTION', 'INVALID_IMPORT_OPTIONS']);
+const invalidResources = new Set(['INVALID_CATALOG_TYPE', 'INVALID_CATALOG_ENTRY', 'INVALID_CATALOG_IMAGE', 'INVALID_CATALOG_SOURCE', 'INVALID_CATALOG_PARENT', 'CATALOG_PARENT_CYCLE', 'INVALID_CATALOG_LOOKUP', 'INVALID_CATALOG_LINK', 'INVALID_CATALOG_RULES', 'INVALID_CATALOG_RECALCULATE', 'INVALID_CATALOG_CURSOR', 'INVALID_COLLECTION_DATA', 'INVALID_PLAYBACK_SETTINGS', 'INVALID_EXTERNAL_IDS', 'CATALOG_DATA_TOO_LARGE', 'INVALID_IMPORT_RUN', 'EMPTY_IMPORT_RUN', 'INVALID_IMPORT_PROFILE', 'INVALID_IMPORT_ACTION', 'INVALID_IMPORT_OPTIONS']);
 const resourceConflicts = new Set(['CATALOG_TYPE_IMMUTABLE', 'CATALOG_SLUG_CONFLICT', 'CATALOG_ID_CONFLICT', 'IMPORT_ID_CONFLICT', 'IMPORT_IDENTITY_CONFLICT', 'IMPORT_RUN_BUSY']);
 
 /** Do not return upstream messages, causes, URLs or raw database errors, even for administrators. */

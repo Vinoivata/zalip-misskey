@@ -18,6 +18,9 @@ import { MiZalipCatalogRelation } from '@/models/ZalipCatalogRelation.js';
 import { MiZalipWork } from '@/models/ZalipWork.js';
 import {
 	getZalipCatalogEditorialData,
+	getZalipCollectionSettings,
+	decodeZalipCatalogCursor,
+	encodeZalipCatalogCursor,
 	matchesZalipCategoryRules,
 	mergeZalipCatalogEntry,
 	normalizeZalipCategoryRules,
@@ -25,6 +28,8 @@ import {
 	normalizeZalipExternalIds,
 	packZalipCatalogFacts,
 	zalipCatalogSlug,
+	zalipCollectionSemanticKinds,
+	type ZalipCollectionSemanticKind,
 	type ZalipCatalogEntryInput,
 } from '@/misc/zalip-taxonomy.js';
 
@@ -82,6 +87,7 @@ export class ZalipTaxonomyService {
 	public packEntry(entry: MiZalipCatalogEntry, admin = false): PackedZalipCatalogEntry {
 		const facts = packZalipCatalogFacts(entry.data);
 		const data = Object.fromEntries(Object.entries(facts).filter(([key]) => publicFactKeys.has(key)));
+		if (entry.type === 'collection') Object.assign(data, getZalipCollectionSettings(facts));
 		const rules = normalizeZalipCategoryRules(facts.rules);
 		if (admin && entry.type === 'category' && rules) data.rules = rules;
 		return {
@@ -104,6 +110,8 @@ export class ZalipTaxonomyService {
 		if (!name || name.length > 256 || !(slug ?? zalipCatalogSlug(name))) throw new Error('INVALID_CATALOG_ENTRY');
 		if ((input.description?.length ?? 0) > 8192 || (input.imageUrl?.length ?? 0) > 1024) throw new Error('INVALID_CATALOG_ENTRY');
 		if (input.data?.rules !== undefined && input.data.rules !== null && (input.type !== 'category' || !normalizeZalipCategoryRules(input.data.rules))) throw new Error('INVALID_CATALOG_RULES');
+		if (input.data?.semanticKind !== undefined && (input.type !== 'collection' || !zalipCollectionSemanticKinds.includes(input.data.semanticKind as ZalipCollectionSemanticKind))) throw new Error('INVALID_COLLECTION_DATA');
+		if (input.data?.isEnabled !== undefined && (input.type !== 'collection' || typeof input.data.isEnabled !== 'boolean')) throw new Error('INVALID_COLLECTION_DATA');
 		if (input.imageUrl) {
 			let url: URL;
 			try {
@@ -317,6 +325,7 @@ export class ZalipTaxonomyService {
 		const text = options.query?.trim();
 		if (text) query.andWhere('entry.name ILIKE :query', { query: `%${text.replace(/[\\%_]/gu, '\\$&')}%` });
 		if (publishedOnly) {
+			query.andWhere('(entry.type <> :collectionType OR entry.data->\'isEnabled\' IS DISTINCT FROM \'false\'::jsonb)', { collectionType: 'collection' });
 			query.andWhere('EXISTS (SELECT 1 FROM "zalip_catalog_relation" relation INNER JOIN "zalip_work" work ON work.id = relation."workId" WHERE relation."entryId" = entry.id AND work."publicationState" = :publicationState)', { publicationState: 'published' });
 		}
 		const entries = await query.orderBy('entry.name', 'ASC').addOrderBy('entry.id', 'ASC')
@@ -330,22 +339,35 @@ export class ZalipTaxonomyService {
 		type?: ZalipCatalogEntryType;
 		publishedOnly?: boolean;
 		limit?: number;
-	}): Promise<{ entry: PackedZalipCatalogEntry; works: (PackedZalipWork & { role: string; character: string | null; position: number })[] }> {
+		cursor?: string;
+	}): Promise<{ entry: PackedZalipCatalogEntry; works: (PackedZalipWork & { role: string; character: string | null; position: number })[]; nextCursor: string | null }> {
 		if (!options.entryId && (!options.slug || !options.type)) throw new Error('INVALID_CATALOG_LOOKUP');
 		const publishedOnly = options.publishedOnly ?? true;
 		const entry = await this.db.getRepository(MiZalipCatalogEntry).findOneBy(options.entryId ? { id: options.entryId } : { type: options.type, slug: options.slug });
-		if (!entry) throw new Error('NO_SUCH_CATALOG_ENTRY');
+		if (!entry || (publishedOnly && entry.type === 'collection' && !getZalipCollectionSettings(entry.data).isEnabled)) throw new Error('NO_SUCH_CATALOG_ENTRY');
+		const cursor = options.cursor === undefined ? null : decodeZalipCatalogCursor(options.cursor, entry.id, publishedOnly);
+		const limit = Math.min(200, Math.max(1, options.limit ?? 100));
 		const query = this.db.getRepository(MiZalipCatalogRelation).createQueryBuilder('relation')
 			.innerJoinAndSelect('relation.work', 'work').where('relation.entryId = :entryId', { entryId: entry.id });
 		if (publishedOnly) query.andWhere('work.publicationState = :publicationState', { publicationState: 'published' });
-		const relations = await query.orderBy('relation.position', 'ASC').addOrderBy('work.releaseYear', 'DESC').addOrderBy('relation.id', 'ASC')
-			.take(Math.min(200, Math.max(1, options.limit ?? 100))).getMany();
-		if (publishedOnly && relations.length === 0) throw new Error('NO_SUCH_CATALOG_ENTRY');
-		const ordered = this.effectiveRelations(relations);
-		const works = ordered.flatMap(relation => relation.work ? [{
+		// Check visibility without the cursor: an exhausted public page is empty, not a 404.
+		if (publishedOnly && !await query.getExists()) throw new Error('NO_SUCH_CATALOG_ENTRY');
+		// Select the effective membership BEFORE applying the page boundary or row limit.
+		// Otherwise provider duplicates can consume a page or hide an editorial override.
+		query.andWhere(`NOT EXISTS (
+			SELECT 1 FROM "zalip_catalog_relation" preferred
+			WHERE preferred."entryId" = relation."entryId" AND preferred."workId" = relation."workId" AND preferred.role = relation.role
+			AND ((preferred.source = 'manual' AND relation.source <> 'manual')
+				OR ((preferred.source = 'manual') = (relation.source = 'manual')
+					AND (preferred.position < relation.position OR (preferred.position = relation.position AND preferred.id < relation.id))))
+		)`);
+		if (cursor) query.andWhere('(relation.position > :cursorPosition OR (relation.position = :cursorPosition AND relation.id > :cursorId))', { cursorPosition: cursor.position, cursorId: cursor.id });
+		const relations = await query.orderBy('relation.position', 'ASC').addOrderBy('relation.id', 'ASC').take(limit + 1).getMany();
+		const page = relations.slice(0, limit);
+		const works = page.flatMap(relation => relation.work ? [{
 			...this.packWork(relation.work), role: relation.role, character: relation.character, position: relation.position,
 		}] : []);
-		return { entry: this.packEntry(entry, !publishedOnly), works };
+		return { entry: this.packEntry(entry, !publishedOnly), works, nextCursor: relations.length > limit ? encodeZalipCatalogCursor(entry.id, publishedOnly, page[page.length - 1]) : null };
 	}
 
 	private packWork(work: MiZalipWork): PackedZalipWork {
@@ -373,7 +395,7 @@ export class ZalipTaxonomyService {
 		const work = await this.db.getRepository(MiZalipWork).findOneBy({ id: workId });
 		if (!work || (publishedOnly && work.publicationState !== 'published')) throw new Error('NO_SUCH_WORK');
 		const relations = await this.db.getRepository(MiZalipCatalogRelation).find({ where: { workId }, relations: { entry: true }, order: { position: 'ASC', id: 'ASC' } });
-		return this.effectiveRelations(relations).flatMap(relation => relation.entry ? [{
+		return this.effectiveRelations(relations).flatMap(relation => relation.entry && (!publishedOnly || relation.entry.type !== 'collection' || getZalipCollectionSettings(relation.entry.data).isEnabled) ? [{
 			entry: this.packEntry(relation.entry, !publishedOnly), role: relation.role,
 			character: relation.character, position: relation.position, ...(!publishedOnly ? { source: relation.source } : {}),
 		}] : []);
@@ -397,21 +419,32 @@ export class ZalipTaxonomyService {
 		}));
 	}
 
-	public async linkWork(input: ZalipCatalogLinkInput, source = 'manual'): Promise<void> {
+	public async linkWork(input: ZalipCatalogLinkInput, source = 'manual', protectedField?: 'collections' | 'categories'): Promise<boolean> {
 		this.validateSource(source);
 		this.normalizeLink(input);
-		await this.db.transaction(async manager => {
+		if (protectedField !== undefined && !['collections', 'categories'].includes(protectedField)) throw new Error('INVALID_CATALOG_LINK');
+		return this.db.transaction(async manager => {
+			await this.lockEntries(manager);
 			await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`zalip-catalog-membership:${input.workId}`]);
-			if (!await manager.getRepository(MiZalipWork).existsBy({ id: input.workId })) throw new Error('NO_SUCH_WORK');
+			const works = manager.getRepository(MiZalipWork);
+			// Serialize with editorial lock updates, not just other membership writers.
+			const protectedWork = protectedField ? await works.findOne({ where: { id: input.workId }, lock: { mode: 'pessimistic_write' } }) : null;
+			if (protectedField ? !protectedWork : !await works.existsBy({ id: input.workId })) throw new Error('NO_SUCH_WORK');
 			if (!await manager.getRepository(MiZalipCatalogEntry).existsBy({ id: input.entryId })) throw new Error('NO_SUCH_CATALOG_ENTRY');
+			if (protectedField && protectedWork && readImportState(protectedWork.importData).locks.includes(protectedField)) return false;
 			await this.saveLink(manager, input, source);
+			return true;
 		});
 	}
 
 	public async unlinkWork(input: Pick<ZalipCatalogLinkInput, 'entryId' | 'workId' | 'role'>, source = 'manual'): Promise<void> {
 		this.validateSource(source);
-		const role = input.role?.trim() ?? '';
-		await this.db.getRepository(MiZalipCatalogRelation).delete({ entryId: input.entryId, workId: input.workId, role, source });
+		const { role } = this.normalizeLink(input);
+		await this.db.transaction(async manager => {
+			await this.lockEntries(manager);
+			await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`zalip-catalog-membership:${input.workId}`]);
+			await manager.getRepository(MiZalipCatalogRelation).delete({ entryId: input.entryId, workId: input.workId, role, source });
+		});
 	}
 
 	public async replaceImportedWorkRelations(
@@ -424,6 +457,7 @@ export class ZalipTaxonomyService {
 		if (source === 'manual') throw new Error('INVALID_CATALOG_SOURCE');
 		const clean = inputs.map(input => this.normalizeLink({ ...input, workId }));
 		await this.db.transaction(async manager => {
+			await this.lockEntries(manager);
 			await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`zalip-catalog-membership:${workId}`]);
 			if (!await manager.getRepository(MiZalipWork).existsBy({ id: workId })) throw new Error('NO_SUCH_WORK');
 			const entryIds = [...new Set(clean.map(input => input.entryId))];

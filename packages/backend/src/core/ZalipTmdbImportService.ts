@@ -5,7 +5,8 @@
 
 import { Injectable } from '@nestjs/common';
 import { HttpRequestService } from '@/core/HttpRequestService.js';
-import { StatusError } from '@/misc/status-error.js';
+import { ZalipImporterSourceSettingsService } from '@/core/ZalipImporterSourceSettingsService.js';
+import { createConfiguredImportTransport, createImportRequest, ImportProviderError } from '@/core/zalip-importer/providers.js';
 import {
 	ZalipCatalogService,
 	type ZalipTmdbMediaSyncTarget,
@@ -268,35 +269,35 @@ function tmdbSeasonEpisodes(details: TmdbSeasonDetails) {
 
 /**
  * Server-only import boundary. The browser submits only a TMDB media type and numeric ID;
- * its credential stays in the deployment environment and is never returned or logged.
+ * credentials use the current encrypted administrator settings and stay server-only.
  */
 @Injectable()
 export class ZalipTmdbImportService {
 	constructor(
-		private httpRequestService: HttpRequestService,
+		_httpRequestService: HttpRequestService,
 		private zalipCatalogService: ZalipCatalogService,
+		private sourceSettings: ZalipImporterSourceSettingsService,
 	) {
 	}
 
+	private async request() {
+		const config = await this.sourceSettings.getRuntime();
+		if (!config.tmdbApiKey?.trim()) return null;
+		return createImportRequest('tmdb', config.tmdbApiKey, createConfiguredImportTransport(config), config.apiOrigins?.tmdb);
+	}
+
 	public async importDraft(tmdbMediaType: TmdbMediaType, tmdbId: number): Promise<TmdbImportResult> {
-		const apiKey = process.env.ZALIP_TMDB_API_KEY?.trim();
-		if (apiKey == null || apiKey === '') return { kind: 'not-configured' };
-
-		const url = new URL(`https://api.themoviedb.org/3/${tmdbMediaType}/${tmdbId}`);
-		url.searchParams.set('api_key', apiKey);
-		url.searchParams.set('language', 'ru-RU');
-		url.searchParams.set('append_to_response', 'videos,images');
-		url.searchParams.set('include_image_language', 'ru,en,null');
-
 		let details: TmdbDetails;
 		try {
-			details = await this.httpRequestService.getJson<TmdbDetails>(url.toString());
+			const request = await this.request();
+			if (!request) return { kind: 'not-configured' };
+			details = await request(`/3/${tmdbMediaType}/${tmdbId}`, { language: 'ru-RU', append_to_response: 'videos,images', include_image_language: 'ru,en,null' }) as TmdbDetails;
 		} catch (err) {
-			if (err instanceof StatusError && err.statusCode === 404) return { kind: 'not-found' };
+			if (err instanceof ImportProviderError && err.code === 'not-found') return { kind: 'not-found' };
 			return { kind: 'upstream-failure' };
 		}
 
-		if (details.id !== tmdbId) return { kind: 'upstream-failure' };
+		if (details == null || typeof details !== 'object' || details.id !== tmdbId) return { kind: 'upstream-failure' };
 		const title = nullableString(tmdbMediaType === 'movie' ? details.title : details.name, 256);
 		if (title == null) return { kind: 'upstream-failure' };
 
@@ -316,46 +317,34 @@ export class ZalipTmdbImportService {
 
 	/** Re-fetches TMDB-owned catalogue facts and visuals for an existing title; editorial text is preserved. */
 	public async refreshMedia(target: ZalipTmdbMediaSyncTarget): Promise<TmdbMediaRefreshResult> {
-		const apiKey = process.env.ZALIP_TMDB_API_KEY?.trim();
-		if (apiKey == null || apiKey === '') return { kind: 'not-configured' };
-
-		const url = new URL(`https://api.themoviedb.org/3/${target.tmdbMediaType}/${target.tmdbId}`);
-		url.searchParams.set('api_key', apiKey);
-		url.searchParams.set('language', 'ru-RU');
-		url.searchParams.set('append_to_response', 'videos,images');
-		url.searchParams.set('include_image_language', 'ru,en,null');
-
 		let details: TmdbDetails;
 		try {
-			details = await this.httpRequestService.getJson<TmdbDetails>(url.toString());
+			const request = await this.request();
+			if (!request) return { kind: 'not-configured' };
+			details = await request(`/3/${target.tmdbMediaType}/${target.tmdbId}`, { language: 'ru-RU', append_to_response: 'videos,images', include_image_language: 'ru,en,null' }) as TmdbDetails;
 		} catch (err) {
-			if (err instanceof StatusError && err.statusCode === 404) return { kind: 'not-found' };
+			if (err instanceof ImportProviderError && err.code === 'not-found') return { kind: 'not-found' };
 			return { kind: 'upstream-failure' };
 		}
 
-		if (details.id !== target.tmdbId) return { kind: 'upstream-failure' };
+		if (details == null || typeof details !== 'object' || details.id !== target.tmdbId) return { kind: 'upstream-failure' };
 		const work = await this.zalipCatalogService.updateTmdbMedia(target.workId, tmdbMedia(details, target.tmdbMediaType));
 		return work == null ? { kind: 'upstream-failure' } : { kind: 'updated' };
 	}
 
 	/** Imports one full season only on an editor action; it has no public playback side effect. */
 	public async importSeasonEpisodes(target: ZalipTmdbSeasonSyncTarget): Promise<TmdbSeasonEpisodeImportResult> {
-		const apiKey = process.env.ZALIP_TMDB_API_KEY?.trim();
-		if (apiKey == null || apiKey === '') return { kind: 'not-configured' };
-
-		const url = new URL(`https://api.themoviedb.org/3/tv/${target.tmdbId}/season/${target.seasonNumber}`);
-		url.searchParams.set('api_key', apiKey);
-		url.searchParams.set('language', 'ru-RU');
-
 		let details: TmdbSeasonDetails;
 		try {
-			details = await this.httpRequestService.getJson<TmdbSeasonDetails>(url.toString());
+			const request = await this.request();
+			if (!request) return { kind: 'not-configured' };
+			details = await request(`/3/tv/${target.tmdbId}/season/${target.seasonNumber}`, { language: 'ru-RU' }) as TmdbSeasonDetails;
 		} catch (err) {
-			if (err instanceof StatusError && err.statusCode === 404) return { kind: 'not-found' };
+			if (err instanceof ImportProviderError && err.code === 'not-found') return { kind: 'not-found' };
 			return { kind: 'upstream-failure' };
 		}
 
-		if (details.season_number !== target.seasonNumber) return { kind: 'upstream-failure' };
+		if (details == null || typeof details !== 'object' || details.season_number !== target.seasonNumber) return { kind: 'upstream-failure' };
 		const result = await this.zalipCatalogService.syncSeasonEpisodes(target.seasonId, tmdbSeasonEpisodes(details));
 		return { kind: 'synced', ...result };
 	}

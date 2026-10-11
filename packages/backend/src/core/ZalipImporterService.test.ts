@@ -10,8 +10,9 @@ import { MiZalipExternalIdentity } from '@/models/ZalipExternalIdentity.js';
 import { MiZalipImportItem, MiZalipImportRun } from '@/models/ZalipImportRun.js';
 import { MiZalipImportProfile } from '@/models/ZalipImportProfile.js';
 import { MiZalipCatalogEntry } from '@/models/ZalipCatalogEntry.js';
-import { ImportProviderError } from './zalip-importer/providers.js';
+import { defaultImportApiOrigins, ImportProviderError } from './zalip-importer/providers.js';
 import { importSources, type ImportProvider, type ImportRecord, type ImportRef, type ImportSource } from './zalip-importer/types.js';
+import { defaultPlaybackSettings } from './zalip-importer/playback-settings.js';
 
 const isolated = vi.hoisted(() => ({ providers: vi.fn(), apply: vi.fn() }));
 
@@ -19,6 +20,8 @@ const isolated = vi.hoisted(() => ({ providers: vi.fn(), apply: vi.fn() }));
 vi.mock('@/core/ZalipCatalogService.js', () => ({ ZalipCatalogService: class {} }));
 vi.mock('@/core/ZalipTaxonomyService.js', () => ({ ZalipTaxonomyService: class {} }));
 vi.mock('@/core/ZalipImporterArtworkService.js', () => ({ ZalipImporterArtworkService: class {} }));
+vi.mock('@/core/ZalipPlaybackSettingsService.js', () => ({ ZalipPlaybackSettingsService: class {} }));
+vi.mock('@/core/ZalipImporterSourceSettingsService.js', () => ({ ZalipImporterSourceSettingsService: class {} }));
 vi.mock('./zalip-importer/providers.js', async importOriginal => ({
 	...await importOriginal<typeof import('./zalip-importer/providers.js')>(),
 	createImportProviders: isolated.providers,
@@ -182,8 +185,10 @@ function fixture(seed: { runs?: MiZalipImportRun[]; items?: MiZalipImportItem[];
 	const taxonomy = { syncImportedWork: vi.fn(), linkWork: vi.fn(), upsertImportedEntry: vi.fn().mockResolvedValue({ id: 'collection' }) };
 	const artwork = { prepare: vi.fn().mockImplementation(async (incoming: ImportRecord) => incoming) };
 	let nextId = 0;
-	const service = new ZalipImporterService(db as never, {} as never, queue as never, { gen: () => `id-${++nextId}` } as never, catalogue as never, taxonomy as never, artwork as never);
-	return { service, runs, items, works, identities, profiles, entries, providers, queue, jobs, catalogue, taxonomy, artwork, connection, db };
+	const playbackSettings = { show: vi.fn().mockResolvedValue({ providers: defaultPlaybackSettings() }) };
+	const sourceSettings = { getRuntime: vi.fn().mockResolvedValue({ apiOrigins: defaultImportApiOrigins }) };
+	const service = new ZalipImporterService(db as never, {} as never, queue as never, { gen: () => `id-${++nextId}` } as never, catalogue as never, taxonomy as never, artwork as never, playbackSettings as never, sourceSettings as never);
+	return { service, runs, items, works, identities, profiles, entries, providers, queue, jobs, catalogue, taxonomy, artwork, playbackSettings, sourceSettings, connection, db };
 }
 
 function enable(context: ReturnType<typeof fixture>, source: ImportSource) {
@@ -199,6 +204,16 @@ function deferred<T>() {
 beforeEach(() => { vi.clearAllMocks(); });
 
 describe('Zalip importer orchestration', () => {
+	test('new works without a player are skipped before artwork, while existing sync proceeds', async () => {
+		const fresh = fixture({ runs: [run({ options: { filters: { requirePlayer: true }, artwork: 'local-webp' } })], items: [item()] });
+		await fresh.service.processRun('run');
+		expect(fresh.items.rows[0]).toMatchObject({ state: 'skipped', error: 'import-player-required' });
+		expect(fresh.artwork.prepare).not.toHaveBeenCalled();
+		expect(isolated.apply).not.toHaveBeenCalled();
+		const existing = fixture({ runs: [run({ mode: 'sync', options: { filters: { requirePlayer: true } } })], items: [item({ workId: 'canonical' })], works: [work()] });
+		await existing.service.processRun('run');
+		expect(existing.items.rows[0]).toMatchObject({ state: 'completed' });
+	});
 	test('persists bounded targets and sends IDs only to the job queue', async () => {
 		const context = fixture();
 		const result = await context.service.createRun({ refs: [record().ref], mode: 'import', lockedFields: ['title', 'title'] }, 'admin');
@@ -664,13 +679,44 @@ describe('Zalip importer orchestration', () => {
 	});
 
 	test('public playback hides drafts and private provider identity fields', async () => {
-		const player: ImportRecord['players'][number] = { source: 'alloha', externalId: 'private-id', iframeUrl: 'https://player.example.test/embed', translations: [], quality: 'HD', episodes: [] };
+		const player: ImportRecord['players'][number] = { source: 'alloha', externalId: 'private-id', iframeUrl: 'https://ascorbic-as.stravers.live/embed', translations: [], quality: 'HD', episodes: [] };
 		const context = fixture({ works: [work({ importData: { values: { players: [player] }, raw: { private: 'internal' } } }), work({ id: 'draft', publicationState: 'draft' })] });
 		await expect(context.service.playback('draft')).rejects.toThrow('NO_SUCH_WORK');
 		const playback = await context.service.playback('canonical');
 		expect(playback.sources).toHaveLength(1);
 		expect(JSON.stringify(playback)).not.toContain('private-id');
 		expect(JSON.stringify(playback)).not.toContain('internal');
+	});
+
+	test('runtime settings rotate API adapters and cached Alloha iframe token without a restart', async () => {
+		const player: ImportRecord['players'][number] = { source: 'alloha', externalId: 'private-id', iframeUrl: 'https://ascorbic-as.stravers.live/?token_movie=title-fixture&season=1&episode=2&token=old-player-fixture', translations: [], quality: 'HD', episodes: [] };
+		const context = fixture({ works: [work({ importData: { values: { players: [player] } } })] });
+		await context.service.sources();
+		context.sourceSettings.getRuntime.mockResolvedValue({ apiOrigins: defaultImportApiOrigins, allohaApiToken: 'new-api-fixture', allohaPlayerToken: 'new-public-fixture', allohaPlayerOrigin: 'https://mirror.example.org' });
+		await context.service.sources();
+		expect(isolated.providers.mock.calls.at(-1)?.[0]).toMatchObject({ allohaApiToken: 'new-api-fixture' });
+		const playback = await context.service.playback('canonical');
+		const iframe = new URL(playback.sources[0].iframe);
+		expect(iframe.origin).toBe('https://mirror.example.org');
+		expect(iframe.searchParams.get('token')).toBe('new-public-fixture');
+		expect(iframe.searchParams.get('episode')).toBe('2');
+		expect(JSON.stringify(playback)).not.toContain('new-api-fixture');
+		expect(JSON.stringify(playback)).not.toContain('old-player-fixture');
+	});
+
+	test('public playback follows administrator order, hides disabled players and deduplicates canonical sources without events', async () => {
+		const alloha = { source: 'alloha', externalId: 'private-alloha', iframeUrl: 'https://ascorbic-as.stravers.live/alloha', translations: [], quality: 'HD', episodes: [] } as const;
+		const collaps = { ...alloha, source: 'collaps', externalId: 'private-collaps', iframeUrl: 'https://api.nextembed.ws/collaps' } as const;
+		const context = fixture({ works: [work({ importData: { values: { players: [alloha, collaps, { ...collaps, iframeUrl: 'https://player.example.test/duplicate' }] } } }), work({ id: 'draft', publicationState: 'draft' })] });
+		context.playbackSettings.show.mockResolvedValue({ providers: [{ source: 'collaps', label: 'Основной', enabled: true, position: 0 }, { source: 'alloha', label: 'Резервный', enabled: true, position: 1 }] });
+		const ordered = await context.service.playback('canonical');
+		expect(ordered.sources.map(player => player.source)).toEqual(['collaps', 'alloha']);
+		expect(ordered.sources[0]).toMatchObject({ label: 'Основной', iframe: collaps.iframeUrl });
+		context.playbackSettings.show.mockResolvedValue({ providers: [{ source: 'collaps', label: 'Основной', enabled: false, position: 0 }, { source: 'alloha', label: 'Резервный', enabled: true, position: 1 }] });
+		expect((await context.service.playback('canonical')).sources.map(player => player.source)).toEqual(['alloha']);
+		await expect(context.service.playback('draft')).rejects.toThrow('NO_SUCH_WORK');
+		expect(context.catalogue.recordAllohaAvailability).not.toHaveBeenCalled();
+		expect(context.catalogue.dispatchPendingAllohaAvailabilityNotifications).not.toHaveBeenCalled();
 	});
 
 	test('refresh profiles bind existing work IDs and skip unmapped manual titles', async () => {

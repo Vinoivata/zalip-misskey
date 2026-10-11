@@ -4041,6 +4041,87 @@ export type paths = {
          */
         post: operations['zalip___admin___importer___diagnostics'];
     };
+    '/zalip/admin/importer/maintenance/action': {
+        /**
+         * zalip/admin/importer/maintenance/action
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:account*
+         */
+        post: operations['zalip___admin___importer___maintenance___action'];
+    };
+    '/zalip/admin/importer/maintenance/create': {
+        /**
+         * zalip/admin/importer/maintenance/create
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:account*
+         */
+        post: operations['zalip___admin___importer___maintenance___create'];
+    };
+    '/zalip/admin/importer/maintenance/list': {
+        /**
+         * zalip/admin/importer/maintenance/list
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *read:account*
+         */
+        post: operations['zalip___admin___importer___maintenance___list'];
+    };
+    '/zalip/admin/importer/maintenance/schedules/action': {
+        /**
+         * zalip/admin/importer/maintenance/schedules/action
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:account*
+         */
+        post: operations['zalip___admin___importer___maintenance___schedules___action'];
+    };
+    '/zalip/admin/importer/maintenance/schedules/list': {
+        /**
+         * zalip/admin/importer/maintenance/schedules/list
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *read:account*
+         */
+        post: operations['zalip___admin___importer___maintenance___schedules___list'];
+    };
+    '/zalip/admin/importer/maintenance/schedules/save': {
+        /**
+         * zalip/admin/importer/maintenance/schedules/save
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:account*
+         */
+        post: operations['zalip___admin___importer___maintenance___schedules___save'];
+    };
+    '/zalip/admin/importer/maintenance/show': {
+        /**
+         * zalip/admin/importer/maintenance/show
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *read:account*
+         */
+        post: operations['zalip___admin___importer___maintenance___show'];
+    };
+    '/zalip/admin/importer/playback-settings/save': {
+        /**
+         * zalip/admin/importer/playback-settings/save
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:account*
+         */
+        post: operations['zalip___admin___importer___playback-settings___save'];
+    };
+    '/zalip/admin/importer/playback-settings/show': {
+        /**
+         * zalip/admin/importer/playback-settings/show
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *read:account*
+         */
+        post: operations['zalip___admin___importer___playback-settings___show'];
+    };
     '/zalip/admin/importer/preview': {
         /**
          * zalip/admin/importer/preview
@@ -4157,6 +4238,26 @@ export type paths = {
          *     **Credential required**: *Yes* / **Permission**: *read:account*
          */
         post: operations['zalip___admin___importer___sources___check'];
+    };
+    '/zalip/admin/importer/sources/settings/save': {
+        /**
+         * zalip/admin/importer/sources/settings/save
+         * @description No description provided.
+         *
+         *     **Internal Endpoint**: This endpoint is an API for the misskey mainframe and is not intended for use by third parties.
+         *     **Credential required**: *Yes*
+         */
+        post: operations['zalip___admin___importer___sources___settings___save'];
+    };
+    '/zalip/admin/importer/sources/settings/show': {
+        /**
+         * zalip/admin/importer/sources/settings/show
+         * @description No description provided.
+         *
+         *     **Internal Endpoint**: This endpoint is an API for the misskey mainframe and is not intended for use by third parties.
+         *     **Credential required**: *Yes*
+         */
+        post: operations['zalip___admin___importer___sources___settings___show'];
     };
     '/zalip/admin/importer/taxonomy/delete': {
         /**
@@ -38190,6 +38291,905 @@ export interface operations {
             };
         };
     };
+    zalip___admin___importer___maintenance___action: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                    /** Format: misskey:id */
+                    runId: string;
+                    /** @enum {string} */
+                    action: 'cancel' | 'resume';
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        id: string;
+                        /** @enum {string} */
+                        kind: 'collections-dictionary' | 'collection-backfill' | 'person-enrichment';
+                        /** @enum {string} */
+                        source: 'collaps' | 'tmdb' | 'kinopoisk';
+                        /** @enum {string} */
+                        state: 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
+                        createdAt: string;
+                        updatedAt: string;
+                        finishedAt: string | null;
+                        profileId: string | null;
+                        options: {
+                            collectionIds?: string[];
+                        };
+                        batchLimit: number;
+                        timeBudgetSeconds: number;
+                        cursor: {
+                            page: number;
+                            offset: number;
+                            entryAfterId: string | null;
+                            activeEntryId: string | null;
+                            collectionIndex: number;
+                        };
+                        stats: {
+                            processed: number;
+                            created: number;
+                            updated: number;
+                            linked: number;
+                            skipped: number;
+                            failed: number;
+                        };
+                        error: string | null;
+                        retryAfter: string | null;
+                        warnings: string[];
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    zalip___admin___importer___maintenance___create: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                    /** @enum {string} */
+                    kind: 'collections-dictionary' | 'collection-backfill' | 'person-enrichment';
+                    /** @enum {string} */
+                    source: 'collaps' | 'tmdb' | 'kinopoisk';
+                    options?: {
+                        collectionIds?: string[];
+                    };
+                    batchLimit?: number;
+                    timeBudgetSeconds?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        runId: string;
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    zalip___admin___importer___maintenance___list: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                    /** @default 20 */
+                    limit?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        id: string;
+                        /** @enum {string} */
+                        kind: 'collections-dictionary' | 'collection-backfill' | 'person-enrichment';
+                        /** @enum {string} */
+                        source: 'collaps' | 'tmdb' | 'kinopoisk';
+                        /** @enum {string} */
+                        state: 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
+                        createdAt: string;
+                        updatedAt: string;
+                        finishedAt: string | null;
+                        profileId: string | null;
+                        options: {
+                            collectionIds?: string[];
+                        };
+                        batchLimit: number;
+                        timeBudgetSeconds: number;
+                        cursor: {
+                            page: number;
+                            offset: number;
+                            entryAfterId: string | null;
+                            activeEntryId: string | null;
+                            collectionIndex: number;
+                        };
+                        stats: {
+                            processed: number;
+                            created: number;
+                            updated: number;
+                            linked: number;
+                            skipped: number;
+                            failed: number;
+                        };
+                        error: string | null;
+                        retryAfter: string | null;
+                        warnings: string[];
+                    }[];
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    zalip___admin___importer___maintenance___schedules___action: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                    /** Format: misskey:id */
+                    profileId: string;
+                    /** @enum {string} */
+                    action: 'enable' | 'disable' | 'reset-cursor' | 'delete';
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        id: string;
+                        name: string;
+                        /** @enum {string} */
+                        kind: 'collections-dictionary' | 'collection-backfill' | 'person-enrichment';
+                        /** @enum {string} */
+                        source: 'collaps' | 'tmdb' | 'kinopoisk';
+                        enabled: boolean;
+                        options: {
+                            collectionIds?: string[];
+                        };
+                        intervalMinutes: number;
+                        batchLimit: number;
+                        timeBudgetSeconds: number;
+                        cursor: {
+                            page: number;
+                            offset: number;
+                            entryAfterId: string | null;
+                            activeEntryId: string | null;
+                            collectionIndex: number;
+                        };
+                        lastRunAt: string | null;
+                        nextRunAt: string | null;
+                        lastError: string | null;
+                    } | null;
+                };
+            };
+            /** @description OK (without any results) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    zalip___admin___importer___maintenance___schedules___list: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        id: string;
+                        name: string;
+                        /** @enum {string} */
+                        kind: 'collections-dictionary' | 'collection-backfill' | 'person-enrichment';
+                        /** @enum {string} */
+                        source: 'collaps' | 'tmdb' | 'kinopoisk';
+                        enabled: boolean;
+                        options: {
+                            collectionIds?: string[];
+                        };
+                        intervalMinutes: number;
+                        batchLimit: number;
+                        timeBudgetSeconds: number;
+                        cursor: {
+                            page: number;
+                            offset: number;
+                            entryAfterId: string | null;
+                            activeEntryId: string | null;
+                            collectionIndex: number;
+                        };
+                        lastRunAt: string | null;
+                        nextRunAt: string | null;
+                        lastError: string | null;
+                    }[];
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    zalip___admin___importer___maintenance___schedules___save: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                    /** @enum {string} */
+                    kind: 'collections-dictionary' | 'collection-backfill' | 'person-enrichment';
+                    /** @enum {string} */
+                    source: 'collaps' | 'tmdb' | 'kinopoisk';
+                    options?: {
+                        collectionIds?: string[];
+                    };
+                    batchLimit?: number;
+                    timeBudgetSeconds?: number;
+                    /** Format: misskey:id */
+                    profileId?: string;
+                    name: string;
+                    intervalMinutes: number;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        id: string;
+                        name: string;
+                        /** @enum {string} */
+                        kind: 'collections-dictionary' | 'collection-backfill' | 'person-enrichment';
+                        /** @enum {string} */
+                        source: 'collaps' | 'tmdb' | 'kinopoisk';
+                        enabled: boolean;
+                        options: {
+                            collectionIds?: string[];
+                        };
+                        intervalMinutes: number;
+                        batchLimit: number;
+                        timeBudgetSeconds: number;
+                        cursor: {
+                            page: number;
+                            offset: number;
+                            entryAfterId: string | null;
+                            activeEntryId: string | null;
+                            collectionIndex: number;
+                        };
+                        lastRunAt: string | null;
+                        nextRunAt: string | null;
+                        lastError: string | null;
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    zalip___admin___importer___maintenance___show: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                    /** Format: misskey:id */
+                    runId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        id: string;
+                        /** @enum {string} */
+                        kind: 'collections-dictionary' | 'collection-backfill' | 'person-enrichment';
+                        /** @enum {string} */
+                        source: 'collaps' | 'tmdb' | 'kinopoisk';
+                        /** @enum {string} */
+                        state: 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
+                        createdAt: string;
+                        updatedAt: string;
+                        finishedAt: string | null;
+                        profileId: string | null;
+                        options: {
+                            collectionIds?: string[];
+                        };
+                        batchLimit: number;
+                        timeBudgetSeconds: number;
+                        cursor: {
+                            page: number;
+                            offset: number;
+                            entryAfterId: string | null;
+                            activeEntryId: string | null;
+                            collectionIndex: number;
+                        };
+                        stats: {
+                            processed: number;
+                            created: number;
+                            updated: number;
+                            linked: number;
+                            skipped: number;
+                            failed: number;
+                        };
+                        error: string | null;
+                        retryAfter: string | null;
+                        warnings: string[];
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    'zalip___admin___importer___playback-settings___save': {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                    providers: {
+                        /** @enum {string} */
+                        source: 'alloha' | 'collaps';
+                        label: string;
+                        enabled: boolean;
+                        position: number;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        providers: {
+                            /** @enum {string} */
+                            source: 'alloha' | 'collaps';
+                            label: string;
+                            enabled: boolean;
+                            position: number;
+                        }[];
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    'zalip___admin___importer___playback-settings___show': {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        providers: {
+                            /** @enum {string} */
+                            source: 'alloha' | 'collaps';
+                            label: string;
+                            enabled: boolean;
+                            position: number;
+                        }[];
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
     zalip___admin___importer___preview: {
         requestBody: {
             content: {
@@ -38259,6 +39259,7 @@ export interface operations {
                             genres?: string[];
                             countries?: string[];
                             ratingMin?: number;
+                            requirePlayer?: boolean;
                         };
                     };
                 };
@@ -38567,6 +39568,7 @@ export interface operations {
                             genres?: string[];
                             countries?: string[];
                             ratingMin?: number;
+                            requirePlayer?: boolean;
                         };
                     };
                 } & (unknown | unknown);
@@ -39073,6 +40075,7 @@ export interface operations {
                             genres?: string[];
                             countries?: string[];
                             ratingMin?: number;
+                            requirePlayer?: boolean;
                         };
                     };
                 };
@@ -39315,6 +40318,196 @@ export interface operations {
                 content: {
                     'application/json': {
                         [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    zalip___admin___importer___sources___settings___save: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                    /** @enum {string} */
+                    source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                    apiOrigin: string;
+                    playerOrigin?: string;
+                    apiToken?: string;
+                    clearApiToken?: boolean;
+                    playerToken?: string;
+                    clearPlayerToken?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        encryptionReady: boolean;
+                        sources: {
+                            /** @enum {string} */
+                            source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            apiOrigin: string;
+                            playerOrigin: string | null;
+                            apiToken: string | null;
+                            playerToken: string | null;
+                            apiTokenSet: boolean;
+                            /** @enum {string} */
+                            apiTokenOrigin: 'environment' | 'database' | 'none';
+                            playerTokenSet: boolean;
+                            /** @enum {string} */
+                            playerTokenOrigin: 'environment' | 'database' | 'none';
+                            updatedAt: string | null;
+                        }[];
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    zalip___admin___importer___sources___settings___show: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        encryptionReady: boolean;
+                        sources: {
+                            /** @enum {string} */
+                            source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            apiOrigin: string;
+                            playerOrigin: string | null;
+                            apiToken: string | null;
+                            playerToken: string | null;
+                            apiTokenSet: boolean;
+                            /** @enum {string} */
+                            apiTokenOrigin: 'environment' | 'database' | 'none';
+                            playerTokenSet: boolean;
+                            /** @enum {string} */
+                            playerTokenOrigin: 'environment' | 'database' | 'none';
+                            updatedAt: string | null;
+                        }[];
                     };
                 };
             };
@@ -39804,6 +40997,9 @@ export interface operations {
                         identityQuality?: 'verified' | 'unresolved';
                         /** @enum {string} */
                         collectionKind?: 'manual' | 'provider' | 'rules';
+                        /** @enum {string} */
+                        semanticKind?: 'theme' | 'platform' | 'franchise';
+                        isEnabled?: boolean;
                         rules?: {
                             all?: boolean;
                             kinds?: ('movie' | 'series' | 'anime' | 'animation')[];
@@ -39898,6 +41094,7 @@ export interface operations {
                     type?: 'person' | 'studio' | 'genre' | 'category' | 'collection';
                     /** @default 100 */
                     limit?: number;
+                    cursor?: string;
                 } & (unknown | unknown | unknown);
             };
         };
@@ -41267,6 +42464,7 @@ export interface operations {
                 };
                 content: {
                     'application/json': {
+                        label: string;
                         available: boolean;
                         iframe: string | null;
                         translations: {
@@ -41814,6 +43012,7 @@ export interface operations {
                     type?: 'person' | 'studio' | 'genre' | 'category' | 'collection';
                     /** @default 100 */
                     limit?: number;
+                    cursor?: string;
                 } & (unknown | unknown | unknown);
             };
         };

@@ -60,7 +60,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<p v-if="work.description" :class="$style.description">{{ work.description }}</p>
 				<div :class="$style.content">
 					<section ref="playerSection" :class="$style.player" :aria-label="i18n.ts.zalip.playerTab">
-						<div v-if="playbackSources.length" :class="$style.playerTabs" role="group" :aria-label="i18n.ts.zalip._importer.workSources"><button v-for="source in playbackSources" :key="source.source" type="button" class="_button" :class="[$style.playerTab, { [$style.playerTabActive]: selectedProvider === source.source }]" :aria-pressed="selectedProvider === source.source" @click="selectProvider(source.source)">{{ source.source.toUpperCase() }}</button></div>
+						<div v-if="playbackSources.length" :class="$style.playerTabs" role="group" :aria-label="i18n.ts.zalip._importer.workSources"><button v-for="source in playbackSources" :key="source.source" type="button" class="_button" :class="[$style.playerTab, { [$style.playerTabActive]: selectedProvider === source.source }]" :aria-pressed="selectedProvider === source.source" @click="selectProvider(source.source)">{{ source.label }}</button></div>
 						<p v-if="importedPlayback" :class="$style.availableNotice">{{ i18n.ts.zalip._importer.nativeVoicesHint }}</p>
 						<div :class="$style.playerTabs">
 							<button type="button" class="_button" :class="[$style.playerTab, { [$style.playerTabActive]: playerView === 'player' }]" :aria-pressed="playerView === 'player'" @click="playerView = 'player'"><i class="ti ti-list" aria-hidden="true"></i><span>{{ work.seasons.length ? i18n.ts.zalip.workEpisodes : i18n.ts.zalip.playerTab }}</span></button>
@@ -89,7 +89,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 										<button type="button" class="_button" :disabled="nextEpisode == null" :aria-label="i18n.ts.zalip.playerNextEpisode" @click="selectRelativeEpisode(1)"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
 									</div>
 									<button v-if="$i && selectedEpisodeProgress != null" type="button" class="_button" :class="[$style.watched, { [$style.actionActive]: episodeWatched }]" :disabled="saving || episodeWatched" @click="markEpisodeWatched"><i :class="episodeWatched ? 'ti ti-eye-check' : 'ti ti-eye'" aria-hidden="true"></i>{{ episodeWatched ? i18n.ts.zalip.playerWatched : i18n.ts.zalip.playerMarkWatched }}</button>
-									<span v-if="$i && importedPlayback" :class="$style.voiceButton">{{ selectedProvider.toUpperCase() }}</span>
+									<span v-if="$i && importedPlayback" :class="$style.voiceButton">{{ selectedProviderLabel }}</span>
 									<button v-else-if="$i && allohaPlayback?.available && allohaPlayback.translations.length" type="button" class="_button" :class="$style.voiceButton" aria-haspopup="dialog" :aria-expanded="voiceMenuOpen" @click="openVoiceMenu"><span>{{ selectedVoiceLabel }}</span><i class="ti ti-volume" aria-hidden="true"></i></button>
 								</div>
 							</div>
@@ -175,7 +175,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<MkModal v-if="voiceMenuOpen" ref="voiceModal" :class="$style.voiceOverlay" preferType="dialog" :returnFocusTo="voiceAnchor" @click="voiceModal?.close()" @esc="voiceModal?.close()" @closed="voiceMenuOpen = false">
 			<section :class="$style.voiceDrawer" :style="viewportWidth <= 600 ? undefined : voicePanelPosition" role="dialog" aria-modal="true" :aria-label="i18n.ts.zalip.playerVoices">
 				<header><h2>{{ i18n.ts.zalip.playerTab }}</h2><button type="button" class="_button" :aria-label="i18n.ts.close" @click="voiceModal?.close()"><i class="ti ti-x" aria-hidden="true"></i></button></header>
-				<span :class="$style.providerPill">{{ selectedProvider.toUpperCase() }}</span>
+				<span :class="$style.providerPill">{{ selectedProviderLabel }}</span>
 				<p v-if="playbackSources.length">{{ i18n.ts.zalip._importer.workVoiceovers }}</p>
 				<h3>{{ i18n.ts.zalip.playerVoices }}</h3>
 				<label :class="$style.menuSearch"><i class="ti ti-search" aria-hidden="true"></i><input v-model="voiceQuery" type="search" :placeholder="i18n.ts.zalip.playerVoiceSearch" :aria-label="i18n.ts.zalip.playerVoiceSearch" @keydown.esc.stop.prevent="voiceModal?.close()"></label>
@@ -268,13 +268,14 @@ type LibraryEntry = {
 type LibraryUpdate = Pick<LibraryEntry, 'status' | 'episodesWatched' | 'personalRating' | 'isFavorite' | 'isReleaseSubscribed'>;
 
 type AllohaPlayback = {
+	label?: string;
 	available: boolean;
 	iframe: string | null;
 	translations: Array<{ id: number; name: string; quality: string | null; resolutions: string[]; iframe: string }>;
 	lastCheckedAt: string | null;
 };
 
-type PlaybackSource = { source: 'alloha' | 'collaps'; iframe: string; quality: string | null; translations: { id: string; name: string }[]; episodes: { seasonNumber: number; episodeNumber: number }[] };
+type PlaybackSource = { source: 'alloha' | 'collaps'; label: string; iframe: string; quality: string | null; translations: { id: string; name: string }[]; episodes: { seasonNumber: number; episodeNumber: number }[] };
 type CatalogLink = { entry: TaxonomyEntry; role: string; character: string | null; position: number };
 const playbackSources = ref<PlaybackSource[]>([]);
 const selectedProvider = ref<'alloha' | 'collaps'>('alloha');
@@ -328,6 +329,7 @@ const releaseSubscriptionLabel = computed(() => episodic.value ? i18n.ts.zalip.s
 const playerView = ref<'player' | 'trailer'>('player');
 const legacyPlayback = ref<AllohaPlayback | null>(null);
 const importedPlayback = computed(() => playbackSources.value.find(item => item.source === selectedProvider.value));
+const selectedProviderLabel = computed(() => importedPlayback.value?.label ?? legacyPlayback.value?.label ?? selectedProvider.value.toUpperCase());
 const allohaPlayback = computed<AllohaPlayback | null>(() => {
 	const source = importedPlayback.value;
 	if (!source) return legacyPlayback.value;
@@ -340,7 +342,7 @@ const voiceQuery = ref('');
 const filteredTranslations = computed(() => (allohaPlayback.value?.translations ?? []).filter(translation => translation.name.toLocaleLowerCase('ru').includes(voiceQuery.value.trim().toLocaleLowerCase('ru'))));
 const selectedVoiceLabel = computed(() => {
 	const translation = allohaPlayback.value?.translations.find(item => item.id === selectedAllohaTranslationId.value);
-	return translation?.name ?? selectedProvider.value.toUpperCase();
+	return translation?.name ?? selectedProviderLabel.value;
 });
 const discussionNoteId = ref<string | null>(null);
 const discussionError = ref<string | null>(null);

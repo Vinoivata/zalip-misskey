@@ -674,6 +674,24 @@ import type {
 	ZalipAdminEpisodesDiscussionsCreateResponse,
 	ZalipAdminImporterDiagnosticsRequest,
 	ZalipAdminImporterDiagnosticsResponse,
+	ZalipAdminImporterMaintenanceActionRequest,
+	ZalipAdminImporterMaintenanceActionResponse,
+	ZalipAdminImporterMaintenanceCreateRequest,
+	ZalipAdminImporterMaintenanceCreateResponse,
+	ZalipAdminImporterMaintenanceListRequest,
+	ZalipAdminImporterMaintenanceListResponse,
+	ZalipAdminImporterMaintenanceSchedulesActionRequest,
+	ZalipAdminImporterMaintenanceSchedulesActionResponse,
+	ZalipAdminImporterMaintenanceSchedulesListRequest,
+	ZalipAdminImporterMaintenanceSchedulesListResponse,
+	ZalipAdminImporterMaintenanceSchedulesSaveRequest,
+	ZalipAdminImporterMaintenanceSchedulesSaveResponse,
+	ZalipAdminImporterMaintenanceShowRequest,
+	ZalipAdminImporterMaintenanceShowResponse,
+	ZalipAdminImporterPlaybackSettingsSaveRequest,
+	ZalipAdminImporterPlaybackSettingsSaveResponse,
+	ZalipAdminImporterPlaybackSettingsShowRequest,
+	ZalipAdminImporterPlaybackSettingsShowResponse,
 	ZalipAdminImporterPreviewRequest,
 	ZalipAdminImporterPreviewResponse,
 	ZalipAdminImporterResolveRequest,
@@ -700,6 +718,10 @@ import type {
 	ZalipAdminImporterSourcesResponse,
 	ZalipAdminImporterSourcesCheckRequest,
 	ZalipAdminImporterSourcesCheckResponse,
+	ZalipAdminImporterSourcesSettingsSaveRequest,
+	ZalipAdminImporterSourcesSettingsSaveResponse,
+	ZalipAdminImporterSourcesSettingsShowRequest,
+	ZalipAdminImporterSourcesSettingsShowResponse,
 	ZalipAdminImporterTaxonomyDeleteRequest,
 	ZalipAdminImporterTaxonomyDeleteResponse,
 	ZalipAdminImporterTaxonomyEnrichPersonRequest,
@@ -1213,6 +1235,15 @@ export type Endpoints = {
 	'zalip/admin/episodes/create': { req: ZalipAdminEpisodesCreateRequest; res: ZalipAdminEpisodesCreateResponse };
 	'zalip/admin/episodes/discussions/create': { req: ZalipAdminEpisodesDiscussionsCreateRequest; res: ZalipAdminEpisodesDiscussionsCreateResponse };
 	'zalip/admin/importer/diagnostics': { req: ZalipAdminImporterDiagnosticsRequest; res: ZalipAdminImporterDiagnosticsResponse };
+	'zalip/admin/importer/maintenance/action': { req: ZalipAdminImporterMaintenanceActionRequest; res: ZalipAdminImporterMaintenanceActionResponse };
+	'zalip/admin/importer/maintenance/create': { req: ZalipAdminImporterMaintenanceCreateRequest; res: ZalipAdminImporterMaintenanceCreateResponse };
+	'zalip/admin/importer/maintenance/list': { req: ZalipAdminImporterMaintenanceListRequest; res: ZalipAdminImporterMaintenanceListResponse };
+	'zalip/admin/importer/maintenance/schedules/action': { req: ZalipAdminImporterMaintenanceSchedulesActionRequest; res: ZalipAdminImporterMaintenanceSchedulesActionResponse };
+	'zalip/admin/importer/maintenance/schedules/list': { req: ZalipAdminImporterMaintenanceSchedulesListRequest; res: ZalipAdminImporterMaintenanceSchedulesListResponse };
+	'zalip/admin/importer/maintenance/schedules/save': { req: ZalipAdminImporterMaintenanceSchedulesSaveRequest; res: ZalipAdminImporterMaintenanceSchedulesSaveResponse };
+	'zalip/admin/importer/maintenance/show': { req: ZalipAdminImporterMaintenanceShowRequest; res: ZalipAdminImporterMaintenanceShowResponse };
+	'zalip/admin/importer/playback-settings/save': { req: ZalipAdminImporterPlaybackSettingsSaveRequest; res: ZalipAdminImporterPlaybackSettingsSaveResponse };
+	'zalip/admin/importer/playback-settings/show': { req: ZalipAdminImporterPlaybackSettingsShowRequest; res: ZalipAdminImporterPlaybackSettingsShowResponse };
 	'zalip/admin/importer/preview': { req: ZalipAdminImporterPreviewRequest; res: ZalipAdminImporterPreviewResponse };
 	'zalip/admin/importer/resolve': { req: ZalipAdminImporterResolveRequest; res: ZalipAdminImporterResolveResponse };
 	'zalip/admin/importer/runs/action': { req: ZalipAdminImporterRunsActionRequest; res: ZalipAdminImporterRunsActionResponse };
@@ -1226,6 +1257,8 @@ export type Endpoints = {
 	'zalip/admin/importer/search': { req: ZalipAdminImporterSearchRequest; res: ZalipAdminImporterSearchResponse };
 	'zalip/admin/importer/sources': { req: ZalipAdminImporterSourcesRequest; res: ZalipAdminImporterSourcesResponse };
 	'zalip/admin/importer/sources/check': { req: ZalipAdminImporterSourcesCheckRequest; res: ZalipAdminImporterSourcesCheckResponse };
+	'zalip/admin/importer/sources/settings/save': { req: ZalipAdminImporterSourcesSettingsSaveRequest; res: ZalipAdminImporterSourcesSettingsSaveResponse };
+	'zalip/admin/importer/sources/settings/show': { req: ZalipAdminImporterSourcesSettingsShowRequest; res: ZalipAdminImporterSourcesSettingsShowResponse };
 	'zalip/admin/importer/taxonomy/delete': { req: ZalipAdminImporterTaxonomyDeleteRequest; res: ZalipAdminImporterTaxonomyDeleteResponse };
 	'zalip/admin/importer/taxonomy/enrich-person': { req: ZalipAdminImporterTaxonomyEnrichPersonRequest; res: ZalipAdminImporterTaxonomyEnrichPersonResponse };
 	'zalip/admin/importer/taxonomy/link': { req: ZalipAdminImporterTaxonomyLinkRequest; res: ZalipAdminImporterTaxonomyLinkResponse };

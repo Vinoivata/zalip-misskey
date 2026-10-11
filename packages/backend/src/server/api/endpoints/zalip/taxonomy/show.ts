@@ -21,9 +21,11 @@ export const paramDef = {
 		slug: { type: 'string', minLength: 1, maxLength: 160, pattern: '^[\\p{L}\\p{N}]+(?:-[\\p{L}\\p{N}]+)*$' },
 		type: importerTaxonomyTypeProperty,
 		limit: { type: 'integer', minimum: 1, maximum: 100, default: 100 },
+		cursor: { type: 'string', minLength: 1, maxLength: 256, pattern: '^[a-zA-Z0-9_-]+$' },
 	},
 	required: [],
 	oneOf: [{ required: ['entryId'] }, { required: ['workId'] }, { required: ['slug', 'type'] }],
+	not: { required: ['workId', 'cursor'] },
 } as const;
 
 @Injectable()
@@ -32,7 +34,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		private importer: ZalipTaxonomyService,
 	) {
 		super(meta, paramDef, async (ps) => {
-			return safeImporterCall(async () => ps.workId ? { entries: await this.importer.listWorkEntries(ps.workId, { publishedOnly: true }) } : this.importer.showEntry({ entryId: ps.entryId, slug: ps.slug, type: ps.type, limit: ps.limit, publishedOnly: true }));
+			return safeImporterCall(async () => ps.workId ? { entries: await this.importer.listWorkEntries(ps.workId, { publishedOnly: true }) } : this.importer.showEntry({ entryId: ps.entryId, slug: ps.slug, type: ps.type, limit: ps.limit, cursor: ps.cursor, publishedOnly: true }));
 		});
 	}
 }

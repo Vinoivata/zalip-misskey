@@ -11,6 +11,8 @@ import { IdService } from '@/core/IdService.js';
 import { ZalipCatalogService } from '@/core/ZalipCatalogService.js';
 import { ZalipTaxonomyService } from '@/core/ZalipTaxonomyService.js';
 import { ZalipImporterArtworkService } from '@/core/ZalipImporterArtworkService.js';
+import { ZalipPlaybackSettingsService } from '@/core/ZalipPlaybackSettingsService.js';
+import { ZalipImporterSourceSettingsService } from '@/core/ZalipImporterSourceSettingsService.js';
 import type { ZalipImportQueue } from '@/core/QueueModule.js';
 import { MiZalipWork } from '@/models/ZalipWork.js';
 import { MiZalipExternalIdentity } from '@/models/ZalipExternalIdentity.js';
@@ -19,8 +21,8 @@ import { MiZalipImportProfile } from '@/models/ZalipImportProfile.js';
 import { MiZalipCatalogEntry } from '@/models/ZalipCatalogEntry.js';
 import { applyImportRecord, currentImportFields, findImportWork } from './zalip-importer/apply.js';
 import { budgetedTransport } from './zalip-importer/budget.js';
-import { canUpdateField, importFieldSelected, matchesImportFilters, mergeImportRecords, nonEmpty, normalizeImportOptions, readImportState, sameValue, selectedImportSources } from './zalip-importer/policy.js';
-import { createImportProviders, defaultImportTransport, ImportProviderError } from './zalip-importer/providers.js';
+import { canUpdateField, importFieldSelected, matchesCreatePlayerFilter, matchesImportFilters, mergeImportRecords, nonEmpty, normalizeImportOptions, readImportState, sameValue, selectedImportSources } from './zalip-importer/policy.js';
+import { configuredImportPlayerUrl, createImportProviders, createConfiguredImportTransport, ImportProviderError } from './zalip-importer/providers.js';
 import { importFields, importSources, type ExternalIdentity, type ImportField, type ImportMediaType, type ImportOptions, type ImportPreview, type ImportProvider, type ImportRecord, type ImportRef, type ImportSource } from './zalip-importer/types.js';
 
 export type CreateImportRun = {
@@ -74,8 +76,6 @@ export function safeImportWarnings(value: unknown): string[] {
 /** Queue payloads contain IDs only. Tokens and normalized private snapshots never enter job logs. */
 @Injectable()
 export class ZalipImporterService {
-	private providers: Record<ImportSource, ImportProvider>;
-
 	constructor(
 		@Inject(DI.db) private db: DataSource,
 		@Inject(DI.redis) private redis: Redis.Redis,
@@ -84,25 +84,23 @@ export class ZalipImporterService {
 		private catalogue: ZalipCatalogService,
 		private taxonomy: ZalipTaxonomyService,
 		private artwork: ZalipImporterArtworkService,
-	) {
-		const kpKey = process.env.ZALIP_KINOPOISK_API_KEY;
+		private playbackSettings: ZalipPlaybackSettingsService,
+		private sourceSettings: ZalipImporterSourceSettingsService,
+	) {}
+
+	private async getProviders(): Promise<Record<ImportSource, ImportProvider>> {
+		const config = await this.sourceSettings.getRuntime();
 		const budget = Number(process.env.ZALIP_KINOPOISK_DAILY_BUDGET ?? 350);
-		this.providers = createImportProviders({
-			tmdbApiKey: process.env.ZALIP_TMDB_API_KEY,
-			allohaApiToken: process.env.ZALIP_ALLOHA_API_TOKEN,
-			kinopoiskApiKey: kpKey,
-			collapsApiToken: process.env.ZALIP_COLLAPS_API_TOKEN,
-			allohaIframeHosts: process.env.ZALIP_ALLOHA_IFRAME_HOSTS?.split(',').map(value => value.trim()).filter(Boolean),
-			collapsIframeHosts: process.env.ZALIP_COLLAPS_IFRAME_HOSTS?.split(',').map(value => value.trim()).filter(Boolean),
-		}, budgetedTransport(this.redis, defaultImportTransport, kpKey, Number.isSafeInteger(budget) && budget > 0 ? budget : 350));
+		return createImportProviders(config, budgetedTransport(this.redis, createConfiguredImportTransport(config), config.kinopoiskApiKey, Number.isSafeInteger(budget) && budget > 0 ? budget : 350, config.apiOrigins.kinopoisk));
 	}
 
-	public sources() {
-		return { sources: importSources.map(source => this.providers[source].status()) };
+	public async sources() {
+		const providers = await this.getProviders();
+		return { sources: importSources.map(source => providers[source].status()) };
 	}
 
 	public async search(source: ImportSource, query: string, page = 1, mediaType?: ImportMediaType) {
-		return this.providers[source].search(query, page, mediaType);
+		return (await this.getProviders())[source].search(query, page, mediaType);
 	}
 
 	private assertCompatibleIdentities(record: ImportRecord, identities: ExternalIdentity[], mediaType: ImportMediaType) {
@@ -114,12 +112,13 @@ export class ZalipImporterService {
 	}
 
 	private async fetchRecord(ref: ImportRef, availabilityOnly = false, inputOptions?: ImportOptions, workId?: string) {
+		const providers = await this.getProviders();
 		const options = normalizeImportOptions(inputOptions);
 		const selectedSources = selectedImportSources(ref.source, options);
 		const fields = availabilityOnly ? ['players'] as const : options.fields;
 		let primary: ImportRecord;
 		try {
-			primary = await this.providers[ref.source].fetch(ref, fields);
+			primary = await providers[ref.source].fetch(ref, fields);
 		} catch (error) {
 			// Refresh recovery uses only previously bound exact IDs, never a title search.
 			// Authentication, quota and transport errors must retain their original handling.
@@ -130,7 +129,7 @@ export class ZalipImporterService {
 			if (work.tmdbId && work.tmdbMediaType && !identities.some(identity => identity.provider === 'tmdb')) identities.push({ provider: 'tmdb', externalId: String(work.tmdbId), entityType: work.tmdbMediaType });
 			let fallback: ImportRecord | null = null;
 			for (const source of selectedSources) {
-				const provider = this.providers[source];
+				const provider = providers[source];
 				if (source === ref.source || !provider.status().configured || (availabilityOnly && source !== 'alloha' && source !== 'collaps')) continue;
 				try {
 					const exact = identities.find(identity => identity.provider === source && identity.entityType === ref.mediaType);
@@ -153,8 +152,8 @@ export class ZalipImporterService {
 		// A second pass permits TMDB discovery from IMDb obtained from Kinopoisk/Collaps.
 		for (let pass = 0; pass < 2; pass++) {
 			for (const source of selectedSources) {
-				if (visited.has(source) || !this.providers[source].status().configured || (availabilityOnly && source !== 'alloha' && source !== 'collaps')) continue;
-				const provider = this.providers[source];
+				if (visited.has(source) || !providers[source].status().configured || (availabilityOnly && source !== 'alloha' && source !== 'collaps')) continue;
+				const provider = providers[source];
 				try {
 					const identities = records.flatMap(record => record.identities);
 					const extra = await provider.lookup?.(identities, ref.mediaType, fields);
@@ -185,18 +184,19 @@ export class ZalipImporterService {
 			record,
 			workId: work?.id ?? null,
 			options, locks: state.locks,
-			matchesFilters: matchesImportFilters(record, options.filters),
+			matchesFilters: matchesImportFilters(record, options.filters) && matchesCreatePlayerFilter(record, work != null, options.filters),
 			changes: importFields.map(field => ({ field, before: fields[field] ?? null, after: record[field], selected: importFieldSelected(field, options, !work), protected: !importFieldSelected(field, options, !work) || (work != null && !canUpdateField(fields[field], state.values[field], record[field], state.locks.includes(field))) })),
 			warnings: record.warnings,
 		};
 	}
 
 	private async refsForWorks(workIds: string[], source?: ImportSource): Promise<{ ref: ImportRef; workId: string }[]> {
+		const providers = await this.getProviders();
 		const works = await this.db.getRepository(MiZalipWork).findBy({ id: In(workIds) });
 		if (works.length !== new Set(workIds).size) throw new Error('NO_SUCH_WORK');
 		const identities = await this.db.getRepository(MiZalipExternalIdentity).findBy({ workId: In(workIds) });
 		return works.map(work => {
-			const identity = identities.find(item => item.workId === work.id && importSources.includes(item.provider as ImportSource) && (!source || item.provider === source) && this.providers[item.provider as ImportSource].status().configured);
+			const identity = identities.find(item => item.workId === work.id && importSources.includes(item.provider as ImportSource) && (!source || item.provider === source) && providers[item.provider as ImportSource].status().configured);
 			if (identity) return { workId: work.id, ref: { source: identity.provider as ImportSource, externalId: identity.externalId, mediaType: identity.entityType } };
 			if ((!source || source === 'tmdb') && work.tmdbId && work.tmdbMediaType) return { workId: work.id, ref: { source: 'tmdb' as const, externalId: String(work.tmdbId), mediaType: work.tmdbMediaType } };
 			if (source === 'alloha' && work.tmdbId && work.tmdbMediaType) return { workId: work.id, ref: { source: 'alloha' as const, externalId: `tmdb:${work.tmdbMediaType}:${work.tmdbId}`, mediaType: work.tmdbMediaType } };
@@ -205,13 +205,14 @@ export class ZalipImporterService {
 	}
 
 	public async createRun(input: CreateImportRun, actorId?: string, boundTargets?: { ref: ImportRef; workId: string | null }[]) {
+		const providers = await this.getProviders();
 		const options = normalizeImportOptions(input.options);
 		const lockedFields = normalizeImportOptions({ fields: input.lockedFields as ImportField[] | undefined }).fields ?? [];
 		if ((input.refs?.length ?? 0) > 100 || (input.workIds?.length ?? 0) > 100 || (input.refs?.length && input.workIds?.length)) throw new ImportProviderError('invalid-ref');
 		const targets = boundTargets ?? (input.workIds?.length ? await this.refsForWorks(input.workIds) : (input.refs ?? []).map(ref => ({ ref, workId: null })));
 		if (targets.length > 100) throw new ImportProviderError('invalid-ref');
 		if (targets.length === 0 && boundTargets === undefined) throw new ImportProviderError('invalid-ref');
-		if (targets.some(item => !this.providers[item.ref.source]?.status().configured)) throw new ImportProviderError('not-configured');
+		if (targets.some(item => !providers[item.ref.source]?.status().configured)) throw new ImportProviderError('not-configured');
 		const categoryIds = [...new Set(input.categoryIds ?? [])];
 		if (categoryIds.length > 50 || (categoryIds.length && await this.db.getRepository(MiZalipCatalogEntry).countBy({ id: In(categoryIds), type: 'category' }) !== categoryIds.length)) throw new Error('ZALIP_CATALOG_ENTRY_NOT_FOUND');
 		const now = new Date();
@@ -301,6 +302,10 @@ export class ZalipImporterService {
 						continue;
 					}
 					const before = await findImportWork(this.db, record, item.workId ?? undefined);
+					if (!matchesCreatePlayerFilter(record, before != null, run.options?.filters)) {
+						await items.update(item.id, { state: 'skipped', error: 'import-player-required', warnings, updatedAt: new Date() });
+						continue;
+					}
 					const establishedAvailability = before != null && readImportState(before.importData).values.players !== undefined;
 					if (run.mode !== 'availability' && run.options?.artwork === 'local-webp') record = await this.artwork.prepare(record, before, run.options.fields, run.lockedFields);
 					const preparedWarnings = safeImportWarnings(record.warnings);
@@ -357,7 +362,16 @@ export class ZalipImporterService {
 		if (!work) throw new Error('NO_SUCH_WORK');
 		const stored = readImportState(work.importData).values.players;
 		const players = Array.isArray(stored) ? stored as ImportRecord['players'] : [];
-		return { sources: players.map(player => ({ source: player.source, iframe: player.iframeUrl, translations: player.translations, quality: player.quality, episodes: player.episodes })) };
+		const { providers } = await this.playbackSettings.show();
+		const config = await this.sourceSettings.getRuntime();
+		return {
+			providers,
+			sources: providers.filter(setting => setting.enabled).flatMap(setting => {
+				const player = players.find(candidate => candidate.source === setting.source);
+				const iframe = player ? configuredImportPlayerUrl(player.iframeUrl, setting.source, config) : null;
+				return player && iframe ? [{ source: player.source, label: setting.label, iframe, translations: player.translations, quality: player.quality, episodes: player.episodes }] : [];
+			}),
+		};
 	}
 
 	private packWorkState(work: MiZalipWork) {
@@ -398,11 +412,12 @@ export class ZalipImporterService {
 	}
 
 	public async saveProfile(input: SaveImportProfile) {
+		const providers = await this.getProviders();
 		const name = input.name.trim();
 		if (!name || name.length > 120 || !importSources.includes(input.source) || !['metadata', 'availability', 'collection', 'discovery'].includes(input.mode) || !Number.isInteger(input.intervalMinutes) || input.intervalMinutes < 15 || input.intervalMinutes > 43200 || (input.mode === 'collection' && (!input.collectionId || !/^[A-Za-z0-9_-]{1,100}$/u.test(input.collectionId)))) throw new ImportProviderError('invalid-ref');
-		if (input.mode === 'collection' && !this.providers[input.source].status().capabilities.collections) throw new ImportProviderError('unsupported');
-		if (input.mode === 'discovery' && (!this.providers[input.source].status().capabilities.updates || !this.providers[input.source].updates)) throw new ImportProviderError('unsupported');
-		if (input.enabled && !this.providers[input.source].status().configured) throw new ImportProviderError('not-configured');
+		if (input.mode === 'collection' && !providers[input.source].status().capabilities.collections) throw new ImportProviderError('unsupported');
+		if (input.mode === 'discovery' && (!providers[input.source].status().capabilities.updates || !providers[input.source].updates)) throw new ImportProviderError('unsupported');
+		if (input.enabled && !providers[input.source].status().configured) throw new ImportProviderError('not-configured');
 		return this.db.transaction(async manager => {
 			if (input.id) await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`zalip-import-profile:${input.id}`]);
 			const repository = manager.getRepository(MiZalipImportProfile);
@@ -424,6 +439,7 @@ export class ZalipImporterService {
 
 	public async actionProfile(profileId: string, action: 'enable' | 'disable' | 'reset-cursor' | 'delete') {
 		if (!['enable', 'disable', 'reset-cursor', 'delete'].includes(action)) throw new Error('INVALID_IMPORT_ACTION');
+		const providers = action === 'enable' ? await this.getProviders() : null;
 		return this.db.transaction(async manager => {
 			await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`zalip-import-profile:${profileId}`]);
 			const repository = manager.getRepository(MiZalipImportProfile);
@@ -435,8 +451,8 @@ export class ZalipImporterService {
 				return { id: profileId, deleted: true };
 			}
 			if (action === 'enable') {
-				if (!this.providers[profile.source]?.status().configured) throw new ImportProviderError('not-configured');
-				if (profile.mode === 'discovery' && !this.providers[profile.source].updates) throw new ImportProviderError('unsupported');
+				if (!providers?.[profile.source]?.status().configured) throw new ImportProviderError('not-configured');
+				if (profile.mode === 'discovery' && !providers[profile.source].updates) throw new ImportProviderError('unsupported');
 				profile.enabled = true;
 				profile.nextRunAt = new Date(Date.now() + profile.intervalMinutes * 60000);
 			} else if (action === 'disable') {
@@ -477,13 +493,14 @@ export class ZalipImporterService {
 		if (await this.db.getRepository(MiZalipImportRun).existsBy({ profileId, state: In(['queued', 'running', 'paused']) })) throw new ImportProviderError('rate-limited');
 		try {
 			let targets: { ref: ImportRef; workId: string | null }[];
+			const providers = await this.getProviders();
 			if (profile.mode === 'collection') {
-				const page = await this.providers[profile.source].collection?.(profile.collectionId!, profile.cursor + 1);
+				const page = await providers[profile.source].collection?.(profile.collectionId!, profile.cursor + 1);
 				if (!page) throw new ImportProviderError('unsupported');
 				targets = page.items.slice(0, 100).map(item => ({ ref: item.ref, workId: null }));
 				profile.cursor = page.hasMore ? profile.cursor + 1 : 0;
 			} else if (profile.mode === 'discovery') {
-				const page = await this.providers[profile.source].updates?.(profile.cursor + 1);
+				const page = await providers[profile.source].updates?.(profile.cursor + 1);
 				if (!page) throw new ImportProviderError('unsupported');
 				targets = page.items.slice(0, 100).map(item => ({ ref: item.ref, workId: null }));
 				profile.cursor = page.hasMore ? profile.cursor + 1 : 0;

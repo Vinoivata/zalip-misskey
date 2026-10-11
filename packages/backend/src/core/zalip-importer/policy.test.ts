@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, test } from 'vitest';
-import { canUpdateField, importFieldSelected, matchesImportFilters, mergeImportRecords, normalizeImportOptions, readImportState, selectedImportSources } from './policy.js';
+import { canUpdateField, importFieldSelected, matchesCreatePlayerFilter, matchesImportFilters, mergeImportRecords, normalizeImportOptions, readImportState, selectedImportSources } from './policy.js';
 import type { ImportOptions, ImportRecord } from './types.js';
 
 function record(source: ImportRecord['ref']['source'], values: Partial<ImportRecord> = {}): ImportRecord {
@@ -12,6 +12,14 @@ function record(source: ImportRecord['ref']['source'], values: Partial<ImportRec
 }
 
 describe('Zalip import ownership', () => {
+	test('requiring a player is explicit and affects only new-title creation', () => {
+		expect(normalizeImportOptions({ filters: { requirePlayer: true } })).toEqual({ filters: { requirePlayer: true } });
+		expect(() => normalizeImportOptions({ filters: { requirePlayer: 'yes' } } as never)).toThrow('INVALID_IMPORT_OPTIONS');
+		expect(matchesCreatePlayerFilter(record('tmdb'), false, { requirePlayer: true })).toBe(false);
+		expect(matchesCreatePlayerFilter(record('tmdb'), true, { requirePlayer: true })).toBe(true);
+		expect(matchesCreatePlayerFilter(record('tmdb'), false, {})).toBe(true);
+		expect(matchesCreatePlayerFilter(record('collaps', { players: [{ source: 'collaps', externalId: '100', iframeUrl: 'https://api.nextembed.ws/embed/100', translations: [], quality: null, episodes: [] }] }), false, { requirePlayer: true })).toBe(true);
+	});
 	test('updates unchanged provider fields, never overwrites manual changes', () => {
 		expect(canUpdateField('old', 'old', 'new', false)).toBe(true);
 		expect(canUpdateField('manual', 'old', 'new', false)).toBe(false);

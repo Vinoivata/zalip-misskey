@@ -2502,6 +2502,282 @@ export interface Locale extends ILocale {
              * Часть дополнительных данных недоступна. Проверьте сохранённый тайтл.
              */
             "warningGeneric": string;
+            /**
+             * Добавлять новые тайтлы только с безопасным плеером
+             */
+            "requirePlayer": string;
+            /**
+             * Без плеера новый тайтл будет пропущен. Обновление существующих тайтлов не ограничивается; скрытие плеера в оформлении не меняет этот фильтр.
+             */
+            "requirePlayerHint": string;
+            /**
+             * Обслуживание
+             */
+            "maintenance": string;
+            /**
+             * Названия и порядок плееров
+             */
+            "playbackSettings": string;
+            /**
+             * Общие настройки просмотра для всего сайта. Подписи и порядок не меняют ID источников, импорт и уведомления. Ключи API здесь не используются.
+             */
+            "playbackSettingsHint": string;
+            /**
+             * Подпись плеера
+             */
+            "playerLabel": string;
+            /**
+             * Поднять плеер «{name}»
+             */
+            "movePlayerUp": ParameterizedString<"name">;
+            /**
+             * Опустить плеер «{name}»
+             */
+            "movePlayerDown": ParameterizedString<"name">;
+            /**
+             * Укажите подписи обоих плееров длиной от 1 до 40 символов и уникальный порядок.
+             */
+            "invalidPlaybackSettings": string;
+            /**
+             * Скрыть все плееры?
+             */
+            "disableAllPlayersTitle": string;
+            /**
+             * Просмотр через эти плееры будет отключён на всём сайте. Тайтлы, данные импорта и подписки сохранятся.
+             */
+            "disableAllPlayersText": string;
+            /**
+             * Настройки плееров сохранены.
+             */
+            "playbackSettingsSaved": string;
+            /**
+             * Видимость и тип подборки
+             */
+            "collectionPresentation": string;
+            /**
+             * Тип подборки
+             */
+            "collectionSemanticKind": string;
+            /**
+             * Тематическая
+             */
+            "collectionTheme": string;
+            /**
+             * Платформа
+             */
+            "collectionPlatform": string;
+            /**
+             * Франшиза
+             */
+            "collectionFranchise": string;
+            /**
+             * Показывать подборку в каталоге
+             */
+            "collectionPublicEnabled": string;
+            /**
+             * Скрытая подборка остаётся в панели администратора. Ручные настройки сохраняются при обновлении из источников.
+             */
+            "collectionPresentationHint": string;
+            /**
+             * ID подборки Collaps: {id}
+             */
+            "collectionSourceId": ParameterizedString<"id">;
+            /**
+             * Настроить заполнение связей
+             */
+            "prepareCollectionBackfill": string;
+            /**
+             * Обслуживание справочников
+             */
+            "maintenanceHeading": string;
+            /**
+             * Задания продолжаются на сервере после закрытия страницы. Обработка ограничена порциями и временем; новые тайтлы не добавляются и существующие связи не удаляются.
+             */
+            "maintenanceHint": string;
+            /**
+             * Обновить словарь подборок Collaps
+             */
+            "dictionaryMaintenance": string;
+            /**
+             * Обновляются названия, описания и данные подборок. Состав каталога не импортируется; ручные изменения защищены.
+             */
+            "dictionaryMaintenanceHint": string;
+            /**
+             * Дополнить связи подборок
+             */
+            "collectionBackfill": string;
+            /**
+             * Связи добавляются только для существующих тайтлов с точным совпадением ID. Не найденные тайтлы пропускаются; новые не импортируются. Пустой список означает все включённые подборки с подтверждённым ID Collaps.
+             */
+            "collectionBackfillHint": string;
+            /**
+             * Обновить сведения о создателях
+             */
+            "personMaintenance": string;
+            /**
+             * Обновляются только создатели с сохранённым ID выбранного источника. Поиска по имени и автоматического объединения нет. Ручные изменения защищены.
+             */
+            "personMaintenanceHint": string;
+            /**
+             * ID подборок Collaps: до 100, через пробел или по одному на строку
+             */
+            "maintenanceCollectionIds": string;
+            /**
+             * Размер порции (20–50)
+             */
+            "maintenanceBatch": string;
+            /**
+             * Время одной порции, секунд (10–120)
+             */
+            "maintenanceBudget": string;
+            /**
+             * Создать задание
+             */
+            "maintenanceStart": string;
+            /**
+             * Запустить обслуживание справочника?
+             */
+            "maintenanceStartTitle": string;
+            /**
+             * Проверьте параметры: до 100 числовых ID подборок, порция 20–50, время 10–120 секунд, интервал расписания 60–10080 минут.
+             */
+            "invalidMaintenance": string;
+            /**
+             * Задание обслуживания добавлено в очередь.
+             */
+            "maintenanceCreated": string;
+            /**
+             * Задания обслуживания
+             */
+            "maintenanceRuns": string;
+            /**
+             * Обработано: {count}
+             */
+            "maintenanceProcessed": ParameterizedString<"count">;
+            /**
+             * Обработано: {processed} · Создано записей: {created} · Обновлено: {updated} · Связано: {linked} · Пропущено: {skipped} · Ошибок: {failed}
+             */
+            "maintenanceStats": ParameterizedString<"processed" | "created" | "updated" | "linked" | "skipped" | "failed">;
+            /**
+             * Счётчики накопительные. Общий объём источника заранее неизвестен, поэтому процент не показывается.
+             */
+            "maintenanceProgressHint": string;
+            /**
+             * Повторная попытка доступна после {date}
+             */
+            "maintenanceRetryAfter": ParameterizedString<"date">;
+            /**
+             * Задание остановится после текущей операции. Уже обновлённые записи и добавленные связи сохранятся.
+             */
+            "maintenanceCancelText": string;
+            /**
+             * Расписания обслуживания
+             */
+            "maintenanceSchedules": string;
+            /**
+             * Новое расписание создаётся выключенным. Включение разрешает автоматические ограниченные запуски; выключение останавливает только будущие запуски, не текущее задание.
+             */
+            "maintenanceSchedulesHint": string;
+            /**
+             * Включить автоматическое обслуживание?
+             */
+            "maintenanceEnableTitle": string;
+            /**
+             * Источник не подтвердил продолжение списка подборок. Проверьте полноту результата; существующие подборки не удалены.
+             */
+            "warningDictionaryPagination": string;
+            /**
+             * Связь подборки пропущена из-за противоречащих внешних ID. Проверьте тайтл вручную.
+             */
+            "warningCollectionConflict": string;
+            /**
+             * Подборка или связь защищена ручной правкой и не перезаписана.
+             */
+            "warningCollectionLocked": string;
+            /**
+             * Для части создателей нет подтверждённого ID выбранного источника. Они пропущены без поиска по имени.
+             */
+            "warningPersonIdMissing": string;
+            /**
+             * Источники и ключи
+             */
+            "serviceSettings": string;
+            /**
+             * Ключи видны только в защищённой панели администратора. Пустое поле сохраняет текущий ключ. Изменения применяются к следующим обращениям к источнику; запущенная операция может завершиться с прежней конфигурацией.
+             */
+            "serviceSettingsHint": string;
+            /**
+             * Адрес API
+             */
+            "sourceApiOrigin": string;
+            /**
+             * Адрес плеера
+             */
+            "sourcePlayerOrigin": string;
+            /**
+             * Только HTTPS-адрес сервиса без пути, порта, параметров и ключа в ссылке. Локальные и частные адреса запрещены сервером.
+             */
+            "sourceOriginHint": string;
+            /**
+             * Ключ API
+             */
+            "sourceApiToken": string;
+            /**
+             * Публичный токен iframe Alloha
+             */
+            "sourcePlayerToken": string;
+            /**
+             * Это отдельный токен просмотра: он виден браузеру в ссылке iframe. Не используйте секретный ключ API вместо публичного токена плеера.
+             */
+            "sourcePlayerTokenHint": string;
+            /**
+             * Конфигурация сервера
+             */
+            "credentialEnvironment": string;
+            /**
+             * Настройки панели
+             */
+            "credentialDatabase": string;
+            /**
+             * Не задан или отключён
+             */
+            "credentialMissing": string;
+            /**
+             * Источник ключа: {origin}
+             */
+            "credentialOrigin": ParameterizedString<"origin">;
+            /**
+             * Отключить ключ API, включая ключ из конфигурации сервера
+             */
+            "clearSourceApiToken": string;
+            /**
+             * Отключить публичный токен плеера, включая конфигурацию сервера
+             */
+            "clearSourcePlayerToken": string;
+            /**
+             * Отключить выбранные ключи?
+             */
+            "clearSourceTokenTitle": string;
+            /**
+             * Источник может перестать работать. Отключение действует и для ключа из конфигурации сервера; вернуть доступ можно сохранением нового ключа. Тайтлы и подписки не удаляются.
+             */
+            "clearSourceTokenText": string;
+            /**
+             * На сервере не настроено шифрование настроек. Сохранение недоступно; требуется настройка администратора сервера.
+             */
+            "sourceSettingsEncryptionUnavailable": string;
+            /**
+             * Проверьте HTTPS-адреса и ключи: не более 4096 символов, без пробелов и управляющих символов. Для отключения ключа очистите поле и отметьте отдельный пункт.
+             */
+            "invalidSourceSettings": string;
+            /**
+             * Настройки источника сохранены. Доступность API проверяется отдельной кнопкой.
+             */
+            "sourceSettingsSaved": string;
+            /**
+             * Сбросить изменения формы
+             */
+            "resetSourceChanges": string;
         };
         /**
          * Добавить контент

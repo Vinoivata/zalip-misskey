@@ -12,6 +12,7 @@ export const QUEUE = {
 	INBOX: 'inbox',
 	SYSTEM: 'system',
 	ZALIP_IMPORT: 'zalipImport',
+	ZALIP_MAINTENANCE: 'zalipMaintenance',
 	ENDED_POLL_NOTIFICATION: 'endedPollNotification',
 	POST_SCHEDULED_NOTE: 'postScheduledNote',
 	DB: 'db',

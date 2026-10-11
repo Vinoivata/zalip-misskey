@@ -4,18 +4,38 @@
  */
 
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { createImportProviders, defaultImportTransport, ImportProviderError, normalizeAllohaRecord, normalizeCollapsRecord, normalizeKinopoiskRecord, normalizeTmdbRecord, pacedImportTransport, safeImportUrl } from './providers.js';
+import { configuredImportPlayerUrl, createImportProviders, createConfiguredImportTransport, defaultImportTransport, ImportProviderError, normalizeAllohaRecord, normalizeCollapsRecord, normalizeImportApiOrigin, normalizeKinopoiskRecord, normalizeTmdbRecord, pacedImportTransport, safeImportUrl, safeAllohaPlayerUrl } from './providers.js';
 import type { ImportTransport } from './providers.js';
 
 const mockedFetch = vi.hoisted(() => vi.fn());
+const mockedLookup = vi.hoisted(() => vi.fn());
 vi.mock('node-fetch', () => ({ default: mockedFetch }));
+vi.mock('node:dns/promises', () => ({ lookup: mockedLookup }));
 
 afterEach(() => {
 	vi.useRealTimers();
 	mockedFetch.mockReset();
+	mockedLookup.mockReset();
 });
 
 describe('importer normalizers', () => {
+	test('explicit public Alloha token rewrites API credential only on approved iframe hosts', () => {
+		const raw = 'https://ascorbic-as.stravers.live/?token_movie=title-specific&token=private-api-fixture';
+		const hosts = ['ascorbic-as.stravers.live'];
+		expect(safeAllohaPlayerUrl(raw, hosts)).toBeNull();
+		const result = safeAllohaPlayerUrl(raw, hosts, 'public-player-fixture');
+		expect(new URL(result!).searchParams.get('token')).toBe('public-player-fixture');
+		expect(new URL(result!).searchParams.get('token_movie')).toBe('title-specific');
+		expect(result).not.toContain('private-api-fixture');
+		expect(safeImportUrl(result, hosts)).toBeNull();
+		for (const url of [raw.replace('ascorbic-as.stravers.live', 'untrusted.example.org'), `${raw}&api_key=private`, `${raw}&token=duplicate`, `${raw}&TOKEN=ambiguous`, raw.replace('https:', 'http:'), raw.replace('https://', 'https://user:pass@'), `${raw}#secret`]) expect(safeAllohaPlayerUrl(url, hosts, 'public-player-fixture')).toBeNull();
+		expect(safeAllohaPlayerUrl(raw, hosts, 'bad token')).toBeNull();
+		const record = normalizeAllohaRecord({ data: { iframe: raw, category: { slug: 'movie' }, translations: [{ id: 1, name: 'Studio', iframe: raw }] } }, { source: 'alloha', externalId: 'tmdb:movie:1', mediaType: 'movie' }, hosts, 'public-player-fixture');
+		expect(record.players).toHaveLength(1);
+		expect(record.players[0].translations).toHaveLength(1);
+		expect(JSON.stringify(record)).not.toContain('private-api-fixture');
+		expect(record.warnings).not.toContain('alloha-player-url-rejected');
+	});
 	test('TMDB identities keep movie and TV namespaces and omit arbitrary upstream properties', () => {
 		const record = normalizeTmdbRecord({ id: 123, title: 'Тайтл', original_title: 'Title', release_date: '2026-07-17', runtime: 123, imdb_id: 'tt1234567', token: 'fixture-secret-never-persist', nested: { api_key: 'fixture-secret-never-persist' }, vote_average: 7.8, vote_count: 100, poster_path: '/poster.jpg' }, 'movie');
 		expect(record.identities).toEqual([{ provider: 'tmdb', externalId: '123', entityType: 'movie' }, { provider: 'imdb', externalId: 'tt1234567', entityType: 'movie' }]);
@@ -101,6 +121,33 @@ describe('importer normalizers', () => {
 });
 
 describe('importer adapter contracts', () => {
+	test('Collaps dictionary is a typed paginated resource and discards token-bearing next URLs', async () => {
+		const transport = vi.fn<ImportTransport>().mockResolvedValue({ results: [{ id: 12, name: 'Подборка', token: 'fixture-never-store' }], next_page: 'https://evil.example/?token=fixture-never-store' });
+		const provider = createImportProviders({ collapsApiToken: 'fixture' }, transport).collaps;
+		const page = await provider.collectionDictionary!(1, 20);
+		expect(page).toEqual({ items: [{ externalId: '12', name: 'Подборка' }], page: 1, hasMore: true, warnings: [] });
+		expect(new URL(transport.mock.calls[0][0]).pathname).toBe('/collection');
+		await provider.collectionDictionary!(2, 20);
+		expect(new URL(transport.mock.calls[1][0]).origin).toBe('https://api.bhcesh.me');
+		expect(JSON.stringify(page)).not.toContain('fixture-never-store');
+	});
+
+	test('Collaps membership uses exact identities, real series type and no fake movie refs', async () => {
+		const transport = vi.fn<ImportTransport>().mockResolvedValue({ results: [{ id: 5, type: 'series', kinopoisk_id: '123', imdb_id: 'tt1234567' }], next_page: null });
+		const page = await createImportProviders({ collapsApiToken: 'fixture' }, transport).collaps.collectionMembers!('12', 1, 20);
+		expect(page.items).toEqual([{ externalId: '5', mediaType: 'tv', identities: [{ provider: 'collaps', externalId: '5', entityType: 'tv' }, { provider: 'kinopoisk', externalId: '123', entityType: 'tv' }, { provider: 'imdb', externalId: 'tt1234567', entityType: 'tv' }] }]);
+		expect(new URL(transport.mock.calls[0][0]).searchParams.get('join_seasons')).toBe('false');
+	});
+
+	test('maintenance contracts reject bad IDs, unbounded rows and unknown work types', async () => {
+		const transport = vi.fn<ImportTransport>().mockResolvedValue({ results: Array.from({ length: 21 }, (_, index) => ({ id: index + 1, name: 'Collection' })) });
+		const provider = createImportProviders({ collapsApiToken: 'fixture' }, transport).collaps;
+		await expect(provider.collectionDictionary!(1, 20)).rejects.toMatchObject({ code: 'malformed-response' });
+		await expect(provider.collectionMembers!('../bad', 1, 20)).rejects.toMatchObject({ code: 'invalid-ref' });
+		await expect(provider.collectionDictionary!(1, 500)).rejects.toMatchObject({ code: 'invalid-ref' });
+		transport.mockResolvedValue({ results: [{ id: 1, type: 'unknown' }] });
+		await expect(provider.collectionMembers!('1', 1, 20)).rejects.toMatchObject({ code: 'malformed-response' });
+	});
 	test('queued IMDb references resolve by exact ID inside the provider worker', async () => {
 		const transport = vi.fn<ImportTransport>(async url => new URL(url).pathname.startsWith('/3/find/')
 			? { movie_results: [{ id: 278 }], tv_results: [] }
@@ -300,6 +347,39 @@ describe('importer adapter contracts', () => {
 });
 
 describe('safe default HTTP transport', () => {
+	test('configurable API origins reject path, credentials, explicit ports and local targets', () => {
+		expect(normalizeImportApiOrigin('https://Api.Example.org/')).toBe('https://api.example.org');
+		for (const value of ['http://api.example.org', 'https://api.example.org:443', 'https://api.example.org:8443', 'https://api.example.org/path', 'https://api.example.org/?key=fixture', 'https://user:pass@api.example.org', 'https://127.0.0.1', 'https://[::1]', 'https://metadata.internal', 'https://localhost', ' https://api.example.org']) expect(() => normalizeImportApiOrigin(value)).toThrow('invalid-ref');
+	});
+
+	test('configured transport permits only exact selected origins and pins public DNS answers', async () => {
+		mockedFetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ id: 1 }) });
+		const transport = createConfiguredImportTransport({ apiOrigins: { alloha: 'https://mirror.example.org' } });
+		await expect(transport('https://mirror.example.org/v2/movies/tmdb/1', {})).resolves.toEqual({ id: 1 });
+		await expect(transport('https://mirror.example.org.evil.org/path', {})).rejects.toMatchObject({ code: 'invalid-ref' });
+		await expect(transport('https://apbugall.org/path', {})).rejects.toMatchObject({ code: 'invalid-ref' });
+		expect(mockedFetch).toHaveBeenCalledTimes(1);
+		const agent = mockedFetch.mock.calls[0][1].agent;
+		const resolve = () => new Promise((accept, reject) => agent.options.lookup('mirror.example.org', { all: true }, (error: Error | null, addresses: unknown) => error ? reject(error) : accept(addresses)));
+		mockedLookup.mockResolvedValueOnce([{ address: '8.8.8.8', family: 4 }]);
+		await expect(resolve()).resolves.toEqual([{ address: '8.8.8.8', family: 4 }]);
+		for (const address of ['127.0.0.1', '10.0.0.1', '169.254.169.254', '::1', '::ffff:127.0.0.1']) {
+			mockedLookup.mockResolvedValueOnce([{ address: '8.8.8.8', family: 4 }, { address, family: address.includes(':') ? 6 : 4 }]);
+			await expect(resolve()).rejects.toThrow('IMPORT_ADDRESS_REJECTED');
+		}
+	});
+
+	test('cached player mirror and public token changes preserve episode selection but reject unknown hosts', () => {
+		const raw = 'https://ascorbic-as.stravers.live/?token_movie=title-fixture&translation=246&season=1&episode=2&token=old-fixture-token';
+		const config = { allohaPlayerOrigin: 'https://mirror.example.org', allohaPlayerToken: 'new-public-fixture' };
+		const result = new URL(configuredImportPlayerUrl(raw, 'alloha', config)!);
+		expect(result.origin).toBe('https://mirror.example.org');
+		expect(result.searchParams.get('episode')).toBe('2');
+		expect(result.searchParams.get('token')).toBe('new-public-fixture');
+		expect(result.toString()).not.toContain('old-fixture-token');
+		expect(configuredImportPlayerUrl(raw.replace('ascorbic-as.stravers.live', 'untrusted.example.org'), 'alloha', config)).toBeNull();
+		expect(configuredImportPlayerUrl('https://api.nextembed.ws/embed/1', 'collaps', { collapsPlayerOrigin: 'https://mirror.example.org' })).toBe('https://mirror.example.org/embed/1');
+	});
 	test('rejects non-provider hosts before fetch', async () => {
 		await expect(defaultImportTransport('https://evil.example.org/path', {})).rejects.toMatchObject({ code: 'invalid-ref' });
 		expect(mockedFetch).not.toHaveBeenCalled();

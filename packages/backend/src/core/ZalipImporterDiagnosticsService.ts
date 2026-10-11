@@ -10,8 +10,9 @@ import type * as Redis from 'ioredis';
 import { DI } from '@/di-symbols.js';
 import { budgetedTransport } from './zalip-importer/budget.js';
 import { cachedImportSourceCheck, checkImportProvider, resolveImdbImport, type ImportSourceCheck } from './zalip-importer/diagnostics.js';
-import { createImportProviders, defaultImportTransport } from './zalip-importer/providers.js';
-import type { ImportMediaType, ImportProvider, ImportSource } from './zalip-importer/types.js';
+import { createImportProviders, createConfiguredImportTransport } from './zalip-importer/providers.js';
+import type { ImportMediaType, ImportSource } from './zalip-importer/types.js';
+import { ZalipImporterSourceSettingsService } from './ZalipImporterSourceSettingsService.js';
 import { MiZalipLibraryEntry } from '@/models/ZalipLibraryEntry.js';
 import { MiZalipAllohaAvailabilityEvent } from '@/models/ZalipAllohaAvailabilityEvent.js';
 import { MiZalipReleaseEvent } from '@/models/ZalipReleaseEvent.js';
@@ -19,24 +20,19 @@ import { MiZalipWork } from '@/models/ZalipWork.js';
 
 @Injectable()
 export class ZalipImporterDiagnosticsService {
-	private providers: Record<ImportSource, ImportProvider>;
-	private cacheNamespace: string;
+	constructor(@Inject(DI.redis) private redis: Redis.Redis, @Inject(DI.db) private db: DataSource, private sourceSettings: ZalipImporterSourceSettingsService) {}
 
-	constructor(@Inject(DI.redis) private redis: Redis.Redis, @Inject(DI.db) private db: DataSource) {
-		const keys = {
-			tmdbApiKey: process.env.ZALIP_TMDB_API_KEY,
-			kinopoiskApiKey: process.env.ZALIP_KINOPOISK_API_KEY,
-			allohaApiToken: process.env.ZALIP_ALLOHA_API_TOKEN,
-			collapsApiToken: process.env.ZALIP_COLLAPS_API_TOKEN,
-		};
+	private async snapshot() {
+		const config = await this.sourceSettings.getRuntime();
 		const limit = Number(process.env.ZALIP_KINOPOISK_DAILY_BUDGET ?? 350);
-		this.providers = createImportProviders(keys, budgetedTransport(this.redis, defaultImportTransport, keys.kinopoiskApiKey, Number.isSafeInteger(limit) && limit > 0 ? limit : 350));
-		// A key change invalidates diagnostics without exposing any part of the credential.
-		this.cacheNamespace = createHash('sha256').update(JSON.stringify(keys)).digest('hex').slice(0, 20);
+		const providers = createImportProviders(config, budgetedTransport(this.redis, createConfiguredImportTransport(config), config.kinopoiskApiKey, Number.isSafeInteger(limit) && limit > 0 ? limit : 350, config.apiOrigins.kinopoisk));
+		// Both address and credential changes invalidate diagnostics; raw secrets never enter Redis.
+		return { providers, namespace: createHash('sha256').update(JSON.stringify(config)).digest('hex').slice(0, 20) };
 	}
 
 	public async check(source: ImportSource): Promise<ImportSourceCheck> {
-		const key = `zalip:import:health:${this.cacheNamespace}:${source}`;
+		const { providers, namespace } = await this.snapshot();
+		const key = `zalip:import:health:${namespace}:${source}`;
 		const cached = await this.redis.get(key);
 		if (cached) {
 			try {
@@ -44,13 +40,13 @@ export class ZalipImporterDiagnosticsService {
 				if (result) return result;
 			} catch { /* A stale cache is not a failed integration. */ }
 		}
-		const result = await checkImportProvider(this.providers[source]);
+		const result = await checkImportProvider(providers[source]);
 		await this.redis.set(key, JSON.stringify(result), 'EX', 300);
 		return result;
 	}
 
 	public async resolve(source: ImportSource, imdbId: string, mediaType: ImportMediaType) {
-		return resolveImdbImport(this.providers[source], imdbId, mediaType);
+		return resolveImdbImport((await this.snapshot()).providers[source], imdbId, mediaType);
 	}
 
 	/** Aggregates only; recipient identities and private work metadata are never returned. */

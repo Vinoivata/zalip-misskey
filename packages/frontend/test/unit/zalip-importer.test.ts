@@ -5,7 +5,8 @@
 
 import { describe, expect, it } from 'vitest';
 import { i18n } from '../../src/i18n.js';
-import { formatImporterValue, importerFieldGroups, importerFields, importerFiltersValid, importerImageUrl, importerImdbId, importerOptions, importerProgress, importerReference, importerReferenceKey, importerSelection, importerWarningLabel, importerWarningLabels, importerWorkIds, splitImporterReferenceLines, taxonomyBaseChanges, taxonomyFacts, taxonomyPersonChanges } from '../../src/utility/zalip-importer.js';
+import { formatImporterValue, importerCollectionIds, importerFieldGroups, importerFields, importerFiltersValid, importerImageUrl, importerImdbId, importerMaintenanceRequest, importerOptions, importerPlaybackSettings, importerProgress, importerReference, importerReferenceKey, importerRefreshSequence, importerRequestCurrent, importerRequestFinish, importerRequestInvalidate, importerRequestStart, importerRequestState, importerSelection, importerServiceForm, importerServiceOrigin, importerServiceRequest, importerServiceSettingsUpdate, importerWarningLabel, importerWarningLabels, importerWorkIds, splitImporterReferenceLines, taxonomyAppendWorks, taxonomyBaseChanges, taxonomyCollectionChanges, taxonomyFacts, taxonomyPersonChanges } from '../../src/utility/zalip-importer.js';
+import type { ImportPlaybackProvider, ImportServiceSettings, TaxonomyWork } from '../../src/utility/zalip-importer.js';
 
 describe('importer presentation helpers', () => {
 	it('trims and deduplicates references without splitting provider URLs', () => {
@@ -116,5 +117,193 @@ describe('importer presentation helpers', () => {
 		form.description = ''; form.imageUrl = ''; form.slug = 'new-slug';
 		expect(taxonomyBaseChanges(form, original)).toEqual({ slug: 'new-slug', description: null, imageUrl: null });
 		expect(taxonomyBaseChanges({ slug: '', description: '', imageUrl: '', parentId: '' }, null)).toEqual({ description: null, imageUrl: null, parentId: null });
+	});
+	it('snapshots global player labels without changing provider identities', () => {
+		const providers: ImportPlaybackProvider[] = [{ source: 'collaps', label: ' Cinema ', enabled: false, position: 1 }, { source: 'alloha', label: 'Alloha', enabled: true, position: 0 }];
+		const result = importerPlaybackSettings(providers);
+		expect(result?.providers).toEqual([{ source: 'alloha', label: 'Alloha', enabled: true, position: 0 }, { source: 'collaps', label: 'Cinema', enabled: false, position: 1 }]);
+		providers[0].label = 'Changed'; expect(result?.providers[1].label).toBe('Cinema');
+		expect(importerPlaybackSettings([providers[0]])).toBeNull();
+		expect(importerPlaybackSettings([providers[0], { ...providers[1], source: 'collaps' }])).toBeNull();
+		expect(importerPlaybackSettings([providers[0], { ...providers[1], position: 1 }])).toBeNull();
+		for (const label of ['', ' '.repeat(2), 'x'.repeat(41), 'private\nvalue', 'private\u0085value']) expect(importerPlaybackSettings([{ ...providers[0], label }, providers[1]])).toBeNull();
+	});
+	it('adds effective work pages without losing earlier cards or distinct roles', () => {
+		const make = (id: string, role: string | null): TaxonomyWork => ({ id, slug: id, title: id, releaseYear: null, posterPath: null, kind: 'movie', role });
+		const first = [make('one', 'actor')];
+		expect(taxonomyAppendWorks(first, [make('one', 'actor'), make('one', 'director'), make('two', null), make('two', '')])).toEqual([make('one', 'actor'), make('one', 'director'), make('two', null)]);
+		expect(taxonomyAppendWorks(first, [])).toEqual(first);
+		expect(first).toHaveLength(1);
+	});
+	it('validates bounded collection IDs without guessing references or importing names', () => {
+		expect(importerCollectionIds(' 12, 34\n12 ')).toEqual(['12', '34']);
+		expect(importerCollectionIds('')).toEqual([]);
+		for (const text of ['0', '012', 'movie:12', 'https://example.org/12', '1'.repeat(17), Array.from({ length: 101 }, (_, index) => String(index + 1)).join('\n')]) expect(importerCollectionIds(text)).toBeNull();
+	});
+	it('separates maintenance kinds and snapshots only permitted bounded options', () => {
+		const form = { kind: 'collection-backfill' as const, source: 'collaps' as const, collectionIds: '12\n12\n34', batchLimit: 20, timeBudgetSeconds: 60 };
+		const result = importerMaintenanceRequest(form);
+		expect(result).toEqual({ kind: 'collection-backfill', source: 'collaps', options: { collectionIds: ['12', '34'] }, batchLimit: 20, timeBudgetSeconds: 60 });
+		form.collectionIds = '56'; expect(result?.options?.collectionIds).toEqual(['12', '34']);
+		expect(importerMaintenanceRequest({ ...form, collectionIds: '' })).toEqual({ kind: 'collection-backfill', source: 'collaps', batchLimit: 20, timeBudgetSeconds: 60 });
+		expect(importerMaintenanceRequest({ ...form, kind: 'collections-dictionary', collectionIds: 'ignored' })?.options).toBeUndefined();
+		expect(importerMaintenanceRequest({ ...form, kind: 'person-enrichment', source: 'tmdb', collectionIds: 'ignored' })?.options).toBeUndefined();
+		expect(importerMaintenanceRequest({ ...form, kind: 'person-enrichment' })).toBeNull();
+		expect(importerMaintenanceRequest({ ...form, source: 'tmdb' })).toBeNull();
+		for (const batchLimit of [19, 51, NaN, 20.5]) expect(importerMaintenanceRequest({ ...form, batchLimit })).toBeNull();
+		for (const timeBudgetSeconds of [9, 121, Infinity, 10.5]) expect(importerMaintenanceRequest({ ...form, timeBudgetSeconds })).toBeNull();
+	});
+	it('submits only edited collection presentation settings, preserving provenance', () => {
+		expect(taxonomyCollectionChanges({ semanticKind: 'theme', isEnabled: true }, { collectionKind: 'provider', _zalip: {} })).toEqual({});
+		expect(taxonomyCollectionChanges({ semanticKind: 'franchise', isEnabled: false }, { semanticKind: 'theme', isEnabled: true, collectionKind: 'provider' })).toEqual({ semanticKind: 'franchise', isEnabled: false });
+		expect(taxonomyCollectionChanges({ semanticKind: 'platform', isEnabled: false }, { semanticKind: 'platform', isEnabled: false })).toEqual({});
+	});
+	it('preserves the new-title-only player filter without introducing it by default', () => {
+		expect(importerOptions(importerSelection()).filters).toBeUndefined();
+		const selection = importerSelection({ filters: { requirePlayer: true } });
+		expect(importerOptions(selection).filters).toEqual({ requirePlayer: true });
+		selection.filters.requirePlayer = false;
+		expect(importerOptions(selection).filters).toBeUndefined();
+	});
+	it('humanizes only the closed maintenance warning codes', () => {
+		expect(importerWarningLabel('dictionary-pagination-uncertain')).toBe(i18n.ts.zalip._importer.warningDictionaryPagination);
+		expect(importerWarningLabel('collection-identity-conflict')).toBe(i18n.ts.zalip._importer.warningCollectionConflict);
+		expect(importerWarningLabel('collection-field-locked')).toBe(i18n.ts.zalip._importer.warningCollectionLocked);
+		expect(importerWarningLabel('person-id-missing')).toBe(i18n.ts.zalip._importer.warningPersonIdMissing);
+		expect(importerWarningLabel('__proto__')).toBe(i18n.ts.zalip._importer.warningGeneric);
+		expect(importerWarningLabel('collection-identity-conflict:private')).toBe(i18n.ts.zalip._importer.warningGeneric);
+	});
+	it('refreshes details only while the list sequence remains ready', async () => {
+		const calls: string[] = [];
+		const list = async (): Promise<void> => { calls.push('list'); };
+		const show = async (): Promise<void> => { calls.push('show'); };
+		await importerRefreshSequence(list, show, () => false);
+		expect(calls).toEqual([]);
+		await importerRefreshSequence(list, show, () => true);
+		expect(calls).toEqual(['list', 'show']);
+	});
+	it('does not leave actions blocked when delayed list and show reads overlap an action', async () => {
+		const deferred = <T,>() => {
+			let resolve!: (value: T) => void;
+			const promise = new Promise<T>(done => { resolve = done; });
+			return { promise, resolve };
+		};
+		const list = deferred<void>();
+		const show = deferred<string>();
+		const action = deferred<string>();
+		const state = importerRequestState();
+		const revision = importerRequestStart(state);
+		let current = 'running';
+		let busy = false;
+		let subsequentShows = 0;
+		const pendingShow = show.promise.then(value => {
+			if (importerRequestCurrent(state, revision)) current = value;
+		}).finally(() => { importerRequestFinish(state, revision); });
+		const refresh = importerRefreshSequence(() => list.promise, async () => { subsequentShows++; }, () => !busy);
+		busy = true;
+		const pendingAction = action.promise.then(value => {
+			importerRequestInvalidate(state);
+			current = value;
+			busy = false;
+		});
+		list.resolve();
+		await refresh;
+		expect(subsequentShows).toBe(0);
+		action.resolve('cancelled');
+		await pendingAction;
+		expect(state.loading).toBe(false);
+		expect(state.error).toBe('');
+		show.resolve('running');
+		await pendingShow;
+		expect(current).toBe('cancelled');
+		expect(state.loading).toBe(false);
+	});
+	it('invalidates a stale request without letting its completion stop a newer request', () => {
+		const state = importerRequestState();
+		const first = importerRequestStart(state);
+		state.error = 'previous';
+		importerRequestInvalidate(state);
+		expect(importerRequestCurrent(state, first)).toBe(false);
+		expect(state).toEqual({ revision: 2, loading: false, error: '' });
+		const second = importerRequestStart(state);
+		importerRequestFinish(state, first);
+		expect(state.loading).toBe(true);
+		importerRequestFinish(state, second);
+		expect(state.loading).toBe(false);
+	});
+	it('snapshots visible native-admin credentials without migrating unchanged environment keys', () => {
+		const settings: ImportServiceSettings = { source: 'alloha', apiOrigin: 'https://api.service.org', playerOrigin: 'https://player.service.org', apiToken: 'fixture-api', apiTokenSet: true, apiTokenOrigin: 'environment', playerToken: 'fixture-player', playerTokenSet: true, playerTokenOrigin: 'environment', updatedAt: null };
+		const form = importerServiceForm(settings);
+		expect(form.apiToken).toBe('fixture-api');
+		expect(form.playerToken).toBe('fixture-player');
+		expect(importerServiceRequest(settings, form)).toEqual({ source: 'alloha', apiOrigin: settings.apiOrigin, playerOrigin: settings.playerOrigin });
+		form.apiOrigin = 'https://new.service.org/';
+		form.apiToken = ''; form.playerToken = '';
+		expect(importerServiceRequest(settings, form)).toEqual({ source: 'alloha', apiOrigin: 'https://new.service.org', playerOrigin: settings.playerOrigin });
+		expect(settings.apiOrigin).toBe('https://api.service.org');
+		expect(settings.apiToken).toBe('fixture-api');
+	});
+	it('keeps replacement and explicit disabling separate and limits player-token writes to Alloha', () => {
+		const settings: ImportServiceSettings = { source: 'alloha', apiOrigin: 'https://api.service.org', playerOrigin: 'https://player.service.org', apiToken: 'fixture-api', apiTokenSet: true, apiTokenOrigin: 'database', playerToken: 'fixture-player', playerTokenSet: true, playerTokenOrigin: 'database', updatedAt: null };
+		const form = importerServiceForm(settings);
+		form.apiToken = ' new-api '; form.playerToken = 'new-player';
+		expect(importerServiceRequest(settings, form)).toMatchObject({ apiToken: 'new-api', playerToken: 'new-player' });
+		form.clearApiToken = true;
+		expect(importerServiceRequest(settings, form)).toBeNull();
+		form.apiToken = ''; form.playerToken = ''; form.clearPlayerToken = true;
+		expect(importerServiceRequest(settings, form)).toEqual({ source: 'alloha', apiOrigin: settings.apiOrigin, playerOrigin: settings.playerOrigin, clearApiToken: true, clearPlayerToken: true });
+		const collaps = { ...settings, source: 'collaps' as const };
+		expect(importerServiceRequest(collaps, importerServiceForm(collaps))).toEqual({ source: 'collaps', apiOrigin: settings.apiOrigin, playerOrigin: settings.playerOrigin });
+	});
+	it('preserves each unsaved form baseline when saving another source after a concurrent rotation', () => {
+		const original: ImportServiceSettings = { source: 'collaps', apiOrigin: 'https://api.service.org', playerOrigin: 'https://player.service.org', apiToken: 'fixture-original', apiTokenSet: true, apiTokenOrigin: 'database', playerToken: null, playerTokenSet: false, playerTokenOrigin: 'none', updatedAt: null };
+		const tmdb = { ...original, source: 'tmdb' as const, playerOrigin: null };
+		const previous = { encryptionReady: true, sources: [tmdb, original] };
+		const form = importerServiceForm(original);
+		form.apiOrigin = 'https://edited.service.org';
+		const rotated = { ...original, apiToken: 'fixture-rotated', updatedAt: '2026-10-12T00:00:00Z' };
+		const saved = { ...tmdb, apiOrigin: 'https://saved.service.org' };
+		const result = { encryptionReady: false, sources: [saved, rotated] };
+		const merged = importerServiceSettingsUpdate(previous, result, 'tmdb');
+		expect(merged.encryptionReady).toBe(false);
+		expect(merged.sources.find(entry => entry.source === 'tmdb')).toEqual(saved);
+		const preserved = merged.sources.find(entry => entry.source === 'collaps')!;
+		expect(preserved).toEqual(original);
+		expect(importerServiceRequest(preserved, form)).toEqual({ source: 'collaps', apiOrigin: 'https://edited.service.org', playerOrigin: original.playerOrigin });
+		form.apiToken = 'fixture-intentionally-edited';
+		expect(importerServiceRequest(preserved, form)?.apiToken).toBe('fixture-intentionally-edited');
+		expect(result.sources[1]).toEqual(rotated);
+		expect(previous.sources[1]).toEqual(original);
+	});
+	it('refreshes all service baselines only on an explicit full settings reload', () => {
+		const entry: ImportServiceSettings = { source: 'alloha', apiOrigin: 'https://api.service.org', playerOrigin: 'https://player.service.org', apiToken: 'fixture-old', apiTokenSet: true, apiTokenOrigin: 'database', playerToken: 'fixture-player-old', playerTokenSet: true, playerTokenOrigin: 'database', updatedAt: null };
+		const result = { encryptionReady: true, sources: [{ ...entry, apiToken: 'fixture-new', playerToken: 'fixture-player-new' }] };
+		const reloaded = importerServiceSettingsUpdate({ encryptionReady: true, sources: [entry] }, result);
+		expect(reloaded).toEqual(result);
+		expect(reloaded.sources[0]).not.toBe(result.sources[0]);
+		expect(importerServiceRequest(reloaded.sources[0], importerServiceForm(reloaded.sources[0]))).toEqual({ source: 'alloha', apiOrigin: entry.apiOrigin, playerOrigin: entry.playerOrigin });
+		expect(importerServiceSettingsUpdate(null, result)).toEqual(result);
+	});
+	it('validates replacement Alloha iframe credentials without resubmitting unchanged legacy values', () => {
+		const entry: ImportServiceSettings = { source: 'alloha', apiOrigin: 'https://api.service.org', playerOrigin: 'https://player.service.org', apiToken: null, apiTokenSet: false, apiTokenOrigin: 'none', playerToken: 'fixture:legacy-player', playerTokenSet: true, playerTokenOrigin: 'environment', updatedAt: null };
+		const form = importerServiceForm(entry);
+		expect(importerServiceRequest(entry, form)).toEqual({ source: 'alloha', apiOrigin: entry.apiOrigin, playerOrigin: entry.playerOrigin });
+		for (const value of ['short', 'fixture.invalid', 'x'.repeat(513)]) { form.playerToken = value; expect(importerServiceRequest(entry, form)).toBeNull(); }
+		for (const value of ['12345678', 'fixture-player_key', 'x'.repeat(512)]) { form.playerToken = value; expect(importerServiceRequest(entry, form)?.playerToken).toBe(value); }
+		form.playerToken = '';
+		expect(importerServiceRequest(entry, form)).toEqual({ source: 'alloha', apiOrigin: entry.apiOrigin, playerOrigin: entry.playerOrigin });
+	});
+	it('accepts public HTTPS origins only, with server DNS checks remaining authoritative', () => {
+		expect(importerServiceOrigin(' https://API.service.org/ ')).toBe('https://api.service.org');
+		for (const value of ['http://api.service.org', 'https://key@api.service.org', 'https://api.service.org:443', 'https://api.service.org:8443', 'https://api.service.org/path', 'https://api.service.org?token=fixture', 'https://api.service.org#fixture', 'https://api.service.org?', 'https://127.0.0.1', 'https://[::1]', 'https://localhost', 'https://host.local', 'https://api.service.org\n/path', 'javascript:fixture']) expect(importerServiceOrigin(value)).toBeNull();
+	});
+	it('bounds service credentials without accepting whitespace or control characters inside them', () => {
+		const settings: ImportServiceSettings = { source: 'tmdb', apiOrigin: 'https://api.service.org', playerOrigin: null, apiToken: null, apiTokenSet: false, apiTokenOrigin: 'none', playerToken: null, playerTokenSet: false, playerTokenOrigin: 'none', updatedAt: null };
+		const form = importerServiceForm(settings);
+		for (const apiToken of ['x'.repeat(4097), 'fixture token', 'fixture\nvalue', 'fixture\u0000value', 'fixture\u0085value']) { form.apiToken = apiToken; expect(importerServiceRequest(settings, form)).toBeNull(); }
+		form.apiToken = 'x'.repeat(4096);
+		expect(importerServiceRequest(settings, form)?.apiToken).toHaveLength(4096);
+		form.apiToken = ''; form.playerOrigin = 'https://ignored.service.org'; form.playerToken = 'ignored-player'; form.clearPlayerToken = true;
+		expect(importerServiceRequest(settings, form)).toEqual({ source: 'tmdb', apiOrigin: settings.apiOrigin });
 	});
 });

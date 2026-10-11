@@ -7,6 +7,9 @@ import { Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { ApiError } from '@/server/api/error.js';
 import { ZalipCatalogService } from '@/core/ZalipCatalogService.js';
+import { ZalipPlaybackSettingsService } from '@/core/ZalipPlaybackSettingsService.js';
+import { ZalipImporterSourceSettingsService } from '@/core/ZalipImporterSourceSettingsService.js';
+import { configuredImportPlayerUrl } from '@/core/zalip-importer/providers.js';
 
 export const meta = {
 	tags: ['zalip', 'account'],
@@ -17,6 +20,7 @@ export const meta = {
 	res: {
 		type: 'object', optional: false, nullable: false,
 		properties: {
+			label: { type: 'string' },
 			available: { type: 'boolean' },
 			iframe: { type: 'string', nullable: true },
 			translations: {
@@ -35,7 +39,7 @@ export const meta = {
 			},
 			lastCheckedAt: { type: 'string', nullable: true },
 		},
-		required: ['available', 'iframe', 'translations', 'lastCheckedAt'],
+		required: ['available', 'iframe', 'translations', 'lastCheckedAt', 'label'],
 	},
 	errors: {
 		noSuchWork: {
@@ -59,11 +63,22 @@ export const paramDef = {
 export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
 	constructor(
 		private zalipCatalogService: ZalipCatalogService,
+		private playbackSettings: ZalipPlaybackSettingsService,
+		private sourceSettings: ZalipImporterSourceSettingsService,
 	) {
 		super(meta, paramDef, async (ps) => {
 			const playback = await this.zalipCatalogService.getAllohaPlayback(ps.slug);
 			if (playback == null) throw new ApiError(meta.errors.noSuchWork);
-			return playback;
+			const { providers } = await this.playbackSettings.show();
+			const setting = providers.find(provider => provider.source === 'alloha')!;
+			if (!setting.enabled) return { available: false, iframe: null, translations: [], lastCheckedAt: playback.lastCheckedAt, label: setting.label };
+			const config = await this.sourceSettings.getRuntime();
+			const iframe = configuredImportPlayerUrl(playback.iframe, 'alloha', config);
+			const translations = playback.translations.flatMap(translation => {
+				const url = configuredImportPlayerUrl(translation.iframe, 'alloha', config);
+				return url ? [{ ...translation, iframe: url }] : [];
+			});
+			return { ...playback, available: playback.available && iframe !== null, iframe, translations, label: setting.label };
 		});
 	}
 }

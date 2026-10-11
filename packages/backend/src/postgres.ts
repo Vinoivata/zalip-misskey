@@ -102,6 +102,9 @@ import { MiZalipCatalogRelation } from '@/models/ZalipCatalogRelation.js';
 import { MiZalipExternalIdentity } from '@/models/ZalipExternalIdentity.js';
 import { MiZalipImportRun, MiZalipImportItem } from '@/models/ZalipImportRun.js';
 import { MiZalipImportProfile } from '@/models/ZalipImportProfile.js';
+import { MiZalipPlaybackSettings } from '@/models/ZalipPlaybackSettings.js';
+import { MiZalipImporterSourceSetting } from '@/models/ZalipImporterSourceSetting.js';
+import { MiZalipMaintenanceRun, MiZalipMaintenanceProfile } from '@/models/ZalipMaintenanceRun.js';
 
 pg.types.setTypeParser(20, Number);
 
@@ -242,6 +245,10 @@ export const entities = [
 	MiZalipImportRun,
 	MiZalipImportItem,
 	MiZalipImportProfile,
+	MiZalipPlaybackSettings,
+	MiZalipImporterSourceSetting,
+	MiZalipMaintenanceRun,
+	MiZalipMaintenanceProfile,
 	MiZalipSeason,
 	MiZalipEpisode,
 	MiZalipEpisodeNoteContext,

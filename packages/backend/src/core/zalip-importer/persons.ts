@@ -77,9 +77,9 @@ export function normalizeKinopoiskPerson(value: unknown): ZalipCatalogEntryInput
 }
 
 /** Known person ID only. Name-based matching can merge unrelated namesakes and is not used. */
-export async function fetchImportedPerson(source: ImportPersonSource, id: string, config: Pick<ImportProviderConfig, 'tmdbApiKey' | 'kinopoiskApiKey'>, transport: ImportTransport = defaultImportTransport): Promise<ZalipCatalogEntryInput> {
+export async function fetchImportedPerson(source: ImportPersonSource, id: string, config: Pick<ImportProviderConfig, 'tmdbApiKey' | 'kinopoiskApiKey' | 'apiOrigins'>, transport: ImportTransport = defaultImportTransport): Promise<ZalipCatalogEntryInput> {
 	if (!['tmdb', 'kinopoisk'].includes(source) || externalId(id) !== id) throw new ImportProviderError('invalid-ref');
-	const request = createImportRequest(source, source === 'tmdb' ? config.tmdbApiKey : config.kinopoiskApiKey, pacedImportTransport(transport));
+	const request = createImportRequest(source, source === 'tmdb' ? config.tmdbApiKey : config.kinopoiskApiKey, pacedImportTransport(transport), config.apiOrigins?.[source]);
 	if (source === 'kinopoisk') {
 		const result = normalizeKinopoiskPerson(await request(`/api/v1/staff/${id}`));
 		if (result.externalIds?.kinopoisk !== id) throw new ImportProviderError('malformed-response');
