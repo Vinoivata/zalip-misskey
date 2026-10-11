@@ -142,6 +142,7 @@ export function mergeZalipCatalogEntry(
 	existing: Pick<MiZalipCatalogEntry, 'name' | 'slug' | 'description' | 'imageUrl' | 'externalIds' | 'data' | 'parentId'>,
 	input: ZalipCatalogEntryInput,
 	source: string,
+	options: { protectOnlyChangedBaseFields?: boolean } = {},
 ): Pick<MiZalipCatalogEntry, 'name' | 'slug' | 'description' | 'imageUrl' | 'externalIds' | 'data' | 'parentId'> {
 	const editorial = getZalipCatalogEditorialData(existing.data);
 	const manualFields = new Set(editorial.manualFields);
@@ -155,12 +156,25 @@ export function mergeZalipCatalogEntry(
 	for (const field of editableFields) {
 		const value = input[field];
 		if (value === undefined) continue;
+		// An editor must send a name, even for a fact-only change. Do not claim unchanged
+		// imported base fields, while keeping explicit null clears editorially protected.
+		if (source === 'manual' && options.protectOnlyChangedBaseFields && field !== 'data' && value !== null && value === existing[field]) continue;
 		if (source !== 'manual' && (manualFields.has(field) || value === null || (typeof value === 'string' && !value.trim()) || (field === 'data' && Object.keys(value as object).length === 0))) continue;
+		if (field === 'data') {
+			// Facts are owned separately: editing a birthday must not freeze a future biography.
+			// Preserve the older whole-data lock above for existing editorial records.
+			for (const [key, fact] of Object.entries(publicFacts(value as Record<string, unknown>))) {
+				const factField = `data.${key}`;
+				if (source !== 'manual' && (manualFields.has(factField) || fact === null || fact === '' || (Array.isArray(fact) && fact.length === 0))) continue;
+				if (source === 'manual') manualFields.add(factField);
+				fieldSources[factField] = source;
+				merged.data[key] = fact;
+			}
+			continue;
+		}
 		if (source === 'manual') manualFields.add(field);
 		fieldSources[field] = source;
-		if (field === 'data') {
-			merged.data = { ...merged.data, ...publicFacts(value as Record<string, unknown>) };
-		} else if (field === 'name' || field === 'slug') {
+		if (field === 'name' || field === 'slug') {
 			merged[field] = String(value).trim();
 		} else {
 			merged[field] = value as string | null;

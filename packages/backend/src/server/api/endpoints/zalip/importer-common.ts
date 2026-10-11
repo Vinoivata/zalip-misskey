@@ -4,7 +4,7 @@
  */
 
 import { ImportProviderError } from '@/core/zalip-importer/providers.js';
-import { importFields, importSources } from '@/core/zalip-importer/types.js';
+import { importFields, importSources, type ImportField } from '@/core/zalip-importer/types.js';
 import type { RoleService } from '@/core/RoleService.js';
 import type { MiLocalUser } from '@/models/User.js';
 import { ApiError } from '@/server/api/error.js';
@@ -29,11 +29,32 @@ export const importerTaxonomyTypeProperty = { type: 'string', enum: ['person', '
 export const importerIdProperty = { type: 'string', format: 'misskey:id', minLength: 1, maxLength: 32 } as const;
 export const importerLockedFieldsProperty = { type: 'array', uniqueItems: true, maxItems: importFields.length, items: { type: 'string', enum: importFields } } as const;
 export const importerCategoryIdsProperty = { type: 'array', uniqueItems: true, maxItems: 50, items: importerIdProperty } as const;
+export const importerOptionsProperty = {
+	type: 'object', additionalProperties: false,
+	properties: {
+		artwork: { type: 'string', enum: ['remote', 'local-webp'] },
+		sources: { type: 'array', uniqueItems: true, maxItems: importSources.length, items: importerSourceProperty },
+		fields: importerLockedFieldsProperty,
+		fieldSources: { type: 'object', additionalProperties: false, properties: Object.fromEntries(importFields.map(field => [field, importerSourceProperty])) as Record<ImportField, typeof importerSourceProperty> },
+		filters: {
+			type: 'object', additionalProperties: false,
+			properties: {
+				mediaTypes: { type: 'array', uniqueItems: true, maxItems: 2, items: importerMediaTypeProperty },
+				kinds: { type: 'array', uniqueItems: true, maxItems: 4, items: { type: 'string', enum: ['movie', 'series', 'anime', 'animation'] } },
+				yearFrom: { type: 'integer', minimum: 1888, maximum: 3000 },
+				yearTo: { type: 'integer', minimum: 1888, maximum: 3000 },
+				genres: { type: 'array', uniqueItems: true, maxItems: 50, items: { type: 'string', minLength: 1, maxLength: 100 } },
+				countries: { type: 'array', uniqueItems: true, maxItems: 50, items: { type: 'string', minLength: 1, maxLength: 100 } },
+				ratingMin: { type: 'number', minimum: 0, maximum: 10 },
+			},
+		},
+	},
+} as const;
 export const importerRefProperty = {
 	type: 'object', additionalProperties: false,
 	properties: {
 		source: importerSourceProperty,
-		externalId: { type: 'string', minLength: 1, maxLength: 64, pattern: '^(?:[1-9][0-9]{0,15}|tmdb:(?:movie|tv):[1-9][0-9]{0,15})$' },
+		externalId: { type: 'string', minLength: 1, maxLength: 64, pattern: '^(?:[1-9][0-9]{0,15}|tmdb:(?:movie|tv):[1-9][0-9]{0,15}|imdb:tt[0-9]{5,12})$' },
 		mediaType: importerMediaTypeProperty,
 	},
 	required: ['source', 'externalId', 'mediaType'],
@@ -53,7 +74,7 @@ export async function assertImporterAdministrator(roleService: Pick<RoleService,
 }
 
 const missingResources = new Set(['NO_SUCH_CATALOG_ENTRY', 'NO_SUCH_WORK', 'NO_SUCH_IMPORT_RUN', 'NO_SUCH_IMPORT_PROFILE', 'ZALIP_CATALOG_ENTRY_NOT_FOUND']);
-const invalidResources = new Set(['INVALID_CATALOG_TYPE', 'INVALID_CATALOG_ENTRY', 'INVALID_CATALOG_IMAGE', 'INVALID_CATALOG_SOURCE', 'INVALID_CATALOG_PARENT', 'CATALOG_PARENT_CYCLE', 'INVALID_CATALOG_LOOKUP', 'INVALID_CATALOG_LINK', 'INVALID_EXTERNAL_IDS', 'CATALOG_DATA_TOO_LARGE', 'INVALID_IMPORT_RUN', 'EMPTY_IMPORT_RUN', 'INVALID_IMPORT_PROFILE', 'INVALID_IMPORT_ACTION']);
+const invalidResources = new Set(['INVALID_CATALOG_TYPE', 'INVALID_CATALOG_ENTRY', 'INVALID_CATALOG_IMAGE', 'INVALID_CATALOG_SOURCE', 'INVALID_CATALOG_PARENT', 'CATALOG_PARENT_CYCLE', 'INVALID_CATALOG_LOOKUP', 'INVALID_CATALOG_LINK', 'INVALID_CATALOG_RULES', 'INVALID_CATALOG_RECALCULATE', 'INVALID_EXTERNAL_IDS', 'CATALOG_DATA_TOO_LARGE', 'INVALID_IMPORT_RUN', 'EMPTY_IMPORT_RUN', 'INVALID_IMPORT_PROFILE', 'INVALID_IMPORT_ACTION', 'INVALID_IMPORT_OPTIONS']);
 const resourceConflicts = new Set(['CATALOG_TYPE_IMMUTABLE', 'CATALOG_SLUG_CONFLICT', 'CATALOG_ID_CONFLICT', 'IMPORT_ID_CONFLICT', 'IMPORT_IDENTITY_CONFLICT', 'IMPORT_RUN_BUSY']);
 
 /** Do not return upstream messages, causes, URLs or raw database errors, even for administrators. */

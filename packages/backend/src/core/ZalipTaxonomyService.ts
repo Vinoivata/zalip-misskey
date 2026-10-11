@@ -10,6 +10,8 @@ import { DI } from '@/di-symbols.js';
 import { IdService } from '@/core/IdService.js';
 import type { PackedZalipWork } from '@/core/ZalipCatalogService.js';
 import type { ImportRecord } from '@/core/zalip-importer/types.js';
+import type { ImportPersonSource } from '@/core/zalip-importer/persons.js';
+import { ImportProviderError } from '@/core/zalip-importer/providers.js';
 import { readImportState } from '@/core/zalip-importer/policy.js';
 import { MiZalipCatalogEntry, zalipCatalogEntryTypes, type ZalipCatalogEntryType } from '@/models/ZalipCatalogEntry.js';
 import { MiZalipCatalogRelation } from '@/models/ZalipCatalogRelation.js';
@@ -147,7 +149,7 @@ export class ZalipTaxonomyService {
 			if (existing && existing.type !== clean.type) throw new Error('CATALOG_TYPE_IMMUTABLE');
 			const entry = existing ?? this.newEntry(clean);
 			await this.assertParent(manager, entry.id, entry.type, clean.parentId ?? entry.parentId);
-			const updated = repository.create({ ...entry, ...mergeZalipCatalogEntry(entry, clean, 'manual'), updatedAt: new Date() });
+			const updated = repository.create({ ...entry, ...mergeZalipCatalogEntry(entry, clean, 'manual', { protectOnlyChangedBaseFields: existing !== null }), updatedAt: new Date() });
 			const conflict = await repository.findOneBy({ type: updated.type, slug: updated.slug });
 			if (conflict && conflict.id !== updated.id) throw new Error('CATALOG_SLUG_CONFLICT');
 			await this.assertExternalIds(manager, updated.type, updated.externalIds, updated.id);
@@ -226,8 +228,86 @@ export class ZalipTaxonomyService {
 	}
 
 	public async deleteEntry(entryId: string): Promise<void> {
-		const result = await this.db.getRepository(MiZalipCatalogEntry).delete({ id: entryId });
-		if (!result.affected) throw new Error('NO_SUCH_CATALOG_ENTRY');
+		await this.db.transaction(async manager => {
+			await this.lockEntries(manager);
+			const result = await manager.getRepository(MiZalipCatalogEntry).delete({ id: entryId });
+			if (!result.affected) throw new Error('NO_SUCH_CATALOG_ENTRY');
+		});
+	}
+
+	/** One explicitly selected directory record, never a guessed match by a person's name. */
+	public async enrichPerson(
+		entryId: string,
+		source: ImportPersonSource,
+		fetchPerson: (externalId: string) => Promise<ZalipCatalogEntryInput>,
+	): Promise<{ entry: PackedZalipCatalogEntry; changedFields: string[] }> {
+		if (!['tmdb', 'kinopoisk'].includes(source)) throw new ImportProviderError('invalid-ref');
+		const before = await this.db.getRepository(MiZalipCatalogEntry).findOneBy({ id: entryId });
+		if (!before) throw new Error('NO_SUCH_CATALOG_ENTRY');
+		const externalId = before.externalIds[source];
+		if (before.type !== 'person' || !externalId || !/^[1-9]\d{0,15}$/.test(externalId)) throw new ImportProviderError('invalid-ref');
+		const incoming = this.validateInput(await fetchPerson(externalId));
+		if (incoming.type !== 'person' || incoming.externalIds?.[source] !== externalId) throw new ImportProviderError('malformed-response');
+		return this.db.transaction(async manager => {
+			await this.lockEntries(manager);
+			const repository = manager.getRepository(MiZalipCatalogEntry);
+			const current = await repository.findOneBy({ id: entryId });
+			if (!current) throw new Error('NO_SUCH_CATALOG_ENTRY');
+			if (current.type !== 'person' || current.externalIds[source] !== externalId) throw new Error('CATALOG_ID_CONFLICT');
+			const metadata = getZalipCatalogEditorialData(current.data);
+			const manualFields = new Set(metadata.manualFields);
+			// Legacy nonempty values without provenance are editorial, not safe to overwrite.
+			for (const field of ['name', 'description', 'imageUrl'] as const) {
+				if (current[field] && !metadata.fieldSources[field]) manualFields.add(field);
+			}
+			for (const [key, value] of Object.entries(packZalipCatalogFacts(current.data))) {
+				if (value !== null && value !== '' && (!Array.isArray(value) || value.length > 0) && !metadata.fieldSources[`data.${key}`] && !metadata.fieldSources.data) manualFields.add(`data.${key}`);
+			}
+			const owned = { ...current, data: { ...current.data, _zalip: { ...metadata, manualFields: [...manualFields] } } };
+			const updated = repository.create({ ...current, ...mergeZalipCatalogEntry(owned, incoming, source), updatedAt: new Date() });
+			await this.assertExternalIds(manager, updated.type, updated.externalIds, updated.id);
+			await repository.save(updated);
+			const oldFacts = packZalipCatalogFacts(current.data);
+			const newFacts = packZalipCatalogFacts(updated.data);
+			const changedFields: string[] = ['name', 'description', 'imageUrl', 'externalIds'].filter(field => JSON.stringify(current[field as keyof MiZalipCatalogEntry]) !== JSON.stringify(updated[field as keyof MiZalipCatalogEntry]));
+			for (const key of new Set([...Object.keys(oldFacts), ...Object.keys(newFacts)])) {
+				if (JSON.stringify(oldFacts[key]) !== JSON.stringify(newFacts[key])) changedFields.push(`data.${key}`);
+			}
+			return { entry: this.packEntry(updated, true), changedFields };
+		});
+	}
+
+	/** A bounded editor-requested rebuild changes only this category's rule-owned membership. */
+	public async recalculateCategory(options: { entryId: string; workIds?: string[]; afterId?: string; limit?: number }): Promise<{ processed: number; matched: number; skipped: number; nextCursor: string | null }> {
+		const limit = options.limit ?? 100;
+		if (!Number.isInteger(limit) || limit < 1 || limit > 100 || (options.workIds && (options.afterId || options.workIds.length < 1 || options.workIds.length > 100 || new Set(options.workIds).size !== options.workIds.length))) throw new Error('INVALID_CATALOG_RECALCULATE');
+		return this.db.transaction(async manager => {
+			await this.lockEntries(manager);
+			const category = await manager.getRepository(MiZalipCatalogEntry).findOneBy({ id: options.entryId });
+			if (!category) throw new Error('NO_SUCH_CATALOG_ENTRY');
+			if (category.type !== 'category') throw new Error('INVALID_CATALOG_RECALCULATE');
+			const works = manager.getRepository(MiZalipWork).createQueryBuilder('work').orderBy('work.id', 'ASC');
+			if (options.workIds) works.where('work.id IN (:...workIds)', { workIds: options.workIds });
+			else if (options.afterId) works.where('work.id > :afterId', { afterId: options.afterId });
+			const candidates = await works.take(options.workIds ? options.workIds.length : limit + 1).getMany();
+			if (options.workIds && candidates.length !== options.workIds.length) throw new Error('NO_SUCH_WORK');
+			const page = options.workIds ? candidates : candidates.slice(0, limit);
+			let matched = 0;
+			let skipped = 0;
+			for (const work of page) {
+				await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`zalip-catalog-membership:${work.id}`]);
+				const state = readImportState(work.importData);
+				if (state.locks.includes('categories')) { skipped++; continue; }
+				const applies = matchesZalipCategoryRules(category.data.rules, { kind: work.kind, genres: work.genres, releaseYear: work.releaseYear, countries: state.countries.filter(value => typeof value === 'string') });
+				if (applies) {
+					await this.saveLink(manager, { entryId: category.id, workId: work.id }, 'rules');
+					matched++;
+				} else {
+					await manager.getRepository(MiZalipCatalogRelation).delete({ entryId: category.id, workId: work.id, source: 'rules' });
+				}
+			}
+			return { processed: page.length, matched, skipped, nextCursor: !options.workIds && candidates.length > limit ? page[page.length - 1].id : null };
+		});
 	}
 
 	public async listEntries(options: ZalipCatalogDirectoryOptions = {}): Promise<PackedZalipCatalogEntry[]> {

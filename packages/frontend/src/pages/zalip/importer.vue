@@ -18,6 +18,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<article v-for="source in importerSources" :key="source" :class="$style.source">
 						<strong>{{ importerSourceLabel(source) }}</strong><span :class="{ [$style.connected]: sourceStatus(source)?.configured }">{{ sourcesLoading ? i18n.ts.zalip._importer.checkingSettings : sourcesError ? i18n.ts.zalip._importer.configurationUnknown : sourceStatus(source)?.configured ? i18n.ts.zalip._importer.configured : i18n.ts.zalip._importer.notConfigured }}</span>
 						<small v-if="sourceStatus(source)?.dailyLimit">{{ i18n.tsx.zalip._importer.dailyLimit({ count: String(sourceStatus(source)?.dailyLimit) }) }}</small>
+						<button type="button" class="_button" :class="$style.button" :disabled="sourceChecking[source] || !sourceStatus(source)?.configured" @click="checkSource(source)"><i :class="sourceChecking[source] ? 'ti ti-loader-2 ti-spin' : 'ti ti-plug-connected'" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.checkSource }}</button>
+						<template v-if="sourceChecks[source]"><small :class="{ [$style.error]: !sourceChecks[source]!.ok }" role="status">{{ sourceChecks[source]!.ok ? i18n.ts.zalip._importer.sourceHealthy : i18n.ts.zalip._importer.sourceCheckFailed }}</small><small>{{ i18n.tsx.zalip._importer.sourceChecked({ date: dateLabel(sourceChecks[source]!.checkedAt), latency: String(sourceChecks[source]!.latencyMs) }) }}<span v-if="sourceChecks[source]!.cached"> · {{ i18n.ts.zalip._importer.cachedCheck }}</span></small></template>
+						<small v-if="sourceCheckErrors[source]" :class="$style.error" role="alert">{{ sourceCheckErrors[source] }}</small>
 					</article>
 				</section>
 				<p v-if="sourcesError" :class="$style.error" role="alert">{{ sourcesError }} <button type="button" class="_textButton" @click="loadSources">{{ i18n.ts.zalip._importer.retry }}</button></p>
@@ -28,6 +31,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</nav>
 				<p v-if="message" :class="$style.message" role="status">{{ message }}</p>
 				<p v-if="actionError" :class="$style.error" role="alert">{{ actionError }}</p>
+
+				<details v-if="tab === 'import' || tab === 'schedules'" :class="[$style.panel, $style.details]">
+					<summary>{{ i18n.ts.zalip._importer.importOptions }}</summary>
+					<p :class="$style.hint">{{ i18n.ts.zalip._importer.optionsHint }}</p>
+					<div :class="$style.form"><label><span>{{ i18n.ts.zalip._importer.artworkStorage }}</span><select v-model="currentSelection.artwork" :disabled="busy || profileOptionsLocked"><option value="remote">{{ i18n.ts.zalip._importer.artworkRemote }}</option><option value="local-webp">{{ i18n.ts.zalip._importer.artworkLocal }}</option></select></label><p :class="$style.hint">{{ i18n.ts.zalip._importer.artworkStorageHint }}</p></div>
+					<fieldset :class="$style.locks"><legend>{{ i18n.ts.zalip._importer.enrichmentSources }}</legend><label v-for="source in importerSources" :key="source"><input v-model="currentSelection.sources" type="checkbox" :value="source" :disabled="busy || profileOptionsLocked || !sourceStatus(source)?.configured">{{ importerSourceLabel(source) }}</label></fieldset>
+					<h3 :class="$style.optionsHeading">{{ i18n.ts.zalip._importer.selectedFields }}</h3>
+					<details v-for="group in importerFieldGroups" :key="group.id" :class="$style.fieldGroup">
+						<summary>{{ importerGroupLabel(group.id) }} <small>{{ group.fields.filter(field => currentSelection.fields.includes(field)).length }} / {{ group.fields.length }}</small></summary>
+						<label :class="$style.check"><input type="checkbox" :checked="group.fields.every(field => currentSelection.fields.includes(field))" :disabled="busy || profileOptionsLocked" @change="toggleFieldGroup(group.fields)">{{ i18n.ts.zalip._importer.selectGroup }}</label>
+						<div v-for="field in group.fields" :key="field" :class="$style.fieldRow"><label :class="$style.check"><input v-model="currentSelection.fields" type="checkbox" :value="field" :disabled="busy || profileOptionsLocked">{{ importerFieldLabel(field) }}</label><select v-model="currentSelection.fieldSources[field]" :aria-label="i18n.tsx.zalip._importer.fieldPreference({ field: importerFieldLabel(field) })" :disabled="busy || profileOptionsLocked || !currentSelection.fields.includes(field)"><option value="">{{ i18n.ts.zalip._importer.defaultSource }}</option><option v-for="source in importerSources" :key="source" :value="source" :disabled="!sourceStatus(source)?.configured || (!currentSelection.sources.includes(source) && !currentPrimarySources.includes(source))">{{ importerSourceLabel(source) }}</option></select></div>
+					</details>
+					<details :class="$style.fieldGroup"><summary>{{ i18n.ts.zalip._importer.importFilters }}</summary><p :class="$style.hint">{{ i18n.ts.zalip._importer.importFiltersHint }}</p><div :class="$style.form"><fieldset :class="[$style.locks, $style.wide]"><legend>{{ i18n.ts.zalip._importer.workType }}</legend><label v-for="kind in workKinds" :key="kind.value"><input v-model="currentSelection.filters.kinds" type="checkbox" :value="kind.value" :disabled="busy || profileOptionsLocked">{{ kind.title }}</label></fieldset><label><span>{{ i18n.ts.zalip._importer.yearFrom }}</span><input v-model="currentSelection.filters.yearFrom" type="number" min="1888" max="3000" :disabled="busy || profileOptionsLocked"></label><label><span>{{ i18n.ts.zalip._importer.yearTo }}</span><input v-model="currentSelection.filters.yearTo" type="number" min="1888" max="3000" :disabled="busy || profileOptionsLocked"></label><label><span>{{ i18n.ts.zalip._importer.ruleGenres }}</span><input v-model="currentSelection.filters.genres" maxlength="5050" :disabled="busy || profileOptionsLocked"></label><label><span>{{ i18n.ts.zalip._importer.ruleCountries }}</span><input v-model="currentSelection.filters.countries" maxlength="5050" :disabled="busy || profileOptionsLocked"></label><label><span>{{ i18n.ts.zalip._importer.ratingMin }}</span><input v-model="currentSelection.filters.ratingMin" type="number" min="0" max="10" step="0.1" :disabled="busy || profileOptionsLocked"></label></div></details>
+				</details>
 
 				<template v-if="tab === 'import'">
 					<section :class="$style.panel">
@@ -57,6 +74,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 					<section :class="$style.panel">
 						<h2>{{ i18n.ts.zalip._importer.byId }}</h2><p :class="$style.hint">{{ i18n.ts.zalip._importer.byIdHint }}</p>
+						<p :class="$style.hint">{{ i18n.ts.zalip._importer.imdbHint }}</p>
 						<p v-if="lockedFields.length" :class="$style.hint">{{ i18n.ts.zalip._importer.protectionScope }}</p>
 						<form :class="$style.form" @submit.prevent="queueBatch">
 							<label><span>{{ i18n.ts.zalip._importer.source }}</span><select v-model="batch.source" :disabled="busy"><option v-for="source in importerSources" :key="source" :value="source" :disabled="!sourceStatus(source)?.configured">{{ importerSourceLabel(source) }}</option></select></label>
@@ -66,25 +84,34 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<div :class="[$style.actions, $style.wide]"><button type="button" class="_button" :class="$style.button" :disabled="previewLoading || !batch.references.trim()" @click="previewBatch"><i class="ti ti-eye" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.previewFirst }}</button><button type="submit" class="_button" :class="$style.primary" :disabled="busy || !batch.references.trim() || !sourceStatus(batch.source)?.configured"><i class="ti ti-download" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.enqueue }}</button></div>
 						</form>
 					</section>
+					<details :class="[$style.panel, $style.details]">
+						<summary>{{ i18n.ts.zalip._importer.persistedProtection }}</summary><p :class="$style.hint">{{ i18n.ts.zalip._importer.persistedProtectionHint }}</p>
+						<form :class="$style.searchForm" @submit.prevent="loadWorkState"><label :class="$style.grow"><span>{{ i18n.ts.zalip._importer.workId }}</span><input v-model.trim="workStateId" required maxlength="32" pattern="[A-Za-z0-9]+" :disabled="busy || workStateLoading"></label><button type="submit" class="_button" :class="$style.button" :disabled="busy || workStateLoading || !workStateId">{{ i18n.ts.zalip._importer.loadWorkState }}</button></form>
+						<p v-if="workStateLoading" :class="$style.hint" role="status">{{ i18n.ts.zalip._importer.loading }}</p><p v-if="workStateError" :class="$style.error" role="alert">{{ workStateError }}</p>
+						<template v-if="workState"><h3 :class="$style.optionsHeading">{{ workState.title }}</h3><fieldset v-for="group in importerFieldGroups" :key="group.id" :class="[$style.locks, $style.lockGroup]"><legend>{{ importerGroupLabel(group.id) }}</legend><label v-for="field in group.fields" :key="field"><input v-model="persistedLocks" type="checkbox" :value="field" :disabled="busy || workStateLoading">{{ importerFieldLabel(field) }}<small v-if="workOrigin(field)"> · {{ workOrigin(field) }}</small><small v-if="workState.fields.find(item => item.field === field)?.editorial"> · {{ i18n.ts.zalip._importer.editorialProtection }}</small></label></fieldset><button type="button" class="_button" :class="$style.primary" :disabled="busy || workStateLoading || workState.workId !== workStateId" @click="saveWorkLocks">{{ i18n.ts.zalip._importer.saveLocks }}</button></template>
+					</details>
 
 					<section v-if="previewLoading || preview || previewError" ref="previewPanel" :class="$style.panel" aria-live="polite">
 						<div :class="$style.sectionHeading"><h2>{{ i18n.ts.zalip._importer.previewHeading }}</h2><button type="button" class="_button" :class="$style.button" :disabled="previewLoading" :aria-label="i18n.ts.zalip._importer.closePreview" @click="preview = null; previewError = ''"><i class="ti ti-x" aria-hidden="true"></i></button></div>
 						<p v-if="previewLoading"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.previewLoading }}</p>
 						<p v-if="previewError" :class="$style.error" role="alert">{{ previewError }}</p>
 						<template v-if="preview && !previewLoading">
+							<p v-if="previewStale" :class="$style.hint" role="status">{{ i18n.ts.zalip._importer.optionsChangedPreview }} <button type="button" class="_textButton" :disabled="busy" @click="showPreview(preview.record.ref)">{{ i18n.ts.zalip._importer.refreshPreview }}</button></p>
+							<p v-if="preview.matchesFilters === false" :class="$style.hint" role="status">{{ i18n.ts.zalip._importer.previewFiltered }}</p>
 							<div :class="$style.previewHero"><div :class="$style.previewPoster"><img v-if="importerImageUrl(preview.record.posterUrl)" :src="importerImageUrl(preview.record.posterUrl)!" alt=""><i v-else class="ti ti-movie" aria-hidden="true"></i></div><div><span :class="$style.badge">{{ preview.workId ? i18n.ts.zalip._importer.existingWork : i18n.ts.zalip._importer.newDraft }}</span><h3>{{ preview.record.title }}</h3><p>{{ [preview.record.releaseYear, preview.record.originalTitle].filter(Boolean).join(' · ') }}</p><p>{{ preview.record.genres.join(' · ') }}</p><p>{{ preview.record.description }}</p><div :class="$style.chips"><span v-for="identity in preview.record.identities" :key="`${identity.provider}:${identity.entityType}:${identity.externalId}`">{{ identity.provider }} · {{ identity.entityType }} · {{ identity.externalId }}</span></div></div></div>
-							<ul v-if="preview.warnings.length" :class="$style.warnings"><li v-for="warning in preview.warnings" :key="warning">{{ warning }}</li></ul>
+							<ul v-if="previewWarnings.length" :class="$style.warnings" :aria-label="i18n.ts.zalip._importer.warningsTitle"><li v-for="warning in previewWarnings" :key="warning">{{ warning }}</li></ul>
 							<div :class="$style.chips"><span>{{ i18n.tsx.zalip._importer.peopleCount({ count: String(preview.record.credits.length) }) }}</span><span>{{ i18n.tsx.zalip._importer.studiosCount({ count: String(preview.record.companies.length) }) }}</span><span>{{ i18n.tsx.zalip._importer.collectionsCount({ count: String(preview.record.collections.length) }) }}</span><span>{{ i18n.tsx.zalip._importer.seasonsCount({ count: String(preview.record.seasons.length) }) }}</span><span>{{ i18n.tsx.zalip._importer.playersCount({ count: String(preview.record.players.length) }) }}</span></div>
 							<details :class="$style.details"><summary>{{ i18n.ts.zalip._importer.peopleAndCollections }}</summary><p v-if="preview.record.credits.length">{{ preview.record.credits.map(credit => `${credit.name} (${credit.role})`).join(' · ') }}</p><p v-if="preview.record.companies.length">{{ preview.record.companies.map(company => company.name).join(' · ') }}</p><p v-if="preview.record.collections.length">{{ preview.record.collections.map(collection => collection.name).join(' · ') }}</p></details>
 							<h3>{{ i18n.ts.zalip._importer.changes }}</h3><p :class="$style.hint">{{ i18n.ts.zalip._importer.locksHint }}</p>
-							<div :class="$style.diffList"><article v-for="change in preview.changes" :key="change.field" :class="$style.diff"><label><input type="checkbox" :checked="change.protected || lockedFields.includes(change.field)" :disabled="busy || (change.protected)" @change="toggleLock(change.field)"><strong>{{ importerFieldLabel(change.field) }}</strong><span v-if="change.protected" :class="$style.badge"><i class="ti ti-lock" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.protected }}</span></label><div :class="$style.diffValues"><div><small>{{ i18n.ts.zalip._importer.before }}</small><p>{{ formatImporterValue(change.before) }}</p></div><div><small>{{ i18n.ts.zalip._importer.after }}</small><p>{{ formatImporterValue(change.after) }}</p></div></div></article></div>
+							<div :class="$style.diffList"><article v-for="change in preview.changes" :key="change.field" :class="$style.diff"><label><input type="checkbox" :checked="change.protected || lockedFields.includes(change.field)" :disabled="busy || change.protected || change.selected === false || previewStale" @change="toggleLock(change.field)"><strong>{{ importerFieldLabel(change.field) }}</strong><span v-if="change.protected" :class="$style.badge"><i class="ti ti-lock" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.protected }}</span><small v-if="change.selected === false">{{ i18n.ts.zalip._importer.skippedField }}</small></label><div :class="$style.diffValues"><div><small>{{ i18n.ts.zalip._importer.before }}</small><p>{{ formatImporterValue(change.before) }}</p></div><div><small>{{ i18n.ts.zalip._importer.after }}</small><p>{{ formatImporterValue(change.after) }}</p></div></div></article></div>
 							<p v-if="preview.changes.length === 0" :class="$style.hint">{{ i18n.ts.zalip._importer.noChanges }}</p>
-							<div :class="$style.actions"><button type="button" class="_button" :class="$style.primary" :disabled="busy" @click="queueReferences([preview.record.ref])"><i class="ti ti-download" aria-hidden="true"></i>{{ preview.workId ? i18n.ts.zalip._importer.enqueueUpdate : i18n.ts.zalip._importer.enqueueDraft }}</button><span :class="$style.hint">{{ i18n.ts.zalip._importer.noPublishing }}</span></div>
+							<div :class="$style.actions"><button type="button" class="_button" :class="$style.primary" :disabled="busy || previewStale" @click="queueReferences([preview.record.ref])"><i class="ti ti-download" aria-hidden="true"></i>{{ preview.workId ? i18n.ts.zalip._importer.enqueueUpdate : i18n.ts.zalip._importer.enqueueDraft }}</button><span :class="$style.hint">{{ i18n.ts.zalip._importer.noPublishing }}</span></div>
 						</template>
 					</section>
 				</template>
 
 				<template v-else-if="tab === 'runs'">
+					<details :class="[$style.panel, $style.details]"><summary>{{ i18n.ts.zalip._importer.deliveryDiagnostics }}</summary><p :class="$style.hint">{{ i18n.ts.zalip._importer.deliveryDiagnosticsHint }}</p><button type="button" class="_button" :class="$style.button" :disabled="diagnosticsLoading" @click="loadDiagnostics">{{ i18n.ts.zalip._importer.refresh }}</button><p v-if="diagnosticsLoading" :class="$style.hint" role="status">{{ i18n.ts.zalip._importer.loading }}</p><p v-if="diagnosticsError" :class="$style.error" role="alert">{{ diagnosticsError }}</p><template v-if="diagnostics"><p>{{ i18n.tsx.zalip._importer.subscriptionsSummary({ total: String(diagnostics.subscriptions.total), works: String(diagnostics.subscriptions.works) }) }}</p><p>{{ i18n.tsx.zalip._importer.availabilitySummary({ total: String(diagnostics.availability.total), pending: String(diagnostics.availability.pendingPublished) }) }}<small v-if="diagnostics.availability.oldestPendingAt" :class="$style.hint"> · {{ i18n.tsx.zalip._importer.oldestPending({ date: dateLabel(diagnostics.availability.oldestPendingAt) }) }}</small></p><p>{{ i18n.tsx.zalip._importer.releasesSummary({ total: String(diagnostics.releases.total), pending: String(diagnostics.releases.pendingPublished) }) }}<small v-if="diagnostics.releases.oldestPendingAt" :class="$style.hint"> · {{ i18n.tsx.zalip._importer.oldestPending({ date: dateLabel(diagnostics.releases.oldestPendingAt) }) }}</small></p></template></details>
 					<section :class="$style.panel">
 						<div :class="$style.sectionHeading"><div><h2>{{ i18n.ts.zalip._importer.runsHeading }}</h2><p>{{ i18n.ts.zalip._importer.runsHint }}</p></div><button type="button" class="_button" :class="$style.button" :disabled="runsLoading" @click="loadRuns"><i class="ti ti-refresh" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.refresh }}</button></div>
 						<p v-if="runsError" :class="$style.error" role="alert">{{ runsError }}</p>
@@ -94,7 +121,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<section v-if="selectedRun" :class="$style.panel">
 						<div :class="$style.sectionHeading"><div><h2>{{ importerStateLabel(selectedRun.state) }}</h2><p>{{ selectedRun.id }}</p></div><div :class="$style.actions"><button v-if="['queued', 'running'].includes(selectedRun.state)" type="button" class="_button" :class="$style.button" :disabled="busy" @click="runAction('pause')"><i class="ti ti-player-pause" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.pause }}</button><button v-if="selectedRun.state === 'paused'" type="button" class="_button" :class="$style.button" :disabled="busy" @click="runAction('resume')"><i class="ti ti-player-play" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.resume }}</button><button v-if="selectedRun.failed > 0 || selectedRun.state === 'failed'" type="button" class="_button" :class="$style.button" :disabled="busy || selectedRun.state === 'running'" @click="runAction('retry')"><i class="ti ti-refresh" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.retryFailed }}</button><button v-if="['queued', 'running', 'paused'].includes(selectedRun.state)" type="button" class="_button" :class="$style.danger" :disabled="busy" @click="runAction('cancel')">{{ i18n.ts.zalip._importer.cancel }}</button></div></div>
 						<p v-if="selectedRun.error" :class="$style.error" role="alert">{{ selectedRun.error }}</p>
-						<div :class="$style.rows"><article v-for="item in runItems" :key="item.id" :class="$style.itemRow"><div><strong>{{ item.position + 1 }}. {{ importerSourceLabel(item.ref.source) }} · {{ item.ref.externalId }}</strong><small>{{ item.ref.mediaType }} · {{ importerStateLabel(item.state) }}</small><p v-if="item.error" :class="$style.error">{{ item.error }}</p></div><span v-if="item.workId" :class="$style.hint">{{ i18n.tsx.zalip._importer.itemWorkId({ id: item.workId }) }}</span></article></div>
+						<div :class="$style.rows"><article v-for="item in runItems" :key="item.id" :class="$style.itemRow"><div :class="$style.grow"><strong>{{ item.position + 1 }}. {{ importerSourceLabel(item.ref.source) }} · {{ item.ref.externalId }}</strong><small>{{ item.ref.mediaType }} · {{ importerStateLabel(item.state) }}</small><p v-if="item.error" :class="$style.error">{{ item.error }}</p><div v-if="runWarnings.get(item.id)?.length" :class="$style.itemWarnings"><p><i class="ti ti-alert-triangle" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.warningsTitle }}</p><ul :class="$style.warnings" :aria-label="i18n.ts.zalip._importer.warningsTitle"><li v-for="warning in runWarnings.get(item.id)" :key="warning">{{ warning }}</li></ul></div></div><span v-if="item.workId" :class="$style.hint">{{ i18n.tsx.zalip._importer.itemWorkId({ id: item.workId }) }}</span></article></div>
 					</section>
 				</template>
 
@@ -108,6 +135,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<section :class="$style.panel">
 						<h2>{{ taxonomyForm.id ? i18n.ts.zalip._importer.editEntry : i18n.ts.zalip._importer.newEntry }}</h2>
 						<form :class="$style.form" @submit.prevent="saveTaxonomy"><label><span>{{ i18n.ts.zalip._importer.type }}</span><select v-model="taxonomyForm.type" :disabled="busy || (!!taxonomyForm.id)"><option v-for="type in taxonomyTypes" :key="type" :value="type">{{ taxonomyTypeLabel(type) }}</option></select></label><label><span>{{ i18n.ts.zalip._importer.name }}</span><input v-model.trim="taxonomyForm.name" required maxlength="256" :disabled="busy"></label><label><span>{{ i18n.ts.zalip._importer.slug }}</span><input v-model.trim="taxonomyForm.slug" maxlength="160" :placeholder="i18n.ts.zalip._importer.slugPlaceholder" :disabled="busy"></label><label><span>{{ i18n.ts.zalip._importer.imageUrl }}</span><input v-model.trim="taxonomyForm.imageUrl" type="url" maxlength="1024" :disabled="busy"></label><label v-if="taxonomyForm.type === 'category'" :class="$style.wide"><span>{{ i18n.ts.zalip._importer.parentCategory }}</span><select v-model="taxonomyForm.parentId" :disabled="busy"><option value="">{{ i18n.ts.zalip._importer.noParent }}</option><option v-for="entry in categories.filter(category => category.id !== taxonomyForm.id)" :key="entry.id" :value="entry.id">{{ entry.name }}</option></select></label><label :class="$style.wide"><span>{{ i18n.ts.zalip._importer.description }}</span><textarea v-model="taxonomyForm.description" rows="4" maxlength="8192" :disabled="busy"></textarea></label><div :class="[$style.actions, $style.wide]"><button type="submit" class="_button" :class="$style.primary" :disabled="busy || !taxonomyForm.name"><i class="ti ti-device-floppy" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.save }}</button><MkA v-if="taxonomyForm.id && taxonomyForm.slug" :to="`/zalip/taxonomy/${taxonomyForm.type}/${taxonomyForm.slug}`" :class="$style.button">{{ i18n.ts.zalip._importer.publicPage }}</MkA></div></form>
+						<details v-if="taxonomyForm.type === 'person'" :class="$style.fieldGroup" open><summary>{{ i18n.ts.zalip._importer.personFacts }}</summary><div :class="$style.form"><label v-for="key in personFactKeys" :key="key"><span>{{ taxonomyFactLabel(key) }}</span><input v-model.trim="personFacts[key]" :type="key === 'homepage' ? 'url' : 'text'" :maxlength="key === 'birthday' || key === 'deathday' ? 32 : key === 'homepage' ? 1024 : 256" :disabled="busy"></label><label :class="$style.wide"><span>{{ i18n.ts.zalip._importer.aliases }}</span><textarea v-model="personFacts.aliases" rows="3" maxlength="7710" :placeholder="i18n.ts.zalip._importer.aliasesHint" :disabled="busy"></textarea></label><label :class="$style.wide"><span>{{ i18n.ts.zalip._importer.biography }}</span><textarea v-model="personFacts.biography" rows="6" maxlength="16384" :disabled="busy"></textarea></label></div><div :class="$style.actions"><button type="button" class="_button" :class="$style.primary" :disabled="busy || !taxonomyForm.name" @click="saveTaxonomy">{{ i18n.ts.zalip._importer.save }}</button></div><template v-if="taxonomyForm.id"><p :class="$style.hint">{{ i18n.ts.zalip._importer.personEnrichmentHint }}</p><div :class="$style.actions"><button v-for="source in personSources" :key="source" type="button" class="_button" :class="$style.button" :disabled="busy || taxonomyDirty" @click="enrichPerson(source)"><i class="ti ti-refresh" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.personEnrichment }} · {{ importerSourceLabel(source) }}</button></div></template></details>
 						<fieldset v-if="taxonomyForm.type === 'category'" :class="$style.categoryRules">
 							<legend>{{ i18n.ts.zalip._importer.categoryRules }}</legend>
 							<label :class="$style.check"><input v-model="categoryRules.enabled" type="checkbox" :disabled="busy">{{ i18n.ts.zalip._importer.enableCategoryRules }}</label>
@@ -122,13 +150,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 							</div>
 							<button type="button" class="_button" :class="$style.button" :disabled="busy || !taxonomyForm.name" @click="saveTaxonomy">{{ i18n.ts.zalip._importer.saveRules }}</button>
 						</fieldset>
+						<details v-if="taxonomyForm.id && taxonomyForm.type === 'category'" :class="$style.fieldGroup"><summary>{{ i18n.ts.zalip._importer.recalculate }}</summary><p :class="$style.hint">{{ i18n.ts.zalip._importer.recalculateHint }}</p><div :class="$style.form"><label><span>{{ i18n.ts.zalip._importer.task }}</span><select v-model="recalculateForm.mode" :disabled="busy" @change="resetRecalculate"><option value="selected">{{ i18n.ts.zalip._importer.recalculateSelected }}</option><option value="catalogue">{{ i18n.ts.zalip._importer.recalculateCatalogue }}</option></select></label><label v-if="recalculateForm.mode === 'selected'" :class="$style.wide"><span>{{ i18n.ts.zalip._importer.recalculateWorkIds }}</span><textarea v-model="recalculateForm.workIds" rows="3" maxlength="3300" :disabled="busy"></textarea></label></div><div :class="$style.actions"><button type="button" class="_button" :class="$style.button" :disabled="busy || taxonomyDirty" @click="recalculateCategory(false)">{{ i18n.ts.zalip._importer.recalculate }}</button><button v-if="recalculateForm.mode === 'catalogue' && recalculateCursor" type="button" class="_button" :class="$style.button" :disabled="busy || taxonomyDirty" @click="recalculateCategory(true)">{{ i18n.ts.zalip._importer.recalculateContinue }}</button></div><p v-if="recalculateResult" :class="$style.hint" role="status">{{ i18n.tsx.zalip._importer.recalculateResult({ processed: String(recalculateResult.processed), matched: String(recalculateResult.matched), skipped: String(recalculateResult.skipped) }) }}<span v-if="recalculateForm.mode === 'catalogue' && !recalculateCursor"> · {{ i18n.ts.zalip._importer.recalculateDone }}</span></p></details>
 						<template v-if="taxonomyForm.id"><h3>{{ i18n.ts.zalip._importer.linkedWorks }}</h3><form :class="$style.form" @submit.prevent="linkTaxonomy"><label><span>{{ i18n.ts.zalip._importer.workId }}</span><input v-model.trim="membership.workId" required maxlength="32" :placeholder="i18n.ts.zalip._importer.workIdPlaceholder" :disabled="busy"></label><label><span>{{ i18n.ts.zalip._importer.role }}</span><input v-model.trim="membership.role" maxlength="64" :placeholder="i18n.ts.zalip._importer.rolePlaceholder" :disabled="busy"></label><label><span>{{ i18n.ts.zalip._importer.character }}</span><input v-model.trim="membership.character" maxlength="256" :disabled="busy"></label><label><span>{{ i18n.ts.zalip._importer.position }}</span><input v-model.number="membership.position" type="number" min="0" max="100000" :disabled="busy"></label><button type="submit" class="_button" :class="$style.button" :disabled="busy || taxonomyWorksLoading"><i class="ti ti-link" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.linkWork }}</button></form><p v-if="taxonomyWorksLoading" :class="$style.hint" role="status">{{ i18n.ts.zalip._importer.loading }}</p><div :class="$style.rows"><article v-for="work in taxonomyWorks" :key="`${work.id}:${work.role ?? ''}`" :class="$style.itemRow"><div><strong>{{ work.title }}</strong><small>{{ [work.releaseYear, work.role, work.character].filter(Boolean).join(' · ') }}</small></div><button type="button" class="_button" :class="$style.danger" :disabled="busy || taxonomyWorksLoading" :aria-label="i18n.tsx.zalip._importer.unlinkWork({ name: work.title })" @click="unlinkTaxonomy(work)"><i class="ti ti-unlink" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.unlink }}</button></article></div></template>
 					</section>
 				</template>
 
 				<template v-else>
-					<section :class="$style.panel"><div :class="$style.sectionHeading"><div><h2>{{ i18n.ts.zalip._importer.schedulesHeading }}</h2><p>{{ i18n.ts.zalip._importer.schedulesHint }}</p></div><button type="button" class="_button" :class="$style.primary" :disabled="busy" @click="resetProfile"><i class="ti ti-plus" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.newSchedule }}</button></div><p v-if="profilesError" :class="$style.error" role="alert">{{ profilesError }}</p><div :class="$style.rows"><article v-for="profile in profiles" :key="profile.id" :class="$style.itemRow"><div :class="$style.grow"><strong>{{ profile.name }}</strong><small>{{ importerSourceLabel(profile.source) }} · {{ profileModeLabel(profile.mode) }} · {{ profile.enabled ? i18n.ts.zalip._importer.enabled : i18n.ts.zalip._importer.disabled }} · {{ i18n.tsx.zalip._importer.intervalSummary({ count: String(profile.intervalMinutes) }) }}</small><small>{{ i18n.tsx.zalip._importer.scheduleDates({ last: dateLabel(profile.lastRunAt), next: dateLabel(profile.nextRunAt) }) }}</small><p v-if="profile.lastError" :class="$style.error">{{ profile.lastError }}</p></div><div :class="$style.actions"><button type="button" class="_button" :class="$style.button" :disabled="busy" @click="editProfile(profile)">{{ i18n.ts.zalip._importer.edit }}</button><button type="button" class="_button" :class="$style.button" :disabled="busy" @click="runProfile(profile)"><i class="ti ti-player-play" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.run }}</button></div></article></div><p v-if="!profiles.length && !profilesError" :class="$style.hint">{{ i18n.ts.zalip._importer.noSchedules }}</p></section>
-					<section :class="$style.panel"><h2>{{ profileForm.id ? i18n.ts.zalip._importer.editSchedule : i18n.ts.zalip._importer.newSchedule }}</h2><form :class="$style.form" @submit.prevent="saveProfile"><label><span>{{ i18n.ts.zalip._importer.name }}</span><input v-model.trim="profileForm.name" required maxlength="160" :disabled="busy"></label><label><span>{{ i18n.ts.zalip._importer.source }}</span><select v-model="profileForm.source" :disabled="busy"><option v-for="source in importerSources" :key="source" :value="source" :disabled="!sourceStatus(source)?.configured">{{ importerSourceLabel(source) }}</option></select></label><label><span>{{ i18n.ts.zalip._importer.task }}</span><select v-model="profileForm.mode" :disabled="busy"><option value="metadata">{{ i18n.ts.zalip._importer.metadataMode }}</option><option value="availability">{{ i18n.ts.zalip._importer.availabilityMode }}</option><option value="collection">{{ i18n.ts.zalip._importer.collectionMode }}</option></select></label><label><span>{{ i18n.ts.zalip._importer.interval }}</span><input v-model.number="profileForm.intervalMinutes" type="number" required min="15" max="43200" :disabled="busy"></label><label v-if="profileForm.mode === 'collection'" :class="$style.wide"><span>{{ i18n.ts.zalip._importer.collectionId }}</span><input v-model.trim="profileForm.collectionId" required maxlength="128" pattern="[A-Za-z0-9_-]+" :disabled="busy"></label><label :class="$style.wide"><span>{{ i18n.ts.zalip._importer.categories }}</span><select v-model="profileForm.categoryIds" multiple size="3" :disabled="busy"><option v-for="entry in categories" :key="entry.id" :value="entry.id">{{ entry.name }}</option></select></label><fieldset :class="[$style.locks, $style.wide]"><legend>{{ i18n.ts.zalip._importer.lockedFields }}</legend><label v-for="field in importerFields" :key="field"><input v-model="profileForm.lockedFields" type="checkbox" :value="field" :disabled="busy">{{ importerFieldLabel(field) }}</label></fieldset><label :class="[$style.check, $style.wide]"><input v-model="profileForm.enabled" type="checkbox" :disabled="busy">{{ i18n.ts.zalip._importer.enableSchedule }}</label><p v-if="profileCapabilityWarning" :class="[$style.hint, $style.wide]">{{ profileCapabilityWarning }}</p><button type="submit" class="_button" :class="$style.primary" :disabled="busy || !profileForm.name || !!profileCapabilityWarning"><i class="ti ti-device-floppy" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.saveSchedule }}</button></form></section>
+					<section :class="$style.panel">
+						<div :class="$style.sectionHeading"><div><h2>{{ i18n.ts.zalip._importer.schedulesHeading }}</h2><p>{{ i18n.ts.zalip._importer.schedulesHint }}</p></div><button type="button" class="_button" :class="$style.primary" :disabled="busy" @click="resetProfile()"><i class="ti ti-plus" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.newSchedule }}</button></div>
+						<p v-if="profilesError" :class="$style.error" role="alert">{{ profilesError }}</p><p :class="$style.hint">{{ i18n.ts.zalip._importer.activeProfileHint }}</p>
+						<div :class="$style.rows"><article v-for="profile in profiles" :key="profile.id" :class="$style.itemRow"><div :class="$style.grow"><strong>{{ profile.name }}</strong><small>{{ importerSourceLabel(profile.source) }} · {{ profileModeLabel(profile.mode) }} · {{ profile.enabled ? i18n.ts.zalip._importer.enabled : i18n.ts.zalip._importer.disabled }} · {{ i18n.tsx.zalip._importer.intervalSummary({ count: String(profile.intervalMinutes) }) }}</small><small>{{ i18n.tsx.zalip._importer.scheduleDates({ last: dateLabel(profile.lastRunAt), next: dateLabel(profile.nextRunAt) }) }}</small><p v-if="profile.lastError" :class="$style.error">{{ profile.lastError }}</p></div><div :class="$style.actions"><button type="button" class="_button" :class="$style.button" :disabled="busy" @click="editProfile(profile)">{{ i18n.ts.zalip._importer.edit }}</button><button type="button" class="_button" :class="$style.button" :disabled="busy || profileActive(profile.id)" @click="runProfile(profile)"><i class="ti ti-player-play" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.run }}</button><button type="button" class="_button" :class="$style.button" :disabled="busy" @click="profileAction(profile, profile.enabled ? 'disable' : 'enable')">{{ profile.enabled ? i18n.ts.zalip._importer.disableProfile : i18n.ts.zalip._importer.enableProfile }}</button><button type="button" class="_button" :class="$style.button" :disabled="busy || profileActive(profile.id)" @click="profileAction(profile, 'reset-cursor')">{{ i18n.ts.zalip._importer.resetCursor }}</button><button type="button" class="_button" :class="$style.danger" :disabled="busy || profileActive(profile.id)" @click="profileAction(profile, 'delete')"><i class="ti ti-trash" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.deleteSchedule }}</button></div></article></div><p v-if="!profiles.length && !profilesError" :class="$style.hint">{{ i18n.ts.zalip._importer.noSchedules }}</p>
+					</section>
+					<section :class="$style.panel"><h2>{{ profileForm.id ? i18n.ts.zalip._importer.editSchedule : i18n.ts.zalip._importer.newSchedule }}</h2>
+						<form :class="$style.form" @submit.prevent="saveProfile"><label><span>{{ i18n.ts.zalip._importer.name }}</span><input v-model.trim="profileForm.name" required maxlength="120" :disabled="busy"></label><label><span>{{ i18n.ts.zalip._importer.source }}</span><select v-model="profileForm.source" :disabled="busy || profileOptionsLocked"><option v-for="source in importerSources" :key="source" :value="source" :disabled="!sourceStatus(source)?.configured">{{ importerSourceLabel(source) }}</option></select></label><label><span>{{ i18n.ts.zalip._importer.task }}</span><select v-model="profileForm.mode" :disabled="busy || profileOptionsLocked"><option value="metadata">{{ i18n.ts.zalip._importer.metadataMode }}</option><option value="availability">{{ i18n.ts.zalip._importer.availabilityMode }}</option><option value="collection">{{ i18n.ts.zalip._importer.collectionMode }}</option><option value="discovery" :disabled="profileForm.source !== 'collaps' || !sourceStatus('collaps')?.capabilities.updates">{{ i18n.ts.zalip._importer.discoveryMode }}</option></select></label><label><span>{{ i18n.ts.zalip._importer.interval }}</span><input v-model.number="profileForm.intervalMinutes" type="number" required min="15" max="43200" :disabled="busy"></label><label v-if="profileForm.mode === 'collection'" :class="$style.wide"><span>{{ i18n.ts.zalip._importer.collectionId }}</span><input v-model.trim="profileForm.collectionId" required maxlength="100" pattern="[A-Za-z0-9_-]+" :disabled="busy || profileOptionsLocked"></label><label :class="$style.wide"><span>{{ i18n.ts.zalip._importer.categories }}</span><select v-model="profileForm.categoryIds" multiple size="3" :disabled="busy"><option v-for="entry in categories" :key="entry.id" :value="entry.id">{{ entry.name }}</option></select></label><details :class="[$style.fieldGroup, $style.wide]"><summary>{{ i18n.ts.zalip._importer.lockedFields }}</summary><fieldset v-for="group in importerFieldGroups" :key="group.id" :class="[$style.locks, $style.lockGroup]"><legend>{{ importerGroupLabel(group.id) }}</legend><label v-for="field in group.fields" :key="field"><input v-model="profileForm.lockedFields" type="checkbox" :value="field" :disabled="busy">{{ importerFieldLabel(field) }}</label></fieldset></details><label :class="[$style.check, $style.wide]"><input v-model="profileForm.enabled" type="checkbox" :disabled="busy">{{ i18n.ts.zalip._importer.enableSchedule }}</label><p v-if="profileCapabilityWarning" :class="[$style.hint, $style.wide]">{{ profileCapabilityWarning }}</p><button type="submit" class="_button" :class="$style.primary" :disabled="busy || !profileForm.name || !!profileCapabilityWarning"><i class="ti ti-device-floppy" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.saveSchedule }}</button></form>
+					</section>
 				</template>
 			</template>
 		</main>
@@ -137,10 +172,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { i18n } from '@/i18n.js';
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, useTemplateRef, watch } from 'vue';
-import type { ImportMediaType, ImportPreview, ImportProfile, ImportRef, ImportRun, ImportRunItem, ImportSearchItem, ImportSource, ImportSourceStatus, TaxonomyEntry, TaxonomyType, TaxonomyWork } from '@/utility/zalip-importer.js';
-import { formatImporterValue, importerFieldLabel, importerFields, importerImageUrl, importerProgress, importerReference, importerReferenceKey, importerSourceLabel, importerSources, importerStateLabel, splitImporterReferenceLines, taxonomyTypeLabel, taxonomyTypes } from '@/utility/zalip-importer.js';
+import type { ImportField, ImportMediaType, ImportPreview, ImportProfile, ImportRef, ImportRun, ImportRunItem, ImportSearchItem, ImportSource, ImportSourceCheck, ImportSourceStatus, ImportWorkState, TaxonomyEntry, TaxonomyType, TaxonomyWork } from '@/utility/zalip-importer.js';
+import { i18n } from '@/i18n.js';
+import { formatImporterValue, importerFieldGroups, importerFieldLabel, importerFiltersValid, importerGroupLabel, importerImageUrl, importerImdbId, importerOptions, importerProgress, importerReference, importerReferenceKey, importerSelection, importerSourceLabel, importerSources, importerStateLabel, importerWarningLabels, importerWorkIds, splitImporterReferenceLines, taxonomyBaseChanges, taxonomyFactLabel, taxonomyPersonChanges, taxonomyTypeLabel, taxonomyTypes } from '@/utility/zalip-importer.js';
 import { iAmAdmin } from '@/i.js';
 import { definePage } from '@/page.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
@@ -152,6 +187,9 @@ const tab = ref<Tab>('import');
 const sources = ref<ImportSourceStatus[]>([]);
 const sourcesLoading = ref(true);
 const sourcesError = ref('');
+const sourceChecks = reactive<Partial<Record<ImportSource, ImportSourceCheck>>>({});
+const sourceChecking = reactive<Partial<Record<ImportSource, boolean>>>({});
+const sourceCheckErrors = reactive<Partial<Record<ImportSource, string>>>({});
 const busy = ref(false);
 const message = ref('');
 const actionError = ref('');
@@ -166,9 +204,17 @@ const selectedRefs = ref<ImportRef[]>([]);
 const batch = reactive({ source: 'tmdb' as ImportSource, mediaType: 'movie' as ImportMediaType, references: '' });
 const categoryIds = ref<string[]>([]);
 const lockedFields = ref<string[]>([]);
+const importSelection = reactive(importerSelection());
+const profileSelection = reactive(importerSelection());
+const workStateId = ref('');
+const workState = ref<ImportWorkState | null>(null);
+const persistedLocks = ref<string[]>([]);
+const workStateLoading = ref(false);
+const workStateError = ref('');
 const preview = ref<ImportPreview | null>(null);
 const previewLoading = ref(false);
 const previewError = ref('');
+const previewOptionsKey = ref('');
 const previewPanel = useTemplateRef('previewPanel');
 const runs = ref<ImportRun[]>([]);
 const runsLoading = ref(false);
@@ -177,6 +223,10 @@ const selectedRun = ref<ImportRun | null>(null);
 const requestedRunId = ref<string | null>(null);
 const runLoading = ref(false);
 const runItems = ref<ImportRunItem[]>([]);
+type DeliveryDiagnostics = { subscriptions: { total: number; works: number }; availability: { total: number; pendingPublished: number; oldestPendingAt: string | null }; releases: { total: number; pendingPublished: number; oldestPendingAt: string | null } };
+const diagnostics = ref<DeliveryDiagnostics | null>(null);
+const diagnosticsLoading = ref(false);
+const diagnosticsError = ref('');
 const taxonomyType = ref<TaxonomyType>('person');
 const taxonomyQuery = ref('');
 const taxonomyEntries = ref<TaxonomyEntry[]>([]);
@@ -187,6 +237,14 @@ const taxonomyLoading = ref(false);
 const taxonomyError = ref('');
 const taxonomyForm = reactive({ id: '', type: 'person' as TaxonomyType, name: '', slug: '', description: '', imageUrl: '', parentId: '' });
 const taxonomyData = ref<Record<string, unknown>>({});
+const taxonomyBaseEntry = ref<TaxonomyEntry | null>(null);
+const taxonomyExternalIds = ref<Record<string, unknown>>({});
+const personFactKeys = ['originalName', 'birthday', 'deathday', 'placeOfBirth', 'homepage'] as const;
+const personFacts = reactive({ originalName: '', birthday: '', deathday: '', placeOfBirth: '', homepage: '', biography: '', aliases: '' });
+const recalculateForm = reactive({ mode: 'selected', workIds: '' });
+const recalculateCursor = ref<string | null>(null);
+const recalculateResult = ref<{ processed: number; matched: number; skipped: number; nextCursor: string | null } | null>(null);
+const taxonomySavedSnapshot = ref('');
 const categoryRules = reactive({ enabled: false, all: false, kinds: [] as string[], genres: '', countries: '', yearFrom: '', yearTo: '' });
 const workKinds = [{ value: 'movie', title: i18n.ts.zalip._importer.movie }, { value: 'series', title: i18n.ts.zalip._importer.series }, { value: 'anime', title: i18n.ts.zalip._importer.anime }, { value: 'animation', title: i18n.ts.zalip._importer.animation }];
 const membership = reactive({ workId: '', role: '', character: '', position: 0 });
@@ -200,16 +258,26 @@ let taxonomyRevision = 0;
 let taxonomyWorksRevision = 0;
 let previewRevision = 0;
 let runRevision = 0;
+let workStateRevision = 0;
 
 function sourceStatus(source: ImportSource): ImportSourceStatus | undefined { return sources.value.find(item => item.source === source); }
 
 const searchableSources = computed(() => sources.value.filter(source => source.configured && source.capabilities.search));
 const canSearch = computed(() => sourceStatus(searchForm.source)?.configured && sourceStatus(searchForm.source)?.capabilities.search);
+const currentSelection = computed(() => tab.value === 'schedules' ? profileSelection : importSelection);
+const currentPrimarySources = computed(() => tab.value === 'schedules' ? [profileForm.source] : [...new Set([batch.source, searchForm.source, ...selectedRefs.value.map(item => item.source), ...(preview.value ? [preview.value.record.ref.source] : [])])]);
+const previewStale = computed(() => !!preview.value && previewOptionsKey.value !== JSON.stringify(importerOptions(importSelection)));
+const previewWarnings = computed(() => importerWarningLabels(preview.value?.warnings));
+const runWarnings = computed(() => new Map(runItems.value.map(item => [item.id, importerWarningLabels(item.warnings)])));
+const profileOptionsLocked = computed(() => tab.value === 'schedules' && profileActive(profileForm.id));
+const personSources = computed(() => importerSources.filter((source): source is 'tmdb' | 'kinopoisk' => (source === 'tmdb' || source === 'kinopoisk') && sourceStatus(source)?.configured === true && /^[1-9]\d*$/u.test(String(taxonomyExternalIds.value[source] ?? ''))));
+const taxonomyDirty = computed(() => taxonomySavedSnapshot.value !== taxonomySnapshot());
 const profileCapabilityWarning = computed(() => {
 	const source = sourceStatus(profileForm.source);
 	if (!source?.configured) return i18n.ts.zalip._importer.sourceNotConfigured;
 	if (profileForm.mode === 'collection' && !source.capabilities.collections) return i18n.ts.zalip._importer.collectionsUnsupported;
 	if (profileForm.mode === 'availability' && !['alloha', 'collaps'].includes(profileForm.source)) return i18n.ts.zalip._importer.availabilityUnsupported;
+	if (profileForm.mode === 'discovery' && (profileForm.source !== 'collaps' || !source.capabilities.updates)) return i18n.ts.zalip._importer.discoveryUnsupported;
 	return '';
 });
 
@@ -231,7 +299,55 @@ function dateLabel(value: string | null): string {
 
 function taxonomyIcon(type: TaxonomyType): string { return ({ person: 'ti ti-user', studio: 'ti ti-building', genre: 'ti ti-tag', category: 'ti ti-folders', collection: 'ti ti-stack-2' })[type]; }
 
-function profileModeLabel(mode: ImportProfile['mode']): string { return ({ metadata: i18n.ts.zalip._importer.metadata, availability: i18n.ts.zalip._importer.availabilityMode, collection: i18n.ts.zalip._importer.collectionMode })[mode]; }
+function profileModeLabel(mode: ImportProfile['mode']): string { return ({ metadata: i18n.ts.zalip._importer.metadata, availability: i18n.ts.zalip._importer.availabilityMode, collection: i18n.ts.zalip._importer.collectionMode, discovery: i18n.ts.zalip._importer.discoveryMode })[mode]; }
+
+function profileActive(id: string): boolean { return !!id && runs.value.some(run => run.profileId === id && ['queued', 'running', 'paused'].includes(run.state)); }
+
+// Vue refs can change while a confirmation is open; re-read them outside TS's pre-await narrowing.
+function actionBusy(): boolean { return busy.value; }
+
+function currentRunId(): string | undefined { return selectedRun.value?.id; }
+
+function taxonomyContextReady(entryId: string): boolean { return !busy.value && !taxonomyDirty.value && taxonomyForm.id === entryId; }
+
+function taxonomyLinkReady(entryId: string): boolean { return !busy.value && !taxonomyWorksLoading.value && taxonomyForm.id === entryId; }
+
+function workOrigin(field: ImportField): string {
+	const source = workState.value?.fields.find(item => item.field === field)?.source;
+	return source && importerSources.includes(source as ImportSource) ? importerSourceLabel(source as ImportSource) : source ?? '';
+}
+
+function toggleFieldGroup(fields: ImportField[]): void {
+	if (busy.value || profileOptionsLocked.value) return;
+	const selection = currentSelection.value;
+	selection.fields = fields.every(field => selection.fields.includes(field)) ? selection.fields.filter(field => !fields.includes(field)) : [...new Set([...selection.fields, ...fields])];
+}
+
+async function checkSource(source: ImportSource): Promise<void> {
+	if (sourceChecking[source] || !sourceStatus(source)?.configured) return;
+	sourceChecking[source] = true;
+	sourceCheckErrors[source] = '';
+	try { sourceChecks[source] = await misskeyApiZalip<ImportSourceCheck>('zalip/admin/importer/sources/check', { source }); } catch (error) { sourceCheckErrors[source] = errorMessage(error); } finally { sourceChecking[source] = false; }
+}
+
+async function loadWorkState(): Promise<void> {
+	if (busy.value || workStateLoading.value || !workStateId.value) return;
+	const workId = workStateId.value;
+	const revision = ++workStateRevision;
+	workStateLoading.value = true;
+	workStateError.value = '';
+	workState.value = null;
+	try { const result = await misskeyApiZalip<ImportWorkState>('zalip/admin/importer/work-state/show', { workId }); if (revision === workStateRevision && workId === workStateId.value) { workState.value = result; persistedLocks.value = [...result.locks]; } } catch (error) { if (revision === workStateRevision) workStateError.value = errorMessage(error); } finally { if (revision === workStateRevision) workStateLoading.value = false; }
+}
+
+async function saveWorkLocks(): Promise<void> {
+	if (busy.value || workStateLoading.value || !workState.value || workState.value.workId !== workStateId.value) return;
+	const workId = workState.value.workId;
+	const locks = [...persistedLocks.value];
+	busy.value = true;
+	workStateError.value = '';
+	try { const result = await misskeyApiZalip<ImportWorkState>('zalip/admin/importer/work-state/save', { workId, lockedFields: locks }); if (workId === workStateId.value) { workState.value = result; persistedLocks.value = [...result.locks]; } if (preview.value?.workId === workId) { previewOptionsKey.value = ''; } message.value = i18n.ts.zalip._importer.locksSaved; } catch (error) { workStateError.value = errorMessage(error); } finally { busy.value = false; }
+}
 
 function runModeLabel(mode: ImportRun['mode']): string { return ({ import: i18n.ts.zalip._importer.import, sync: i18n.ts.zalip._importer.update, availability: i18n.ts.zalip._importer.availabilityMode })[mode]; }
 
@@ -273,6 +389,7 @@ function toggleLock(field: string): void { lockedFields.value = lockedFields.val
 function batchReferences(): ImportRef[] | null {
 	const lines = splitImporterReferenceLines(batch.references);
 	if (lines.length === 0 || lines.length > 100) { actionError.value = i18n.ts.zalip._importer.errorBatchSize; return null; }
+	if (batch.source === 'alloha' && lines.some(value => importerImdbId(value) || value.startsWith('imdb:'))) { actionError.value = i18n.ts.zalip._importer.imdbAllohaUnsupported; return null; }
 	const refs = lines.map(value => importerReference(batch.source, batch.mediaType, value));
 	if (refs.some(value => value === null)) { actionError.value = i18n.ts.zalip._importer.errorReferences; return null; }
 	return refs as ImportRef[];
@@ -283,6 +400,8 @@ async function previewBatch(): Promise<void> { const refs = batchReferences(); i
 async function queueBatch(): Promise<void> { const refs = batchReferences(); if (refs) await queueReferences(refs); }
 
 async function showPreview(value: ImportRef): Promise<void> {
+	if (busy.value || !importerFiltersValid(importSelection)) { if (!busy.value) actionError.value = i18n.ts.zalip._importer.invalidFilters; return; }
+	const options = importerOptions(importSelection);
 	const revision = ++previewRevision;
 	previewLoading.value = true;
 	previewError.value = '';
@@ -291,17 +410,19 @@ async function showPreview(value: ImportRef): Promise<void> {
 	await nextTick();
 	previewPanel.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 	try {
-		const result = await misskeyApiZalip<ImportPreview>('zalip/admin/importer/preview', { ref: value });
-		if (revision === previewRevision) preview.value = result;
+		const result = await misskeyApiZalip<ImportPreview>('zalip/admin/importer/preview', { ref: { ...value }, options });
+		if (revision === previewRevision) { preview.value = result; previewOptionsKey.value = JSON.stringify(options); if (result.workId) workStateId.value = result.workId; }
 	} catch (error) { if (revision === previewRevision) previewError.value = errorMessage(error); } finally { if (revision === previewRevision) previewLoading.value = false; }
 }
 
 async function queueReferences(refs: ImportRef[]): Promise<void> {
 	if (busy.value || refs.length === 0 || refs.length > 100) return;
+	if (!importerFiltersValid(importSelection)) { actionError.value = i18n.ts.zalip._importer.invalidFilters; return; }
+	const params = { refs: refs.map(value => ({ ...value })), mode: 'import', lockedFields: [...lockedFields.value], categoryIds: [...categoryIds.value], options: importerOptions(importSelection) };
 	busy.value = true;
 	actionError.value = '';
 	try {
-		const result = await misskeyApiZalip<{ id: string; state: string }>('zalip/admin/importer/runs/create', { refs, mode: 'import', lockedFields: lockedFields.value, categoryIds: categoryIds.value });
+		const result = await misskeyApiZalip<{ id: string; state: string }>('zalip/admin/importer/runs/create', params);
 		message.value = i18n.ts.zalip._importer.runCreated;
 		selectedRefs.value = [];
 		tab.value = 'runs';
@@ -314,6 +435,13 @@ async function loadRuns(): Promise<void> {
 	runsLoading.value = true;
 	runsError.value = '';
 	try { runs.value = (await misskeyApiZalip<{ runs: ImportRun[] }>('zalip/admin/importer/runs/list')).runs; } catch (error) { runsError.value = errorMessage(error); } finally { runsLoading.value = false; }
+}
+
+async function loadDiagnostics(): Promise<void> {
+	if (diagnosticsLoading.value) return;
+	diagnosticsLoading.value = true;
+	diagnosticsError.value = '';
+	try { diagnostics.value = await misskeyApiZalip<DeliveryDiagnostics>('zalip/admin/importer/diagnostics'); } catch (error) { diagnosticsError.value = errorMessage(error); } finally { diagnosticsLoading.value = false; }
 }
 
 async function loadRun(runId: string, polling = false): Promise<void> {
@@ -335,8 +463,9 @@ async function loadRun(runId: string, polling = false): Promise<void> {
 
 async function runAction(action: 'pause' | 'resume' | 'retry' | 'cancel'): Promise<void> {
 	if (!selectedRun.value || busy.value) return;
-	if (action === 'cancel') { const result = await os.confirm({ type: 'warning', title: i18n.ts.zalip._importer.cancelRunTitle, text: i18n.ts.zalip._importer.cancelRunText }); if (result.canceled) return; }
 	const runId = selectedRun.value.id;
+	if (action === 'cancel') { const result = await os.confirm({ type: 'warning', title: i18n.ts.zalip._importer.cancelRunTitle, text: i18n.ts.zalip._importer.cancelRunText }); if (result.canceled) return; }
+	if (actionBusy() || currentRunId() !== runId) return;
 	busy.value = true;
 	actionError.value = '';
 	try { await misskeyApiZalip('zalip/admin/importer/runs/action', { runId, action }); await Promise.all([loadRuns(), loadRun(runId)]); } catch (error) { actionError.value = errorMessage(error); } finally { busy.value = false; }
@@ -353,16 +482,39 @@ async function loadTaxonomy(): Promise<void> {
 	try { const result = await misskeyApiZalip<{ entries: TaxonomyEntry[] }>('zalip/admin/importer/taxonomy/list', { type: taxonomyType.value, query: taxonomyQuery.value, limit: 100 }); if (revision === taxonomyRevision) taxonomyEntries.value = result.entries; } catch (error) { if (revision === taxonomyRevision) taxonomyError.value = errorMessage(error); } finally { if (revision === taxonomyRevision) taxonomyLoading.value = false; }
 }
 
-function resetTaxonomyForm(): void { if (busy.value) return; taxonomyWorksRevision++; taxonomyWorksLoading.value = false; Object.assign(taxonomyForm, { id: '', type: taxonomyType.value, name: '', slug: '', description: '', imageUrl: '', parentId: '' }); taxonomyWorks.value = []; taxonomyData.value = {}; Object.assign(categoryRules, { enabled: false, all: false, kinds: [], genres: '', countries: '', yearFrom: '', yearTo: '' }); }
+function resetRecalculate(): void { recalculateCursor.value = null; recalculateResult.value = null; }
+
+function taxonomySnapshot(): string { return JSON.stringify({ form: taxonomyForm, facts: personFacts, rules: categoryRules }); }
+
+function resetTaxonomyForm(): void {
+	if (busy.value) return;
+	taxonomyWorksRevision++;
+	taxonomyWorksLoading.value = false;
+	Object.assign(taxonomyForm, { id: '', type: taxonomyType.value, name: '', slug: '', description: '', imageUrl: '', parentId: '' });
+	taxonomyWorks.value = [];
+	taxonomyData.value = {};
+	taxonomyBaseEntry.value = null;
+	taxonomyExternalIds.value = {};
+	for (const key of Object.keys(personFacts) as (keyof typeof personFacts)[]) personFacts[key] = '';
+	Object.assign(categoryRules, { enabled: false, all: false, kinds: [], genres: '', countries: '', yearFrom: '', yearTo: '' });
+	resetRecalculate();
+	taxonomySavedSnapshot.value = taxonomySnapshot();
+}
 
 async function editTaxonomy(entry: TaxonomyEntry, fromSave = false): Promise<void> {
 	if (busy.value && !fromSave) return;
 	taxonomyWorks.value = [];
 	Object.assign(taxonomyForm, { id: entry.id, type: entry.type, name: entry.name, slug: entry.slug, description: entry.description ?? '', imageUrl: entry.imageUrl ?? '', parentId: entry.parentId ?? '' });
 	taxonomyData.value = { ...entry.data };
+	taxonomyBaseEntry.value = { ...entry };
+	taxonomyExternalIds.value = { ...entry.externalIds };
 	const rules = typeof entry.data?.rules === 'object' && entry.data.rules !== null ? entry.data.rules as Record<string, unknown> : null;
 	const strings = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 	Object.assign(categoryRules, { enabled: !!rules && Object.keys(rules).length > 0, all: rules?.all === true, kinds: strings(rules?.kinds), genres: strings(rules?.genres).join(', '), countries: strings(rules?.countries).join(', '), yearFrom: typeof rules?.yearFrom === 'number' ? String(rules.yearFrom) : '', yearTo: typeof rules?.yearTo === 'number' ? String(rules.yearTo) : '' });
+	for (const key of [...personFactKeys, 'biography'] as const) personFacts[key] = typeof entry.data?.[key] === 'string' ? entry.data[key] as string : '';
+	personFacts.aliases = strings(entry.data?.aliases).join('\n');
+	resetRecalculate();
+	taxonomySavedSnapshot.value = taxonomySnapshot();
 	Object.assign(membership, { workId: '', role: '', character: '', position: 0 });
 	await loadTaxonomyWorks(entry.id);
 }
@@ -375,6 +527,8 @@ async function loadTaxonomyWorks(entryId: string): Promise<void> {
 
 async function saveTaxonomy(): Promise<void> {
 	if (busy.value) return;
+	const aliases = [...new Set(personFacts.aliases.split(/\r?\n/u).map(value => value.trim()).filter(Boolean))];
+	if (taxonomyForm.type === 'person' && (aliases.length > 30 || aliases.some(value => value.length > 256))) { actionError.value = i18n.ts.zalip._importer.invalidAliases; return; }
 	const yearFrom = categoryRules.yearFrom === '' ? undefined : Number(categoryRules.yearFrom);
 	const yearTo = categoryRules.yearTo === '' ? undefined : Number(categoryRules.yearTo);
 	if (taxonomyForm.type === 'category' && categoryRules.enabled && ([yearFrom, yearTo].some(year => year !== undefined && (!Number.isInteger(year) || year < 1888 || year > 3000)) || (yearFrom !== undefined && yearTo !== undefined && yearFrom > yearTo))) { actionError.value = i18n.ts.zalip._importer.invalidYears; return; }
@@ -382,11 +536,36 @@ async function saveTaxonomy(): Promise<void> {
 	actionError.value = '';
 	try {
 		const list = (value: string) => Array.from(new Set(value.split(',').map(item => item.trim()).filter(Boolean)));
-		const entry = await misskeyApiZalip<TaxonomyEntry>('zalip/admin/importer/taxonomy/save', { entryId: taxonomyForm.id || undefined, type: taxonomyForm.type, name: taxonomyForm.name, slug: taxonomyForm.slug || undefined, description: taxonomyForm.description || null, imageUrl: taxonomyForm.imageUrl || null, parentId: taxonomyForm.parentId || null, ...(taxonomyForm.type === 'category' ? { data: { ...taxonomyData.value, rules: categoryRules.enabled ? { all: categoryRules.all, kinds: categoryRules.kinds, genres: list(categoryRules.genres), countries: list(categoryRules.countries), yearFrom, yearTo } : {} } } : {}) });
+		const data = taxonomyForm.type === 'category' ? { rules: categoryRules.enabled ? { all: categoryRules.all, kinds: [...categoryRules.kinds], genres: list(categoryRules.genres), countries: list(categoryRules.countries), yearFrom, yearTo } : {} } : taxonomyForm.type === 'person' ? taxonomyPersonChanges(personFacts, taxonomyData.value) : undefined;
+		const entry = await misskeyApiZalip<TaxonomyEntry>('zalip/admin/importer/taxonomy/save', { entryId: taxonomyForm.id || undefined, type: taxonomyForm.type, name: taxonomyForm.name, ...taxonomyBaseChanges(taxonomyForm, taxonomyBaseEntry.value), ...(data ? { data } : {}) });
 		await editTaxonomy(entry, true);
 		await Promise.all([loadTaxonomy(), loadCategories()]);
 		message.value = i18n.ts.zalip._importer.entrySaved;
 	} catch (error) { actionError.value = errorMessage(error); } finally { busy.value = false; }
+}
+
+async function enrichPerson(source: 'tmdb' | 'kinopoisk'): Promise<void> {
+	if (busy.value || taxonomyDirty.value || !taxonomyForm.id || taxonomyForm.type !== 'person' || !personSources.value.includes(source)) return;
+	const entryId = taxonomyForm.id;
+	busy.value = true;
+	actionError.value = '';
+	try { const result = await misskeyApiZalip<{ entry: TaxonomyEntry; changedFields: string[] }>('zalip/admin/importer/taxonomy/enrich-person', { entryId, source }); if (taxonomyForm.id === entryId) await editTaxonomy(result.entry, true); await loadTaxonomy(); message.value = i18n.tsx.zalip._importer.personEnriched({ count: String(result.changedFields.length) }); } catch (error) { actionError.value = errorMessage(error); } finally { busy.value = false; }
+}
+
+async function recalculateCategory(continuing: boolean): Promise<void> {
+	if (busy.value || taxonomyDirty.value || !taxonomyForm.id || taxonomyForm.type !== 'category') return;
+	const entryId = taxonomyForm.id;
+	const mode = recalculateForm.mode;
+	const workIds = mode === 'selected' ? importerWorkIds(recalculateForm.workIds) : undefined;
+	if (workIds === null) { actionError.value = i18n.ts.zalip._importer.errorWorkIds; return; }
+	const cursor = continuing ? recalculateCursor.value : null;
+	if (continuing && !cursor) return;
+	const selectedIdsText = recalculateForm.workIds;
+	const confirmation = await os.confirm({ type: 'warning', title: i18n.ts.zalip._importer.recalculateTitle, text: i18n.ts.zalip._importer.recalculateText });
+	if (confirmation.canceled || !taxonomyContextReady(entryId) || mode !== recalculateForm.mode || selectedIdsText !== recalculateForm.workIds || (continuing && cursor !== recalculateCursor.value)) return;
+	busy.value = true;
+	actionError.value = '';
+	try { const result = await misskeyApiZalip<{ processed: number; matched: number; skipped: number; nextCursor: string | null }>('zalip/admin/importer/taxonomy/recalculate', { entryId, ...(workIds ? { workIds } : { limit: 100, ...(cursor ? { afterId: cursor } : {}) }) }); if (taxonomyForm.id === entryId) { recalculateResult.value = result; recalculateCursor.value = result.nextCursor; await loadTaxonomyWorks(entryId); } } catch (error) { actionError.value = errorMessage(error); } finally { busy.value = false; }
 }
 
 async function linkTaxonomy(): Promise<void> {
@@ -401,7 +580,7 @@ async function unlinkTaxonomy(work: TaxonomyWork): Promise<void> {
 	if (busy.value || taxonomyWorksLoading.value) return;
 	const entryId = taxonomyForm.id;
 	const result = await os.confirm({ type: 'warning', title: i18n.ts.zalip._importer.unlinkTitle, text: i18n.tsx.zalip._importer.unlinkText({ name: work.title }) });
-	if (result.canceled || busy.value || taxonomyWorksLoading.value || entryId !== taxonomyForm.id) return;
+	if (result.canceled || !taxonomyLinkReady(entryId)) return;
 	busy.value = true;
 	try { await misskeyApiZalip('zalip/admin/importer/taxonomy/link', { entryId, workId: work.id, role: work.role || undefined, remove: true }); if (taxonomyForm.id === entryId) await loadTaxonomyWorks(entryId); } catch (error) { actionError.value = errorMessage(error); } finally { busy.value = false; }
 }
@@ -411,19 +590,34 @@ async function loadProfiles(): Promise<void> {
 	try { profiles.value = (await misskeyApiZalip<{ profiles: ImportProfile[] }>('zalip/admin/importer/schedules/list')).profiles; } catch (error) { profilesError.value = errorMessage(error); }
 }
 
-function resetProfile(): void { if (busy.value) return; Object.assign(profileForm, { id: '', name: '', source: 'tmdb', mode: 'metadata', intervalMinutes: 1440, enabled: false, collectionId: '', lockedFields: [], categoryIds: [] }); }
+function resetProfile(fromSave = false): void { if (busy.value && !fromSave) return; Object.assign(profileForm, { id: '', name: '', source: 'tmdb', mode: 'metadata', intervalMinutes: 1440, enabled: false, collectionId: '', lockedFields: [], categoryIds: [] }); Object.assign(profileSelection, importerSelection()); }
 
-function editProfile(profile: ImportProfile, fromSave = false): void { if (busy.value && !fromSave) return; Object.assign(profileForm, { id: profile.id, name: profile.name, source: profile.source, mode: profile.mode, intervalMinutes: profile.intervalMinutes, enabled: profile.enabled, collectionId: profile.collectionId ?? '', lockedFields: [...profile.lockedFields], categoryIds: [...profile.categoryIds] }); }
+function editProfile(profile: ImportProfile, fromSave = false): void { if (busy.value && !fromSave) return; Object.assign(profileForm, { id: profile.id, name: profile.name, source: profile.source, mode: profile.mode, intervalMinutes: profile.intervalMinutes, enabled: profile.enabled, collectionId: profile.collectionId ?? '', lockedFields: [...profile.lockedFields], categoryIds: [...profile.categoryIds] }); Object.assign(profileSelection, importerSelection(profile.options)); }
 
 async function saveProfile(): Promise<void> {
 	if (busy.value || profileCapabilityWarning.value) return;
+	if (!importerFiltersValid(profileSelection)) { actionError.value = i18n.ts.zalip._importer.invalidFilters; return; }
+	if (!profileForm.name || profileForm.name.length > 120 || profileForm.collectionId.length > 100 || !Number.isInteger(profileForm.intervalMinutes) || profileForm.intervalMinutes < 15 || profileForm.intervalMinutes > 43200) { actionError.value = i18n.ts.zalip._importer.errorGeneric; return; }
+	const params = { ...profileForm, id: profileForm.id || undefined, collectionId: profileForm.mode === 'collection' ? profileForm.collectionId : null, lockedFields: [...profileForm.lockedFields], categoryIds: [...profileForm.categoryIds], options: importerOptions(profileSelection) };
 	busy.value = true;
 	actionError.value = '';
-	try { const result = await misskeyApiZalip<ImportProfile>('zalip/admin/importer/schedules/save', { ...profileForm, id: profileForm.id || undefined, collectionId: profileForm.mode === 'collection' ? profileForm.collectionId : null }); editProfile(result, true); await loadProfiles(); message.value = i18n.ts.zalip._importer.scheduleSaved; } catch (error) { actionError.value = errorMessage(error); } finally { busy.value = false; }
+	try { const result = await misskeyApiZalip<ImportProfile>('zalip/admin/importer/schedules/save', params); editProfile(result, true); await loadProfiles(); message.value = i18n.ts.zalip._importer.scheduleSaved; } catch (error) { actionError.value = errorMessage(error); } finally { busy.value = false; }
+}
+
+async function profileAction(profile: ImportProfile, action: 'enable' | 'disable' | 'reset-cursor' | 'delete'): Promise<void> {
+	if (busy.value || (['reset-cursor', 'delete'].includes(action) && profileActive(profile.id))) return;
+	const profileId = profile.id;
+	if (action === 'reset-cursor' || action === 'delete') {
+		const result = await os.confirm({ type: 'warning', title: action === 'delete' ? i18n.ts.zalip._importer.deleteScheduleTitle : i18n.ts.zalip._importer.resetCursorTitle, text: action === 'delete' ? i18n.ts.zalip._importer.deleteScheduleText : i18n.ts.zalip._importer.resetCursorText });
+		if (result.canceled || actionBusy() || profileActive(profileId) || !profiles.value.some(item => item.id === profileId)) return;
+	}
+	busy.value = true;
+	actionError.value = '';
+	try { const result = await misskeyApiZalip<{ id: string; deleted?: boolean; profile?: ImportProfile }>('zalip/admin/importer/schedules/action', { profileId, action }); if (profileForm.id === profileId) { if (result.deleted) resetProfile(true); else if (result.profile) profileForm.enabled = result.profile.enabled; } await loadProfiles(); message.value = i18n.ts.zalip._importer.profileActionSaved; } catch (error) { actionError.value = errorMessage(error); } finally { busy.value = false; }
 }
 
 async function runProfile(profile: ImportProfile): Promise<void> {
-	if (busy.value) return;
+	if (busy.value || profileActive(profile.id)) return;
 	busy.value = true;
 	actionError.value = '';
 	try { const result = await misskeyApiZalip<{ id: string; state: string }>('zalip/admin/importer/schedules/run', { profileId: profile.id }); tab.value = 'runs'; await Promise.all([loadRuns(), loadRun(result.id)]); message.value = i18n.ts.zalip._importer.scheduleEnqueued; } catch (error) { actionError.value = errorMessage(error); } finally { busy.value = false; }
@@ -470,7 +664,7 @@ definePage(() => ({ title: i18n.ts.zalip._importer.pageTitle, icon: 'ti ti-datab
 .primary { background: var(--MI_THEME-accent); color: var(--MI_THEME-fgOnAccent); }
 .danger { color: var(--MI_THEME-error); }
 .page button:disabled { opacity: .5; }
-.page button:focus-visible, .page a:focus-visible, .page input:focus-visible, .page select:focus-visible, .page textarea:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 3px; }
+.page button:focus-visible, .page a:focus-visible, .page input:focus-visible, .page select:focus-visible, .page textarea:focus-visible, .page summary:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 3px; }
 .searchForm { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
 .searchForm label { min-width: 120px; }
 .form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 16px; }
@@ -503,8 +697,20 @@ definePage(() => ({ title: i18n.ts.zalip._importer.pageTitle, icon: 'ti ti-datab
 .chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0; }
 .chips span { background: var(--MI_THEME-bg); color: var(--MI_THEME-fgTransparentWeak); overflow-wrap: anywhere; }
 .warnings { padding: 14px 14px 14px 32px; border-radius: var(--MI-radius); background: var(--MI_THEME-infoWarnBg); color: var(--MI_THEME-infoWarnFg); font-size: .85rem; line-height: 1.6; }
+.itemWarnings { margin-top: 12px; }
+.itemWarnings > p { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--MI_THEME-infoWarnFg); font-size: .82rem; }
+.itemWarnings .warnings { margin: 8px 0 0; overflow-wrap: anywhere; }
 .details { margin: 16px 0; font-size: .85rem; line-height: 1.6; }
 .details summary { cursor: pointer; color: var(--MI_THEME-accent); }
+.optionsHeading { margin-top: 20px !important; }
+.fieldGroup { margin: 16px 0; padding: 14px; border: 1px solid var(--MI_THEME-divider); border-radius: var(--MI-radius); }
+.fieldGroup summary { cursor: pointer; font-weight: 700; }
+.fieldGroup summary small { margin-left: 8px; color: var(--MI_THEME-fgTransparentWeak); font-weight: 400; }
+.fieldGroup > .check { margin-top: 14px; }
+.fieldGroup > .actions { margin-top: 16px; }
+.fieldRow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(160px, 1fr); align-items: center; gap: 12px; margin-top: 10px; }
+.fieldRow .check { min-width: 0; }
+.lockGroup { margin: 16px 0; }
 .diffList { display: grid; gap: 12px; margin: 16px 0; }
 .diff { border-bottom: 1px solid var(--MI_THEME-divider); padding-bottom: 12px; }
 .diff > label { flex-direction: row; align-items: center; flex-wrap: wrap; }
@@ -526,4 +732,5 @@ definePage(() => ({ title: i18n.ts.zalip._importer.pageTitle, icon: 'ti ti-datab
 .empty { padding: 50px 20px; text-align: center; color: var(--MI_THEME-fgTransparentWeak); }
 .empty i { font-size: 2rem; color: var(--MI_THEME-accent); }
 @media (max-width: 650px) { .page { padding-top: 12px; } .sources { grid-template-columns: repeat(2, minmax(0, 1fr)); } .source { padding: 12px; } .heading { align-items: start; } .heading h1 { font-size: 1.5rem; } .panel { padding: 16px; } .tabs button { padding: 11px 14px; } .tabs button i { display: none; } .searchForm { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } .searchForm label { min-width: 0; } .searchForm .grow { grid-column: 1 / -1; } .searchForm > button { width: fit-content; } .form, .diffValues { grid-template-columns: 1fr; } .wide { grid-column: auto; } .result { flex-wrap: wrap; gap: 10px; } .result .button { margin-left: auto; } .previewHero { gap: 12px; } .previewPoster { width: 90px; height: 135px; } .previewHero h3 { font-size: 1.1rem; } }
+@media (max-width: 650px) { .fieldRow { grid-template-columns: 1fr; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--MI_THEME-divider); } }
 </style>

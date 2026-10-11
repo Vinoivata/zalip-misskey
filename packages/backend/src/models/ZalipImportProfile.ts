@@ -5,7 +5,7 @@
 
 import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
 import { id } from './util/id.js';
-import type { ImportSource } from '@/core/zalip-importer/types.js';
+import type { ImportOptions, ImportSource } from '@/core/zalip-importer/types.js';
 
 @Entity('zalip_import_profile')
 @Index('IDX_zalip_import_profile_next', ['enabled', 'nextRunAt'])
@@ -14,11 +14,12 @@ export class MiZalipImportProfile {
 	@Column('varchar', { length: 120 }) public name: string;
 	@Column('boolean', { default: false }) public enabled: boolean;
 	@Column('varchar', { length: 16 }) public source: ImportSource;
-	@Column('varchar', { length: 16 }) public mode: 'metadata' | 'availability' | 'collection';
+	@Column('varchar', { length: 16 }) public mode: 'metadata' | 'availability' | 'collection' | 'discovery';
 	@Column('integer', { default: 1440 }) public intervalMinutes: number;
 	@Column('varchar', { length: 100, nullable: true }) public collectionId: string | null;
 	@Column('jsonb', { default: [] }) public lockedFields: string[];
 	@Column('jsonb', { default: [] }) public categoryIds: string[];
+	@Column('jsonb', { default: {} }) public options: ImportOptions;
 	@Column('timestamp with time zone', { nullable: true }) public lastRunAt: Date | null;
 	@Column('timestamp with time zone', { nullable: true }) public nextRunAt: Date | null;
 	@Column('varchar', { length: 128, nullable: true }) public lastError: string | null;

@@ -106,6 +106,31 @@ describe('Zalip transactional import application', () => {
 		expect(context.identities()).toHaveLength(1);
 	});
 
+	test('a new title requires only title and kind when all optional blocks are excluded', async () => {
+		const context = fixture();
+		const incoming = record({ seasons: [{ seasonNumber: 1, title: 'Season', episodes: [{ episodeNumber: 1, title: 'Episode' }] }] });
+		const result = await applyImportRecord(context.db, context.idService, incoming, {}, { options: { fields: [] } });
+		expect(result.work).toMatchObject({ title: 'Movie', kind: 'movie', description: null, releaseYear: null, posterPath: null, genres: [], publicationState: 'draft' });
+		expect(result.work.importData).toMatchObject({ countries: [], ratings: [], values: { title: 'Movie', kind: 'movie' } });
+		expect(result.protectedFields).toContain('seasons');
+		expect(context.seasons()).toEqual([]);
+		expect(context.episodes()).toEqual([]);
+	});
+
+	test('selected fields cannot update excluded values, baselines, players or episode blocks', async () => {
+		const context = fixture();
+		const initial = record({ seasons: [{ seasonNumber: 1, title: 'Original season', episodes: [{ episodeNumber: 1, title: 'Original episode' }] }] });
+		await applyImportRecord(context.db, context.idService, initial, {});
+		const baseline = structuredClone(context.works()[0].importData);
+		const result = await applyImportRecord(context.db, context.idService, record({ title: 'Excluded title', description: 'Selected description', genres: ['комедия'], releaseYear: 2027, countries: ['Япония'], ratings: [{ source: 'tmdb', value: 5, votes: 1 }], seasons: [{ seasonNumber: 2, title: 'Excluded season', episodes: [] }], players: [{ source: 'collaps', externalId: '50', iframeUrl: 'https://api.nextembed.ws/embed/movie/50', translations: [], quality: null, episodes: [] }] }), {}, { options: { fields: ['description'] } });
+		expect(result.work).toMatchObject({ title: 'Movie', description: 'Selected description', releaseYear: 2026, genres: ['драма'] });
+		for (const field of ['title', 'genres', 'releaseYear', 'seasons', 'players', 'ratings', 'countries']) expect((result.work.importData.values as Row)[field]).toEqual((baseline.values as Row)[field]);
+		expect(result.work.importData).toMatchObject({ countries: ['Россия'], ratings: [{ source: 'tmdb', value: 8, votes: 20 }] });
+		expect(result.protectedFields).toEqual(expect.arrayContaining(['credits', 'genres', 'collections', 'companies', 'players', 'seasons']));
+		expect(context.seasons()).toHaveLength(1);
+		expect(context.episodes()[0].title).toBe('Original episode');
+	});
+
 	test('detects manual edits and manual clearing independently of explicit locks', async () => {
 		const context = fixture();
 		await applyImportRecord(context.db, context.idService, record(), {});

@@ -45,13 +45,25 @@ export type ImportSearchPage = { items: ImportSearchResult[]; page: number; hasM
 export type ImportProviderStatus = { source: ImportSource; configured: boolean; capabilities: { search: boolean; collections: boolean; updates: boolean }; dailyLimit: number | null };
 export interface ImportProvider {
 	status(): ImportProviderStatus;
+	check?(): Promise<void>;
 	search(query: string, page?: number, mediaType?: ImportMediaType): Promise<ImportSearchPage>;
-	fetch(ref: ImportRef): Promise<ImportRecord>;
-	lookup?(identities: ExternalIdentity[], mediaType: ImportMediaType): Promise<ImportRecord | null>;
+	fetch(ref: ImportRef, fields?: readonly ImportField[]): Promise<ImportRecord>;
+	lookup?(identities: ExternalIdentity[], mediaType: ImportMediaType, fields?: readonly ImportField[]): Promise<ImportRecord | null>;
 	collection?(externalId: string, page?: number): Promise<ImportSearchPage>;
 	updates?(page?: number): Promise<ImportSearchPage>;
 }
 export const importFields = ['title', 'originalTitle', 'description', 'releaseYear', 'runtimeMinutes', 'kind', 'genres', 'countries', 'posterUrl', 'backdropUrl', 'logoUrl', 'galleryUrls', 'trailerYoutubeKey', 'ratings', 'ageRating', 'credits', 'companies', 'collections', 'seasons', 'players'] as const;
 export type ImportField = typeof importFields[number];
+export type ImportFilters = {
+	mediaTypes?: ImportMediaType[];
+	kinds?: ImportRecord['kind'][];
+	yearFrom?: number;
+	yearTo?: number;
+	genres?: string[];
+	countries?: string[];
+	ratingMin?: number;
+};
+/** A persisted job policy contains no credentials or arbitrary provider parameters. */
+export type ImportOptions = { sources?: ImportSource[]; fields?: ImportField[]; fieldSources?: Partial<Record<ImportField, ImportSource>>; filters?: ImportFilters; artwork?: 'remote' | 'local-webp' };
 export type ImportWorkState = { locks: string[]; values: Record<string, unknown>; sources: Record<string, string>; countries: string[]; ratings: ImportRecord['ratings']; ageRating: string | null };
-export type ImportPreview = { record: ImportRecord; workId: string | null; changes: { field: string; before: unknown; after: unknown; protected: boolean }[]; warnings: string[] };
+export type ImportPreview = { record: ImportRecord; workId: string | null; options: ImportOptions; locks: string[]; matchesFilters: boolean; changes: { field: string; before: unknown; after: unknown; protected: boolean; selected: boolean }[]; warnings: string[] };

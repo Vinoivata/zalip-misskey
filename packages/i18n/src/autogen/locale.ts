@@ -2150,6 +2150,358 @@ export interface Locale extends ILocale {
              * Озвучка и качество выбираются внутри плеера.
              */
             "nativeVoicesHint": string;
+            /**
+             * Изображения и трейлер
+             */
+            "artworkGroup": string;
+            /**
+             * Серии и просмотр
+             */
+            "playbackGroup": string;
+            /**
+             * Источники и поля импорта
+             */
+            "importOptions": string;
+            /**
+             * Основной источник всегда используется. Дополнительные источники дополняют только выбранные поля; новые тайтлы всегда получают название и тип. Для плееров и подборок приоритет меняет порядок, а не убирает остальные источники.
+             */
+            "optionsHint": string;
+            /**
+             * Дополнительные источники
+             */
+            "enrichmentSources": string;
+            /**
+             * Выбор полей и приоритет источника
+             */
+            "selectedFields": string;
+            /**
+             * Выбрать группу
+             */
+            "selectGroup": string;
+            /**
+             * Автоматический приоритет
+             */
+            "defaultSource": string;
+            /**
+             * Приоритет для поля «{field}»
+             */
+            "fieldPreference": ParameterizedString<"field">;
+            /**
+             * Исключено из этого импорта
+             */
+            "skippedField": string;
+            /**
+             * Настройки изменились. Обновите предпросмотр, прежде чем импортировать этот тайтл.
+             */
+            "optionsChangedPreview": string;
+            /**
+             * Обновить предпросмотр
+             */
+            "refreshPreview": string;
+            /**
+             * Сохранённая защита тайтла
+             */
+            "persistedProtection": string;
+            /**
+             * Эти замки сохраняются для всех будущих обновлений. Здесь можно снять замок; ручные редакторские изменения по-прежнему защищены автоматически.
+             */
+            "persistedProtectionHint": string;
+            /**
+             * Открыть защиту
+             */
+            "loadWorkState": string;
+            /**
+             * Изменено редактором
+             */
+            "editorialProtection": string;
+            /**
+             * Сохранить замки
+             */
+            "saveLocks": string;
+            /**
+             * Защита тайтла сохранена.
+             */
+            "locksSaved": string;
+            /**
+             * Проверить API
+             */
+            "checkSource": string;
+            /**
+             * API доступен
+             */
+            "sourceHealthy": string;
+            /**
+             * Проверка API не пройдена
+             */
+            "sourceCheckFailed": string;
+            /**
+             * {date} · {latency} мс
+             */
+            "sourceChecked": ParameterizedString<"date" | "latency">;
+            /**
+             * Результат из кеша
+             */
+            "cachedCheck": string;
+            /**
+             * IMDb ID (tt…) или ссылка на IMDb сопоставляются с выбранным TMDB, Кинопоиском или Collaps. Для Alloha используйте ID либо выберите другой источник.
+             */
+            "imdbHint": string;
+            /**
+             * Сопоставляем ID…
+             */
+            "resolvingReferences": string;
+            /**
+             * Для сопоставления IMDb выберите TMDB, Кинопоиск или Collaps.
+             */
+            "imdbAllohaUnsupported": string;
+            /**
+             * Новые поступления Collaps → черновики
+             */
+            "discoveryMode": string;
+            /**
+             * Поиск новых поступлений доступен только для настроенного Collaps с API обновлений.
+             */
+            "discoveryUnsupported": string;
+            /**
+             * Включить
+             */
+            "enableProfile": string;
+            /**
+             * Выключить
+             */
+            "disableProfile": string;
+            /**
+             * Сбросить курсор
+             */
+            "resetCursor": string;
+            /**
+             * Удалить расписание
+             */
+            "deleteSchedule": string;
+            /**
+             * Сбросить курсор расписания?
+             */
+            "resetCursorTitle": string;
+            /**
+             * Следующий запуск начнёт обход сначала. Уже импортированные тайтлы сохранятся; активное задание должно завершиться.
+             */
+            "resetCursorText": string;
+            /**
+             * Удалить расписание?
+             */
+            "deleteScheduleTitle": string;
+            /**
+             * Расписание будет удалено. Тайтлы и история заданий сохранятся; активное задание должно завершиться.
+             */
+            "deleteScheduleText": string;
+            /**
+             * Расписание обновлено.
+             */
+            "profileActionSaved": string;
+            /**
+             * При активном задании нельзя менять источник, задачу и параметры или сбрасывать курсор. Выключение остановит только следующие запуски.
+             */
+            "activeProfileHint": string;
+            /**
+             * Биография
+             */
+            "biography": string;
+            /**
+             * Имя в оригинале
+             */
+            "originalName": string;
+            /**
+             * Дата рождения
+             */
+            "birthday": string;
+            /**
+             * Дата смерти
+             */
+            "deathday": string;
+            /**
+             * Место рождения
+             */
+            "placeOfBirth": string;
+            /**
+             * Другие имена
+             */
+            "aliases": string;
+            /**
+             * По одному имени на строку
+             */
+            "aliasesHint": string;
+            /**
+             * Официальный сайт
+             */
+            "homepage": string;
+            /**
+             * Информация о создателе
+             */
+            "personFacts": string;
+            /**
+             * Дополнить информацию из источника
+             */
+            "personEnrichment": string;
+            /**
+             * Обновление использует сохранённый ID создателя, без поиска по имени. Ручные изменения защищены. Сохраните правки перед обновлением.
+             */
+            "personEnrichmentHint": string;
+            /**
+             * Информация обновлена. Изменено полей: {count}.
+             */
+            "personEnriched": ParameterizedString<"count">;
+            /**
+             * Пересчитать связи категории
+             */
+            "recalculate": string;
+            /**
+             * Сначала сохраните правила. Один запрос обрабатывает до 100 тайтлов; продолжение запускается только по кнопке. Ручные связи сохраняются.
+             */
+            "recalculateHint": string;
+            /**
+             * Только указанные тайтлы
+             */
+            "recalculateSelected": string;
+            /**
+             * Порция каталога
+             */
+            "recalculateCatalogue": string;
+            /**
+             * Следующие 100 тайтлов
+             */
+            "recalculateContinue": string;
+            /**
+             * ID тайтлов через пробел или по одному на строку
+             */
+            "recalculateWorkIds": string;
+            /**
+             * Пересчитать категорию?
+             */
+            "recalculateTitle": string;
+            /**
+             * Связи категории будут обновлены по сохранённым правилам для выбранной порции тайтлов.
+             */
+            "recalculateText": string;
+            /**
+             * Обработано: {processed} · Совпало: {matched} · Пропущено: {skipped}
+             */
+            "recalculateResult": ParameterizedString<"processed" | "matched" | "skipped">;
+            /**
+             * Обход каталога завершён.
+             */
+            "recalculateDone": string;
+            /**
+             * Укажите от 1 до 100 корректных ID тайтлов.
+             */
+            "errorWorkIds": string;
+            /**
+             * Фильтры тайтлов
+             */
+            "importFilters": string;
+            /**
+             * Условия проверяются после получения карточки. Не подходящие тайтлы пропускаются без записи; пустые фильтры ничего не ограничивают.
+             */
+            "importFiltersHint": string;
+            /**
+             * Минимальный внешний рейтинг (0–10)
+             */
+            "ratingMin": string;
+            /**
+             * Проверьте фильтры: годы 1888–3000, начало не позже конца, рейтинг 0–10.
+             */
+            "invalidFilters": string;
+            /**
+             * Допускается до 30 других имён, не длиннее 256 символов каждое.
+             */
+            "invalidAliases": string;
+            /**
+             * Хранение изображений
+             */
+            "artworkStorage": string;
+            /**
+             * Ссылки источников
+             */
+            "artworkRemote": string;
+            /**
+             * Локальные копии WebP
+             */
+            "artworkLocal": string;
+            /**
+             * Локальный режим сохраняет обложку, постер, логотип и до 12 кадров в Drive. Ручные и защищённые изображения не меняются; если копирование недоступно, остаётся ссылка источника.
+             */
+            "artworkStorageHint": string;
+            /**
+             * Подписки и доставка уведомлений
+             */
+            "deliveryDiagnostics": string;
+            /**
+             * Ожидающие события находятся в очереди доставки. Это не подтверждённые ошибки; эта панель не отправляет уведомления принудительно.
+             */
+            "deliveryDiagnosticsHint": string;
+            /**
+             * Подписок: {total} · Тайтлов: {works}
+             */
+            "subscriptionsSummary": ParameterizedString<"total" | "works">;
+            /**
+             * Событий доступности: {total} · Ожидают доставки: {pending}
+             */
+            "availabilitySummary": ParameterizedString<"total" | "pending">;
+            /**
+             * Событий выхода: {total} · Ожидают доставки: {pending}
+             */
+            "releasesSummary": ParameterizedString<"total" | "pending">;
+            /**
+             * Самое раннее ожидающее: {date}
+             */
+            "oldestPending": ParameterizedString<"date">;
+            /**
+             * Этот тайтл не соответствует фильтрам и будет пропущен без записи.
+             */
+            "previewFiltered": string;
+            /**
+             * Предупреждения импорта
+             */
+            "warningsTitle": string;
+            /**
+             * Локальная копия «{field}» недоступна. Сохранено рабочее изображение или использована внешняя ссылка.
+             */
+            "warningArtworkLocal": ParameterizedString<"field">;
+            /**
+             * {source}: {reason}
+             */
+            "warningSource": ParameterizedString<"source" | "reason">;
+            /**
+             * Дополнительные данные источника недоступны; сохранены остальные полученные данные.
+             */
+            "warningSourceUnavailable": string;
+            /**
+             * {source} вернул неполные метаданные. Существующие данные не удалены.
+             */
+            "warningMetadataPartial": ParameterizedString<"source">;
+            /**
+             * Достигнут лимит сезонов или серий {source} для одного импорта. Существующие серии не удалены.
+             */
+            "warningEpisodeLimit": ParameterizedString<"source">;
+            /**
+             * TMDB: данные сезона {number} недоступны. Остальные доступные данные сохранены.
+             */
+            "warningSeasonUnavailable": ParameterizedString<"number">;
+            /**
+             * TMDB не вернул список сезонов. Существующие сезоны не удалены.
+             */
+            "warningSeasonsUnavailable": string;
+            /**
+             * Дополнительные изображения Кинопоиска недоступны.
+             */
+            "warningKinopoiskArtwork": string;
+            /**
+             * Плеер {source} отклонён проверкой безопасной ссылки. Метаданные можно сохранить без него.
+             */
+            "warningPlayerRejected": ParameterizedString<"source">;
+            /**
+             * Часть дополнительных данных недоступна. Проверьте сохранённый тайтл.
+             */
+            "warningGeneric": string;
         };
         /**
          * Добавить контент

@@ -144,6 +144,11 @@ describe('Zalip discussions', () => {
 		const ref = { source: 'tmdb', externalId: '123', mediaType: 'movie' } as const;
 		const cases: ImporterPermissionCase[] = [
 			['zalip/admin/importer/sources', {}],
+			['zalip/admin/importer/sources/check', { source: 'tmdb' }],
+			['zalip/admin/importer/diagnostics', {}],
+			['zalip/admin/importer/resolve', { source: 'tmdb', imdbId: 'tt1234567', mediaType: 'movie' }],
+			['zalip/admin/importer/work-state/show', { workId: 'work01' }],
+			['zalip/admin/importer/work-state/save', { workId: 'work01', lockedFields: [] }],
 			['zalip/admin/importer/search', { source: 'tmdb', query: 'offline permission test' }],
 			['zalip/admin/importer/preview', { ref }],
 			['zalip/admin/importer/runs/create', { refs: [ref], mode: 'import' }],
@@ -153,10 +158,14 @@ describe('Zalip discussions', () => {
 			['zalip/admin/importer/schedules/list', {}],
 			['zalip/admin/importer/schedules/save', { name: 'Offline profile', enabled: false, source: 'tmdb', mode: 'metadata', intervalMinutes: 60 }],
 			['zalip/admin/importer/schedules/run', { profileId: 'profile01' }],
+			['zalip/admin/importer/schedules/action', { profileId: 'profile01', action: 'disable' }],
 			['zalip/admin/importer/taxonomy/list', {}],
 			['zalip/admin/importer/taxonomy/show', { entryId: 'entry01' }],
 			['zalip/admin/importer/taxonomy/save', { type: 'genre', name: 'Offline genre' }],
 			['zalip/admin/importer/taxonomy/link', { entryId: 'entry01', workId: 'work01' }],
+			['zalip/admin/importer/taxonomy/delete', { entryId: 'entry01' }],
+			['zalip/admin/importer/taxonomy/enrich-person', { entryId: 'entry01', source: 'tmdb' }],
+			['zalip/admin/importer/taxonomy/recalculate', { entryId: 'entry01', workIds: ['work01'] }],
 		];
 		for (const [endpoint, params] of cases) {
 			const anonymous = await api(endpoint, params);

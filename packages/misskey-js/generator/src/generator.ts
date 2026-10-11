@@ -61,7 +61,7 @@ async function generateBaseTypes(
 
 	lines.push('');
 
-	await writeFile(typeFileName, lines.join('\n'));
+	await writeFile(typeFileName, `${lines.join('\n').trimEnd()}\n`);
 }
 
 async function generateSchemaEntities(

@@ -9,14 +9,15 @@ import { MiZalipWork } from '@/models/ZalipWork.js';
 import { MiZalipSeason } from '@/models/ZalipSeason.js';
 import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
 import { MiZalipExternalIdentity } from '@/models/ZalipExternalIdentity.js';
-import { canUpdateField, nonEmpty, readImportState, sameValue } from './policy.js';
-import { importFields, type ExternalIdentity, type ImportRecord } from './types.js';
+import { canUpdateField, importFieldSelected, nonEmpty, normalizeImportOptions, readImportState, sameValue } from './policy.js';
+import { importFields, type ExternalIdentity, type ImportOptions, type ImportRecord } from './types.js';
 import type { DataSource, EntityManager } from 'typeorm';
 
 export type ApplyImportOptions = {
 	workId?: string;
 	lockedFields?: string[];
 	mode?: 'import' | 'sync' | 'availability';
+	options?: ImportOptions;
 };
 
 export type ApplyImportResult = { work: MiZalipWork; created: boolean; protectedFields: string[] };
@@ -239,6 +240,7 @@ export async function applyImportRecord(
 	options: ApplyImportOptions = {},
 ): Promise<ApplyImportResult> {
 	const normalized = normalizedSnapshot(record);
+	const importOptions = normalizeImportOptions(options.options);
 	const identities = importIdentities(normalized);
 	const mode = options.mode ?? 'import';
 	return db.transaction(async manager => {
@@ -269,6 +271,10 @@ export async function applyImportRecord(
 		const values = { ...state.values };
 		const fieldSources = { ...state.sources };
 		for (const field of importFields) {
+			if (!importFieldSelected(field, importOptions, created)) {
+				protectedFields.add(field);
+				continue;
+			}
 			let incoming: unknown = normalized[field];
 			if (field === 'players' && !normalized.complete) incoming = mergePartialPlayers(current.players, normalized.players);
 			const protectedField = !created && (locks.includes(field) || (mode === 'availability' && field !== 'players') || changedSinceImport(current[field], state.values[field]));

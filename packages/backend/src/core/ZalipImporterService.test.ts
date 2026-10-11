@@ -4,7 +4,7 @@
  */
 
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { ZalipImporterService, safeImportError } from '@/core/ZalipImporterService.js';
+import { ZalipImporterService, safeImportError, safeImportWarnings } from '@/core/ZalipImporterService.js';
 import { MiZalipWork } from '@/models/ZalipWork.js';
 import { MiZalipExternalIdentity } from '@/models/ZalipExternalIdentity.js';
 import { MiZalipImportItem, MiZalipImportRun } from '@/models/ZalipImportRun.js';
@@ -18,6 +18,7 @@ const isolated = vi.hoisted(() => ({ providers: vi.fn(), apply: vi.fn() }));
 // No runtime credentials, live transport, Redis or Bull worker is used in this suite.
 vi.mock('@/core/ZalipCatalogService.js', () => ({ ZalipCatalogService: class {} }));
 vi.mock('@/core/ZalipTaxonomyService.js', () => ({ ZalipTaxonomyService: class {} }));
+vi.mock('@/core/ZalipImporterArtworkService.js', () => ({ ZalipImporterArtworkService: class {} }));
 vi.mock('./zalip-importer/providers.js', async importOriginal => ({
 	...await importOriginal<typeof import('./zalip-importer/providers.js')>(),
 	createImportProviders: isolated.providers,
@@ -88,6 +89,12 @@ function memoryRepository(seed: object[] = []) {
 			for (const row of selected) Object.assign(row, structuredClone(value));
 			return { affected: selected.length };
 		}),
+		delete: vi.fn(async (criteria: string) => {
+			const index = rows.findIndex(row => row.id === criteria);
+			if (index === -1) return { affected: 0 };
+			rows.splice(index, 1);
+			return { affected: 1 };
+		}),
 	};
 }
 
@@ -110,15 +117,15 @@ function work(values: Partial<MiZalipWork> = {}): MiZalipWork {
 }
 
 function run(values: Partial<MiZalipImportRun> = {}): MiZalipImportRun {
-	return { id: 'run', state: 'queued', mode: 'import', createdAt: new Date(), updatedAt: new Date(), createdById: null, profileId: null, lockedFields: [], categoryIds: [], error: null, retryAt: null, ...values };
+	return { id: 'run', state: 'queued', mode: 'import', createdAt: new Date(), updatedAt: new Date(), createdById: null, profileId: null, lockedFields: [], categoryIds: [], options: {}, error: null, retryAt: null, ...values };
 }
 
 function item(values: Partial<MiZalipImportItem> = {}): MiZalipImportItem {
-	return { id: 'item', runId: 'run', position: 0, state: 'pending', ref: record().ref, workId: null, error: null, updatedAt: new Date(), run: null, ...values };
+	return { id: 'item', runId: 'run', position: 0, state: 'pending', ref: record().ref, workId: null, error: null, warnings: [], updatedAt: new Date(), run: null, ...values };
 }
 
 function profile(values: Partial<MiZalipImportProfile> = {}): MiZalipImportProfile {
-	return { id: 'profile', name: 'Collection', enabled: true, source: 'tmdb', mode: 'metadata', intervalMinutes: 15, collectionId: null, lockedFields: [], categoryIds: [], lastRunAt: null, nextRunAt: new Date('2026-01-01'), lastError: null, cursor: 0, ...values };
+	return { id: 'profile', name: 'Collection', enabled: true, source: 'tmdb', mode: 'metadata', intervalMinutes: 15, collectionId: null, lockedFields: [], categoryIds: [], options: {}, lastRunAt: null, nextRunAt: new Date('2026-01-01'), lastError: null, cursor: 0, ...values };
 }
 
 function fixture(seed: { runs?: MiZalipImportRun[]; items?: MiZalipImportItem[]; works?: MiZalipWork[]; identities?: object[]; profiles?: MiZalipImportProfile[]; entries?: object[] } = {}) {
@@ -147,6 +154,7 @@ function fixture(seed: { runs?: MiZalipImportRun[]; items?: MiZalipImportItem[];
 		}),
 	};
 	const db = {
+		query: vi.fn().mockResolvedValue([]),
 		getRepository: (model: unknown) => {
 			const repository = repositories.get(model);
 			if (!repository) throw new Error('UNEXPECTED_TEST_REPOSITORY');
@@ -161,7 +169,8 @@ function fixture(seed: { runs?: MiZalipImportRun[]; items?: MiZalipImportItem[];
 		fetch: vi.fn().mockImplementation(async (ref: ImportRef) => record({ ref })),
 		lookup: vi.fn().mockResolvedValue(null),
 		collection: vi.fn().mockResolvedValue({ items: [], page: 1, hasMore: false }),
-	}])) as unknown as Record<ImportSource, ImportProvider & { fetch: ReturnType<typeof vi.fn>; lookup: ReturnType<typeof vi.fn>; collection: ReturnType<typeof vi.fn> }>;
+		updates: vi.fn().mockResolvedValue({ items: [], page: 1, hasMore: false }),
+	}])) as unknown as Record<ImportSource, ImportProvider & { fetch: ReturnType<typeof vi.fn>; lookup: ReturnType<typeof vi.fn>; collection: ReturnType<typeof vi.fn>; updates: ReturnType<typeof vi.fn> }>;
 	isolated.providers.mockReturnValue(providers);
 	isolated.apply.mockResolvedValue({ work: work({ publicationState: 'draft', publishedAt: null }), created: true, protectedFields: [] });
 	const jobs = new Map<string, { runId: string }>();
@@ -171,9 +180,10 @@ function fixture(seed: { runs?: MiZalipImportRun[]; items?: MiZalipImportItem[];
 	}) };
 	const catalogue = { recordAllohaAvailability: vi.fn(), dispatchPendingAllohaAvailabilityNotifications: vi.fn() };
 	const taxonomy = { syncImportedWork: vi.fn(), linkWork: vi.fn(), upsertImportedEntry: vi.fn().mockResolvedValue({ id: 'collection' }) };
+	const artwork = { prepare: vi.fn().mockImplementation(async (incoming: ImportRecord) => incoming) };
 	let nextId = 0;
-	const service = new ZalipImporterService(db as never, {} as never, queue as never, { gen: () => `id-${++nextId}` } as never, catalogue as never, taxonomy as never);
-	return { service, runs, items, works, identities, profiles, entries, providers, queue, jobs, catalogue, taxonomy, connection };
+	const service = new ZalipImporterService(db as never, {} as never, queue as never, { gen: () => `id-${++nextId}` } as never, catalogue as never, taxonomy as never, artwork as never);
+	return { service, runs, items, works, identities, profiles, entries, providers, queue, jobs, catalogue, taxonomy, artwork, connection, db };
 }
 
 function enable(context: ReturnType<typeof fixture>, source: ImportSource) {
@@ -193,8 +203,134 @@ describe('Zalip importer orchestration', () => {
 		const context = fixture();
 		const result = await context.service.createRun({ refs: [record().ref], mode: 'import', lockedFields: ['title', 'title'] }, 'admin');
 		expect(context.runs.rows[0]).toMatchObject({ id: result.id, state: 'queued', createdById: 'admin', lockedFields: ['title'] });
-		expect(context.items.rows[0]).toMatchObject({ runId: result.id, state: 'pending', position: 0, workId: null, ref: record().ref });
+		expect(context.items.rows[0]).toMatchObject({ runId: result.id, state: 'pending', position: 0, workId: null, ref: record().ref, warnings: [] });
 		expect(context.queue.add).toHaveBeenCalledWith('import', { runId: result.id }, expect.objectContaining({ attempts: 3 }));
+	});
+
+	test('persists provider and local artwork warnings in the completed journal', async () => {
+		const context = fixture({ runs: [run({ options: { artwork: 'local-webp' } })], items: [item()] });
+		context.providers.tmdb.fetch.mockResolvedValueOnce(record({ complete: false, warnings: ['tmdb-metadata-partial', 'tmdb-season-2-unavailable', 'tmdb-metadata-partial', 'token=PRIVATE_EXAMPLE'] }));
+		context.artwork.prepare.mockImplementationOnce(async (incoming: ImportRecord) => ({ ...incoming, warnings: [...incoming.warnings, 'artwork-local-unavailable:posterUrl'] }));
+		await context.service.processRun('run');
+		const expected = ['tmdb-metadata-partial', 'tmdb-season-2-unavailable', 'artwork-local-unavailable:posterUrl'];
+		expect(context.items.rows[0]).toMatchObject({ state: 'completed', error: null, warnings: expected });
+		expect((await context.service.showRun('run')).items[0].warnings).toEqual(expected);
+		expect(context.runs.rows[0].state).toBe('completed');
+		expect(JSON.stringify(await context.service.showRun('run'))).not.toContain('PRIVATE_EXAMPLE');
+	});
+
+	test('retains fetched warnings on filtered and failed items without treating warnings as errors', async () => {
+		for (const filtered of [false, true]) {
+			const context = fixture({ runs: [run({ options: filtered ? { filters: { yearFrom: 2027 } } : {} })], items: [item()] });
+			context.providers.tmdb.fetch.mockResolvedValueOnce(record({ complete: false, warnings: ['collaps-player-url-rejected'] }));
+			if (!filtered) context.taxonomy.syncImportedWork.mockRejectedValueOnce(new Error('PRIVATE_EXAMPLE'));
+			await context.service.processRun('run');
+			expect(context.items.rows[0]).toMatchObject({ state: filtered ? 'skipped' : 'failed', error: filtered ? 'import-filtered' : 'import-failed', warnings: ['collaps-player-url-rejected'] });
+			expect((await context.service.showRun('run')).items[0].warnings).toEqual(['collaps-player-url-rejected']);
+		}
+	});
+
+	test('journals fetch warnings before downstream work and keeps them when cancelled', async () => {
+		const context = fixture({ runs: [run({ options: { artwork: 'local-webp' } })], items: [item()] });
+		context.providers.tmdb.fetch.mockResolvedValueOnce(record({ complete: false, warnings: ['tmdb-metadata-partial'] }));
+		const preparing = deferred<void>();
+		const response = deferred<ImportRecord>();
+		context.artwork.prepare.mockImplementationOnce(async () => { preparing.resolve(); return response.promise; });
+		const processing = context.service.processRun('run');
+		await preparing.promise;
+		expect((await context.service.showRun('run')).items[0]).toMatchObject({ state: 'running', warnings: ['tmdb-metadata-partial'] });
+		await context.service.actionRun('run', 'cancel');
+		response.resolve(record({ warnings: ['tmdb-metadata-partial', 'artwork-local-unavailable:posterUrl'] }));
+		await processing;
+		expect((await context.service.showRun('run')).items[0]).toMatchObject({ state: 'pending', warnings: ['tmdb-metadata-partial', 'artwork-local-unavailable:posterUrl'] });
+		expect(isolated.apply).not.toHaveBeenCalled();
+	});
+
+	test('warnings describe the latest attempt and do not leak from a failed retry', async () => {
+		const context = fixture({ runs: [run({ state: 'failed' })], items: [item({ state: 'failed', warnings: ['tmdb-season-limit'] })] });
+		await context.service.actionRun('run', 'retry');
+		context.providers.tmdb.fetch.mockRejectedValueOnce(new Error('PRIVATE_EXAMPLE'));
+		await context.service.processRun('run');
+		expect(context.items.rows[0]).toMatchObject({ state: 'failed', error: 'import-failed', warnings: [] });
+	});
+
+	test('journal projection supplies a safe array for every state and legacy missing values', async () => {
+		const states = ['pending', 'running', 'completed', 'failed', 'skipped'] as const;
+		const context = fixture({ runs: [run({ state: 'completed' })], items: states.map((state, position) => item({ id: `item-${position}`, state, position, warnings: position === 0 ? undefined as never : ['kinopoisk:upstream-failure', 'unsafe PRIVATE_EXAMPLE'] })) });
+		const shown = await context.service.showRun('run');
+		expect(shown.items.map(value => value.warnings)).toEqual([[], ...states.slice(1).map(() => ['kinopoisk:upstream-failure'])]);
+		expect(JSON.stringify(shown)).not.toContain('PRIVATE_EXAMPLE');
+	});
+
+	test('persists the job policy, always fetches primary, and excludes unchecked enrichment', async () => {
+		const context = fixture();
+		enable(context, 'kinopoisk');
+		enable(context, 'collaps');
+		const options = { sources: ['collaps'] as ImportSource[], fields: ['description'] as const, fieldSources: { description: 'collaps' as const } };
+		const created = await context.service.createRun({ refs: [record().ref], mode: 'import', options: { ...options, fields: [...options.fields] } });
+		await context.service.processRun(created.id);
+		expect(context.providers.tmdb.fetch).toHaveBeenCalledWith(record().ref, ['description']);
+		expect(context.providers.collaps.lookup).toHaveBeenCalled();
+		expect(context.providers.collaps.lookup.mock.calls[0][2]).toEqual(['description']);
+		expect(context.providers.kinopoisk.lookup).not.toHaveBeenCalled();
+		expect(isolated.apply.mock.calls[0][4].options).toEqual(options);
+		expect((await context.service.showRun(created.id)).run.options).toEqual(options);
+	});
+
+	test('local filters skip nonmatching items without artwork, work or taxonomy writes', async () => {
+		const context = fixture({ runs: [run({ options: { sources: [], filters: { yearFrom: 2027 }, artwork: 'local-webp' } })], items: [item()] });
+		await context.service.processRun('run');
+		expect(context.items.rows[0]).toMatchObject({ state: 'skipped', error: 'import-filtered', workId: null });
+		expect(context.runs.rows[0].state).toBe('completed');
+		expect(isolated.apply).not.toHaveBeenCalled();
+		expect(context.artwork.prepare).not.toHaveBeenCalled();
+		expect(context.taxonomy.syncImportedWork).not.toHaveBeenCalled();
+		expect((await context.service.showRun('run')).run.completed).toBe(1);
+	});
+
+	test('local artwork preparation is opt-in and forwards field selection and locks', async () => {
+		const context = fixture({ runs: [run({ options: { artwork: 'local-webp', fields: ['posterUrl'] }, lockedFields: ['logoUrl'] })], items: [item({ workId: 'canonical' })], works: [work()] });
+		context.artwork.prepare.mockResolvedValueOnce(record({ posterUrl: 'https://cdn.example.test/local.webp' }));
+		await context.service.processRun('run');
+		expect(context.artwork.prepare).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: 'canonical' }), ['posterUrl'], ['logoUrl']);
+		expect(isolated.apply.mock.calls[0][2].posterUrl).toBe('https://cdn.example.test/local.webp');
+		const remote = fixture({ runs: [run()], items: [item()] });
+		await remote.service.processRun('run');
+		expect(remote.artwork.prepare).not.toHaveBeenCalled();
+	});
+
+	test('a missing primary refresh can recover only from stored exact alternate IDs', async () => {
+		const context = fixture({ runs: [run({ mode: 'sync' })], items: [item({ workId: 'canonical' })], works: [work()], identities: [{ provider: 'tmdb', entityType: 'movie', externalId: '100', workId: 'canonical' }, { provider: 'kinopoisk', entityType: 'movie', externalId: '200', workId: 'canonical' }] });
+		enable(context, 'kinopoisk');
+		context.providers.tmdb.fetch.mockRejectedValueOnce(new ImportProviderError('not-found'));
+		context.providers.kinopoisk.fetch.mockResolvedValueOnce(record({ ref: { source: 'kinopoisk', externalId: '200', mediaType: 'movie' }, identities: [{ provider: 'kinopoisk', externalId: '200', entityType: 'movie' }] }));
+		await context.service.processRun('run');
+		expect(context.providers.kinopoisk.fetch).toHaveBeenCalledWith({ source: 'kinopoisk', externalId: '200', mediaType: 'movie' }, undefined);
+		expect(isolated.apply.mock.calls[0][2]).toMatchObject({ complete: false, warnings: ['tmdb:not-found'] });
+		expect(isolated.apply.mock.calls[0][4].workId).toBe('canonical');
+		expect(context.items.rows[0].state).toBe('completed');
+	});
+
+	test.each(['quota-exceeded', 'not-configured', 'upstream-failure'] as const)('primary %s never triggers alternate source recovery', async code => {
+		const context = fixture({ runs: [run({ mode: 'sync' })], items: [item({ workId: 'canonical' })], works: [work()], identities: [{ provider: 'kinopoisk', entityType: 'movie', externalId: '200', workId: 'canonical' }] });
+		enable(context, 'kinopoisk');
+		context.providers.tmdb.fetch.mockRejectedValueOnce(new ImportProviderError(code));
+		await context.service.processRun('run');
+		expect(context.providers.kinopoisk.fetch).not.toHaveBeenCalled();
+		expect(context.providers.kinopoisk.lookup).not.toHaveBeenCalled();
+		expect(isolated.apply).not.toHaveBeenCalled();
+	});
+
+	test('missing-primary recovery respects source selection and rejects contradictory identities', async () => {
+		for (const selected of [false, true]) {
+			const context = fixture({ runs: [run({ mode: 'sync', options: selected ? {} : { sources: [] } })], items: [item({ workId: 'canonical' })], works: [work()], identities: [{ provider: 'kinopoisk', entityType: 'movie', externalId: '200', workId: 'canonical' }] });
+			enable(context, 'kinopoisk');
+			context.providers.tmdb.fetch.mockRejectedValueOnce(new ImportProviderError('not-found'));
+			context.providers.kinopoisk.fetch.mockResolvedValueOnce(record({ ref: { source: 'kinopoisk', externalId: '201', mediaType: 'movie' }, identities: [{ provider: 'kinopoisk', externalId: '201', entityType: 'movie' }] }));
+			await context.service.processRun('run');
+			expect(isolated.apply).not.toHaveBeenCalled();
+			expect(context.items.rows[0].error).toBe(selected ? 'IMPORT_IDENTITY_CONFLICT' : 'not-found');
+		}
 	});
 
 	test('rejects empty, oversized, mixed and unconfigured requests before creating jobs', async () => {
@@ -219,7 +355,7 @@ describe('Zalip importer orchestration', () => {
 		const context = fixture({ runs: [run({ mode: 'sync', lockedFields: ['credits'], categoryIds: ['category'] })], items: [item({ workId: 'canonical' })], works: [work()] });
 		isolated.apply.mockResolvedValue({ work: work(), created: false, protectedFields: ['credits', 'genres'] });
 		await context.service.processRun('run');
-		expect(isolated.apply).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ title: 'Provider title' }), expect.objectContaining({ title: 'tmdb' }), { workId: 'canonical', lockedFields: ['credits'], mode: 'sync' });
+		expect(isolated.apply).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ title: 'Provider title' }), expect.objectContaining({ title: 'tmdb' }), { workId: 'canonical', lockedFields: ['credits'], mode: 'sync', options: {} });
 		expect(context.taxonomy.syncImportedWork).toHaveBeenCalledWith('canonical', expect.anything(), ['credits', 'genres']);
 		expect(context.taxonomy.linkWork).toHaveBeenCalledWith({ entryId: 'category', workId: 'canonical' });
 		expect(context.runs.rows[0].state).toBe('completed');
@@ -271,6 +407,21 @@ describe('Zalip importer orchestration', () => {
 		expect(isolated.apply).not.toHaveBeenCalled();
 		expect(context.connection.query).toHaveBeenLastCalledWith('SELECT pg_advisory_unlock(hashtext($1))', ['zalip-import:run']);
 		expect(context.connection.release).toHaveBeenCalledOnce();
+	});
+
+	test('cancelling during optional artwork preparation prevents later work application', async () => {
+		const context = fixture({ runs: [run({ options: { artwork: 'local-webp' } })], items: [item()] });
+		const preparing = deferred<void>();
+		const response = deferred<ImportRecord>();
+		context.artwork.prepare.mockImplementationOnce(async () => { preparing.resolve(); return response.promise; });
+		const processing = context.service.processRun('run');
+		await preparing.promise;
+		await context.service.actionRun('run', 'cancel');
+		response.resolve(record());
+		await processing;
+		expect(context.items.rows[0].state).toBe('pending');
+		expect(context.runs.rows[0].state).toBe('cancelled');
+		expect(isolated.apply).not.toHaveBeenCalled();
 	});
 
 	test('cancelled runs cannot be resumed and never fetch provider data', async () => {
@@ -444,6 +595,35 @@ describe('Zalip importer orchestration', () => {
 		expect(preview.changes.find(change => change.field === 'posterUrl')?.protected).toBe(true); // An empty incoming field is not an update.
 	});
 
+	test('preview distinguishes selected fields and still requires title/kind for a new draft', async () => {
+		const existing = fixture({ works: [work()] });
+		const preview = await existing.service.preview(record().ref, 'canonical', { fields: ['description'], sources: [] });
+		expect(preview.changes.find(change => change.field === 'title')).toMatchObject({ selected: false, protected: true });
+		expect(preview.changes.find(change => change.field === 'description')).toMatchObject({ selected: true, protected: false });
+		const fresh = fixture();
+		const creation = await fresh.service.preview(record().ref, undefined, { fields: [], sources: [] });
+		expect(creation.matchesFilters).toBe(true);
+		expect(creation.changes.find(change => change.field === 'title')).toMatchObject({ selected: true, protected: false });
+		expect(creation.changes.find(change => change.field === 'kind')).toMatchObject({ selected: true, protected: false });
+		expect(creation.changes.find(change => change.field === 'genres')).toMatchObject({ selected: false, protected: true });
+		expect((await fresh.service.preview(record().ref, undefined, { sources: [], filters: { yearTo: 2000 } })).matchesFilters).toBe(false);
+	});
+
+	test('exact work locks use a pessimistic write lock without replacing editorial baselines', async () => {
+		const context = fixture({ works: [work({ importData: { locks: ['title', 'credits'], values: { title: 'Provider title' }, sources: { title: 'tmdb', credits: 'private-source' }, extra: { preserved: true } } })] });
+		const before = structuredClone(context.works.rows[0]);
+		const result = await context.service.saveWorkState('canonical', ['genres']);
+		expect(result.locks).toEqual(['genres']);
+		expect(result.fields.find(field => field.field === 'title')).toMatchObject({ editorial: true, source: 'tmdb' });
+		expect(result.fields.find(field => field.field === 'credits')?.source).toBeNull();
+		expect(context.works.findOne).toHaveBeenCalledWith({ where: { id: 'canonical' }, lock: { mode: 'pessimistic_write' } });
+		expect(context.works.rows[0].title).toBe(before.title);
+		expect(context.works.rows[0].importData).toEqual({ ...(before.importData as Row), locks: ['genres'] });
+		expect(JSON.stringify(await context.service.showWorkState('canonical'))).not.toContain('preserved');
+		await expect(context.service.saveWorkState('canonical', ['raw'])).rejects.toThrow('INVALID_IMPORT_OPTIONS');
+		await expect(context.service.showWorkState('missing')).rejects.toThrow('NO_SUCH_WORK');
+	});
+
 	test('incomplete enrichment cannot authorize destructive taxonomy replacement', async () => {
 		const context = fixture({ runs: [run()], items: [item()] });
 		enable(context, 'kinopoisk');
@@ -501,6 +681,69 @@ describe('Zalip importer orchestration', () => {
 		expect(context.runs.rows[0]).toMatchObject({ mode: 'sync', profileId: 'profile' });
 	});
 
+	test('profile bounds match database lengths and omitted policies preserve their saved value', async () => {
+		const context = fixture({ profiles: [profile({ options: { sources: [], fields: ['ratings'] } })] });
+		const saved = await context.service.saveProfile({ id: 'profile', name: 'n'.repeat(120), enabled: false, source: 'tmdb', mode: 'collection', collectionId: 'c'.repeat(100), intervalMinutes: 15 });
+		expect(saved).toMatchObject({ options: { sources: [], fields: ['ratings'] }, enabled: false, nextRunAt: null });
+		await expect(context.service.saveProfile({ name: 'n'.repeat(121), enabled: false, source: 'tmdb', mode: 'metadata', intervalMinutes: 15 })).rejects.toThrow('invalid-ref');
+		await expect(context.service.saveProfile({ name: 'name', enabled: false, source: 'tmdb', mode: 'collection', collectionId: 'c'.repeat(101), intervalMinutes: 15 })).rejects.toThrow('invalid-ref');
+		expect(context.db.query).toHaveBeenCalledWith('SELECT pg_advisory_xact_lock(hashtext($1))', ['zalip-import-profile:profile']);
+	});
+
+	test('changing source, mode or collection resets the cursor while unchanged config preserves it', async () => {
+		const context = fixture({ profiles: [profile({ mode: 'collection', collectionId: 'first', cursor: 3, lastError: 'not-found' })] });
+		const base = { id: 'profile', name: 'Collection', enabled: false, source: 'tmdb' as const, mode: 'collection' as const, collectionId: 'first', intervalMinutes: 15 };
+		expect((await context.service.saveProfile(base)).cursor).toBe(3);
+		expect(await context.service.saveProfile({ ...base, collectionId: 'second' })).toMatchObject({ cursor: 0, lastError: null });
+		context.profiles.rows[0].cursor = 5;
+		expect((await context.service.saveProfile({ ...base, source: 'kinopoisk', collectionId: 'second' })).cursor).toBe(0);
+		context.profiles.rows[0].cursor = 100;
+		expect((await context.service.saveProfile({ ...base, source: 'kinopoisk', mode: 'metadata' })).cursor).toBe(0);
+	});
+
+	test.each(['queued', 'running', 'paused'] as const)('profile %s runs block config changes, cursor reset and deletion but allow disabling', async state => {
+		const context = fixture({ profiles: [profile({ cursor: 5 })], runs: [run({ profileId: 'profile', state })] });
+		await expect(context.service.saveProfile({ id: 'profile', name: 'Changed', enabled: false, source: 'tmdb', mode: 'metadata', intervalMinutes: 15 })).rejects.toThrow('IMPORT_RUN_BUSY');
+		await expect(context.service.actionProfile('profile', 'reset-cursor')).rejects.toThrow('IMPORT_RUN_BUSY');
+		await expect(context.service.actionProfile('profile', 'delete')).rejects.toThrow('IMPORT_RUN_BUSY');
+		await expect(context.service.actionProfile('profile', 'disable')).resolves.toMatchObject({ profile: { enabled: false, nextRunAt: null, cursor: 5 } });
+		expect(context.runs.rows[0].state).toBe(state);
+		expect(context.profiles.rows[0].name).toBe('Collection');
+	});
+
+	test('profile actions enable, reset and delete only the specified idle profile', async () => {
+		const context = fixture({ profiles: [profile({ enabled: false, cursor: 3, lastError: 'not-found' }), profile({ id: 'other' })] });
+		await expect(context.service.actionProfile('profile', 'enable')).resolves.toMatchObject({ profile: { enabled: true } });
+		await expect(context.service.actionProfile('profile', 'reset-cursor')).resolves.toMatchObject({ profile: { cursor: 0, lastError: null } });
+		await expect(context.service.actionProfile('profile', 'delete')).resolves.toEqual({ id: 'profile', deleted: true });
+		expect(context.profiles.rows.map(row => row.id)).toEqual(['other']);
+		await expect(context.service.actionProfile('missing', 'disable')).rejects.toThrow('not-found');
+	});
+
+	test('discovery is disabled on creation and accepts only providers with update capability', async () => {
+		const context = fixture();
+		context.providers.tmdb.updates = undefined as never;
+		await expect(context.service.saveProfile({ name: 'Unsupported', enabled: false, source: 'tmdb', mode: 'discovery', intervalMinutes: 15 })).rejects.toThrow('unsupported');
+		const saved = await context.service.saveProfile({ name: 'Discover', enabled: false, source: 'collaps', mode: 'discovery', intervalMinutes: 15, options: { filters: { yearFrom: 2026 } } });
+		expect(saved).toMatchObject({ enabled: false, nextRunAt: null, cursor: 0, options: { filters: { yearFrom: 2026 } } });
+		await context.service.tickSchedules();
+		expect(context.providers.collaps.updates).not.toHaveBeenCalled();
+		await expect(context.service.actionProfile(saved.id, 'enable')).rejects.toThrow('not-configured');
+	});
+
+	test('discovery pages at most 100 draft imports and carries the persisted policy into runs', async () => {
+		const options = { sources: ['collaps'] as ImportSource[], fields: ['title', 'ratings'] as const, filters: { yearFrom: 2026 } };
+		const context = fixture({ profiles: [profile({ source: 'collaps', mode: 'discovery', enabled: false, cursor: 2, options: { ...options, fields: [...options.fields] } })] });
+		enable(context, 'collaps');
+		context.providers.collaps.updates.mockResolvedValueOnce({ items: Array.from({ length: 101 }, (_, index) => ({ ref: { source: 'collaps', mediaType: 'movie', externalId: String(index + 1) } })), page: 3, hasMore: true });
+		const dispatched = await context.service.runProfile('profile');
+		expect(context.providers.collaps.updates).toHaveBeenCalledWith(3);
+		expect(context.items.rows).toHaveLength(100);
+		expect(context.runs.rows[0]).toMatchObject({ id: dispatched.id, mode: 'import', options });
+		expect(context.profiles.rows[0]).toMatchObject({ cursor: 3, nextRunAt: null });
+		expect(isolated.apply).not.toHaveBeenCalled(); // Queue dispatch never auto-publishes.
+	});
+
 	test('collection paging preserves profile locks and creates membership against canonical IDs', async () => {
 		const context = fixture({ runs: [run({ profileId: 'profile' })], items: [item()], profiles: [profile({ mode: 'collection', collectionId: 'collection-id' })] });
 		await context.service.processRun('run');
@@ -552,9 +795,28 @@ describe('Zalip importer orchestration', () => {
 		expect(context.items.rows).toHaveLength(1);
 	});
 
+	test('a scheduled profile disabled after its claim cannot start a new run', async () => {
+		const context = fixture({ profiles: [profile()], works: [work()] });
+		context.profiles.findOneBy.mockImplementationOnce(async () => {
+			context.profiles.rows[0].enabled = false;
+			context.profiles.rows[0].nextRunAt = null;
+			return structuredClone(context.profiles.rows[0]);
+		});
+		await context.service.tickSchedules();
+		expect(context.runs.rows).toEqual([]);
+		expect(context.queue.add).not.toHaveBeenCalled();
+	});
+
 	test('error boundary never returns arbitrary messages or provider credentials', () => {
 		expect(safeImportError(new ImportProviderError('quota-exceeded'))).toBe('quota-exceeded');
 		expect(safeImportError(new Error('IMPORT_IDENTITY_CONFLICT'))).toBe('IMPORT_IDENTITY_CONFLICT');
 		expect(safeImportError(new Error('password=PRIVATE_EXAMPLE'))).toBe('import-failed');
+	});
+
+	test('warning boundary accepts closed codes only and bounds deduplicated output', () => {
+		expect(safeImportWarnings(null)).toEqual([]);
+		expect(safeImportWarnings(['tmdb-season-limit', 'tmdb-season-limit', 'tmdb-season-0-unavailable', 'tmdb-season-9999-unavailable', 'tmdb-season-10000-unavailable', 'tmdb-season-01-unavailable', 'kinopoisk:upstream-failure', 'kinopoisk:some-user-error', 'artwork-local-unavailable:logoUrl', 'artwork-local-unavailable:token', 'https://provider.test/?token=PRIVATE_EXAMPLE', 1])).toEqual(['tmdb-season-limit', 'tmdb-season-0-unavailable', 'tmdb-season-9999-unavailable', 'kinopoisk:upstream-failure', 'artwork-local-unavailable:logoUrl']);
+		expect(safeImportWarnings(Array.from({ length: 100 }, (_, index) => `tmdb-season-${index}-unavailable`))).toHaveLength(50);
+		expect(safeImportWarnings([...Array.from({ length: 1000 }, () => 'not-a-warning'), 'tmdb-season-limit'])).toEqual([]);
 	});
 });

@@ -4,7 +4,7 @@
  */
 
 import fetch from 'node-fetch';
-import type { ExternalIdentity, ImportCredit, ImportEpisode, ImportMediaType, ImportPlayer, ImportProvider, ImportProviderStatus, ImportRecord, ImportRef, ImportSearchPage, ImportSearchResult, ImportSource } from './types.js';
+import type { ExternalIdentity, ImportCredit, ImportEpisode, ImportField, ImportMediaType, ImportPlayer, ImportProvider, ImportProviderStatus, ImportRecord, ImportRef, ImportSearchPage, ImportSearchResult, ImportSource } from './types.js';
 
 export type ImportProviderErrorCode = 'not-configured' | 'not-found' | 'quota-exceeded' | 'rate-limited' | 'upstream-failure' | 'invalid-ref' | 'unsupported' | 'malformed-response';
 
@@ -474,7 +474,7 @@ function status(source: ImportSource, credential: string | undefined, search: bo
 	return { source, configured: !!credential?.trim(), capabilities: { search, collections, updates }, dailyLimit: null };
 }
 
-function requestFactory(source: ImportSource, credential: string | undefined, transport: ImportTransport) {
+export function createImportRequest(source: ImportSource, credential: string | undefined, transport: ImportTransport) {
 	return async (path: string, parameters: Record<string, string> = {}): Promise<unknown> => {
 		if (!credential?.trim()) throw new ImportProviderError('not-configured');
 		const url = new URL(path, origins[source]);
@@ -499,6 +499,15 @@ function keyFor(identities: ExternalIdentity[], provider: string, mediaType: Imp
 	return provider === 'imdb' ? imdbId(value) : externalId(value);
 }
 
+async function fetchImdbReference(provider: ImportProvider, ref: ImportRef, fields?: readonly ImportField[]): Promise<ImportRecord> {
+	const match = /^imdb:(tt\d{5,12})$/u.exec(ref.externalId);
+	if (!match || ref.source !== provider.status().source || !['movie', 'tv'].includes(ref.mediaType)) throw new ImportProviderError('invalid-ref');
+	const record = await provider.lookup?.([{ provider: 'imdb', externalId: match[1], entityType: ref.mediaType }], ref.mediaType, fields);
+	if (!record) throw new ImportProviderError('not-found');
+	if (record.ref.mediaType !== ref.mediaType || !record.identities.some(identity => identity.provider === 'imdb' && identity.externalId === match[1] && identity.entityType === ref.mediaType)) throw new ImportProviderError('malformed-response');
+	return record;
+}
+
 function configuredIframeHosts(values: readonly string[] | undefined, fallback: string): string[] {
 	const hosts = values?.map(value => value.trim().toLowerCase()).filter(Boolean);
 	return hosts != null && hosts.length > 0 ? hosts : [fallback];
@@ -507,14 +516,18 @@ function configuredIframeHosts(values: readonly string[] | undefined, fallback: 
 /** Creates adapters with process-wide pacing. Persistence, daily budgets and durable retries belong to the runner. */
 export function createImportProviders(config: ImportProviderConfig, transport: ImportTransport = defaultImportTransport): Record<ImportSource, ImportProvider> {
 	const pacedTransport = pacedImportTransport(transport);
-	const tmdbRequest = requestFactory('tmdb', config.tmdbApiKey, pacedTransport);
-	const kpRequest = requestFactory('kinopoisk', config.kinopoiskApiKey, pacedTransport);
-	const allohaRequest = requestFactory('alloha', config.allohaApiToken, pacedTransport);
-	const collapsRequest = requestFactory('collaps', config.collapsApiToken, pacedTransport);
+	const tmdbRequest = createImportRequest('tmdb', config.tmdbApiKey, pacedTransport);
+	const kpRequest = createImportRequest('kinopoisk', config.kinopoiskApiKey, pacedTransport);
+	const allohaRequest = createImportRequest('alloha', config.allohaApiToken, pacedTransport);
+	const collapsRequest = createImportRequest('collaps', config.collapsApiToken, pacedTransport);
 	const allohaHosts = configuredIframeHosts(config.allohaIframeHosts, 'ascorbic-as.stravers.live');
 	const collapsHosts = configuredIframeHosts(config.collapsIframeHosts, 'api.nextembed.ws');
 	const tmdb: ImportProvider = {
 		status: () => status('tmdb', config.tmdbApiKey, true, true, false),
+		async check() {
+			const response = object(await tmdbRequest('/3/configuration'));
+			if (!object(response.images).secure_base_url) throw new ImportProviderError('malformed-response');
+		},
 		async search(query, page = 1, mediaType) {
 			const keyword = text(query);
 			if (keyword == null) throw new ImportProviderError('invalid-ref');
@@ -524,16 +537,19 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 			const results = array(payload.results).filter(raw => mediaType != null || ['movie', 'tv'].includes(String(object(raw).media_type)));
 			return searchPage(results, page, (integer(payload.total_pages, 0) ?? page) > page, value => normalizeTmdbRecord(value, mediaType ?? object(value).media_type as ImportMediaType));
 		},
-		async fetch(ref) {
+		async fetch(ref, fields) {
+			if (ref.externalId.startsWith('imdb:')) return fetchImdbReference(tmdb, ref, fields);
 			validRef(ref, 'tmdb');
-			const payload = object(await tmdbRequest(`/3/${ref.mediaType}/${ref.externalId}`, { language: 'ru-RU', append_to_response: 'external_ids,credits,videos,images', include_image_language: 'ru,en,null' }));
+			const wants = (field: ImportField) => fields === undefined || fields.includes(field);
+			const append = ['external_ids', ...(wants('credits') ? ['credits'] : []), ...(wants('trailerYoutubeKey') ? ['videos'] : []), ...(wants('logoUrl') || wants('galleryUrls') ? ['images'] : [])];
+			const payload = object(await tmdbRequest(`/3/${ref.mediaType}/${ref.externalId}`, { language: 'ru-RU', append_to_response: append.join(','), include_image_language: 'ru,en,null' }));
 			if (externalId(payload.id) !== ref.externalId) throw new ImportProviderError('malformed-response');
 			const seasonDetails: unknown[] = [];
 			const warnings: string[] = [];
 			const credits = object(payload.credits);
-			if (!Array.isArray(payload.genres) || !Array.isArray(payload.production_companies) || !Array.isArray(credits.cast) || !Array.isArray(credits.crew)) warnings.push('tmdb-metadata-partial');
+			if (!Array.isArray(payload.genres) || !Array.isArray(payload.production_companies) || (wants('credits') && (!Array.isArray(credits.cast) || !Array.isArray(credits.crew)))) warnings.push('tmdb-metadata-partial');
 			let remaining = MAX_EPISODES;
-			if (ref.mediaType === 'tv') {
+			if (ref.mediaType === 'tv' && wants('seasons')) {
 				if (!Array.isArray(payload.seasons)) warnings.push('tmdb-seasons-unavailable');
 				if (Array.isArray(payload.seasons) && payload.seasons.length > MAX_SEASONS) warnings.push('tmdb-season-limit');
 				const seen = new Set<number>();
@@ -559,15 +575,15 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 			result.complete = result.warnings.length === 0;
 			return result;
 		},
-		async lookup(identities, mediaType) {
+		async lookup(identities, mediaType, fields) {
 			const ownId = keyFor(identities, 'tmdb', mediaType);
-			if (ownId != null) return tmdb.fetch({ source: 'tmdb', externalId: ownId, mediaType });
+			if (ownId != null) return tmdb.fetch({ source: 'tmdb', externalId: ownId, mediaType }, fields);
 			const imdb = keyFor(identities, 'imdb', mediaType);
 			if (imdb == null) return null;
 			const response = object(await tmdbRequest(`/3/find/${imdb}`, { external_source: 'imdb_id', language: 'ru-RU' }));
 			const match = object(array(response[mediaType === 'movie' ? 'movie_results' : 'tv_results'], 1)[0]);
 			const id = externalId(match.id);
-			return id == null ? null : tmdb.fetch({ source: 'tmdb', externalId: id, mediaType });
+			return id == null ? null : tmdb.fetch({ source: 'tmdb', externalId: id, mediaType }, fields);
 		},
 		async collection(externalIdValue, page = 1) {
 			pageNumber(page);
@@ -581,6 +597,10 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 	};
 	const kinopoisk: ImportProvider = {
 		status: () => status('kinopoisk', config.kinopoiskApiKey, true, true, false),
+		async check() {
+			const response = object(await kpRequest('/api/v2.2/films/301'));
+			if (externalId(response.kinopoiskId) !== '301') throw new ImportProviderError('malformed-response');
+		},
 		async search(query, page = 1, mediaType) {
 			const keyword = text(query);
 			if (keyword == null) throw new ImportProviderError('invalid-ref');
@@ -589,30 +609,44 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 			if (!Array.isArray(response.items)) throw new ImportProviderError('malformed-response');
 			return searchPage(response.items, page, (integer(response.totalPages, 0) ?? page) > page, normalizeKinopoiskRecord);
 		},
-		async fetch(ref) {
+		async fetch(ref, fields) {
+			if (ref.externalId.startsWith('imdb:')) return fetchImdbReference(kinopoisk, ref, fields);
 			validRef(ref, 'kinopoisk');
+			const wants = (field: ImportField) => fields === undefined || fields.includes(field);
 			const details = object(await kpRequest(`/api/v2.2/films/${ref.externalId}`));
 			if (externalId(details.kinopoiskId) !== ref.externalId || kpMediaType(details) !== ref.mediaType) throw new ImportProviderError('malformed-response');
-			const staff = await kpRequest('/api/v1/staff', { filmId: ref.externalId });
+			const staff = wants('credits') ? await kpRequest('/api/v1/staff', { filmId: ref.externalId }) : [];
 			if (!Array.isArray(staff)) throw new ImportProviderError('malformed-response');
-			const seasons = ref.mediaType === 'tv' ? await kpRequest(`/api/v2.2/films/${ref.externalId}/seasons`) : {};
-			if (ref.mediaType === 'tv' && !Array.isArray(object(seasons).items)) throw new ImportProviderError('malformed-response');
+			const seasons = ref.mediaType === 'tv' && wants('seasons') ? await kpRequest(`/api/v2.2/films/${ref.externalId}/seasons`) : {};
+			if (ref.mediaType === 'tv' && wants('seasons') && !Array.isArray(object(seasons).items)) throw new ImportProviderError('malformed-response');
 			const result = normalizeKinopoiskRecord(details, staff, seasons);
+			if (!result.backdropUrl && (wants('backdropUrl') || wants('galleryUrls'))) {
+				try {
+					const images = object(await kpRequest(`/api/v2.2/films/${ref.externalId}/images`, { type: 'STILL', page: '1' }));
+					if (!Array.isArray(images.items)) throw new ImportProviderError('malformed-response');
+					result.galleryUrls = [...new Set(array(images.items, 18).map(item => safeImportUrl(object(item).imageUrl)).filter((url): url is string => url !== null))];
+					result.backdropUrl = result.galleryUrls[0] ?? null;
+				} catch (error) {
+					if (error instanceof ImportProviderError && ['quota-exceeded', 'rate-limited', 'not-configured'].includes(error.code)) throw error;
+					result.warnings.push('kinopoisk-artwork-unavailable');
+					result.complete = false;
+				}
+			}
 			if (!Array.isArray(details.genres)) {
 				result.warnings.push('kinopoisk-metadata-partial');
 				result.complete = false;
 			}
 			return result;
 		},
-		async lookup(identities, mediaType) {
+		async lookup(identities, mediaType, fields) {
 			const ownId = keyFor(identities, 'kinopoisk', mediaType);
-			if (ownId != null) return kinopoisk.fetch({ source: 'kinopoisk', externalId: ownId, mediaType });
+			if (ownId != null) return kinopoisk.fetch({ source: 'kinopoisk', externalId: ownId, mediaType }, fields);
 			const imdb = keyFor(identities, 'imdb', mediaType);
 			if (imdb == null) return null;
 			const response = object(await kpRequest('/api/v2.2/films', { imdbId: imdb, page: '1' }));
 			const match = array(response.items).map(object).find(item => imdbId(item.imdbId) === imdb && kpMediaType(item) === mediaType);
 			const id = externalId(match?.kinopoiskId);
-			return id == null ? null : kinopoisk.fetch({ source: 'kinopoisk', externalId: id, mediaType });
+			return id == null ? null : kinopoisk.fetch({ source: 'kinopoisk', externalId: id, mediaType }, fields);
 		},
 		async collection(externalIdValue, page = 1) {
 			if (!/^[A-Z][A-Z0-9_]{1,63}$/.test(externalIdValue)) throw new ImportProviderError('invalid-ref');
@@ -624,6 +658,10 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 	};
 	const alloha: ImportProvider = {
 		status: () => status('alloha', config.allohaApiToken, false, false, false),
+		async check() {
+			const response = object(await allohaRequest('/v2/movies/tmdb/278', { category: 'movie' }));
+			if (!object(response.data).category) throw new ImportProviderError('malformed-response');
+		},
 		async search() { throw new ImportProviderError('unsupported'); },
 		async fetch(ref) {
 			const match = /^tmdb:(movie|tv):(\d{1,16})$/.exec(ref.externalId);
@@ -638,6 +676,10 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 	};
 	const collaps: ImportProvider = {
 		status: () => status('collaps', config.collapsApiToken, true, true, true),
+		async check() {
+			const response = object(await collapsRequest('/list', { page: '1', limit: '1', format: 'json' }));
+			if (!Array.isArray(response.results)) throw new ImportProviderError('malformed-response');
+		},
 		async search(query, page = 1, mediaType) {
 			const keyword = text(query);
 			if (keyword == null) throw new ImportProviderError('invalid-ref');
@@ -646,7 +688,8 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 			if (!Array.isArray(response.results)) throw new ImportProviderError('malformed-response');
 			return searchPage(response.results, page, response.next_page != null && response.next_page !== '' && response.next_page !== false, value => normalizeCollapsRecord(value, collapsHosts));
 		},
-		async fetch(ref) {
+		async fetch(ref, fields) {
+			if (ref.externalId.startsWith('imdb:')) return fetchImdbReference(collaps, ref, fields);
 			validRef(ref, 'collaps');
 			const response = await collapsRequest('/franchise/details', { id: ref.externalId, format: 'json' });
 			const result = normalizeCollapsRecord(response, collapsHosts);
@@ -658,9 +701,9 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 			}
 			return result;
 		},
-		async lookup(identities, mediaType) {
+		async lookup(identities, mediaType, fields) {
 			const ownId = keyFor(identities, 'collaps', mediaType);
-			if (ownId != null) return collaps.fetch({ source: 'collaps', externalId: ownId, mediaType });
+			if (ownId != null) return collaps.fetch({ source: 'collaps', externalId: ownId, mediaType }, fields);
 			const kpId = keyFor(identities, 'kinopoisk', mediaType);
 			const imdb = keyFor(identities, 'imdb', mediaType);
 			if (kpId == null && imdb == null) return null;

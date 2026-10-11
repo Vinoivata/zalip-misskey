@@ -5,7 +5,7 @@
 
 import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryColumn } from 'typeorm';
 import { id } from './util/id.js';
-import type { ImportRef } from '@/core/zalip-importer/types.js';
+import type { ImportOptions, ImportRef } from '@/core/zalip-importer/types.js';
 
 @Entity('zalip_import_run')
 @Index('IDX_zalip_import_run_state_updated', ['state', 'updatedAt'])
@@ -19,6 +19,7 @@ export class MiZalipImportRun {
 	@Column('varchar', { length: 16, default: 'queued' }) public state: 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
 	@Column('jsonb', { default: [] }) public lockedFields: string[];
 	@Column('jsonb', { default: [] }) public categoryIds: string[];
+	@Column('jsonb', { default: {} }) public options: ImportOptions;
 	@Column('varchar', { length: 128, nullable: true }) public error: string | null;
 	@Column('timestamp with time zone', { nullable: true }) public retryAt: Date | null;
 }
@@ -35,5 +36,6 @@ export class MiZalipImportItem {
 	@Column('jsonb') public ref: ImportRef;
 	@Column({ ...id(), nullable: true }) public workId: string | null;
 	@Column('varchar', { length: 128, nullable: true }) public error: string | null;
+	@Column('jsonb', { default: [] }) public warnings: string[];
 	@Column('timestamp with time zone') public updatedAt: Date;
 }

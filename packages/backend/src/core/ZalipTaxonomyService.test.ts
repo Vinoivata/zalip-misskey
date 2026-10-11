@@ -62,6 +62,22 @@ describe('Zalip catalogue normalization and ownership', () => {
 		expect(getZalipCatalogEditorialData(refreshed.data).manualFields).toEqual(['name', 'description']);
 	});
 
+	test('fact-only editor saves keep unchanged imported base fields provider-owned', () => {
+		const before = entry({ data: { _zalip: { manualFields: [], fieldSources: { name: 'tmdb', description: 'tmdb', imageUrl: 'tmdb', slug: 'tmdb' } } } });
+		const edited = mergeZalipCatalogEntry(before, { type: 'person', name: before.name, slug: before.slug, description: before.description, imageUrl: before.imageUrl, data: { birthday: '1970-01-01' } }, 'manual', { protectOnlyChangedBaseFields: true });
+		expect(getZalipCatalogEditorialData(edited.data)).toEqual({ manualFields: ['data.birthday'], fieldSources: { name: 'tmdb', description: 'tmdb', imageUrl: 'tmdb', slug: 'tmdb', 'data.birthday': 'manual' } });
+		const refreshed = mergeZalipCatalogEntry(edited, { type: 'person', name: 'Provider name', description: 'New biography', imageUrl: 'https://example.test/new.jpg', data: { birthday: '1980-01-01' } }, 'tmdb');
+		expect(refreshed).toMatchObject({ name: 'Provider name', description: 'New biography', imageUrl: 'https://example.test/new.jpg', data: { birthday: '1970-01-01' } });
+	});
+
+	test('changed editor fields and explicit null clears stay protected, including existing locks', () => {
+		const before = entry({ description: null, data: { _zalip: { manualFields: ['imageUrl'], fieldSources: { imageUrl: 'manual' } } } });
+		const edited = mergeZalipCatalogEntry(before, { type: 'person', name: 'Editorial name', description: null, imageUrl: before.imageUrl, parentId: null }, 'manual', { protectOnlyChangedBaseFields: true });
+		expect(getZalipCatalogEditorialData(edited.data).manualFields).toEqual(['imageUrl', 'name', 'description', 'parentId']);
+		const refreshed = mergeZalipCatalogEntry(edited, { type: 'person', name: 'Provider name', description: 'Provider text', imageUrl: 'https://example.test/new.jpg' }, 'tmdb');
+		expect(refreshed).toMatchObject({ name: 'Editorial name', description: null, imageUrl: before.imageUrl });
+	});
+
 	test('empty or incomplete provider data does not erase existing information', () => {
 		const before = entry({ data: { birthday: '1970-01-01' } });
 		const refreshed = mergeZalipCatalogEntry(before, { type: 'person', name: 'Name', description: '  ', imageUrl: null, data: {} }, 'tmdb');
@@ -88,6 +104,23 @@ describe('Zalip catalogue normalization and ownership', () => {
 		expect(packZalipCatalogFacts(refreshed.data)).toEqual({ birthday: '1970-01-01' });
 	});
 
+	test('editing one fact protects only that fact and preserves explicit editorial clears', () => {
+		const edited = mergeZalipCatalogEntry(entry(), { type: 'person', name: 'Name', data: { birthday: null } }, 'manual');
+		const updated = mergeZalipCatalogEntry(edited, { type: 'person', name: 'Name', data: { birthday: '1970-01-01', biography: 'Imported biography' } }, 'tmdb');
+		expect(updated.data.birthday).toBeNull();
+		expect(updated.data.biography).toBe('Imported biography');
+		expect(getZalipCatalogEditorialData(updated.data).manualFields).toContain('data.birthday');
+		expect(getZalipCatalogEditorialData(updated.data).manualFields).not.toContain('data');
+	});
+
+	test('legacy whole-data ownership remains protected and empty facts do not erase data', () => {
+		const before = entry({ data: { birthday: '1970-01-01', _zalip: { manualFields: ['data'], fieldSources: { data: 'manual' } } } });
+		expect(mergeZalipCatalogEntry(before, { type: 'person', name: 'Name', data: { biography: 'Provider' } }, 'tmdb').data).not.toHaveProperty('biography');
+		const refreshed = mergeZalipCatalogEntry(entry({ data: { birthday: '1970-01-01', aliases: ['Name'] } }), { type: 'person', name: 'Name', data: { birthday: null, aliases: [] } }, 'tmdb');
+		expect(refreshed.data.birthday).toBe('1970-01-01');
+		expect(refreshed.data.aliases).toEqual(['Name']);
+	});
+
 	test('does not expose provider payloads or ownership data in public directories', () => {
 		const service = new ZalipTaxonomyService({} as never, {} as never);
 		const packed = service.packEntry(entry({ data: { biography: 'Bio', raw: { token: 'not-a-real-token' }, rules: { all: true }, _zalip: { manualFields: ['name'] } } }));
@@ -106,6 +139,39 @@ describe('Zalip catalogue normalization and ownership', () => {
 		expect(service.packEntry(repository.save.mock.calls[0][0]).data).toEqual({});
 		expect(service.packEntry(entry({ type: 'category', data: { rules: { ...rules, token: 'private' }, raw: 'private' } }), true).data).toEqual({ rules });
 		await expect(service.saveEntry({ type: 'category', name: 'Invalid', data: { rules: { countries: 'Россия' } } })).rejects.toThrow('INVALID_CATALOG_RULES');
+	});
+
+	test('saveEntry does not claim the mandatory unchanged name when editing person facts', async () => {
+		const before = entry({ externalIds: {}, data: { _zalip: { manualFields: [], fieldSources: { name: 'tmdb', description: 'tmdb', imageUrl: 'tmdb' } } } });
+		const repository = { findOneBy: vi.fn().mockResolvedValue(before), create: vi.fn(value => value), save: vi.fn() };
+		const manager = { query: vi.fn(), getRepository: () => repository };
+		const service = new ZalipTaxonomyService({ transaction: async (action: (manager: unknown) => Promise<unknown>) => action(manager) } as never, {} as never);
+		await service.saveEntry({ type: 'person', name: before.name, data: { birthday: '1970-01-01' } }, before.id);
+		expect(getZalipCatalogEditorialData(repository.save.mock.calls[0][0].data)).toEqual({ manualFields: ['data.birthday'], fieldSources: { name: 'tmdb', description: 'tmdb', imageUrl: 'tmdb', 'data.birthday': 'manual' } });
+	});
+});
+
+describe('serialized catalogue entry deletion', () => {
+	test('uses the same directory transaction lock as enrichment and import before deleting', async () => {
+		const repository = { delete: vi.fn().mockResolvedValue({ affected: 1 }) };
+		const manager = { query: vi.fn(), getRepository: vi.fn().mockReturnValue(repository) };
+		const db = { transaction: vi.fn(async action => await action(manager)), getRepository: vi.fn() };
+		const service = new ZalipTaxonomyService(db as never, {} as never);
+		await service.deleteEntry('entry');
+		expect(db.transaction).toHaveBeenCalledOnce();
+		expect(db.getRepository).not.toHaveBeenCalled();
+		expect(manager.query).toHaveBeenCalledExactlyOnceWith('SELECT pg_advisory_xact_lock(hashtext($1))', ['zalip-catalog-directories']);
+		expect(manager.getRepository).toHaveBeenCalledWith(MiZalipCatalogEntry);
+		expect(repository.delete).toHaveBeenCalledExactlyOnceWith({ id: 'entry' });
+		expect(manager.query.mock.invocationCallOrder[0]).toBeLessThan(repository.delete.mock.invocationCallOrder[0]);
+	});
+
+	test('reports an absent entry from within the locked transaction', async () => {
+		const repository = { delete: vi.fn().mockResolvedValue({ affected: 0 }) };
+		const manager = { query: vi.fn(), getRepository: () => repository };
+		const service = new ZalipTaxonomyService({ transaction: async (action: (manager: unknown) => Promise<unknown>) => action(manager) } as never, {} as never);
+		await expect(service.deleteEntry('missing')).rejects.toThrow('NO_SUCH_CATALOG_ENTRY');
+		expect(manager.query.mock.invocationCallOrder[0]).toBeLessThan(repository.delete.mock.invocationCallOrder[0]);
 	});
 });
 
@@ -131,6 +197,133 @@ describe('Zalip category rules', () => {
 		expect(normalizeZalipCategoryRules({ kinds: ['unrecognized'] })).toBeNull();
 		expect(normalizeZalipCategoryRules({ countries: Array.from({ length: 101 }, () => 'Россия') })).toBeNull();
 		expect(normalizeZalipCategoryRules({ genres: [''] })).toBeNull();
+	});
+});
+
+describe('explicit person enrichment', () => {
+	function fixture(person = entry()) {
+		const identityQuery = { where: vi.fn(), setParameter: vi.fn(), andWhere: vi.fn(), getMany: vi.fn().mockResolvedValue([person]) };
+		for (const key of ['where', 'setParameter', 'andWhere'] as const) identityQuery[key].mockReturnValue(identityQuery);
+		const repository = { findOneBy: vi.fn().mockResolvedValue(person), create: vi.fn(value => value), save: vi.fn(), createQueryBuilder: () => identityQuery };
+		const manager = { query: vi.fn(), getRepository: () => repository };
+		const service = new ZalipTaxonomyService({ getRepository: manager.getRepository, transaction: async (action: (manager: unknown) => Promise<unknown>) => action(manager) } as never, {} as never);
+		return { service, repository, manager };
+	}
+
+	test('enriches only the selected verified identity and keeps manual metadata', async () => {
+		const edited = mergeZalipCatalogEntry(entry({ description: null }), { type: 'person', name: 'Editorial name', data: { birthday: null } }, 'manual');
+		const { service, repository } = fixture(entry(edited));
+		const fetch = vi.fn().mockResolvedValue({ type: 'person', name: 'Provider name', description: 'Biography', externalIds: { tmdb: '10' }, data: { birthday: '1970-01-01', biography: 'Biography', identityQuality: 'verified' } });
+		const result = await service.enrichPerson('entry', 'tmdb', fetch);
+		expect(fetch).toHaveBeenCalledWith('10');
+		expect(result.entry).toMatchObject({ id: 'entry', name: 'Editorial name', description: 'Biography', data: { birthday: null, biography: 'Biography' } });
+		expect(result.changedFields).toContain('description');
+		expect(result.changedFields).not.toContain('name');
+		expect(result.entry.data).not.toHaveProperty('_zalip');
+		expect(repository.save).toHaveBeenCalledOnce();
+	});
+
+	test('nonempty legacy values without provenance are preserved', async () => {
+		const { service } = fixture(entry({ data: { birthday: '1970-01-01' } }));
+		const result = await service.enrichPerson('entry', 'tmdb', vi.fn().mockResolvedValue({ type: 'person', name: 'Provider', description: 'New biography', externalIds: { tmdb: '10' }, data: { birthday: '1980-01-01', placeOfBirth: 'Москва' } }));
+		expect(result.entry).toMatchObject({ name: 'Name', description: 'Biography', data: { birthday: '1970-01-01', placeOfBirth: 'Москва' } });
+	});
+
+	test('refuses unknown, nonperson or unmapped entries before requesting a provider', async () => {
+		for (const person of [entry({ type: 'studio' }), entry({ externalIds: {} }), entry({ externalIds: { tmdb: '0' } })]) {
+			const { service, repository } = fixture(person);
+			const fetch = vi.fn();
+			await expect(service.enrichPerson('entry', 'tmdb', fetch)).rejects.toMatchObject({ code: 'invalid-ref' });
+			expect(fetch).not.toHaveBeenCalled();
+			expect(repository.save).not.toHaveBeenCalled();
+		}
+		const { service, repository } = fixture();
+		repository.findOneBy.mockResolvedValue(null);
+		await expect(service.enrichPerson('missing', 'tmdb', vi.fn())).rejects.toThrow('NO_SUCH_CATALOG_ENTRY');
+	});
+
+	test('rejects upstream or concurrently changed identities before writing', async () => {
+		const { service, repository } = fixture();
+		await expect(service.enrichPerson('entry', 'tmdb', vi.fn().mockResolvedValue({ type: 'person', name: 'Other', externalIds: { tmdb: '11' } }))).rejects.toMatchObject({ code: 'malformed-response' });
+		expect(repository.save).not.toHaveBeenCalled();
+		repository.findOneBy.mockResolvedValueOnce(entry()).mockResolvedValueOnce(entry({ externalIds: { tmdb: '11' } }));
+		await expect(service.enrichPerson('entry', 'tmdb', vi.fn().mockResolvedValue({ type: 'person', name: 'Name', externalIds: { tmdb: '10' } }))).rejects.toThrow('CATALOG_ID_CONFLICT');
+		expect(repository.save).not.toHaveBeenCalled();
+	});
+
+	test('does not recreate a person deleted while the provider request was running', async () => {
+		const { service, repository } = fixture();
+		repository.findOneBy.mockResolvedValueOnce(entry()).mockResolvedValueOnce(null);
+		await expect(service.enrichPerson('entry', 'tmdb', vi.fn().mockResolvedValue({ type: 'person', name: 'Name', externalIds: { tmdb: '10' } }))).rejects.toThrow('NO_SUCH_CATALOG_ENTRY');
+		expect(repository.save).not.toHaveBeenCalled();
+	});
+});
+
+describe('bounded category rule recalculation', () => {
+	function fixture(candidates = [
+		{ id: 'work1', kind: 'movie', genres: ['драма'], releaseYear: 2026, importData: { countries: ['Россия'] } },
+		{ id: 'work2', kind: 'series', genres: [], releaseYear: 2026, importData: {} },
+		{ id: 'work3', kind: 'movie', genres: ['драма'], releaseYear: 2026, importData: { locks: ['categories'] } },
+	]) {
+		const category = entry({ id: 'category', type: 'category', data: { rules: { kinds: ['movie'], genres: ['драма'] } } });
+		const query = { orderBy: vi.fn(), where: vi.fn(), take: vi.fn(), getMany: vi.fn().mockResolvedValue(candidates) };
+		for (const key of ['orderBy', 'where', 'take'] as const) query[key].mockReturnValue(query);
+		const categories = { findOneBy: vi.fn().mockResolvedValue(category) };
+		const works = { createQueryBuilder: () => query };
+		const links = { findOneBy: vi.fn().mockResolvedValue(null), create: vi.fn(value => value), save: vi.fn(), delete: vi.fn() };
+		const manager = { query: vi.fn(), getRepository: (model: unknown) => model === MiZalipWork ? works : model === MiZalipCatalogEntry ? categories : links };
+		const db = { transaction: vi.fn(async action => await action(manager)), getRepository: manager.getRepository };
+		const service = new ZalipTaxonomyService(db as never, { gen: () => 'relation' } as never);
+		return { service, query, categories, links, manager, db };
+	}
+
+	test('replaces only rule-owned membership of the selected category, skipping protected works', async () => {
+		const { service, links, manager } = fixture();
+		const result = await service.recalculateCategory({ entryId: 'category' });
+		expect(result).toEqual({ processed: 3, matched: 1, skipped: 1, nextCursor: null });
+		expect(links.save).toHaveBeenCalledWith(expect.objectContaining({ entryId: 'category', workId: 'work1', source: 'rules' }));
+		expect(links.delete).toHaveBeenCalledExactlyOnceWith({ entryId: 'category', workId: 'work2', source: 'rules' });
+		expect(manager.query).toHaveBeenCalledWith('SELECT pg_advisory_xact_lock(hashtext($1))', ['zalip-catalog-membership:work1']);
+	});
+
+	test('uses a stable cursor and one extra row instead of unbounded catalogue scans', async () => {
+		const { service, query, links } = fixture();
+		const result = await service.recalculateCategory({ entryId: 'category', afterId: 'work0', limit: 2 });
+		expect(query.where).toHaveBeenCalledWith('work.id > :afterId', { afterId: 'work0' });
+		expect(query.take).toHaveBeenCalledWith(3);
+		expect(result).toEqual({ processed: 2, matched: 1, skipped: 0, nextCursor: 'work2' });
+		expect(links.save).toHaveBeenCalledTimes(1);
+	});
+
+	test('unknown selected IDs fail before any membership writes', async () => {
+		const { service, query, links } = fixture([]);
+		await expect(service.recalculateCategory({ entryId: 'category', workIds: ['unknown'] })).rejects.toThrow('NO_SUCH_WORK');
+		expect(query.where).toHaveBeenCalledWith('work.id IN (:...workIds)', { workIds: ['unknown'] });
+		expect(links.save).not.toHaveBeenCalled();
+		expect(links.delete).not.toHaveBeenCalled();
+	});
+
+	test('rejects oversized, duplicate and ambiguous batches before opening a transaction', async () => {
+		const { service, db } = fixture();
+		for (const options of [{ limit: 101 }, { limit: 0 }, { workIds: [] }, { workIds: ['one', 'one'] }, { workIds: ['one'], afterId: 'one' }, { workIds: Array.from({ length: 101 }, (_, i) => `work${i}`) }]) await expect(service.recalculateCategory({ entryId: 'category', ...options })).rejects.toThrow('INVALID_CATALOG_RECALCULATE');
+		expect(db.transaction).not.toHaveBeenCalled();
+	});
+
+	test('cleared rules remove old rule-derived membership without affecting manual links', async () => {
+		const { service, categories, links } = fixture();
+		categories.findOneBy.mockResolvedValue(entry({ id: 'category', type: 'category', data: { rules: {} } }));
+		const result = await service.recalculateCategory({ entryId: 'category' });
+		expect(result.matched).toBe(0);
+		expect(links.save).not.toHaveBeenCalled();
+		expect(links.delete.mock.calls.every(([criteria]) => criteria.source === 'rules' && criteria.entryId === 'category')).toBe(true);
+	});
+
+	test('only category entries can trigger recalculation', async () => {
+		const { service, categories, links } = fixture();
+		categories.findOneBy.mockResolvedValue(entry({ type: 'person' }));
+		await expect(service.recalculateCategory({ entryId: 'entry' })).rejects.toThrow('INVALID_CATALOG_RECALCULATE');
+		expect(links.save).not.toHaveBeenCalled();
+		expect(links.delete).not.toHaveBeenCalled();
 	});
 });
 

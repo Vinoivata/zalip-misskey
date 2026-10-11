@@ -4922,7 +4922,29 @@ declare module '../api.js' {
      *
      * **Credential required**: *Yes* / **Permission**: *read:account*
      */
+    request<E extends 'zalip/admin/importer/diagnostics', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     *
+     * **Credential required**: *Yes* / **Permission**: *read:account*
+     */
     request<E extends 'zalip/admin/importer/preview', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     *
+     * **Credential required**: *Yes* / **Permission**: *read:account*
+     */
+    request<E extends 'zalip/admin/importer/resolve', P extends Endpoints[E]['req']>(
       endpoint: E,
       params: P,
       credential?: string | null,
@@ -4967,6 +4989,17 @@ declare module '../api.js' {
      * **Credential required**: *Yes* / **Permission**: *read:account*
      */
     request<E extends 'zalip/admin/importer/runs/show', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     *
+     * **Credential required**: *Yes* / **Permission**: *write:account*
+     */
+    request<E extends 'zalip/admin/importer/schedules/action', P extends Endpoints[E]['req']>(
       endpoint: E,
       params: P,
       credential?: string | null,
@@ -5030,6 +5063,39 @@ declare module '../api.js' {
     /**
      * No description provided.
      *
+     * **Credential required**: *Yes* / **Permission**: *read:account*
+     */
+    request<E extends 'zalip/admin/importer/sources/check', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     *
+     * **Credential required**: *Yes* / **Permission**: *write:account*
+     */
+    request<E extends 'zalip/admin/importer/taxonomy/delete', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     *
+     * **Credential required**: *Yes* / **Permission**: *write:account*
+     */
+    request<E extends 'zalip/admin/importer/taxonomy/enrich-person', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     *
      * **Credential required**: *Yes* / **Permission**: *write:account*
      */
     request<E extends 'zalip/admin/importer/taxonomy/link', P extends Endpoints[E]['req']>(
@@ -5054,6 +5120,17 @@ declare module '../api.js' {
      *
      * **Credential required**: *Yes* / **Permission**: *write:account*
      */
+    request<E extends 'zalip/admin/importer/taxonomy/recalculate', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     *
+     * **Credential required**: *Yes* / **Permission**: *write:account*
+     */
     request<E extends 'zalip/admin/importer/taxonomy/save', P extends Endpoints[E]['req']>(
       endpoint: E,
       params: P,
@@ -5066,6 +5143,28 @@ declare module '../api.js' {
      * **Credential required**: *Yes* / **Permission**: *read:account*
      */
     request<E extends 'zalip/admin/importer/taxonomy/show', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     *
+     * **Credential required**: *Yes* / **Permission**: *write:account*
+     */
+    request<E extends 'zalip/admin/importer/work-state/save', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     *
+     * **Credential required**: *Yes* / **Permission**: *read:account*
+     */
+    request<E extends 'zalip/admin/importer/work-state/show', P extends Endpoints[E]['req']>(
       endpoint: E,
       params: P,
       credential?: string | null,

@@ -15,7 +15,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div v-if="loading && !entries.length && !entry" :class="$style.empty"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.loading }}</div>
 			<div v-else-if="loadError" :class="$style.empty" role="alert"><i class="ti ti-alert-circle" aria-hidden="true"></i><strong>{{ loadError }}</strong><button type="button" class="_button" :class="$style.button" @click="load(false)">{{ i18n.ts.zalip._importer.retry }}</button></div>
 			<template v-else-if="entry">
-				<section :class="$style.hero"><div v-if="importerImageUrl(entry.imageUrl)" :class="[$style.entityArtwork, { [$style.portrait]: currentType === 'person' }]"><img :src="importerImageUrl(entry.imageUrl)!" :alt="entry.name"></div><div><p v-if="entry.description" :class="$style.description">{{ entry.description }}</p><p v-else :class="$style.muted">{{ i18n.tsx.zalip._importer.catalogueEntity({ type: taxonomyTypeLabel(entry.type) }) }}</p></div></section>
+				<section :class="$style.hero"><div v-if="importerImageUrl(entry.imageUrl)" :class="[$style.entityArtwork, { [$style.portrait]: currentType === 'person' }]"><img :src="importerImageUrl(entry.imageUrl)!" :alt="entry.name"></div><div :class="$style.heroInformation"><dl v-if="facts.length" :class="$style.facts"><div v-for="fact in facts" :key="fact.key"><dt>{{ taxonomyFactLabel(fact.key) }}</dt><dd><a v-if="fact.href" :href="fact.href" target="_blank" rel="noopener noreferrer">{{ fact.value }}<i class="ti ti-external-link" aria-hidden="true"></i></a><template v-else>{{ fact.value }}</template></dd></div></dl><p v-if="biography" :class="$style.description">{{ biography }}</p><p v-else :class="$style.muted">{{ i18n.tsx.zalip._importer.catalogueEntity({ type: taxonomyTypeLabel(entry.type) }) }}</p></div></section>
 				<section><h2>{{ currentType === 'person' ? i18n.ts.zalip._importer.filmography : currentType === 'studio' ? i18n.ts.zalip._importer.studioWorks : i18n.ts.zalip._importer.works }}</h2><p v-if="!works.length" :class="$style.empty">{{ i18n.ts.zalip._importer.noPublishedWorks }}</p><div v-else :class="$style.works"><MkA v-for="work in works" :key="`${work.id}:${work.role ?? ''}`" :to="`/zalip/${work.slug}`" :class="$style.work"><div :class="$style.poster"><img v-if="importerImageUrl(work.posterPath)" :src="importerImageUrl(work.posterPath)!" alt="" loading="lazy"><i v-else class="ti ti-movie" aria-hidden="true"></i></div><div><h3>{{ work.title }}</h3><p>{{ [work.releaseYear, kindLabel(work.kind)].filter(Boolean).join(' · ') }}</p><p v-if="work.role || work.character" :class="$style.role">{{ [work.role, work.character].filter(Boolean).join(' · ') }}</p></div></MkA></div></section>
 			</template>
 			<template v-else-if="!props.slug"><div v-if="entries.length" :class="$style.entries"><MkA v-for="item in entries" :key="item.id" :to="`/zalip/taxonomy/${item.type}/${item.slug}`" :class="$style.entry"><div :class="$style.entryArtwork"><img v-if="importerImageUrl(item.imageUrl)" :src="importerImageUrl(item.imageUrl)!" alt="" loading="lazy"><i v-else :class="typeIcon" aria-hidden="true"></i></div><div><h2>{{ item.name }}</h2><p v-if="item.description">{{ item.description }}</p></div><i class="ti ti-chevron-right" aria-hidden="true"></i></MkA></div><p v-else :class="$style.empty">{{ i18n.ts.zalip._importer.directoryNoResults }}</p><button v-if="hasMore" type="button" class="_button" :class="[$style.button, $style.more]" :disabled="loading" @click="load(true)">{{ loading ? i18n.ts.zalip._importer.loading : i18n.ts.zalip._importer.showMore }}</button></template>
@@ -26,10 +26,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { i18n } from '@/i18n.js';
 import { computed, onMounted, ref, watch } from 'vue';
 import type { TaxonomyEntry, TaxonomyType, TaxonomyWork } from '@/utility/zalip-importer.js';
-import { importerImageUrl, taxonomyTypeLabel, taxonomyTypes } from '@/utility/zalip-importer.js';
+import { i18n } from '@/i18n.js';
+import { importerImageUrl, taxonomyFactLabel, taxonomyFacts, taxonomyTypeLabel, taxonomyTypes } from '@/utility/zalip-importer.js';
 import { useRouter } from '@/router.js';
 import { definePage } from '@/page.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
@@ -45,6 +45,8 @@ const works = ref<TaxonomyWork[]>([]);
 const loading = ref(false);
 const loadError = ref('');
 const hasMore = ref(false);
+const facts = computed(() => taxonomyFacts(entry.value?.data));
+const biography = computed(() => currentType.value === 'person' && Object.hasOwn(entry.value?.data ?? {}, 'biography') ? typeof entry.value?.data?.biography === 'string' ? entry.value.data.biography.trim() : '' : entry.value?.description ?? '');
 let requestRevision = 0;
 const PAGE_SIZE = 50;
 
@@ -103,11 +105,18 @@ definePage(() => ({ title: entry.value?.name ?? taxonomyTypeLabel(currentType.va
 .entryArtwork img { width: 100%; height: 100%; object-fit: cover; }
 .entryArtwork i { color: var(--MI_THEME-accent); font-size: 1.6rem; }
 .hero { display: flex; align-items: start; gap: 24px; padding: 24px; margin-bottom: 32px; border-radius: var(--MI-radius); background: var(--MI_THEME-panel); }
+.heroInformation { flex: 1; min-width: 0; }
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; margin: 0 0 24px; }
+.facts > div { min-width: 0; }
+.facts dt { margin-bottom: 4px; color: var(--MI_THEME-fgTransparentWeak); font-size: .8rem; }
+.facts dd { margin: 0; font-size: .9rem; line-height: 1.5; overflow-wrap: anywhere; user-select: text; }
+.facts a { color: var(--MI_THEME-accent); }
+.facts i { margin-left: 5px; }
 .entityArtwork { width: 220px; max-width: 40%; flex-shrink: 0; }
 .entityArtwork img { width: 100%; max-height: 220px; object-fit: contain; border-radius: var(--MI-radius); }
 .entityArtwork.portrait { width: 160px; }
 .entityArtwork.portrait img { max-height: 240px; object-fit: cover; }
-.description { margin: 0; line-height: 1.7; white-space: pre-wrap; user-select: text; }
+.description { margin: 0; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .muted { color: var(--MI_THEME-fgTransparentWeak); }
 .works { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 18px 14px; }
 .work { min-width: 0; text-decoration: none; }
@@ -121,4 +130,5 @@ definePage(() => ({ title: entry.value?.name ?? taxonomyTypeLabel(currentType.va
 .empty > i { font-size: 2rem; color: var(--MI_THEME-accent); }
 .more { margin: 24px auto 0; display: flex; width: fit-content; }
 @media (max-width: 650px) { .page { padding-top: 12px; } .heading { align-items: start; } .heading h1 { font-size: 1.4rem; } .heading .button { padding: 9px; font-size: .75rem; } .entries { grid-template-columns: 1fr; } .hero { gap: 16px; padding: 16px; } .entityArtwork.portrait { width: 100px; } .description { font-size: .9rem; } .works { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 10px; } .tabs a { font-size: .82rem; } }
+@media (max-width: 650px) { .hero { flex-wrap: wrap; } .heroInformation { flex-basis: 100%; } .facts { gap: 12px; } }
 </style>

@@ -4,6 +4,7 @@
 -
 
 ### Client
+- Enhance: Add per-source and per-field Zalip import settings, exact work locks, provider checks, profile controls, person enrichment and bounded category recalculation.
 - Enhance: Rebuild Zalip title hero and episode player controls, add a mobile account sheet, restore catalogue widgets, and fix nested search focus outlines.
 - Enhance: ZALIPのフィードとスレッドを参照デザインの配色・アイコン・余白に統一し、スクロール方向に追従する半透明モバイルナビゲーション、固定返信欄、管理者向けコンテンツ追加導線を実装
 - Enhance: ZALIPのホームスライダーをポスター、背景、作品種別、年、ジャンル、コミュニティ評価を備えたシネマティック表示に刷新し、320pxからタブレットまでの長い原題表示を修正
@@ -56,6 +57,7 @@
 - Feat: Add a Zalip importer console with previews, batch jobs, directories and schedules, public filmographies and selectable playback sources.
 
 ### Server
+- Enhance: Add filtered and IMDb-based draft imports, selective provider requests, persistent import options, safe local WebP artwork, source diagnostics and taxonomy enrichment without overwriting editorial data.
 - Fix: Allow clearing a Zalip library status without removing personal ratings, watch progress, favorites or release subscriptions.
 - Feat: ZALIP作品の公開API、ライブラリ、更新、管理画面で匿名のコミュニティ評価と評価数を一貫して返すように
 - Enhance: ZALIPカタログで同時に選択できるジャンル数を40件に拡張

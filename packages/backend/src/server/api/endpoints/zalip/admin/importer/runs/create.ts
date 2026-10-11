@@ -7,7 +7,7 @@ import { Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { RoleService } from '@/core/RoleService.js';
 import { ZalipImporterService } from '@/core/ZalipImporterService.js';
-import { importerAdminWriteMeta, assertImporterAdministrator, importerAuthProperties, safeImporterCall, importerRefProperty, importerIdProperty, importerLockedFieldsProperty, importerCategoryIdsProperty } from '@/server/api/endpoints/zalip/importer-common.js';
+import { importerAdminWriteMeta, assertImporterAdministrator, importerAuthProperties, safeImporterCall, importerRefProperty, importerIdProperty, importerLockedFieldsProperty, importerCategoryIdsProperty, importerOptionsProperty } from '@/server/api/endpoints/zalip/importer-common.js';
 
 export const meta = {
 	...importerAdminWriteMeta,
@@ -24,6 +24,7 @@ export const paramDef = {
 		lockedFields: importerLockedFieldsProperty,
 		categoryIds: importerCategoryIdsProperty,
 		profileId: importerIdProperty,
+		options: importerOptionsProperty,
 	},
 	required: ["mode"],
 	oneOf: [{ required: ['refs'] }, { required: ['workIds'] }],
@@ -37,7 +38,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 	) {
 		super(meta, paramDef, async (ps, me) => {
 			await assertImporterAdministrator(this.roleService, me);
-			return safeImporterCall(() => this.importer.createRun({ refs: ps.refs, workIds: ps.workIds, mode: ps.mode, lockedFields: ps.lockedFields, categoryIds: ps.categoryIds, profileId: ps.profileId }, me.id));
+			return safeImporterCall(() => this.importer.createRun({ refs: ps.refs, workIds: ps.workIds, mode: ps.mode, lockedFields: ps.lockedFields, categoryIds: ps.categoryIds, profileId: ps.profileId, options: ps.options }, me.id));
 		});
 	}
 }

@@ -101,6 +101,60 @@ describe('importer normalizers', () => {
 });
 
 describe('importer adapter contracts', () => {
+	test('queued IMDb references resolve by exact ID inside the provider worker', async () => {
+		const transport = vi.fn<ImportTransport>(async url => new URL(url).pathname.startsWith('/3/find/')
+			? { movie_results: [{ id: 278 }], tv_results: [] }
+			: { id: 278, title: 'Film', imdb_id: 'tt0111161', genres: [], production_companies: [] });
+		const result = await createImportProviders({ tmdbApiKey: 'fixture' }, transport).tmdb.fetch({ source: 'tmdb', externalId: 'imdb:tt0111161', mediaType: 'movie' }, ['title']);
+		expect(result.ref).toEqual({ source: 'tmdb', externalId: '278', mediaType: 'movie' });
+		expect(transport.mock.calls).toHaveLength(2);
+		await expect(createImportProviders({ tmdbApiKey: 'fixture' }, transport).tmdb.fetch({ source: 'tmdb', externalId: 'imdb:tt0111161', mediaType: 'tv' }, ['title'])).rejects.toMatchObject({ code: 'not-found' });
+	});
+
+	test('field selection avoids season, cast and extra artwork requests', async () => {
+		const transport = vi.fn<ImportTransport>(async url => new URL(url).origin === 'https://api.themoviedb.org'
+			? { id: 1, name: 'Show', genres: [], production_companies: [], seasons: [{ season_number: 1 }] }
+			: { kinopoiskId: 1, nameRu: 'Show', type: 'TV_SERIES', genres: [] });
+		const providers = createImportProviders({ tmdbApiKey: 'fixture', kinopoiskApiKey: 'fixture' }, transport);
+		await providers.tmdb.fetch({ source: 'tmdb', externalId: '1', mediaType: 'tv' }, ['title', 'description']);
+		await providers.kinopoisk.fetch({ source: 'kinopoisk', externalId: '1', mediaType: 'tv' }, ['title', 'description']);
+		expect(transport.mock.calls).toHaveLength(2);
+		expect(new URL(transport.mock.calls[0][0]).searchParams.get('append_to_response')).toBe('external_ids');
+	});
+
+	test('Kinopoisk fills a missing backdrop from safe stills without overwriting the poster', async () => {
+		const transport = vi.fn<ImportTransport>(async url => new URL(url).pathname.endsWith('/images')
+			? { items: [{ imageUrl: 'https://images.example.org/frame.jpg' }, { imageUrl: 'https://images.example.org/frame.jpg' }, { imageUrl: 'https://images.example.org/frame.jpg?api_key=fixture' }] }
+			: { kinopoiskId: 1, nameRu: 'Film', type: 'FILM', genres: [], posterUrl: 'https://images.example.org/poster.jpg' });
+		const result = await createImportProviders({ kinopoiskApiKey: 'fixture' }, transport).kinopoisk.fetch({ source: 'kinopoisk', externalId: '1', mediaType: 'movie' }, ['backdropUrl', 'galleryUrls']);
+		expect(result.posterUrl).toBe('https://images.example.org/poster.jpg');
+		expect(result.backdropUrl).toBe('https://images.example.org/frame.jpg');
+		expect(result.galleryUrls).toEqual(['https://images.example.org/frame.jpg']);
+		expect(transport.mock.calls).toHaveLength(2);
+	});
+
+	test('an artwork failure cannot hide a quota pause or leak upstream errors', async () => {
+		const transport = vi.fn<ImportTransport>(async url => {
+			if (new URL(url).pathname.endsWith('/images')) throw new ImportProviderError('quota-exceeded');
+			return { kinopoiskId: 1, nameRu: 'Film', type: 'FILM', genres: [] };
+		});
+		await expect(createImportProviders({ kinopoiskApiKey: 'fixture' }, transport).kinopoisk.fetch({ source: 'kinopoisk', externalId: '1', mediaType: 'movie' }, ['backdropUrl'])).rejects.toMatchObject({ code: 'quota-exceeded' });
+	});
+
+	test('health checks use fixed endpoints and discard returned metadata', async () => {
+		const transport = vi.fn<ImportTransport>(async url => {
+			switch (new URL(url).origin) {
+				case 'https://api.themoviedb.org': return { images: { secure_base_url: 'https://image.tmdb.org/' } };
+				case 'https://kinopoiskapiunofficial.tech': return { kinopoiskId: 301 };
+				case 'https://apbugall.org': return { data: { category: { slug: 'movie' } } };
+				default: return { results: [] };
+			}
+		});
+		const providers = createImportProviders({ tmdbApiKey: 'fixture', kinopoiskApiKey: 'fixture', allohaApiToken: 'fixture', collapsApiToken: 'fixture' }, transport);
+		for (const provider of Object.values(providers)) await expect(provider.check?.()).resolves.toBeUndefined();
+		expect(transport.mock.calls).toHaveLength(4);
+	});
+
 	test.each([
 		{ name: 'absent', hosts: undefined },
 		{ name: 'empty array', hosts: [] },

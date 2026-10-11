@@ -476,6 +476,9 @@ export * as 'zalip/admin/discussions/create' from './endpoints/zalip/admin/discu
 export * as 'zalip/admin/episodes/create' from './endpoints/zalip/admin/episodes/create.js';
 export * as 'zalip/admin/episodes/discussions/create' from './endpoints/zalip/admin/episodes/discussions/create.js';
 export * as 'zalip/admin/importer/sources' from './endpoints/zalip/admin/importer/sources.js';
+export * as 'zalip/admin/importer/sources/check' from './endpoints/zalip/admin/importer/sources/check.js';
+export * as 'zalip/admin/importer/resolve' from './endpoints/zalip/admin/importer/resolve.js';
+export * as 'zalip/admin/importer/diagnostics' from './endpoints/zalip/admin/importer/diagnostics.js';
 export * as 'zalip/admin/importer/search' from './endpoints/zalip/admin/importer/search.js';
 export * as 'zalip/admin/importer/preview' from './endpoints/zalip/admin/importer/preview.js';
 export * as 'zalip/admin/importer/runs/create' from './endpoints/zalip/admin/importer/runs/create.js';
@@ -486,9 +489,15 @@ export * as 'zalip/admin/importer/taxonomy/list' from './endpoints/zalip/admin/i
 export * as 'zalip/admin/importer/taxonomy/show' from './endpoints/zalip/admin/importer/taxonomy/show.js';
 export * as 'zalip/admin/importer/taxonomy/save' from './endpoints/zalip/admin/importer/taxonomy/save.js';
 export * as 'zalip/admin/importer/taxonomy/link' from './endpoints/zalip/admin/importer/taxonomy/link.js';
+export * as 'zalip/admin/importer/taxonomy/enrich-person' from './endpoints/zalip/admin/importer/taxonomy/enrich-person.js';
+export * as 'zalip/admin/importer/taxonomy/recalculate' from './endpoints/zalip/admin/importer/taxonomy/recalculate.js';
+export * as 'zalip/admin/importer/taxonomy/delete' from './endpoints/zalip/admin/importer/taxonomy/delete.js';
 export * as 'zalip/admin/importer/schedules/list' from './endpoints/zalip/admin/importer/schedules/list.js';
 export * as 'zalip/admin/importer/schedules/save' from './endpoints/zalip/admin/importer/schedules/save.js';
 export * as 'zalip/admin/importer/schedules/run' from './endpoints/zalip/admin/importer/schedules/run.js';
+export * as 'zalip/admin/importer/schedules/action' from './endpoints/zalip/admin/importer/schedules/action.js';
+export * as 'zalip/admin/importer/work-state/show' from './endpoints/zalip/admin/importer/work-state/show.js';
+export * as 'zalip/admin/importer/work-state/save' from './endpoints/zalip/admin/importer/work-state/save.js';
 export * as 'zalip/taxonomy/list' from './endpoints/zalip/taxonomy/list.js';
 export * as 'zalip/taxonomy/show' from './endpoints/zalip/taxonomy/show.js';
 export * as 'zalip/playback/sources' from './endpoints/zalip/playback/sources.js';

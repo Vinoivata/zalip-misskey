@@ -10,6 +10,7 @@ import { DI } from '@/di-symbols.js';
 import { IdService } from '@/core/IdService.js';
 import { ZalipCatalogService } from '@/core/ZalipCatalogService.js';
 import { ZalipTaxonomyService } from '@/core/ZalipTaxonomyService.js';
+import { ZalipImporterArtworkService } from '@/core/ZalipImporterArtworkService.js';
 import type { ZalipImportQueue } from '@/core/QueueModule.js';
 import { MiZalipWork } from '@/models/ZalipWork.js';
 import { MiZalipExternalIdentity } from '@/models/ZalipExternalIdentity.js';
@@ -18,9 +19,9 @@ import { MiZalipImportProfile } from '@/models/ZalipImportProfile.js';
 import { MiZalipCatalogEntry } from '@/models/ZalipCatalogEntry.js';
 import { applyImportRecord, currentImportFields, findImportWork } from './zalip-importer/apply.js';
 import { budgetedTransport } from './zalip-importer/budget.js';
-import { canUpdateField, mergeImportRecords, readImportState } from './zalip-importer/policy.js';
+import { canUpdateField, importFieldSelected, matchesImportFilters, mergeImportRecords, nonEmpty, normalizeImportOptions, readImportState, sameValue, selectedImportSources } from './zalip-importer/policy.js';
 import { createImportProviders, defaultImportTransport, ImportProviderError } from './zalip-importer/providers.js';
-import { importFields, importSources, type ImportMediaType, type ImportPreview, type ImportProvider, type ImportRecord, type ImportRef, type ImportSource } from './zalip-importer/types.js';
+import { importFields, importSources, type ExternalIdentity, type ImportField, type ImportMediaType, type ImportOptions, type ImportPreview, type ImportProvider, type ImportRecord, type ImportRef, type ImportSource } from './zalip-importer/types.js';
 
 export type CreateImportRun = {
 	refs?: ImportRef[];
@@ -29,23 +30,45 @@ export type CreateImportRun = {
 	lockedFields?: string[];
 	categoryIds?: string[];
 	profileId?: string;
+	options?: ImportOptions;
 };
 export type SaveImportProfile = {
 	id?: string;
 	name: string;
 	enabled: boolean;
 	source: ImportSource;
-	mode: 'metadata' | 'availability' | 'collection';
+	mode: 'metadata' | 'availability' | 'collection' | 'discovery';
 	intervalMinutes: number;
 	collectionId?: string | null;
 	lockedFields?: string[];
 	categoryIds?: string[];
+	options?: ImportOptions;
 };
 
 export function safeImportError(error: unknown): string {
 	if (error instanceof ImportProviderError) return error.code;
 	if (error instanceof Error && ['NO_SUCH_WORK', 'IMPORT_IDENTITY_CONFLICT', 'IMPORT_INVALID_RECORD', 'ZALIP_CATALOG_ENTRY_NOT_FOUND'].includes(error.message)) return error.message;
 	return 'import-failed';
+}
+
+const importWarningCodes = new Set([
+	'tmdb-metadata-partial', 'tmdb-seasons-unavailable', 'tmdb-season-limit', 'tmdb-episode-limit',
+	'kinopoisk-metadata-partial', 'kinopoisk-artwork-unavailable', 'kinopoisk-season-limit', 'kinopoisk-episode-limit',
+	'collaps-metadata-partial', 'collaps-season-limit', 'collaps-episode-limit', 'collaps-player-url-rejected',
+	'alloha-player-url-rejected',
+]);
+const sourceWarningPattern = /^(?:tmdb|kinopoisk|alloha|collaps):(?:not-configured|not-found|quota-exceeded|rate-limited|upstream-failure|invalid-ref|unsupported|malformed-response|import-failed|NO_SUCH_WORK|IMPORT_IDENTITY_CONFLICT|IMPORT_INVALID_RECORD|ZALIP_CATALOG_ENTRY_NOT_FOUND)$/u;
+
+/** The durable journal accepts closed codes only, never provider text, URLs or credentials. */
+export function safeImportWarnings(value: unknown): string[] {
+	if (!Array.isArray(value)) return [];
+	const warnings = new Set<string>();
+	for (const warning of value.slice(0, 1000)) {
+		if (typeof warning !== 'string' || warning.length > 100) continue;
+		if (importWarningCodes.has(warning) || sourceWarningPattern.test(warning) || /^tmdb-season-(?:0|[1-9][0-9]{0,3})-unavailable$/u.test(warning) || /^artwork-local-unavailable:(?:posterUrl|backdropUrl|logoUrl|galleryUrls)$/u.test(warning)) warnings.add(warning);
+		if (warnings.size >= 50) break;
+	}
+	return [...warnings];
 }
 
 /** Queue payloads contain IDs only. Tokens and normalized private snapshots never enter job logs. */
@@ -60,6 +83,7 @@ export class ZalipImporterService {
 		private idService: IdService,
 		private catalogue: ZalipCatalogService,
 		private taxonomy: ZalipTaxonomyService,
+		private artwork: ZalipImporterArtworkService,
 	) {
 		const kpKey = process.env.ZALIP_KINOPOISK_API_KEY;
 		const budget = Number(process.env.ZALIP_KINOPOISK_DAILY_BUDGET ?? 350);
@@ -81,24 +105,61 @@ export class ZalipImporterService {
 		return this.providers[source].search(query, page, mediaType);
 	}
 
-	private async fetchRecord(ref: ImportRef, availabilityOnly = false) {
-		const records = [await this.providers[ref.source].fetch(ref)];
-		const visited = new Set<ImportSource>([ref.source]);
+	private assertCompatibleIdentities(record: ImportRecord, identities: ExternalIdentity[], mediaType: ImportMediaType) {
+		if (record.ref.mediaType !== mediaType) throw new Error('IMPORT_IDENTITY_CONFLICT');
+		for (const identity of record.identities) {
+			const existing = identities.find(item => item.provider === identity.provider && item.entityType === identity.entityType);
+			if (existing && existing.externalId !== identity.externalId) throw new Error('IMPORT_IDENTITY_CONFLICT');
+		}
+	}
+
+	private async fetchRecord(ref: ImportRef, availabilityOnly = false, inputOptions?: ImportOptions, workId?: string) {
+		const options = normalizeImportOptions(inputOptions);
+		const selectedSources = selectedImportSources(ref.source, options);
+		const fields = availabilityOnly ? ['players'] as const : options.fields;
+		let primary: ImportRecord;
+		try {
+			primary = await this.providers[ref.source].fetch(ref, fields);
+		} catch (error) {
+			// Refresh recovery uses only previously bound exact IDs, never a title search.
+			// Authentication, quota and transport errors must retain their original handling.
+			if (!(error instanceof ImportProviderError) || error.code !== 'not-found' || !workId) throw error;
+			const work = await this.db.getRepository(MiZalipWork).findOneBy({ id: workId });
+			if (!work) throw new Error('NO_SUCH_WORK');
+			const identities: ExternalIdentity[] = await this.db.getRepository(MiZalipExternalIdentity).findBy({ workId });
+			if (work.tmdbId && work.tmdbMediaType && !identities.some(identity => identity.provider === 'tmdb')) identities.push({ provider: 'tmdb', externalId: String(work.tmdbId), entityType: work.tmdbMediaType });
+			let fallback: ImportRecord | null = null;
+			for (const source of selectedSources) {
+				const provider = this.providers[source];
+				if (source === ref.source || !provider.status().configured || (availabilityOnly && source !== 'alloha' && source !== 'collaps')) continue;
+				try {
+					const exact = identities.find(identity => identity.provider === source && identity.entityType === ref.mediaType);
+					const candidate = exact ? await provider.fetch({ source, externalId: exact.externalId, mediaType: ref.mediaType }, fields) : await provider.lookup?.(identities, ref.mediaType, fields);
+					if (!candidate) continue;
+					this.assertCompatibleIdentities(candidate, identities, ref.mediaType);
+					fallback = candidate;
+					break;
+				} catch (fallbackError) {
+					if (safeImportError(fallbackError) === 'IMPORT_IDENTITY_CONFLICT' || (fallbackError instanceof ImportProviderError && ['quota-exceeded', 'rate-limited'].includes(fallbackError.code))) throw fallbackError;
+				}
+			}
+			if (!fallback) throw error;
+			fallback.warnings.push(`${ref.source}:not-found`);
+			fallback.complete = false;
+			primary = fallback;
+		}
+		const records = [primary];
+		const visited = new Set<ImportSource>([ref.source, primary.ref.source]);
 		// A second pass permits TMDB discovery from IMDb obtained from Kinopoisk/Collaps.
 		for (let pass = 0; pass < 2; pass++) {
-			for (const source of importSources) {
+			for (const source of selectedSources) {
 				if (visited.has(source) || !this.providers[source].status().configured || (availabilityOnly && source !== 'alloha' && source !== 'collaps')) continue;
 				const provider = this.providers[source];
 				try {
 					const identities = records.flatMap(record => record.identities);
-					const extra = await provider.lookup?.(identities, ref.mediaType);
+					const extra = await provider.lookup?.(identities, ref.mediaType, fields);
 					if (extra) {
-						if (extra.ref.mediaType !== ref.mediaType) throw new Error('IMPORT_IDENTITY_CONFLICT');
-						// Reject contradictory provider IDs before allowing enrichment to bind them.
-						for (const identity of extra.identities) {
-							const existing = identities.find(item => item.provider === identity.provider && item.entityType === identity.entityType);
-							if (existing && existing.externalId !== identity.externalId) throw new Error('IMPORT_IDENTITY_CONFLICT');
-						}
+						this.assertCompatibleIdentities(extra, identities, ref.mediaType);
 						records.push(extra);
 						visited.add(source);
 					}
@@ -111,18 +172,21 @@ export class ZalipImporterService {
 				}
 			}
 		}
-		return mergeImportRecords(records);
+		return mergeImportRecords(records, options);
 	}
 
-	public async preview(ref: ImportRef, workId?: string): Promise<ImportPreview> {
-		const { record } = await this.fetchRecord(ref);
+	public async preview(ref: ImportRef, workId?: string, inputOptions?: ImportOptions): Promise<ImportPreview> {
+		const options = normalizeImportOptions(inputOptions);
+		const { record } = await this.fetchRecord(ref, false, options, workId);
 		const work = await findImportWork(this.db, record, workId);
 		const state = readImportState(work?.importData);
 		const fields = work ? currentImportFields(work) : {};
 		return {
 			record,
 			workId: work?.id ?? null,
-			changes: importFields.map(field => ({ field, before: fields[field] ?? null, after: record[field], protected: work != null && !canUpdateField(fields[field], state.values[field], record[field], state.locks.includes(field)) })),
+			options, locks: state.locks,
+			matchesFilters: matchesImportFilters(record, options.filters),
+			changes: importFields.map(field => ({ field, before: fields[field] ?? null, after: record[field], selected: importFieldSelected(field, options, !work), protected: !importFieldSelected(field, options, !work) || (work != null && !canUpdateField(fields[field], state.values[field], record[field], state.locks.includes(field))) })),
 			warnings: record.warnings,
 		};
 	}
@@ -141,18 +205,21 @@ export class ZalipImporterService {
 	}
 
 	public async createRun(input: CreateImportRun, actorId?: string, boundTargets?: { ref: ImportRef; workId: string | null }[]) {
+		const options = normalizeImportOptions(input.options);
+		const lockedFields = normalizeImportOptions({ fields: input.lockedFields as ImportField[] | undefined }).fields ?? [];
 		if ((input.refs?.length ?? 0) > 100 || (input.workIds?.length ?? 0) > 100 || (input.refs?.length && input.workIds?.length)) throw new ImportProviderError('invalid-ref');
 		const targets = boundTargets ?? (input.workIds?.length ? await this.refsForWorks(input.workIds) : (input.refs ?? []).map(ref => ({ ref, workId: null })));
+		if (targets.length > 100) throw new ImportProviderError('invalid-ref');
 		if (targets.length === 0 && boundTargets === undefined) throw new ImportProviderError('invalid-ref');
 		if (targets.some(item => !this.providers[item.ref.source]?.status().configured)) throw new ImportProviderError('not-configured');
 		const categoryIds = [...new Set(input.categoryIds ?? [])];
-		if (categoryIds.length && await this.db.getRepository(MiZalipCatalogEntry).countBy({ id: In(categoryIds), type: 'category' }) !== categoryIds.length) throw new Error('ZALIP_CATALOG_ENTRY_NOT_FOUND');
+		if (categoryIds.length > 50 || (categoryIds.length && await this.db.getRepository(MiZalipCatalogEntry).countBy({ id: In(categoryIds), type: 'category' }) !== categoryIds.length)) throw new Error('ZALIP_CATALOG_ENTRY_NOT_FOUND');
 		const now = new Date();
 		const run = await this.db.transaction(async manager => {
 			const runs = manager.getRepository(MiZalipImportRun);
-			const created = await runs.save(runs.create({ id: this.idService.gen(), createdAt: now, updatedAt: now, createdById: actorId ?? null, profileId: input.profileId ?? null, mode: input.mode, state: targets.length ? 'queued' : 'completed', lockedFields: [...new Set(input.lockedFields ?? [])], categoryIds, error: null, retryAt: null }));
+			const created = await runs.save(runs.create({ id: this.idService.gen(), createdAt: now, updatedAt: now, createdById: actorId ?? null, profileId: input.profileId ?? null, mode: input.mode, state: targets.length ? 'queued' : 'completed', lockedFields, categoryIds, options, error: null, retryAt: null }));
 			const items = manager.getRepository(MiZalipImportItem);
-			if (targets.length) await items.save(targets.map((target, position) => items.create({ id: this.idService.gen(), runId: created.id, position, ref: target.ref, workId: target.workId, state: 'pending', error: null, updatedAt: now })));
+			if (targets.length) await items.save(targets.map((target, position) => items.create({ id: this.idService.gen(), runId: created.id, position, ref: target.ref, workId: target.workId, state: 'pending', error: null, warnings: [], updatedAt: now })));
 			return created;
 		});
 		if (targets.length) await this.enqueue(run.id);
@@ -168,7 +235,7 @@ export class ZalipImporterService {
 
 	private async packRun(run: MiZalipImportRun) {
 		const items = await this.db.getRepository(MiZalipImportItem).findBy({ runId: run.id });
-		return { id: run.id, state: run.state, mode: run.mode, createdAt: run.createdAt.toISOString(), updatedAt: run.updatedAt.toISOString(), total: items.length, completed: items.filter(item => item.state === 'completed' || item.state === 'skipped').length, failed: items.filter(item => item.state === 'failed').length, error: run.error, profileId: run.profileId };
+		return { id: run.id, state: run.state, mode: run.mode, createdAt: run.createdAt.toISOString(), updatedAt: run.updatedAt.toISOString(), total: items.length, completed: items.filter(item => item.state === 'completed' || item.state === 'skipped').length, failed: items.filter(item => item.state === 'failed').length, error: run.error, profileId: run.profileId, options: run.options ?? {}, retryAt: run.retryAt?.toISOString() ?? null };
 	}
 
 	public async listRuns() {
@@ -180,7 +247,7 @@ export class ZalipImporterService {
 		const run = await this.db.getRepository(MiZalipImportRun).findOneBy({ id: runId });
 		if (!run) throw new ImportProviderError('not-found');
 		const items = await this.db.getRepository(MiZalipImportItem).find({ where: { runId }, order: { position: 'ASC' } });
-		return { run: await this.packRun(run), items: items.map(({ id, position, state, ref, workId, error }) => ({ id, position, state, ref, workId, error })) };
+		return { run: await this.packRun(run), items: items.map(({ id, position, state, ref, workId, error, warnings }) => ({ id, position, state, ref, workId, error, warnings: safeImportWarnings(warnings) })) };
 	}
 
 	public async actionRun(runId: string, action: 'pause' | 'resume' | 'retry' | 'cancel') {
@@ -221,13 +288,27 @@ export class ZalipImporterService {
 				if ((await runs.findOneBy({ id: runId }))?.state !== 'running') return;
 				const item = await items.findOne({ where: { runId, state: 'pending' }, order: { position: 'ASC' } });
 				if (!item) break;
-				await items.update(item.id, { state: 'running', updatedAt: new Date() });
+				await items.update(item.id, { state: 'running', warnings: [], updatedAt: new Date() });
+				let warnings: string[] = [];
 				try {
-					const { record, sources } = await this.fetchRecord(item.ref, run.mode === 'availability');
-					if ((await runs.findOneBy({ id: runId }))?.state !== 'running') { await items.update(item.id, { state: 'pending' }); return; }
+					const { record: fetchedRecord, sources } = await this.fetchRecord(item.ref, run.mode === 'availability', run.options, item.workId ?? undefined);
+					let record = fetchedRecord;
+					warnings = safeImportWarnings(record.warnings);
+					if (warnings.length) await items.update(item.id, { warnings });
+					if ((await runs.findOneBy({ id: runId }))?.state !== 'running') { await items.update(item.id, { state: 'pending', warnings }); return; }
+					if (!matchesImportFilters(record, run.options?.filters)) {
+						await items.update(item.id, { state: 'skipped', error: 'import-filtered', warnings, updatedAt: new Date() });
+						continue;
+					}
 					const before = await findImportWork(this.db, record, item.workId ?? undefined);
 					const establishedAvailability = before != null && readImportState(before.importData).values.players !== undefined;
-					const result = await applyImportRecord(this.db, this.idService, record, sources, { workId: item.workId ?? undefined, lockedFields: run.lockedFields, mode: run.mode });
+					if (run.mode !== 'availability' && run.options?.artwork === 'local-webp') record = await this.artwork.prepare(record, before, run.options.fields, run.lockedFields);
+					const preparedWarnings = safeImportWarnings(record.warnings);
+					if (!sameValue(warnings, preparedWarnings)) await items.update(item.id, { warnings: preparedWarnings });
+					warnings = preparedWarnings;
+					// Optional local artwork involves network work: a late pause/cancel still wins.
+					if ((await runs.findOneBy({ id: runId }))?.state !== 'running') { await items.update(item.id, { state: 'pending', warnings }); return; }
+					const result = await applyImportRecord(this.db, this.idService, record, sources, { workId: item.workId ?? undefined, lockedFields: run.lockedFields, mode: run.mode, options: run.options });
 					await items.update(item.id, { workId: result.work.id });
 					if (run.mode !== 'availability') await this.taxonomy.syncImportedWork(result.work.id, record, result.protectedFields);
 					for (const entryId of run.categoryIds) await this.taxonomy.linkWork({ entryId, workId: result.work.id });
@@ -239,15 +320,15 @@ export class ZalipImporterService {
 						}
 					}
 					await this.recordAvailability(result.work, result.created || !establishedAvailability);
-					await items.update(item.id, { state: 'completed', error: null, updatedAt: new Date() });
+					await items.update(item.id, { state: 'completed', error: null, warnings, updatedAt: new Date() });
 				} catch (error) {
 					const code = safeImportError(error);
 					if (code === 'quota-exceeded' || code === 'rate-limited') {
-						await items.update(item.id, { state: 'pending', error: code });
+						await items.update(item.id, { state: 'pending', error: code, warnings });
 						await runs.update({ id: runId, state: 'running' }, { state: 'paused', error: code, retryAt: new Date(Date.now() + (error instanceof ImportProviderError ? error.retryAfterMs ?? 3600000 : 3600000)), updatedAt: new Date() });
 						return;
 					}
-					await items.update(item.id, { state: 'failed', error: code, updatedAt: new Date() });
+					await items.update(item.id, { state: 'failed', error: code, warnings, updatedAt: new Date() });
 				}
 				await runs.update({ id: runId, state: 'running' }, { updatedAt: new Date() });
 			}
@@ -279,8 +360,37 @@ export class ZalipImporterService {
 		return { sources: players.map(player => ({ source: player.source, iframe: player.iframeUrl, translations: player.translations, quality: player.quality, episodes: player.episodes })) };
 	}
 
+	private packWorkState(work: MiZalipWork) {
+		const state = readImportState(work.importData);
+		const current = currentImportFields(work);
+		return {
+			workId: work.id, title: work.title, locks: state.locks.filter(field => importFields.includes(field as ImportField)),
+			fields: importFields.map(field => ({ field, source: importSources.includes(state.sources[field] as ImportSource) ? state.sources[field] : null, editorial: state.values[field] === undefined ? nonEmpty(current[field]) : !sameValue(current[field], state.values[field]) })),
+		};
+	}
+
+	public async showWorkState(workId: string) {
+		const work = await this.db.getRepository(MiZalipWork).findOneBy({ id: workId });
+		if (!work) throw new Error('NO_SUCH_WORK');
+		return this.packWorkState(work);
+	}
+
+	/** Replacing explicit locks never changes field values or the editorial ownership baseline. */
+	public async saveWorkState(workId: string, lockedFields: string[]) {
+		const locks = normalizeImportOptions({ fields: lockedFields as ImportField[] }).fields!;
+		return this.db.transaction(async manager => {
+			const repository = manager.getRepository(MiZalipWork);
+			const work = await repository.findOne({ where: { id: workId }, lock: { mode: 'pessimistic_write' } });
+			if (!work) throw new Error('NO_SUCH_WORK');
+			work.importData = { ...work.importData, locks };
+			work.updatedAt = new Date();
+			await repository.save(work);
+			return this.packWorkState(work);
+		});
+	}
+
 	private packProfile(profile: MiZalipImportProfile) {
-		return { ...profile, lastRunAt: profile.lastRunAt?.toISOString() ?? null, nextRunAt: profile.nextRunAt?.toISOString() ?? null };
+		return { ...profile, options: profile.options ?? {}, lastRunAt: profile.lastRunAt?.toISOString() ?? null, nextRunAt: profile.nextRunAt?.toISOString() ?? null };
 	}
 
 	public async listProfiles() {
@@ -288,16 +398,59 @@ export class ZalipImporterService {
 	}
 
 	public async saveProfile(input: SaveImportProfile) {
-		if (!importSources.includes(input.source) || input.intervalMinutes < 15 || input.intervalMinutes > 43200 || (input.mode === 'collection' && !input.collectionId)) throw new ImportProviderError('invalid-ref');
+		const name = input.name.trim();
+		if (!name || name.length > 120 || !importSources.includes(input.source) || !['metadata', 'availability', 'collection', 'discovery'].includes(input.mode) || !Number.isInteger(input.intervalMinutes) || input.intervalMinutes < 15 || input.intervalMinutes > 43200 || (input.mode === 'collection' && (!input.collectionId || !/^[A-Za-z0-9_-]{1,100}$/u.test(input.collectionId)))) throw new ImportProviderError('invalid-ref');
 		if (input.mode === 'collection' && !this.providers[input.source].status().capabilities.collections) throw new ImportProviderError('unsupported');
-		const repository = this.db.getRepository(MiZalipImportProfile);
-		const existing = input.id ? await repository.findOneBy({ id: input.id }) : null;
-		if (input.id && !existing) throw new ImportProviderError('not-found');
-		const profile = repository.create({ ...existing, ...input, id: existing?.id ?? this.idService.gen(), collectionId: input.collectionId ?? null, lockedFields: input.lockedFields ?? [], categoryIds: input.categoryIds ?? [], lastRunAt: existing?.lastRunAt ?? null, nextRunAt: input.enabled ? new Date(Date.now() + input.intervalMinutes * 60000) : null, lastError: existing?.lastError ?? null, cursor: existing?.cursor ?? 0 });
-		return this.packProfile(await repository.save(profile));
+		if (input.mode === 'discovery' && (!this.providers[input.source].status().capabilities.updates || !this.providers[input.source].updates)) throw new ImportProviderError('unsupported');
+		if (input.enabled && !this.providers[input.source].status().configured) throw new ImportProviderError('not-configured');
+		return this.db.transaction(async manager => {
+			if (input.id) await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`zalip-import-profile:${input.id}`]);
+			const repository = manager.getRepository(MiZalipImportProfile);
+			const existing = input.id ? await repository.findOne({ where: { id: input.id }, lock: { mode: 'pessimistic_write' } }) : null;
+			if (input.id && !existing) throw new ImportProviderError('not-found');
+			const options = normalizeImportOptions(input.options ?? existing?.options);
+			const lockedFields = normalizeImportOptions({ fields: (input.lockedFields ?? existing?.lockedFields ?? []) as ImportField[] }).fields!;
+			const categoryIds = [...new Set(input.categoryIds ?? existing?.categoryIds ?? [])];
+			if (categoryIds.length > 50 || (categoryIds.length && await manager.getRepository(MiZalipCatalogEntry).countBy({ id: In(categoryIds), type: 'category' }) !== categoryIds.length)) throw new Error('ZALIP_CATALOG_ENTRY_NOT_FOUND');
+			const collectionId = input.mode === 'collection' ? input.collectionId! : null;
+			const config = { name, source: input.source, mode: input.mode, intervalMinutes: input.intervalMinutes, collectionId, lockedFields, categoryIds, options };
+			const changed = existing && Object.entries(config).some(([field, value]) => !sameValue(existing[field as keyof MiZalipImportProfile] ?? (field === 'options' ? {} : null), value));
+			if (changed && await manager.getRepository(MiZalipImportRun).existsBy({ profileId: existing.id, state: In(['queued', 'running', 'paused']) })) throw new Error('IMPORT_RUN_BUSY');
+			const resetCursor = existing && (existing.source !== input.source || existing.mode !== input.mode || existing.collectionId !== collectionId);
+			const profile = repository.create({ ...existing, ...config, enabled: input.enabled, id: existing?.id ?? this.idService.gen(), lastRunAt: existing?.lastRunAt ?? null, nextRunAt: input.enabled ? new Date(Date.now() + input.intervalMinutes * 60000) : null, lastError: resetCursor ? null : existing?.lastError ?? null, cursor: resetCursor ? 0 : existing?.cursor ?? 0 });
+			return this.packProfile(await repository.save(profile));
+		});
 	}
 
-	public async runProfile(profileId: string) {
+	public async actionProfile(profileId: string, action: 'enable' | 'disable' | 'reset-cursor' | 'delete') {
+		if (!['enable', 'disable', 'reset-cursor', 'delete'].includes(action)) throw new Error('INVALID_IMPORT_ACTION');
+		return this.db.transaction(async manager => {
+			await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`zalip-import-profile:${profileId}`]);
+			const repository = manager.getRepository(MiZalipImportProfile);
+			const profile = await repository.findOne({ where: { id: profileId }, lock: { mode: 'pessimistic_write' } });
+			if (!profile) throw new ImportProviderError('not-found');
+			if (['reset-cursor', 'delete'].includes(action) && await manager.getRepository(MiZalipImportRun).existsBy({ profileId, state: In(['queued', 'running', 'paused']) })) throw new Error('IMPORT_RUN_BUSY');
+			if (action === 'delete') {
+				await repository.delete(profileId);
+				return { id: profileId, deleted: true };
+			}
+			if (action === 'enable') {
+				if (!this.providers[profile.source]?.status().configured) throw new ImportProviderError('not-configured');
+				if (profile.mode === 'discovery' && !this.providers[profile.source].updates) throw new ImportProviderError('unsupported');
+				profile.enabled = true;
+				profile.nextRunAt = new Date(Date.now() + profile.intervalMinutes * 60000);
+			} else if (action === 'disable') {
+				profile.enabled = false;
+				profile.nextRunAt = null;
+			} else {
+				profile.cursor = 0;
+				profile.lastError = null;
+			}
+			return { id: profileId, profile: this.packProfile(await repository.save(profile)) };
+		});
+	}
+
+	public async runProfile(profileId: string, scheduled = false) {
 		const connection = this.db.createQueryRunner();
 		let locked = false;
 		try {
@@ -305,7 +458,7 @@ export class ZalipImporterService {
 			const [result] = await connection.query('SELECT pg_try_advisory_lock(hashtext($1)) AS locked', [`zalip-import-profile:${profileId}`]) as { locked: boolean }[];
 			locked = result.locked;
 			if (!locked) throw new ImportProviderError('rate-limited');
-			return await this.dispatchProfile(profileId);
+			return await this.dispatchProfile(profileId, scheduled);
 		} finally {
 			try {
 				if (locked) await connection.query('SELECT pg_advisory_unlock(hashtext($1))', [`zalip-import-profile:${profileId}`]);
@@ -315,15 +468,22 @@ export class ZalipImporterService {
 		}
 	}
 
-	private async dispatchProfile(profileId: string) {
+	private async dispatchProfile(profileId: string, scheduled: boolean) {
 		const profiles = this.db.getRepository(MiZalipImportProfile);
 		const profile = await profiles.findOneBy({ id: profileId });
 		if (!profile) throw new ImportProviderError('not-found');
+		// Re-check after taking the shared profile lock: disabling a claimed schedule must win.
+		if (scheduled && !profile.enabled) throw new ImportProviderError('rate-limited');
 		if (await this.db.getRepository(MiZalipImportRun).existsBy({ profileId, state: In(['queued', 'running', 'paused']) })) throw new ImportProviderError('rate-limited');
 		try {
 			let targets: { ref: ImportRef; workId: string | null }[];
 			if (profile.mode === 'collection') {
 				const page = await this.providers[profile.source].collection?.(profile.collectionId!, profile.cursor + 1);
+				if (!page) throw new ImportProviderError('unsupported');
+				targets = page.items.slice(0, 100).map(item => ({ ref: item.ref, workId: null }));
+				profile.cursor = page.hasMore ? profile.cursor + 1 : 0;
+			} else if (profile.mode === 'discovery') {
+				const page = await this.providers[profile.source].updates?.(profile.cursor + 1);
 				if (!page) throw new ImportProviderError('unsupported');
 				targets = page.items.slice(0, 100).map(item => ({ ref: item.ref, workId: null }));
 				profile.cursor = page.hasMore ? profile.cursor + 1 : 0;
@@ -335,7 +495,7 @@ export class ZalipImporterService {
 				}
 				profile.cursor = works.length === 100 ? profile.cursor + 100 : 0;
 			}
-			const run = await this.createRun({ mode: profile.mode === 'collection' ? 'import' : profile.mode === 'availability' ? 'availability' : 'sync', lockedFields: profile.lockedFields, categoryIds: profile.categoryIds, profileId }, undefined, targets);
+			const run = await this.createRun({ mode: profile.mode === 'collection' || profile.mode === 'discovery' ? 'import' : profile.mode === 'availability' ? 'availability' : 'sync', lockedFields: profile.lockedFields, categoryIds: profile.categoryIds, options: profile.options, profileId }, undefined, targets);
 			profile.lastRunAt = new Date();
 			profile.nextRunAt = profile.enabled ? new Date(Date.now() + profile.intervalMinutes * 60000) : null;
 			profile.lastError = null;
@@ -357,9 +517,9 @@ export class ZalipImporterService {
 		const profiles = await this.db.getRepository(MiZalipImportProfile).find({ where: { enabled: true, nextRunAt: LessThanOrEqual(new Date()) }, order: { nextRunAt: 'ASC' }, take: 5 });
 		for (const profile of profiles) {
 			// Distributed claim prevents duplicate schedules in multi-worker installations.
-			const claimed = await this.db.getRepository(MiZalipImportProfile).update({ id: profile.id, nextRunAt: profile.nextRunAt ?? IsNull() }, { nextRunAt: new Date(Date.now() + profile.intervalMinutes * 60000) });
+			const claimed = await this.db.getRepository(MiZalipImportProfile).update({ id: profile.id, enabled: true, nextRunAt: profile.nextRunAt ?? IsNull() }, { nextRunAt: new Date(Date.now() + profile.intervalMinutes * 60000) });
 			if (!claimed.affected) continue;
-			try { await this.runProfile(profile.id); } catch { /* Error code is already recorded in the profile. */ }
+			try { await this.runProfile(profile.id, true); } catch { /* Error code is already recorded in the profile. */ }
 		}
 		await this.catalogue.dispatchPendingAllohaAvailabilityNotifications();
 	}
