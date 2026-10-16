@@ -678,6 +678,7 @@ export type Channels = {
             notificationFlushed: () => void;
             unreadAntenna: (payload: Antenna) => void;
             newChatMessage: (payload: ChatMessage) => void;
+            readAllChatMessages: () => void;
             readAllAnnouncements: () => void;
             myTokenRegenerated: () => void;
             signin: (payload: Signin) => void;
@@ -2206,6 +2207,10 @@ declare namespace entities {
         ZalipAdminEpisodesCreateResponse,
         ZalipAdminEpisodesDiscussionsCreateRequest,
         ZalipAdminEpisodesDiscussionsCreateResponse,
+        ZalipAdminImporterArtworkInspectRequest,
+        ZalipAdminImporterArtworkInspectResponse,
+        ZalipAdminImporterArtworkStepRequest,
+        ZalipAdminImporterArtworkStepResponse,
         ZalipAdminImporterDiagnosticsRequest,
         ZalipAdminImporterDiagnosticsResponse,
         ZalipAdminImporterMaintenanceActionRequest,
@@ -2319,6 +2324,8 @@ declare namespace entities {
         ZalipTaxonomyShowResponse,
         ZalipWorksListRequest,
         ZalipWorksListResponse,
+        ZalipWorksPageRequest,
+        ZalipWorksPageResponse,
         ZalipWorksSearchRequest,
         ZalipWorksSearchResponse,
         ZalipWorksShowRequest,
@@ -3914,6 +3921,18 @@ type ZalipAdminEpisodesDiscussionsCreateRequest = operations['zalip___admin___ep
 type ZalipAdminEpisodesDiscussionsCreateResponse = operations['zalip___admin___episodes___discussions___create']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
+type ZalipAdminImporterArtworkInspectRequest = operations['zalip___admin___importer___artwork___inspect']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterArtworkInspectResponse = operations['zalip___admin___importer___artwork___inspect']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterArtworkStepRequest = operations['zalip___admin___importer___artwork___step']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterArtworkStepResponse = operations['zalip___admin___importer___artwork___step']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
 type ZalipAdminImporterDiagnosticsRequest = operations['zalip___admin___importer___diagnostics']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
@@ -4253,6 +4272,12 @@ type ZalipWorksListRequest = operations['zalip___works___list']['requestBody']['
 type ZalipWorksListResponse = operations['zalip___works___list']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
+type ZalipWorksPageRequest = operations['zalip___works___page']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipWorksPageResponse = operations['zalip___works___page']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
 type ZalipWorksSearchRequest = operations['zalip___works___search']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
@@ -4267,8 +4292,8 @@ type ZalipWorksShowResponse = operations['zalip___works___show']['responses']['2
 // Warnings were encountered during analysis:
 //
 // src/streaming.ts:57:3 - (ae-forgotten-export) The symbol "ReconnectingWebSocket" needs to be exported by the entry point index.d.ts
-// src/streaming.types.ts:226:4 - (ae-forgotten-export) The symbol "ReversiUpdateKey" needs to be exported by the entry point index.d.ts
-// src/streaming.types.ts:241:4 - (ae-forgotten-export) The symbol "ReversiUpdateSettings" needs to be exported by the entry point index.d.ts
+// src/streaming.types.ts:227:4 - (ae-forgotten-export) The symbol "ReversiUpdateKey" needs to be exported by the entry point index.d.ts
+// src/streaming.types.ts:242:4 - (ae-forgotten-export) The symbol "ReversiUpdateSettings" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

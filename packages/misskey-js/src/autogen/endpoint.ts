@@ -672,6 +672,10 @@ import type {
 	ZalipAdminEpisodesCreateResponse,
 	ZalipAdminEpisodesDiscussionsCreateRequest,
 	ZalipAdminEpisodesDiscussionsCreateResponse,
+	ZalipAdminImporterArtworkInspectRequest,
+	ZalipAdminImporterArtworkInspectResponse,
+	ZalipAdminImporterArtworkStepRequest,
+	ZalipAdminImporterArtworkStepResponse,
 	ZalipAdminImporterDiagnosticsRequest,
 	ZalipAdminImporterDiagnosticsResponse,
 	ZalipAdminImporterMaintenanceActionRequest,
@@ -785,6 +789,8 @@ import type {
 	ZalipTaxonomyShowResponse,
 	ZalipWorksListRequest,
 	ZalipWorksListResponse,
+	ZalipWorksPageRequest,
+	ZalipWorksPageResponse,
 	ZalipWorksSearchRequest,
 	ZalipWorksSearchResponse,
 	ZalipWorksShowRequest,
@@ -1234,6 +1240,8 @@ export type Endpoints = {
 	'zalip/admin/discussions/create': { req: ZalipAdminDiscussionsCreateRequest; res: ZalipAdminDiscussionsCreateResponse };
 	'zalip/admin/episodes/create': { req: ZalipAdminEpisodesCreateRequest; res: ZalipAdminEpisodesCreateResponse };
 	'zalip/admin/episodes/discussions/create': { req: ZalipAdminEpisodesDiscussionsCreateRequest; res: ZalipAdminEpisodesDiscussionsCreateResponse };
+	'zalip/admin/importer/artwork/inspect': { req: ZalipAdminImporterArtworkInspectRequest; res: ZalipAdminImporterArtworkInspectResponse };
+	'zalip/admin/importer/artwork/step': { req: ZalipAdminImporterArtworkStepRequest; res: ZalipAdminImporterArtworkStepResponse };
 	'zalip/admin/importer/diagnostics': { req: ZalipAdminImporterDiagnosticsRequest; res: ZalipAdminImporterDiagnosticsResponse };
 	'zalip/admin/importer/maintenance/action': { req: ZalipAdminImporterMaintenanceActionRequest; res: ZalipAdminImporterMaintenanceActionResponse };
 	'zalip/admin/importer/maintenance/create': { req: ZalipAdminImporterMaintenanceCreateRequest; res: ZalipAdminImporterMaintenanceCreateResponse };
@@ -1292,6 +1300,7 @@ export type Endpoints = {
 	'zalip/taxonomy/list': { req: ZalipTaxonomyListRequest; res: ZalipTaxonomyListResponse };
 	'zalip/taxonomy/show': { req: ZalipTaxonomyShowRequest; res: ZalipTaxonomyShowResponse };
 	'zalip/works/list': { req: ZalipWorksListRequest; res: ZalipWorksListResponse };
+	'zalip/works/page': { req: ZalipWorksPageRequest; res: ZalipWorksPageResponse };
 	'zalip/works/search': { req: ZalipWorksSearchRequest; res: ZalipWorksSearchResponse };
 	'zalip/works/show': { req: ZalipWorksShowRequest; res: ZalipWorksShowResponse };
 };

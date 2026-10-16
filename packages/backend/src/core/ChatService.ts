@@ -207,10 +207,10 @@ export class ChatService {
 		const packedMessage = await this.chatEntityService.packMessageLiteFor1on1(inserted);
 
 		if (this.userEntityService.isLocalUser(toUser)) {
-			const redisPipeline = this.redisClient.pipeline();
+			const redisPipeline = this.redisClient.multi();
 			redisPipeline.set(`newUserChatMessageExists:${toUser.id}:${fromUser.id}`, message.id);
 			redisPipeline.sadd(`newChatMessagesExists:${toUser.id}`, `user:${fromUser.id}`);
-			redisPipeline.exec();
+			await this.execChatRedis(redisPipeline);
 		}
 
 		if (this.userEntityService.isLocalUser(fromUser)) {
@@ -225,15 +225,7 @@ export class ChatService {
 
 		// 3秒経っても既読にならなかったらイベント発行
 		if (this.userEntityService.isLocalUser(toUser)) {
-			setTimeout(async () => {
-				const marker = await this.redisClient.get(`newUserChatMessageExists:${toUser.id}:${fromUser.id}`);
-
-				if (marker == null) return; // 既読
-
-				const packedMessageForTo = await this.chatEntityService.packMessageDetailed(inserted, toUser);
-				this.globalEventService.publishMainStream(toUser.id, 'newChatMessage', packedMessageForTo);
-				this.pushNotificationService.pushNotification(toUser.id, 'newChatMessage', packedMessageForTo);
-			}, 3000);
+			setTimeout(() => { void this.notifyUnreadUserMessage(inserted, toUser).catch(() => { /* Markers remain authoritative if a delayed notification fails. */ }); }, 3000);
 		}
 
 		return packedMessage;
@@ -273,40 +265,53 @@ export class ChatService {
 
 		const packedMessage = await this.chatEntityService.packMessageLiteForRoom(inserted);
 
-		this.globalEventService.publishChatRoomStream(toRoom.id, 'message', packedMessage);
-
-		const redisPipeline = this.redisClient.pipeline();
+		const redisPipeline = this.redisClient.multi();
 		for (const membership of membershipsOtherThanMe) {
 			if (membership.isMuted) continue;
 
 			redisPipeline.set(`newRoomChatMessageExists:${membership.userId}:${toRoom.id}`, message.id);
 			redisPipeline.sadd(`newChatMessagesExists:${membership.userId}`, `room:${toRoom.id}`);
 		}
-		redisPipeline.exec();
+		await this.execChatRedis(redisPipeline);
+		this.globalEventService.publishChatRoomStream(toRoom.id, 'message', packedMessage);
 
 		// 3秒経っても既読にならなかったらイベント発行
-		setTimeout(async () => {
-			const redisPipeline = this.redisClient.pipeline();
-			for (const membership of membershipsOtherThanMe) {
-				redisPipeline.get(`newRoomChatMessageExists:${membership.userId}:${toRoom.id}`);
-			}
-			const markers = await redisPipeline.exec();
-			if (markers == null) throw new Error('redis error');
-
-			if (markers.every(marker => marker[1] == null)) return;
-
-			const packedMessageForTo = await this.chatEntityService.packMessageDetailed(inserted);
-
-			for (let i = 0; i < membershipsOtherThanMe.length; i++) {
-				const marker = markers[i][1];
-				if (marker == null) continue;
-
-				this.globalEventService.publishMainStream(membershipsOtherThanMe[i].userId, 'newChatMessage', packedMessageForTo);
-				this.pushNotificationService.pushNotification(membershipsOtherThanMe[i].userId, 'newChatMessage', packedMessageForTo);
-			}
-		}, 3000);
+		setTimeout(() => { void this.notifyUnreadRoomMessage(inserted, toRoom.id, membershipsOtherThanMe.filter(member => !member.isMuted)).catch(() => { /* Leave unread markers intact for the next state refresh. */ }); }, 3000);
 
 		return packedMessage;
+	}
+
+	/** Redis EXEC can resolve successfully while an individual command contains an error. */
+	private async execChatRedis(commands: Redis.ChainableCommander): Promise<[Error | null, unknown][]> {
+		const results = await commands.exec();
+		if (results == null || results.some(result => result.length !== 2 || result[0] != null)) throw new Error('CHAT_REDIS_OPERATION_FAILED');
+		return results;
+	}
+
+	private async notifyUnreadUserMessage(message: MiChatMessage, recipient: MiUser): Promise<void> {
+		const key = `newUserChatMessageExists:${recipient.id}:${message.fromUserId}`;
+		if (await this.redisClient.get(key) !== message.id) return;
+		const packed = await this.chatEntityService.packMessageDetailed(message, recipient);
+		// Packing may await database/cache work while another client marks this dialog read.
+		if (await this.redisClient.get(key) !== message.id) return;
+		this.globalEventService.publishMainStream(recipient.id, 'newChatMessage', packed);
+		this.pushNotificationService.pushNotification(recipient.id, 'newChatMessage', packed);
+	}
+
+	private async notifyUnreadRoomMessage(message: MiChatMessage, roomId: MiChatRoom['id'], members: { userId: MiUser['id'] }[]): Promise<void> {
+		const readMarkers = async () => {
+			const pipeline = this.redisClient.pipeline();
+			for (const member of members) pipeline.get(`newRoomChatMessageExists:${member.userId}:${roomId}`);
+			return this.execChatRedis(pipeline);
+		};
+		if ((await readMarkers()).every(marker => marker[1] !== message.id)) return;
+		const packed = await this.chatEntityService.packMessageDetailed(message);
+		const current = await readMarkers();
+		for (let index = 0; index < members.length; index++) {
+			if (current[index]?.[1] !== message.id) continue;
+			this.globalEventService.publishMainStream(members[index].userId, 'newChatMessage', packed);
+			this.pushNotificationService.pushNotification(members[index].userId, 'newChatMessage', packed);
+		}
 	}
 
 	@bindThis
@@ -314,10 +319,11 @@ export class ChatService {
 		readerId: MiUser['id'],
 		senderId: MiUser['id'],
 	): Promise<void> {
-		const redisPipeline = this.redisClient.pipeline();
+		const redisPipeline = this.redisClient.multi();
 		redisPipeline.del(`newUserChatMessageExists:${readerId}:${senderId}`);
 		redisPipeline.srem(`newChatMessagesExists:${readerId}`, `user:${senderId}`);
-		await redisPipeline.exec();
+		await this.execChatRedis(redisPipeline);
+		await this.publishChatReadState(readerId);
 	}
 
 	@bindThis
@@ -325,20 +331,36 @@ export class ChatService {
 		readerId: MiUser['id'],
 		roomId: MiChatRoom['id'],
 	): Promise<void> {
-		const redisPipeline = this.redisClient.pipeline();
+		const redisPipeline = this.redisClient.multi();
 		redisPipeline.del(`newRoomChatMessageExists:${readerId}:${roomId}`);
 		redisPipeline.srem(`newChatMessagesExists:${readerId}`, `room:${roomId}`);
-		await redisPipeline.exec();
+		await this.execChatRedis(redisPipeline);
+		await this.publishChatReadState(readerId);
 	}
 
 	@bindThis
 	public async readAllChatMessages(
 		readerId: MiUser['id'],
 	): Promise<void> {
-		const redisPipeline = this.redisClient.pipeline();
-		// TODO: newUserChatMessageExists とか newRoomChatMessageExists も消したい(けどキーの列挙が必要になって面倒)
-		redisPipeline.del(`newChatMessagesExists:${readerId}`);
-		await redisPipeline.exec();
+		// Clear dialog markers in the same Redis operation, so delayed new-message events
+		// cannot revive a badge for messages the user has already marked as read.
+		await this.redisClient.eval(`
+local dialogs = redis.call('SMEMBERS', KEYS[1])
+for _, dialog in ipairs(dialogs) do
+ local user = string.match(dialog, '^user:([%w]+)$')
+ local room = string.match(dialog, '^room:([%w]+)$')
+ if user then redis.call('DEL', ARGV[1] .. user) end
+ if room then redis.call('DEL', ARGV[2] .. room) end
+end
+redis.call('DEL', KEYS[1])
+return #dialogs
+`, 1, `newChatMessagesExists:${readerId}`, `newUserChatMessageExists:${readerId}:`, `newRoomChatMessageExists:${readerId}:`);
+		await this.publishChatReadState(readerId);
+	}
+
+	private async publishChatReadState(readerId: MiUser['id']): Promise<void> {
+		// Reading one conversation must not clear the badge of another unread conversation.
+		if (!await this.hasUnreadMessages(readerId)) this.globalEventService.publishMainStream(readerId, 'readAllChatMessages');
 	}
 
 	@bindThis
@@ -517,8 +539,7 @@ export class ChatService {
 			redisPipeline.get(`newUserChatMessageExists:${userId}:${otherId}`);
 		}
 
-		const markers = await redisPipeline.exec();
-		if (markers == null) throw new Error('redis error');
+		const markers = await this.execChatRedis(redisPipeline);
 
 		for (let i = 0; i < otherIds.length; i++) {
 			const marker = markers[i][1];
@@ -538,8 +559,7 @@ export class ChatService {
 			redisPipeline.get(`newRoomChatMessageExists:${userId}:${roomId}`);
 		}
 
-		const markers = await redisPipeline.exec();
-		if (markers == null) throw new Error('redis error');
+		const markers = await this.execChatRedis(redisPipeline);
 
 		for (let i = 0; i < roomIds.length; i++) {
 			const marker = markers[i][1];
@@ -616,12 +636,13 @@ export class ChatService {
 		});
 
 		// 未読フラグ削除
-		const redisPipeline = this.redisClient.pipeline();
+		const redisPipeline = this.redisClient.multi();
 		for (const membership of memberships) {
 			redisPipeline.del(`newRoomChatMessageExists:${membership.userId}:${room.id}`);
 			redisPipeline.srem(`newChatMessagesExists:${membership.userId}`, `room:${room.id}`);
 		}
-		await redisPipeline.exec();
+		await this.execChatRedis(redisPipeline);
+		await Promise.all(memberships.map(membership => this.publishChatReadState(membership.userId)));
 
 		await this.chatRoomsRepository.delete(room.id);
 
@@ -759,10 +780,11 @@ export class ChatService {
 		await this.chatRoomMembershipsRepository.delete(membership.id);
 
 		// 未読フラグを消す (「既読にする」というわけでもないのでreadメソッドは使わないでおく)
-		const redisPipeline = this.redisClient.pipeline();
+		const redisPipeline = this.redisClient.multi();
 		redisPipeline.del(`newRoomChatMessageExists:${userId}:${roomId}`);
 		redisPipeline.srem(`newChatMessagesExists:${userId}`, `room:${roomId}`);
-		await redisPipeline.exec();
+		await this.execChatRedis(redisPipeline);
+		await this.publishChatReadState(userId);
 	}
 
 	@bindThis

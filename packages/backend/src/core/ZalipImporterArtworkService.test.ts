@@ -14,7 +14,8 @@ import type { ImportArtworkField, ImportArtworkSettings } from './zalip-importer
 vi.mock('@/core/DriveService.js', () => ({ DriveService: class {} }));
 vi.mock('@/core/HttpRequestService.js', () => ({ HttpRequestService: class {} }));
 const download = vi.hoisted(() => vi.fn());
-vi.mock('./zalip-importer/artwork.js', async original => ({ ...await original<typeof import('./zalip-importer/artwork.js')>(), downloadImportArtwork: download }));
+const downloadOriginal = vi.hoisted(() => vi.fn());
+vi.mock('./zalip-importer/artwork.js', async original => ({ ...await original<typeof import('./zalip-importer/artwork.js')>(), downloadImportArtwork: download, downloadOriginalImportArtwork: downloadOriginal }));
 
 function fixture() {
 	const service = new ZalipImporterArtworkService({} as never, {} as never, {} as never);
@@ -177,6 +178,21 @@ function cacheFixture() {
 }
 
 describe('native importer artwork storage', () => {
+	test('existing-image localization stores only exact original bytes and reuses the retained-original cache', async () => {
+		const { service, drive, stored } = cacheFixture();
+		downloadOriginal.mockReset().mockResolvedValue({ original: Buffer.from('exact-original'), originalExtension: 'png', format: 'png', width: 100, height: 150 });
+		const url = 'https://image.tmdb.org/t/p/w500/chosen.png';
+		const budget = { deadlineAt: Date.now() + 60000, remainingBytes: 100000 };
+		const result = await service.cacheOriginal(url, budget);
+		expect(result).toMatch(/\.png$/u);
+		expect(result).not.toContain('different-webpublic');
+		expect(drive.addFile).toHaveBeenCalledTimes(1);
+		expect(stored.has(artworkOriginalCacheUri(new URL(url)))).toBe(true);
+		expect(budget.remainingBytes).toBe(100000 - Buffer.byteLength('exact-original'));
+		expect(download).not.toHaveBeenCalled();
+		await service.cacheOriginal(url, budget);
+		expect(downloadOriginal).toHaveBeenCalledTimes(1);
+	});
 	test('stores originals independently and returns the actual processed URL instead of re-encoded webpublic', async () => {
 		const { cache, drive, connection, stored } = cacheFixture();
 		const url = 'https://image.tmdb.org/t/p/original/photo.png';

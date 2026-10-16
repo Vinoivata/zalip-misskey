@@ -8,7 +8,7 @@ import { zalipWorkKinds } from '@/models/ZalipWork.js';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { zalipCatalogueGenreLimit, ZalipCatalogService } from '@/core/ZalipCatalogService.js';
 
-const workSchema = {
+export const workSchema = {
 	type: 'object',
 	optional: false,
 	nullable: false,

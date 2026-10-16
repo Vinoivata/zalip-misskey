@@ -8,6 +8,7 @@ process.env.NODE_ENV = 'test';
 import * as assert from 'node:assert';
 import { beforeAll, describe, test } from 'vitest';
 import { MiZalipAllohaAvailabilityEvent } from '@/models/ZalipAllohaAvailabilityEvent.js';
+import { MiZalipWork } from '@/models/ZalipWork.js';
 import { api, castAsError, initTestDb, signup } from '../utils.js';
 import type * as misskey from 'misskey-js';
 
@@ -73,6 +74,54 @@ describe('Zalip discussions', () => {
 		assert.strictEqual(response.status, 200);
 		assert.strictEqual(response.body.created, false);
 		assert.strictEqual(typeof response.body.noteId, 'string');
+	});
+
+	test('pages beyond 100 published titles with global ordering and scoped cursors, excluding drafts', async () => {
+		const db = await initTestDb(true);
+		const repository = db.getRepository(MiZalipWork);
+		const now = new Date('2026-10-16T12:00:00.000Z');
+		await repository.insert(Array.from({ length: 114 }, (_, index) => ({
+			id: `zalippage${String(index).padStart(5, '0')}`, slug: `zalip-page-fixture-${index}`,
+			title: `Zalip page fixture ${String(index).padStart(3, '0')}`, kind: 'movie' as const,
+			publicationState: index === 113 ? 'draft' as const : 'published' as const,
+			releaseYear: index >= 110 ? null : 2000 + index % 10,
+			createdAt: now, updatedAt: now, publishedAt: now,
+			importData: { privateFixture: 'never-public' },
+		})));
+		const ids: string[] = [];
+		let cursor: string | undefined;
+		let firstCursor: string | null = null;
+		do {
+			const response: { status: number; body: misskey.Endpoints['zalip/works/page']['res'] } = await api('zalip/works/page', { query: 'Zalip page fixture', limit: 24, sort: 'title', ...(cursor ? { cursor } : {}) });
+			assert.strictEqual(response.status, 200);
+			assert.strictEqual(response.body.total, 113);
+			assert.strictEqual(JSON.stringify(response.body).includes('never-public'), false);
+			ids.push(...response.body.items.map(work => work.id));
+			firstCursor ??= response.body.nextCursor;
+			cursor = response.body.nextCursor ?? undefined;
+			assert.ok(ids.length <= 113);
+		} while (cursor);
+		assert.strictEqual(ids.length, 113);
+		assert.strictEqual(new Set(ids).size, 113);
+		assert.deepStrictEqual(ids, Array.from({ length: 113 }, (_, index) => `zalippage${String(index).padStart(5, '0')}`));
+		assert.ok(firstCursor);
+		const wrongSort = await api('zalip/works/page', { query: 'Zalip page fixture', sort: 'year-desc', cursor: firstCursor });
+		assert.strictEqual(wrongSort.status, 400);
+		assert.strictEqual(castAsError(wrongSort.body).error.code, 'ZALIP_IMPORT_INVALID');
+		const wrongFilter = await api('zalip/works/page', { query: 'Zalip page fixture', sort: 'title', kinds: ['series'], cursor: firstCursor });
+		assert.strictEqual(wrongFilter.status, 400);
+		const years: Array<number | null> = [];
+		cursor = undefined;
+		do {
+			const response: { status: number; body: misskey.Endpoints['zalip/works/page']['res'] } = await api('zalip/works/page', { query: 'Zalip page fixture', limit: 24, sort: 'year-desc', ...(cursor ? { cursor } : {}) });
+			assert.strictEqual(response.status, 200);
+			years.push(...response.body.items.map(work => work.releaseYear));
+			cursor = response.body.nextCursor ?? undefined;
+			assert.ok(years.length <= 113);
+		} while (cursor);
+		assert.strictEqual(years.length, 113);
+		assert.deepStrictEqual(years.slice(-3), [null, null, null]);
+		assert.deepStrictEqual(years.slice(0, 110), [...years.slice(0, 110)].sort((left, right) => right! - left!));
 	});
 
 	test('includes nullable movie playback events only for authenticated active subscribers', async () => {
@@ -151,6 +200,8 @@ describe('Zalip discussions', () => {
 			['zalip/admin/importer/work-state/save', { workId: 'work01', lockedFields: [] }],
 			['zalip/admin/importer/search', { source: 'tmdb', query: 'offline permission test' }],
 			['zalip/admin/importer/preview', { ref }],
+			['zalip/admin/importer/artwork/inspect', { kind: 'work', limit: 1 }],
+			['zalip/admin/importer/artwork/step', { kind: 'work', id: 'work01', field: 'posterPath', expected: 'a'.repeat(64) }],
 			['zalip/admin/importer/runs/create', { refs: [ref], mode: 'import' }],
 			['zalip/admin/importer/runs/list', {}],
 			['zalip/admin/importer/runs/show', { runId: 'run01' }],
@@ -174,6 +225,22 @@ describe('Zalip discussions', () => {
 			assert.strictEqual(denied.status, 403, endpoint);
 			assert.strictEqual(castAsError(denied.body as Record<string, unknown>).error.code, 'ZALIP_ADMIN_REQUIRED');
 		}
+	});
+
+	test('native administrator artwork inspection is offline, stale requests are inert and raw URLs are rejected', async () => {
+		const before = await api('zalip/works/show', { slug: 'zalip-discussion-test' }, viewer);
+		const inspection = await api('zalip/admin/importer/artwork/inspect', { kind: 'work', limit: 1 }, admin);
+		assert.strictEqual(inspection.status, 200);
+		assert.ok(Array.isArray(inspection.body.targets));
+		assert.strictEqual(JSON.stringify(inspection.body).includes('https://'), false);
+		const stale = await api('zalip/admin/importer/artwork/step', { kind: 'work', id: workId, field: 'posterPath', expected: 'a'.repeat(64) }, admin);
+		assert.strictEqual(stale.status, 200);
+		assert.strictEqual(stale.body.status, 'stale');
+		const injection = await api('zalip/admin/importer/artwork/step', { kind: 'work', id: workId, field: 'posterPath', expected: 'a'.repeat(64), url: 'https://arbitrary.example.org/image.png' } as never, admin);
+		assert.strictEqual(injection.status, 400);
+		assert.strictEqual(castAsError(injection.body).error.code, 'INVALID_PARAM');
+		const after = await api('zalip/works/show', { slug: 'zalip-discussion-test' }, viewer);
+		assert.deepStrictEqual(after.body, before.body);
 	});
 
 	test('taxonomy editorial entries and draft membership stay private until a work is published', async () => {

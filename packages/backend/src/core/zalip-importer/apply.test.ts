@@ -248,6 +248,20 @@ describe('Zalip transactional import application', () => {
 });
 
 describe('Zalip imported seasons and playback', () => {
+	test('metadata sync retains localized season posters and episode stills without freezing other owned facts', async () => {
+		const context = fixture();
+		const seasons = [{ seasonNumber: 1, title: 'Season', posterUrl: 'https://image.tmdb.org/season.jpg', episodes: [{ episodeNumber: 1, title: 'Episode', stillUrl: 'https://image.tmdb.org/still.jpg' }] }];
+		await applyImportRecord(context.db, context.idService, record({ seasons }), {});
+		context.seasons()[0].posterPath = '/files/season.jpg';
+		context.seasons()[0].importValues.posterPath = '/files/season.jpg';
+		context.seasons()[0].importValues._zalipLocalArtwork = { posterPath: '/files/season.jpg' };
+		context.episodes()[0].stillPath = '/files/still.jpg';
+		context.episodes()[0].importValues.stillPath = '/files/still.jpg';
+		context.episodes()[0].importValues._zalipLocalArtwork = { stillPath: '/files/still.jpg' };
+		await applyImportRecord(context.db, context.idService, record({ seasons: [{ ...seasons[0], title: 'Updated season', episodes: [{ ...seasons[0].episodes[0], title: 'Updated episode' }] }] }), {});
+		expect(context.seasons()[0]).toMatchObject({ title: 'Updated season', posterPath: '/files/season.jpg', importValues: { posterPath: '/files/season.jpg', _zalipLocalArtwork: { posterPath: '/files/season.jpg' } } });
+		expect(context.episodes()[0]).toMatchObject({ title: 'Updated episode', stillPath: '/files/still.jpg', importValues: { stillPath: '/files/still.jpg', _zalipLocalArtwork: { stillPath: '/files/still.jpg' } } });
+	});
 	test('updates episode stills while preserving manual title, description and explicit clearing', async () => {
 		const context = fixture();
 		const seasons = [{ seasonNumber: 1, title: 'Season 1', episodes: [{ episodeNumber: 1, title: 'Episode 1', description: 'Source description', stillUrl: 'https://images.example.org/old.jpg' }] }];

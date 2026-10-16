@@ -449,6 +449,7 @@ export * as 'chat/history' from './endpoints/chat/history.js';
 export * as 'chat/read-all' from './endpoints/chat/read-all.js';
 export * as 'v2/admin/emoji/list' from './endpoints/v2/admin/emoji/list.js';
 export * as 'zalip/works/list' from './endpoints/zalip/works/list.js';
+export * as 'zalip/works/page' from './endpoints/zalip/works/page.js';
 export * as 'zalip/works/show' from './endpoints/zalip/works/show.js';
 export * as 'zalip/works/search' from './endpoints/zalip/works/search.js';
 export * as 'zalip/genres/list' from './endpoints/zalip/genres/list.js';
@@ -492,6 +493,8 @@ export * as 'zalip/admin/importer/maintenance/schedules/save' from './endpoints/
 export * as 'zalip/admin/importer/maintenance/schedules/action' from './endpoints/zalip/admin/importer/maintenance/schedules/action.js';
 export * as 'zalip/admin/importer/search' from './endpoints/zalip/admin/importer/search.js';
 export * as 'zalip/admin/importer/preview' from './endpoints/zalip/admin/importer/preview.js';
+export * as 'zalip/admin/importer/artwork/inspect' from './endpoints/zalip/admin/importer/artwork/inspect.js';
+export * as 'zalip/admin/importer/artwork/step' from './endpoints/zalip/admin/importer/artwork/step.js';
 export * as 'zalip/admin/importer/runs/create' from './endpoints/zalip/admin/importer/runs/create.js';
 export * as 'zalip/admin/importer/runs/list' from './endpoints/zalip/admin/importer/runs/list.js';
 export * as 'zalip/admin/importer/runs/show' from './endpoints/zalip/admin/importer/runs/show.js';

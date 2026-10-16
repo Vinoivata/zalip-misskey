@@ -4920,6 +4920,30 @@ declare module '../api.js' {
     /**
      * No description provided.
      *
+     * **Internal Endpoint**: This endpoint is an API for the misskey mainframe and is not intended for use by third parties.
+     * **Credential required**: *Yes*
+     */
+    request<E extends 'zalip/admin/importer/artwork/inspect', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     *
+     * **Internal Endpoint**: This endpoint is an API for the misskey mainframe and is not intended for use by third parties.
+     * **Credential required**: *Yes*
+     */
+    request<E extends 'zalip/admin/importer/artwork/step', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     *
      * **Credential required**: *Yes* / **Permission**: *read:account*
      */
     request<E extends 'zalip/admin/importer/diagnostics', P extends Endpoints[E]['req']>(
@@ -5552,6 +5576,17 @@ declare module '../api.js' {
      * **Credential required**: *No*
      */
     request<E extends 'zalip/works/list', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * Page all published catalogue titles using a filter-scoped keyset cursor and global ordering.
+     *
+     * **Credential required**: *No*
+     */
+    request<E extends 'zalip/works/page', P extends Endpoints[E]['req']>(
       endpoint: E,
       params: P,
       credential?: string | null,

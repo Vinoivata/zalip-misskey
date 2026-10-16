@@ -70,6 +70,7 @@ export interface MainEventTypes {
 	unreadNotification: Packed<'Notification'>;
 	unreadAntenna: MiAntenna;
 	newChatMessage: Packed<'ChatMessage'>;
+	readAllChatMessages: undefined;
 	readAllAnnouncements: undefined;
 	myTokenRegenerated: undefined;
 	signin: {

@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/vue';
 import { defineComponent, h } from 'vue';
+import type { Window as HappyWindow } from 'happy-dom';
 import Work from '@/pages/zalip/work.vue';
 import { i18n } from '@/i18n.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
@@ -31,14 +32,16 @@ let entry: { status: string | null; episodesWatched: number; personalRating: num
 let workKind = 'movie';
 let available = false;
 let failUpdate = false;
+let failLibrary = false;
+let failDiscussion = false;
 let withEpisodes = false;
 let posterPath: string | null;
 let backdropPath: string | null;
 const testEpisodes = [1, 2, 3].map(n => ({ id: `ep${n}`, episodeNumber: n, title: `Episode ${n}`, stillPath: `/frame${n}.jpg`, description: `Description ${n}`, airDate: `2026-09-0${n}`, runtimeMinutes: 40, discussionNoteId: null }));
 const scrollTo = vi.fn();
 
-function setup() {
-	return render(Work, { props: { slug: 'film' }, global: { stubs: {
+function setup(props: { initialSeason?: string; initialEpisode?: string } = {}) {
+	return render(Work, { props: { slug: 'film', ...props }, global: { stubs: {
 		PageWithHeader: defineComponent({ setup: (_, { slots }) => () => h('div', slots.default?.()) }),
 		MkA: defineComponent({ props: { to: String }, setup: (props, { slots }) => () => h('a', { href: props.to }, slots.default?.()) }),
 	} } });
@@ -54,8 +57,11 @@ function menuSwitch(): MenuSwitch {
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	(window as unknown as HappyWindow).happyDOM.settings.navigation.disableChildFrameNavigation = true;
 	available = false;
 	failUpdate = false;
+	failLibrary = false;
+	failDiscussion = false;
 	workKind = 'movie';
 	withEpisodes = false;
 	posterPath = '/poster.jpg';
@@ -63,10 +69,16 @@ beforeEach(() => {
 	HTMLElement.prototype.scrollTo = scrollTo;
 	entry = { status: 'watching', episodesWatched: 4, personalRating: 8, isFavorite: false, isReleaseSubscribed: false, work: { id: title.id } };
 	vi.mocked(misskeyApiZalip).mockImplementation(async (endpoint, data) => {
-		if (endpoint === 'zalip/works/show') return { ...title, kind: workKind, posterPath, backdropPath, seasons: withEpisodes ? [{ id: 'season', seasonNumber: 1, title: 'Season 1', episodeCount: 3 }] : [] };
+		if (endpoint === 'zalip/works/show') return { ...title, kind: workKind, posterPath, backdropPath, seasons: withEpisodes ? [1, 2].map(n => ({ id: `season${n}`, seasonNumber: n, title: `Season ${n}`, episodeCount: 3 })) : [] };
 		if (endpoint === 'zalip/seasons/episodes') return testEpisodes;
-		if (endpoint === 'zalip/discussions/show') return { noteId: null };
-		if (endpoint === 'zalip/library/list') return [entry];
+		if (endpoint === 'zalip/discussions/show') {
+			if (failDiscussion) throw new Error('Discussion temporarily unavailable');
+			return { noteId: null };
+		}
+		if (endpoint === 'zalip/library/list') {
+			if (failLibrary) throw new Error('Library temporarily unavailable');
+			return [entry];
+		}
 		if (endpoint === 'zalip/playback/alloha/show') return { available, translations: [], iframe: available ? 'https://player.example/?token_movie=fixture' : null, lastCheckedAt: null };
 		if (endpoint === 'zalip/playback/sources') return { sources: [] };
 		if (endpoint === 'zalip/taxonomy/show') return { entries: [] };
@@ -81,6 +93,113 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('Zalip work actions', () => {
+	function deferred<T>() {
+		let resolve!: (value: T) => void;
+		let reject!: (error: Error) => void;
+		const promise = new Promise<T>((ok, fail) => { resolve = ok; reject = fail; });
+		return { promise, resolve, reject };
+	}
+
+	function differentWorkResponses(oldUpdate: Promise<unknown>, newUpdate?: Promise<unknown>) {
+		const fallback = vi.mocked(misskeyApiZalip).getMockImplementation()!;
+		const secondEntry = { status: 'planned', episodesWatched: 1, personalRating: 3, isFavorite: true, isReleaseSubscribed: true, work: { id: 'second-work' } };
+		vi.mocked(misskeyApiZalip).mockImplementation(async (endpoint, data) => {
+			if (endpoint === 'zalip/works/show' && data?.slug === 'second') return { ...title, id: 'second-work', slug: 'second', title: 'Second film' };
+			if (endpoint === 'zalip/library/list') return [entry, secondEntry];
+			if (endpoint === 'zalip/library/update') return data?.workId === title.id ? oldUpdate : newUpdate ?? { ...secondEntry, ...data };
+			return fallback(endpoint, data);
+		});
+		return secondEntry;
+	}
+
+	it('ignores a late save from another title and retains the current title baseline for its next write', async () => {
+		const oldUpdate = deferred<unknown>();
+		const second = differentWorkResponses(oldUpdate.promise);
+		const view = setup();
+		await fireEvent.click(await view.findByRole('button', { name: i18n.ts.zalip.libraryWatching }));
+		menuSwitch().ref.value = true;
+		await waitFor(() => expect(misskeyApiZalip).toHaveBeenCalledWith('zalip/library/update', expect.objectContaining({ workId: title.id })));
+		await view.rerender({ slug: 'second' });
+		await view.findByRole('button', { name: i18n.ts.zalip.libraryPlanned });
+		oldUpdate.resolve({ ...entry, isFavorite: true });
+		await new Promise(resolve => setTimeout(resolve, 0));
+		expect(view.getByRole('button', { name: `${i18n.ts.zalip.myRating}: 3/10` })).toBeTruthy();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip.libraryPlanned }));
+		menuSwitch().ref.value = false;
+		await waitFor(() => expect(misskeyApiZalip).toHaveBeenLastCalledWith('zalip/library/update', { workId: second.work.id, status: 'planned', episodesWatched: 1, personalRating: 3, isFavorite: false, isReleaseSubscribed: true }));
+	});
+
+	it('a previous title finally handler cannot clear the saving flag of a current-title write', async () => {
+		const oldUpdate = deferred<unknown>();
+		const newUpdate = deferred<unknown>();
+		const second = differentWorkResponses(oldUpdate.promise, newUpdate.promise);
+		const view = setup();
+		await fireEvent.click(await view.findByRole('button', { name: i18n.ts.zalip.subscribePremiere }));
+		await view.rerender({ slug: 'second' });
+		await fireEvent.click(await view.findByRole('button', { name: i18n.ts.zalip.releaseSubscribed, pressed: true }));
+		oldUpdate.resolve({ ...entry, isReleaseSubscribed: true });
+		await new Promise(resolve => setTimeout(resolve, 0));
+		expect((view.getByRole('button', { name: i18n.ts.zalip.libraryPlanned }) as HTMLButtonElement).disabled).toBe(true);
+		newUpdate.resolve({ ...second, isReleaseSubscribed: false });
+		await waitFor(() => expect((view.getByRole('button', { name: i18n.ts.zalip.libraryPlanned }) as HTMLButtonElement).disabled).toBe(false));
+	});
+
+	it.each(['status', 'favorite', 'subscription'] as const)('a rejected old-title %s change cannot roll back personal state of a new title', async action => {
+		const oldUpdate = deferred<unknown>();
+		differentWorkResponses(oldUpdate.promise);
+		const view = setup();
+		await view.findByRole('button', { name: i18n.ts.zalip.libraryWatching });
+		if (action === 'subscription') {
+			await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip.subscribePremiere }));
+		} else {
+			await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip.libraryWatching }));
+			if (action === 'favorite') menuSwitch().ref.value = true;
+			else {
+				const items = vi.mocked(os.popupMenu).mock.calls.at(-1)![0] as MenuItem[];
+				const item = items.find(item => item && 'type' in item && item.type === 'switch' && item.text === i18n.ts.zalip.libraryWatching) as MenuSwitch;
+				item.ref.value = false;
+			}
+		}
+		await view.rerender({ slug: 'second' });
+		await view.findByRole('button', { name: i18n.ts.zalip.libraryPlanned });
+		oldUpdate.reject(new Error('Old-title failure'));
+		await new Promise(resolve => setTimeout(resolve, 0));
+		expect(os.toast).not.toHaveBeenCalled();
+		expect(view.getByRole('button', { name: i18n.ts.zalip.releaseSubscribed, pressed: true })).toBeTruthy();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip.libraryPlanned }));
+		expect(menuSwitch().ref.value).toBe(true);
+		expect(view.getByRole('button', { name: `${i18n.ts.zalip.myRating}: 3/10` })).toBeTruthy();
+	});
+
+	it('keeps a valid title and player when optional discussion and library requests fail, and retries personal state safely', async () => {
+		failLibrary = true;
+		failDiscussion = true;
+		available = true;
+		const view = setup();
+		await view.findByRole('heading', { name: title.title, level: 1 });
+		await view.findByText(i18n.ts.zalip.workLibraryLoadFailed);
+		expect((view.getByRole('button', { name: i18n.ts.zalip.workRateAction }) as HTMLButtonElement).disabled).toBe(true);
+		const play = view.getAllByRole('button', { name: i18n.ts.zalip.watchTitle }).at(-1)!;
+		await fireEvent.click(play);
+		await waitFor(() => expect(view.container.querySelector('iframe')).toBeTruthy());
+		const frame = view.container.querySelector('iframe');
+		failLibrary = false;
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.retry }));
+		await view.findByRole('button', { name: i18n.ts.zalip.libraryWatching });
+		expect(view.container.querySelector('iframe')).toBe(frame);
+		expect(view.queryByText(i18n.ts.zalip.workLibraryLoadFailed)).toBeNull();
+		expect(vi.mocked(misskeyApiZalip).mock.calls.filter(([endpoint]) => endpoint === 'zalip/works/show')).toHaveLength(1);
+	});
+
+	it('honors exact season and episode release URLs instead of defaulting to the first unwatched episode', async () => {
+		withEpisodes = true;
+		entry.episodesWatched = 0;
+		const view = setup({ initialSeason: '2', initialEpisode: '3' });
+		await view.findByText('Description 3');
+		expect(misskeyApiZalip).toHaveBeenCalledWith('zalip/seasons/episodes', { slug: 'film', seasonNumber: 2 });
+		expect(view.container.querySelector('[data-episode-id=ep3]')?.getAttribute('aria-pressed')).toBe('true');
+	});
+
 	it.each([
 		['watching', 'ti-eye', 'libraryWatching'],
 		['planned', 'ti-bookmark', 'libraryPlanned'],

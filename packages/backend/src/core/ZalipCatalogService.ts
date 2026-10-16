@@ -31,6 +31,7 @@ import { MiZalipReleaseEvent } from '@/models/ZalipReleaseEvent.js';
 import { MiZalipSharedNote } from '@/models/ZalipSharedNote.js';
 import { NotificationService } from '@/core/NotificationService.js';
 import { MemorySingleCache } from '@/misc/cache.js';
+import { cataloguePageScope, decodeCataloguePageCursor, encodeCataloguePageCursor, zalipCatalogueSorts, type ZalipCatalogueSort } from '@/misc/zalip-catalogue-page.js';
 import { readImportState } from './zalip-importer/policy.js';
 
 // A wide multi-select makes it possible to build genuinely narrow cinema shelves
@@ -272,6 +273,46 @@ export class ZalipCatalogService {
 		}
 
 		return await this.packWorksWithCommunityRatings(works);
+	}
+
+	/** Keyset paging and ordering are applied to the entire filtered catalogue, not one UI slice. */
+	public async pagePublished(limit: number, filters: ZalipPublishedCatalogueFilters = {}, sort: ZalipCatalogueSort = 'newest', cursor?: string): Promise<{ items: PackedZalipWork[]; total: number; nextCursor: string | null }> {
+		if (!Number.isInteger(limit) || limit < 1 || limit > 50 || !zalipCatalogueSorts.includes(sort)) throw new Error('INVALID_CATALOG_LOOKUP');
+		const genres = [...new Set((filters.genres ?? []).map(genre => genre.trim()).filter(Boolean))];
+		const kinds = [...new Set(filters.kinds ?? [])];
+		const normalizedQuery = filters.query?.trim() ?? '';
+		if (genres.length > zalipCatalogueGenreLimit || kinds.length > zalipWorkKinds.length || kinds.some(kind => !zalipWorkKinds.includes(kind)) || normalizedQuery.length > 100 || (filters.yearFrom != null && filters.yearTo != null && filters.yearFrom > filters.yearTo)) return { items: [], total: 0, nextCursor: null };
+		const scope = cataloguePageScope({ genres, kinds, query: normalizedQuery, yearFrom: filters.yearFrom, yearTo: filters.yearTo });
+		const anchor = cursor ? decodeCataloguePageCursor(cursor, scope, sort) : null;
+		const query = this.db.getRepository(MiZalipWork).createQueryBuilder('work')
+			.where('work.publicationState = :publicationState', { publicationState: 'published' });
+		if (genres.length) query.andWhere('work.genres @> CAST(:genres AS jsonb)', { genres: JSON.stringify(genres) });
+		if (kinds.length) query.andWhere('work.kind IN (:...kinds)', { kinds });
+		if (normalizedQuery) query.andWhere('(work.title ILIKE :pattern ESCAPE \'\\\' OR work.originalTitle ILIKE :pattern ESCAPE \'\\\')', { pattern: `%${normalizedQuery.replace(/[\\%_]/g, '\\$&')}%` });
+		if (filters.yearFrom != null) query.andWhere('work.releaseYear >= :yearFrom', { yearFrom: filters.yearFrom });
+		if (filters.yearTo != null) query.andWhere('work.releaseYear <= :yearTo', { yearTo: filters.yearTo });
+		// Count before adding the keyset boundary: total always describes all matching titles.
+		const total = await query.clone().getCount();
+		const direction = sort === 'newest' || sort === 'year-desc' ? 'DESC' : 'ASC';
+		const comparison = direction === 'DESC' ? '<' : '>';
+		const dateExpression = 'DATE_TRUNC(\'milliseconds\', COALESCE(work.publishedAt, work.createdAt))';
+		const expression = sort === 'title' ? 'LOWER(work.title)' : sort.startsWith('year-') ? 'work.releaseYear' : dateExpression;
+		if (anchor) {
+			if (sort.startsWith('year-') && anchor.value === null) {
+				query.andWhere(`(work.releaseYear IS NULL AND work.id ${comparison} :cursorId)`, { cursorId: anchor.id });
+			} else {
+				const value = sort === 'title' ? 'LOWER(CAST(:cursorValue AS text))' : sort.startsWith('year-') ? ':cursorValue' : 'CAST(:cursorValue AS timestamptz)';
+				query.andWhere(`((${expression} ${comparison} ${value}) OR (${expression} = ${value} AND work.id ${comparison} :cursorId)${sort.startsWith('year-') ? ' OR work.releaseYear IS NULL' : ''})`, { cursorValue: anchor.value, cursorId: anchor.id });
+			}
+		}
+		const found = await query.orderBy(expression, direction, 'NULLS LAST').addOrderBy('work.id', direction).take(limit + 1).getMany();
+		const works = found.slice(0, limit);
+		const last = works.at(-1);
+		const value = last ? sort === 'title' ? last.title : sort.startsWith('year-') ? last.releaseYear : (last.publishedAt ?? last.createdAt).toISOString() : null;
+		return {
+			items: await this.packWorksWithCommunityRatings(works), total,
+			nextCursor: found.length > limit && last ? encodeCataloguePageCursor(scope, sort, { id: last.id, value }) : null,
+		};
 	}
 
 	/** All normalized genre facets used by published catalogue titles, independent of paging. */
@@ -805,26 +846,27 @@ export class ZalipCatalogService {
 			.getMany();
 
 		for (const event of events) {
-			if (event.work == null) continue;
-			const entries = await this.db.getRepository(MiZalipLibraryEntry).find({
-				select: { userId: true },
-				where: { workId: event.work.id, isReleaseSubscribed: true },
+			const dispatched = await this.db.transaction(async manager => {
+				// Do not fill the connection pool with lock waiters while the winner packs users.
+				const [globalClaim] = await manager.query<Array<{ locked: boolean }>>('SELECT pg_try_advisory_xact_lock(hashtext($1)) AS locked', ['zalip-notification-dispatch']);
+				if (!globalClaim?.locked) return false;
+				const [claim] = await manager.query<Array<{ locked: boolean }>>('SELECT pg_try_advisory_xact_lock(hashtext($1)) AS locked', [`zalip-notification:availability:${event.id}`]);
+				if (!claim?.locked) return false;
+				const repository = manager.getRepository(MiZalipAllohaAvailabilityEvent);
+				const pending = await repository.findOne({ where: { id: event.id, notificationDeliveredAt: IsNull() }, relations: { work: true } });
+				if (pending?.work?.publicationState !== 'published') return true;
+				const entries = await manager.getRepository(MiZalipLibraryEntry).find({ select: { userId: true }, where: { workId: pending.work.id, isReleaseSubscribed: true } });
+				for (const entry of entries) await this.notificationService.createNotificationOnceAndWait(
+					`zalip:availability:${pending.id}`, entry.userId, 'zalipAllohaAvailable', {
+						workId: pending.work.id, workSlug: pending.work.slug, workTitle: pending.work.title,
+						seasonNumber: pending.seasonNumber, episodeNumber: pending.episodeNumber,
+						translationCount: pending.translationCount,
+					} satisfies ZalipAllohaAvailabilityNotificationPayload,
+				);
+				await repository.update(pending.id, { notificationDeliveredAt: new Date() });
+				return true;
 			});
-			await Promise.all(entries.map(entry => this.notificationService.createNotificationAndWait(
-				entry.userId,
-				'zalipAllohaAvailable',
-				{
-					workId: event.work!.id,
-					workSlug: event.work!.slug,
-					workTitle: event.work!.title,
-					seasonNumber: event.seasonNumber,
-					episodeNumber: event.episodeNumber,
-					translationCount: event.translationCount,
-				} satisfies ZalipAllohaAvailabilityNotificationPayload,
-			)));
-			await this.db.getRepository(MiZalipAllohaAvailabilityEvent).update(event.id, {
-				notificationDeliveredAt: new Date(),
-			});
+			if (!dispatched) break; // A concurrent dispatcher owns this batch; retry next tick.
 		}
 	}
 
@@ -917,7 +959,8 @@ export class ZalipCatalogService {
 				episode.originalTitle = input.originalTitle;
 				episode.description = input.description;
 				episode.airDate = input.airDate;
-				episode.stillPath = input.stillPath;
+				const localArtwork = episode.importValues?._zalipLocalArtwork;
+				if (!localArtwork || typeof localArtwork !== 'object' || Array.isArray(localArtwork) || (localArtwork as Record<string, unknown>).stillPath !== episode.stillPath) episode.stillPath = input.stillPath;
 				episode.runtimeMinutes = input.runtimeMinutes;
 				episode.updatedAt = now;
 				return episode;
@@ -951,10 +994,10 @@ export class ZalipCatalogService {
 	}
 
 	/**
-	 * A durable release-event outbox. A failed Redis/Web Push operation leaves its marker empty,
-	 * allowing the next catalogue sync to retry without duplicating a database release event.
+	 * Persistent event outbox with per-event PostgreSQL serialization and per-recipient native
+	 * Redis receipts. A lost database acknowledgement never inserts a second native notice.
 	 */
-	private async dispatchPendingReleaseNotifications(): Promise<void> {
+	public async dispatchPendingReleaseNotifications(): Promise<void> {
 		const events = await this.db.getRepository(MiZalipReleaseEvent).createQueryBuilder('event')
 			.innerJoinAndSelect('event.work', 'work')
 			.innerJoinAndSelect('event.season', 'season')
@@ -966,40 +1009,28 @@ export class ZalipCatalogService {
 			.getMany();
 
 		for (const event of events) {
-			if (event.work == null || event.season == null || event.episode == null) continue;
-			await this.notifyEpisodeReleaseSubscribers(event, {
-				workId: event.work.id,
-				workSlug: event.work.slug,
-				workTitle: event.work.title,
-				seasonNumber: event.season.seasonNumber,
-				episodeNumber: event.episode.episodeNumber,
-				episodeTitle: event.episode.title,
+			const dispatched = await this.db.transaction(async manager => {
+				const [globalClaim] = await manager.query<Array<{ locked: boolean }>>('SELECT pg_try_advisory_xact_lock(hashtext($1)) AS locked', ['zalip-notification-dispatch']);
+				if (!globalClaim?.locked) return false;
+				const [claim] = await manager.query<Array<{ locked: boolean }>>('SELECT pg_try_advisory_xact_lock(hashtext($1)) AS locked', [`zalip-notification:release:${event.id}`]);
+				if (!claim?.locked) return false;
+				const repository = manager.getRepository(MiZalipReleaseEvent);
+				const pending = await repository.findOne({ where: { id: event.id, notificationDeliveredAt: IsNull() }, relations: { work: true, season: true, episode: true } });
+				if (pending?.work?.publicationState !== 'published' || !pending.season || !pending.episode) return true;
+				const entries = await manager.getRepository(MiZalipLibraryEntry).find({ select: { userId: true }, where: { workId: pending.work.id, isReleaseSubscribed: true } });
+				const notification: ZalipEpisodeReleaseNotificationPayload = {
+					workId: pending.work.id, workSlug: pending.work.slug, workTitle: pending.work.title,
+					seasonNumber: pending.season.seasonNumber, episodeNumber: pending.episode.episodeNumber,
+					episodeTitle: pending.episode.title,
+				};
+				for (const entry of entries) await this.notificationService.createNotificationOnceAndWait(
+					`zalip:release:${pending.id}`, entry.userId, 'zalipEpisodeReleased', notification,
+				);
+				await repository.update(pending.id, { notificationDeliveredAt: new Date() });
+				return true;
 			});
+			if (!dispatched) break;
 		}
-	}
-
-	/** Delivers one committed catalogue arrival before marking its release event as complete. */
-	private async notifyEpisodeReleaseSubscribers(
-		event: MiZalipReleaseEvent,
-		notification: ZalipEpisodeReleaseNotificationPayload,
-	): Promise<void> {
-		const entries = await this.db.getRepository(MiZalipLibraryEntry).find({
-			select: { userId: true },
-			where: {
-				workId: notification.workId,
-				isReleaseSubscribed: true,
-			},
-		});
-
-		await Promise.all(entries.map(entry => this.notificationService.createNotificationAndWait(
-			entry.userId,
-			'zalipEpisodeReleased',
-			notification,
-		)));
-
-		await this.db.getRepository(MiZalipReleaseEvent).update(event.id, {
-			notificationDeliveredAt: new Date(),
-		});
 	}
 
 	public packAdminWork(work: MiZalipWork, seasons: MiZalipSeason[] = [], rating?: Pick<PackedZalipWork, 'communityRating' | 'ratingCount'>): PackedZalipAdminWork {

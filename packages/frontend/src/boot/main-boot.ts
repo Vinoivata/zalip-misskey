@@ -29,6 +29,8 @@ import { prefer } from '@/preferences.js';
 import { updateCurrentAccountPartial } from '@/accounts.js';
 import { unisonReload } from '@/utility/unison-reload.js';
 import { isBirthday } from '@/utility/is-birthday.js';
+import { misskeyApi } from '@/utility/misskey-api.js';
+import { createChatUnreadReconciler } from '@/utility/chat-unread-state.js';
 
 export async function mainBoot() {
 	const { isClientUpdated, lastVersion } = await common(async () => {
@@ -349,10 +351,13 @@ export async function mainBoot() {
 				});
 			});
 
-			main.on('newChatMessage', () => {
-				updateCurrentAccountPartial({ hasUnreadChatMessages: true });
-				sound.playMisskeySfx('chatMessage');
-			});
+			const reconcileChatUnread = createChatUnreadReconciler(
+				async () => (await misskeyApi('i', {})).hasUnreadChatMessages,
+				unread => updateCurrentAccountPartial({ hasUnreadChatMessages: unread }),
+				() => { sound.playMisskeySfx('chatMessage'); },
+			);
+			main.on('newChatMessage', () => { void reconcileChatUnread(true); });
+			main.on('readAllChatMessages', () => { void reconcileChatUnread(); });
 
 			main.on('readAllAnnouncements', () => {
 				updateCurrentAccountPartial({ hasUnreadAnnouncement: false });

@@ -103,7 +103,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 							</div>
 						</MkA>
 					</div>
-					<p v-if="!pending && !loadError" :class="$style.resultCount">{{ i18n.tsx.zalip.catalogueResultCount({ shown: sortedWorks.length.toString(), total: '50' }) }}</p>
+					<div v-if="!pending && !loadError" :class="$style.pagination">
+						<p :class="$style.resultCount">{{ i18n.tsx.zalip.catalogueResultCount({ shown: sortedWorks.length.toString(), total: totalWorks.toString() }) }}</p>
+						<p v-if="moreError" role="alert">{{ i18n.ts.zalip.catalogueLoadFailed }}</p>
+						<button v-if="nextCursor" type="button" class="_button" :disabled="morePending" @click="loadMoreWorks"><i v-if="morePending" class="ti ti-loader-2 ti-spin" aria-hidden="true"></i>{{ moreError ? i18n.ts.zalip.catalogueRetry : i18n.ts.loadMore }}</button>
+					</div>
 				</section>
 			</div>
 		</main>
@@ -176,6 +180,10 @@ const props = withDefaults(defineProps<{
 
 const router = useRouter();
 const works = ref<ZalipWork[]>([]);
+const totalWorks = ref(0);
+const nextCursor = ref<string | null>(null);
+const morePending = ref(false);
+const moreError = ref(false);
 const library = ref<Record<string, LibraryStatus>>({});
 const viewMode = ref<'tiles' | 'cards'>(miLocalStorage.getItem('zalipCatalogueView') === 'cards' ? 'cards' : 'tiles');
 
@@ -224,14 +232,10 @@ const activeFilterCount = computed(() => selectedGenres.value.length + selectedK
 const matchingGenres = computed(() => genreOptions.value.filter(genre => genre.toLocaleLowerCase('ru').includes(genreSearch.value.toLocaleLowerCase('ru'))));
 const displayedGenres = computed(() => showAllGenres.value || genreSearch.value ? matchingGenres.value : matchingGenres.value.slice(0, DISPLAYED_GENRES));
 const shouldOfferMoreGenres = computed(() => !genreSearch.value && matchingGenres.value.length > DISPLAYED_GENRES);
-const resultHeading = computed(() => pending.value ? i18n.ts.zalip.catalogueLoading : `${sortedWorks.value.length} ${pluralTitles(sortedWorks.value.length)}`);
-const sortedWorks = computed(() => {
-	const sorted = [...works.value];
-	if (props.sort === 'title') return sorted.sort((left, right) => left.title.localeCompare(right.title, 'ru'));
-	if (props.sort === 'year-asc') return sorted.sort((left, right) => (left.releaseYear ?? Number.MAX_SAFE_INTEGER) - (right.releaseYear ?? Number.MAX_SAFE_INTEGER) || left.title.localeCompare(right.title, 'ru'));
-	if (props.sort === 'year-desc') return sorted.sort((left, right) => (right.releaseYear ?? 0) - (left.releaseYear ?? 0) || left.title.localeCompare(right.title, 'ru'));
-	return sorted;
-});
+const resultHeading = computed(() => pending.value ? i18n.ts.zalip.catalogueLoading : `${totalWorks.value} ${pluralTitles(totalWorks.value)}`);
+const activeSort = computed<CatalogueSort>(() => ['newest', 'year-desc', 'year-asc', 'title'].includes(props.sort) ? props.sort : 'newest');
+// Sorting belongs to the server so every page follows one catalogue-wide order.
+const sortedWorks = computed(() => works.value);
 
 function parseList(value: string, limit: number): string[] {
 	return Array.from(new Set(value.split(',').map(item => item.trim()).filter(Boolean))).slice(0, limit);
@@ -357,20 +361,54 @@ async function loadWorks(): Promise<void> {
 	const requestId = ++latestRequest;
 	pending.value = true;
 	loadError.value = false;
+	nextCursor.value = null;
+	totalWorks.value = 0;
+	morePending.value = false;
+	moreError.value = false;
 	try {
-		const response = await misskeyApiZalip<ZalipWork[]>('zalip/works/list', {
-			limit: 50,
-			...(selectedGenres.value.length ? { genres: selectedGenres.value } : {}),
-			...(selectedKinds.value.length ? { kinds: selectedKinds.value } : {}),
-			...(query.value.length >= 2 ? { query: query.value } : {}),
-			...(yearFrom.value != null ? { yearFrom: yearFrom.value } : {}),
-			...(yearTo.value != null ? { yearTo: yearTo.value } : {}),
-		});
-		if (requestId === latestRequest) works.value = response;
+		const response = await fetchWorks();
+		if (requestId === latestRequest) {
+			works.value = response.items;
+			totalWorks.value = response.total;
+			nextCursor.value = response.nextCursor;
+		}
 	} catch {
 		if (requestId === latestRequest) loadError.value = true;
 	} finally {
 		if (requestId === latestRequest) pending.value = false;
+	}
+}
+
+function fetchWorks(cursor?: string): Promise<{ items: ZalipWork[]; total: number; nextCursor: string | null }> {
+	return misskeyApiZalip('zalip/works/page', {
+		limit: 24,
+		sort: activeSort.value,
+		...(cursor ? { cursor } : {}),
+		...(selectedGenres.value.length ? { genres: selectedGenres.value } : {}),
+		...(selectedKinds.value.length ? { kinds: selectedKinds.value } : {}),
+		...(query.value.length >= 2 ? { query: query.value } : {}),
+		...(yearFrom.value != null ? { yearFrom: yearFrom.value } : {}),
+		...(yearTo.value != null ? { yearTo: yearTo.value } : {}),
+	});
+}
+
+async function loadMoreWorks(): Promise<void> {
+	if (pending.value || morePending.value || !nextCursor.value) return;
+	const requestId = latestRequest;
+	const cursor = nextCursor.value;
+	morePending.value = true;
+	moreError.value = false;
+	try {
+		const response = await fetchWorks(cursor);
+		if (requestId !== latestRequest) return;
+		const existing = new Set(works.value.map(work => work.id));
+		works.value = [...works.value, ...response.items.filter(work => !existing.has(work.id))];
+		totalWorks.value = response.total;
+		nextCursor.value = response.nextCursor;
+	} catch {
+		if (requestId === latestRequest) moreError.value = true;
+	} finally {
+		if (requestId === latestRequest) morePending.value = false;
 	}
 }
 
@@ -386,13 +424,13 @@ async function loadGenres(): Promise<void> {
 	}
 }
 
-watch(() => [props.genres, props.types, props.query, props.yearFrom, props.yearTo], () => {
+watch(() => [props.genres, props.types, props.query, props.yearFrom, props.yearTo, props.sort], () => {
 	queryInput.value = props.query;
 	yearFromInput.value = props.yearFrom;
 	yearToInput.value = props.yearTo;
+	sortInput.value = activeSort.value;
 	void loadWorks();
 }, { immediate: true });
-watch(() => props.sort, value => { sortInput.value = value; }, { immediate: true });
 
 onMounted(() => {
 	void loadGenres();
@@ -421,6 +459,9 @@ definePage(() => ({ title: i18n.ts.zalip.catalogueHeading, icon: 'ti ti-layout-g
 .search:focus-within, .genreSearch:focus-within { border-color: var(--MI_THEME-accent); outline: 2px solid var(--zalip-accent-border); outline-offset: 2px; }
 .catalogueLayout { display: grid; grid-template-columns: minmax(0, 1fr) 240px; grid-template-areas: "results filters"; gap: 24px; align-items: start; }
 .results { grid-area: results; min-width: 0; }
+.pagination { display: grid; justify-items: center; gap: 12px; margin-top: 24px; }
+.pagination > p { margin: 0; }
+.pagination > button { display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; border-radius: var(--MI-radius); background: var(--MI_THEME-panelHighlight); color: var(--MI_THEME-fg); }
 .filters { grid-area: filters; position: sticky; top: 20px; min-width: 0; padding: 18px; border: 1px solid var(--zalip-social-border); border-radius: 20px; background: var(--zalip-social-panel); }
 .filtersHeading, .toolbar, .filterLabel, .toolbarActions { display: flex; align-items: center; gap: 10px; }
 .filtersHeading { justify-content: space-between; }

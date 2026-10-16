@@ -14,10 +14,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 			<div v-if="pending" :class="$style.empty"><i class="ti ti-loader-2 ti-spin"></i> {{ i18n.ts.zalip.updatesLoading }}</div>
 			<div v-else-if="loadError"><p role="alert">{{ i18n.ts.zalip.subscriptionsLoadFailed }}</p><MkError @retry="loadUpdates"/></div>
-				<div v-else-if="events.length === 0" :class="$style.empty"><i class="ti ti-bell-off"></i><strong>{{ i18n.ts.zalip.updatesEmptyTitle }}</strong><span>{{ i18n.ts.zalip.updatesEmptyDescription }}</span><MkA to="/catalog" :class="$style.start">{{ i18n.ts.zalip.updatesOpenCatalogue }}</MkA></div>
+			<div v-else-if="events.length === 0" :class="$style.empty"><i class="ti ti-bell-off"></i><strong>{{ i18n.ts.zalip.updatesEmptyTitle }}</strong><span>{{ i18n.ts.zalip.updatesEmptyDescription }}</span><MkA to="/catalog" :class="$style.start">{{ i18n.ts.zalip.updatesOpenCatalogue }}</MkA></div>
 			<div v-else :class="$style.list">
-				<MkA v-for="event in events" :key="event.id" :to="`/zalip/${event.work.slug}`" :class="$style.event">
+				<MkA v-for="event in events" :key="event.id" :to="zalipWorkRoute(event.work.slug, event.season?.seasonNumber, event.episode?.episodeNumber)" :class="$style.event">
 					<img v-if="event.work.posterPath" :src="tmdbImage(event.work.posterPath)" :alt="event.work.title" loading="lazy">
+					<i v-else class="ti ti-movie" :class="$style.posterPlaceholder" aria-hidden="true"></i>
 					<div><p>{{ event.work.title }}</p><h2>{{ releaseLabel(event) }}</h2><span>{{ event.source === 'playback' ? i18n.ts.zalip.releaseInPlayer : i18n.ts.zalip.releaseInCatalogue }} · {{ dateLabel(event.createdAt) }}</span></div>
 				</MkA>
 			</div>
@@ -27,7 +28,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { onMounted, ref } from 'vue';
+import { ref } from 'vue';
+import { useZalipPageReload } from '@/composables/use-zalip-page-reload.js';
+import { zalipWorkRoute } from '@/utility/zalip-work-route.js';
 import { definePage } from '@/page.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { importerImageUrl } from '@/utility/zalip-importer.js';
@@ -45,6 +48,7 @@ type ReleaseEvent = {
 const events = ref<ReleaseEvent[]>([]);
 const pending = ref(true);
 const loadError = ref(false);
+let latestRequest = 0;
 
 function tmdbImage(path: string): string | undefined {
 	return importerImageUrl(path) ?? undefined;
@@ -61,18 +65,20 @@ function dateLabel(createdAt: string): string {
 }
 
 async function loadUpdates(): Promise<void> {
+	const request = ++latestRequest;
 	pending.value = true;
 	loadError.value = false;
 	try {
-		events.value = await misskeyApiZalip<ReleaseEvent[]>('zalip/releases/subscribed', { limit: 50 });
+		const releases = await misskeyApiZalip<ReleaseEvent[]>('zalip/releases/subscribed', { limit: 50 });
+		if (request === latestRequest) events.value = releases;
 	} catch {
-		loadError.value = true;
+		if (request === latestRequest) loadError.value = true;
 	} finally {
-		pending.value = false;
+		if (request === latestRequest) pending.value = false;
 	}
 }
 
-onMounted(loadUpdates);
+useZalipPageReload(loadUpdates);
 
 definePage(() => ({ title: i18n.ts.zalip.updatesHeading, icon: 'ti ti-bell' }));
 </script>
@@ -90,7 +96,8 @@ definePage(() => ({ title: i18n.ts.zalip.updatesHeading, icon: 'ti ti-bell' }));
 .start { margin-top: 8px; background: var(--MI_THEME-accent); color: var(--MI_THEME-fgOnAccent); }
 .list { display: grid; gap: 10px; }
 .event { display: grid; grid-template-columns: 62px minmax(0, 1fr); overflow: hidden; min-height: 86px; border-radius: 16px; background: var(--MI_THEME-panel); color: var(--MI_THEME-fg); text-decoration: none; }
-.event img { width: 62px; height: 86px; object-fit: cover; background: var(--MI_THEME-panelHighlight); }
+.event img, .posterPlaceholder { width: 62px; height: 86px; object-fit: cover; background: var(--MI_THEME-panelHighlight); }
+.posterPlaceholder { display: grid; place-items: center; color: var(--MI_THEME-accent); font-size: 24px; }
 .event > div { display: grid; align-content: center; gap: 4px; padding: 12px; }
 .event p, .event h2, .event span { margin: 0; }
 .event p { color: var(--MI_THEME-fgTransparentWeak); font-size: 0.78rem; }

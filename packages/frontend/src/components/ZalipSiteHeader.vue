@@ -6,12 +6,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <header :class="[$style.root, { [$style.thread]: isThread, [$style.mobile]: mobile, [$style.hidden]: hidden }]" :inert="hidden">
 	<template v-if="!mobile && !isThread">
-		<nav :class="$style.desktopNav" :aria-label="i18n.ts.menu">
-			<MkA to="/" exact :activeClass="$style.active">{{ navbarItemDef.zalip.title }}</MkA>
-			<MkA to="/timeline" :activeClass="$style.active">{{ navbarItemDef.feed.title }}</MkA>
-			<MkA to="/catalog" :activeClass="$style.active">{{ navbarItemDef.catalogue.title }}</MkA>
-			<MkA to="/library" :activeClass="$style.active">{{ navbarItemDef.library.title }}</MkA>
-		</nav>
 		<form :class="$style.desktopSearch" role="search" @submit.prevent="submitSearch">
 			<input v-model.trim="searchQuery" class="_input" type="search" :placeholder="i18n.ts.zalip.search" :aria-label="i18n.ts.zalip.siteSearchPlaceholder" maxlength="100">
 			<button type="submit" class="_button" :aria-label="i18n.ts.zalip.search"><MkZalipIcon name="search"/></button>
@@ -34,7 +28,6 @@ import { computed, ref } from 'vue';
 import MkZalipIcon from '@/components/MkZalipIcon.vue';
 import { i18n } from '@/i18n.js';
 import { applyZalipAppearance, getZalipAccent, getZalipAppearanceMenu } from '@/utility/zalip-theme.js';
-import { navbarItemDef } from '@/navbar.js';
 import * as os from '@/os.js';
 import { openZalipSearch } from '@/utility/zalip-search.js';
 import { openZalipCreateMenu } from '@/utility/zalip-create.js';
@@ -92,7 +85,6 @@ function goBack(): void {
 .thread { grid-template-columns: 44px minmax(0, 1fr) 44px; border-bottom: 1px solid var(--zalip-social-border); }
 .root:not(.mobile) { position: relative; display: flex; flex: 0 0 68px; gap: 10px; height: 68px; padding: 0 20px; border-bottom: 1px solid var(--zalip-social-border); background: var(--zalip-accent-wash); }
 .thread:not(.mobile) { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; }
-.desktopNav { display: flex; align-items: center; gap: 2px; white-space: nowrap; > a { padding: 10px 12px; border-radius: 99px; font-size: 14px; font-weight: 600; text-decoration: none; } > a:hover { background: var(--zalip-social-hover); } .active { color: var(--zalip-social-fg); background: var(--zalip-accent-soft); box-shadow: inset 0 0 0 1px var(--zalip-accent-border); } }
 .desktopSearch { display: flex; align-items: center; gap: 10px; min-width: 44px; max-width: 320px; height: 40px; flex: 1; margin-left: auto; padding: 0 14px; border: 1px solid var(--zalip-social-border); border-radius: 99px; background: var(--zalip-social-panel); text-align: left; > svg { width: 20px; height: 20px; } }
 .desktopAction { display: grid; place-items: center; flex: 0 0 40px; height: 40px; border-radius: 50%; &:hover { background: var(--zalip-accent-soft); } > svg { width: 22px; height: 22px; } }
 .desktopSearch input { min-width: 0; width: 100%; flex: 1; border: 0; outline: none; background: transparent; color: var(--zalip-social-fg); font-size: 14px; }

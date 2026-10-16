@@ -210,6 +210,8 @@ async function syncSeasons(manager: EntityManager, idService: Pick<IdService, 'g
 		const baseline = { ...season.importValues };
 		for (const [field, incoming] of Object.entries(facts)) {
 			const current = season[field as keyof typeof facts];
+			const localArtwork = baseline._zalipLocalArtwork as Record<string, unknown> | undefined;
+			if (field === 'posterPath' && localArtwork?.posterPath === current) continue;
 			if ((!existing && nonEmpty(incoming)) || (!changedSinceImport(current, baseline[field]) && canUpdateField(current, baseline[field], incoming, false))) {
 				Object.assign(season, { [field]: incoming });
 				baseline[field] = structuredClone(incoming);
@@ -235,6 +237,8 @@ async function syncSeasons(manager: EntityManager, idService: Pick<IdService, 'g
 			const episodeBaseline = { ...episode.importValues };
 			for (const [field, incoming] of Object.entries(episodeFacts)) {
 				const current = episode[field as keyof typeof episodeFacts];
+				const localArtwork = episodeBaseline._zalipLocalArtwork as Record<string, unknown> | undefined;
+				if (field === 'stillPath' && localArtwork?.stillPath === current) continue;
 				if ((!before && nonEmpty(incoming)) || (!changedSinceImport(current, episodeBaseline[field]) && canUpdateField(current, episodeBaseline[field], incoming, false))) {
 					Object.assign(episode, { [field]: incoming });
 					episodeBaseline[field] = structuredClone(incoming);

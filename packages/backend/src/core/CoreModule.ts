@@ -84,6 +84,7 @@ import { ZalipImporterService } from './ZalipImporterService.js';
 import { ZalipImporterMaintenanceService } from './ZalipImporterMaintenanceService.js';
 import { ZalipImporterDiagnosticsService } from './ZalipImporterDiagnosticsService.js';
 import { ZalipImporterArtworkService } from './ZalipImporterArtworkService.js';
+import { ZalipArtworkLocalizationService } from './ZalipArtworkLocalizationService.js';
 import { ZalipPlaybackSettingsService } from './ZalipPlaybackSettingsService.js';
 import { ZalipImporterSourceSettingsService } from './ZalipImporterSourceSettingsService.js';
 import { ZalipTaxonomyService } from './ZalipTaxonomyService.js';
@@ -399,6 +400,7 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		ZalipImporterMaintenanceService,
 		ZalipImporterDiagnosticsService,
 		ZalipImporterArtworkService,
+		ZalipArtworkLocalizationService,
 		ZalipPlaybackSettingsService,
 		ZalipImporterSourceSettingsService,
 		ZalipTaxonomyService,
@@ -711,6 +713,7 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		ZalipImporterMaintenanceService,
 		ZalipImporterDiagnosticsService,
 		ZalipImporterArtworkService,
+		ZalipArtworkLocalizationService,
 		ZalipPlaybackSettingsService,
 		ZalipImporterSourceSettingsService,
 		ZalipTaxonomyService,

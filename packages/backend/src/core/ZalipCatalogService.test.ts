@@ -105,6 +105,19 @@ describe('ZalipCatalogService', () => {
 		expect(sql).toContain('LIMIT 100');
 	});
 
+	it('legacy episode refresh preserves an exact existing localized still without freezing other episode metadata', async () => {
+		const episode = { id: 'episode', episodeNumber: 1, stillPath: '/files/local.webp', importValues: { _zalipLocalArtwork: { stillPath: '/files/local.webp' } } };
+		const season = { id: 'season', workId: 'work', episodeCount: 1 };
+		const episodes = { findBy: vi.fn().mockResolvedValue([episode]), save: vi.fn() };
+		const seasons = { findOneBy: vi.fn().mockResolvedValue(season), save: vi.fn() };
+		const works = { findOne: vi.fn().mockResolvedValue({ id: 'work', publicationState: 'draft', importData: {} }) };
+		const manager = { getRepository: (model: unknown) => model === MiZalipWork ? works : model === MiZalipSeason ? seasons : episodes };
+		const service = new ZalipCatalogService({ transaction: async (action: (value: typeof manager) => Promise<unknown>) => action(manager) } as never, {} as never, {} as never, {} as never);
+		vi.spyOn(service as unknown as { dispatchPendingReleaseNotifications: () => Promise<void> }, 'dispatchPendingReleaseNotifications').mockResolvedValue();
+		await service.syncSeasonEpisodes('season', [{ tmdbEpisodeId: 1, episodeNumber: 1, title: 'Updated title', originalTitle: null, description: null, airDate: null, stillPath: '/remote.jpg', runtimeMinutes: null }]);
+		expect(episodes.save).toHaveBeenCalledWith([expect.objectContaining({ title: 'Updated title', stillPath: '/files/local.webp' })]);
+	});
+
 	it.each([null, false, true])('atomically saves movie availability and outbox under a work lock (previous=%s)', async previous => {
 		const sources = { findOneBy: vi.fn().mockResolvedValue(previous == null ? null : { id: 'source', isAvailable: previous, createdAt: new Date() }), create: vi.fn(value => value), save: vi.fn() };
 		const events = { existsBy: vi.fn().mockResolvedValue(false), create: vi.fn(value => value), save: vi.fn() };
@@ -151,18 +164,19 @@ describe('ZalipCatalogService', () => {
 	});
 
 	it('delivers playback events only to active subscribers and leaves failed delivery retryable', async () => {
-		const event = { id: 'event', work: { id: 'movie', slug: 'movie', title: 'Movie' }, seasonNumber: null, episodeNumber: null, translationCount: 2 };
+		const event = { id: 'event', work: { id: 'movie', slug: 'movie', title: 'Movie', publicationState: 'published' }, seasonNumber: null, episodeNumber: null, translationCount: 2 };
 		const query = { innerJoinAndSelect: vi.fn(), where: vi.fn(), andWhere: vi.fn(), orderBy: vi.fn(), take: vi.fn(), getMany: vi.fn().mockResolvedValue([event]) };
 		for (const key of ['innerJoinAndSelect', 'where', 'andWhere', 'orderBy', 'take'] as const) query[key].mockReturnValue(query);
-		const events = { createQueryBuilder: () => query, update: vi.fn().mockResolvedValue(undefined) };
+		const events = { createQueryBuilder: () => query, findOne: vi.fn().mockResolvedValue(event), update: vi.fn().mockResolvedValue(undefined) };
 		const library = { find: vi.fn().mockResolvedValue([{ userId: 'subscriber' }]) };
-		const notification = { createNotificationAndWait: vi.fn().mockRejectedValueOnce(new Error('Redis down')).mockResolvedValue(undefined) };
-		const service = new ZalipCatalogService({ getRepository: (model: unknown) => model === MiZalipAllohaAvailabilityEvent ? events : library } as never, {} as never, {} as never, notification as never);
+		const notification = { createNotificationOnceAndWait: vi.fn().mockRejectedValueOnce(new Error('Redis down')).mockResolvedValue(undefined) };
+		const manager = { query: vi.fn().mockResolvedValue([{ locked: true }]), getRepository: (model: unknown) => model === MiZalipAllohaAvailabilityEvent ? events : library };
+		const service = new ZalipCatalogService({ ...manager, transaction: async (action: (value: typeof manager) => Promise<void>) => action(manager) } as never, {} as never, {} as never, notification as never);
 		await expect(service.dispatchPendingAllohaAvailabilityNotifications()).rejects.toThrow('Redis down');
 		expect(events.update).not.toHaveBeenCalled();
 		await service.dispatchPendingAllohaAvailabilityNotifications();
 		expect(library.find).toHaveBeenCalledWith({ select: { userId: true }, where: { workId: 'movie', isReleaseSubscribed: true } });
-		expect(notification.createNotificationAndWait).toHaveBeenCalledWith('subscriber', 'zalipAllohaAvailable', { workId: 'movie', workSlug: 'movie', workTitle: 'Movie', seasonNumber: null, episodeNumber: null, translationCount: 2 });
+		expect(notification.createNotificationOnceAndWait).toHaveBeenCalledWith('zalip:availability:event', 'subscriber', 'zalipAllohaAvailable', { workId: 'movie', workSlug: 'movie', workTitle: 'Movie', seasonNumber: null, episodeNumber: null, translationCount: 2 });
 		expect(events.update).toHaveBeenCalledExactlyOnceWith('event', { notificationDeliveredAt: expect.any(Date) });
 	});
 
@@ -597,11 +611,13 @@ describe('ZalipCatalogService', () => {
 			find: vi.fn().mockResolvedValue([{ userId: 'viewer-1' }, { userId: 'viewer-2' }]),
 		};
 		const manager = {
+			query: vi.fn().mockResolvedValue([{ locked: true }]),
 			getRepository: (model: unknown) => {
 				if (model === MiZalipSeason) return seasonsRepository;
 				if (model === MiZalipWork) return worksRepository;
 				if (model === MiZalipEpisode) return episodesRepository;
-				if (model === MiZalipReleaseEvent) return transactionEventsRepository;
+				if (model === MiZalipReleaseEvent) return { ...transactionEventsRepository, findOne: vi.fn().mockResolvedValue(releaseEvent), update: releaseEventsRepository.update };
+				if (model === MiZalipLibraryEntry) return libraryRepository;
 				throw new Error('Unexpected transaction repository');
 			},
 		};
@@ -614,7 +630,7 @@ describe('ZalipCatalogService', () => {
 			},
 		};
 		const notificationService = {
-			createNotificationAndWait: vi.fn().mockResolvedValue(null),
+			createNotificationOnceAndWait: vi.fn().mockResolvedValue(null),
 		};
 		const service = new ZalipCatalogService(
 			dataSource as never,
@@ -639,7 +655,7 @@ describe('ZalipCatalogService', () => {
 			seasonId: season.id,
 			episodeId: secondEpisode.id,
 		})]);
-		expect(notificationService.createNotificationAndWait).toHaveBeenNthCalledWith(1, 'viewer-1', 'zalipEpisodeReleased', {
+		expect(notificationService.createNotificationOnceAndWait).toHaveBeenNthCalledWith(1, 'zalip:release:release-2', 'viewer-1', 'zalipEpisodeReleased', {
 			workId: work.id,
 			workSlug: work.slug,
 			workTitle: work.title,
@@ -647,7 +663,7 @@ describe('ZalipCatalogService', () => {
 			episodeNumber: 2,
 			episodeTitle: 'Episode 2',
 		});
-		expect(notificationService.createNotificationAndWait).toHaveBeenNthCalledWith(2, 'viewer-2', 'zalipEpisodeReleased', expect.anything());
+		expect(notificationService.createNotificationOnceAndWait).toHaveBeenNthCalledWith(2, 'zalip:release:release-2', 'viewer-2', 'zalipEpisodeReleased', expect.anything());
 		expect(releaseEventsRepository.update).toHaveBeenCalledWith(releaseEvent.id, {
 			notificationDeliveredAt: expect.any(Date),
 		});
@@ -712,11 +728,13 @@ describe('ZalipCatalogService', () => {
 			find: vi.fn().mockResolvedValue([{ userId: 'viewer-1' }]),
 		};
 		const manager = {
+			query: vi.fn().mockResolvedValue([{ locked: true }]),
 			getRepository: (model: unknown) => {
 				if (model === MiZalipWork) return worksRepository;
 				if (model === MiZalipSeason) return seasonsRepository;
 				if (model === MiZalipEpisode) return episodesRepository;
-				if (model === MiZalipReleaseEvent) return transactionEventsRepository;
+				if (model === MiZalipReleaseEvent) return { ...transactionEventsRepository, findOne: vi.fn().mockResolvedValue(releaseEvent), update: releaseEventsRepository.update };
+				if (model === MiZalipLibraryEntry) return libraryRepository;
 				throw new Error('Unexpected transaction repository');
 			},
 		};
@@ -729,7 +747,7 @@ describe('ZalipCatalogService', () => {
 			},
 		};
 		const notificationService = {
-			createNotificationAndWait: vi.fn().mockResolvedValue(null),
+			createNotificationOnceAndWait: vi.fn().mockResolvedValue(null),
 		};
 		const service = new ZalipCatalogService(
 			dataSource as never,
@@ -752,7 +770,7 @@ describe('ZalipCatalogService', () => {
 			seasonId: season.id,
 			episodeId: episode.id,
 		}));
-		expect(notificationService.createNotificationAndWait).toHaveBeenCalledWith('viewer-1', 'zalipEpisodeReleased', {
+		expect(notificationService.createNotificationOnceAndWait).toHaveBeenCalledWith('zalip:release:release-2', 'viewer-1', 'zalipEpisodeReleased', {
 			workId: work.id,
 			workSlug: work.slug,
 			workTitle: work.title,

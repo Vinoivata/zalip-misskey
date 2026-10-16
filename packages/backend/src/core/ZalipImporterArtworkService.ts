@@ -14,7 +14,7 @@ import { createTemp } from '@/misc/create-temp.js';
 import type { MiZalipWork } from '@/models/ZalipWork.js';
 import { currentImportFields } from './zalip-importer/apply.js';
 import { canUpdateField, nonEmpty, normalizeImportArtworkSettings, readImportState } from './zalip-importer/policy.js';
-import { artworkCacheUri, artworkOriginalCacheUri, downloadImportArtwork, equivalentImportArtwork, importArtworkLimits, importArtworkUrl } from './zalip-importer/artwork.js';
+import { artworkCacheUri, artworkOriginalCacheUri, downloadImportArtwork, downloadOriginalImportArtwork, equivalentImportArtwork, importArtworkLimits, importArtworkUrl } from './zalip-importer/artwork.js';
 import type { ImportArtworkField, ImportArtworkSettings, ImportArtworkSettingsInput, ImportField, ImportRecord, PreparedImportRecord } from './zalip-importer/types.js';
 
 type ArtworkBudget = { deadlineAt: number; remainingBytes: number };
@@ -27,6 +27,35 @@ export class ZalipImporterArtworkService {
 		private drive: DriveService,
 		private http: HttpRequestService,
 	) {}
+
+	/** Existing-catalogue localization is byte-preserving, never a new provider image selection. */
+	public async cacheOriginal(value: string, budget: ArtworkBudget = { deadlineAt: Date.now() + importArtworkLimits.batchTimeoutMs, remainingBytes: importArtworkLimits.batchBytes }): Promise<string> {
+		const url = importArtworkUrl(value);
+		if (!url) throw new Error('IMPORT_ARTWORK_REJECTED');
+		const uri = artworkOriginalCacheUri(url);
+		const connection = this.db.createQueryRunner();
+		let locked = false;
+		try {
+			await connection.connect();
+			const [lock] = await connection.query('SELECT pg_try_advisory_lock(hashtext($1)) AS locked', [uri]) as { locked: boolean }[];
+			if (!lock?.locked) throw new Error('IMPORT_ARTWORK_BUSY');
+			locked = true;
+			const cached = await this.db.getRepository(MiDriveFile).findOneBy({ uri, userId: IsNull(), isLink: false });
+			if (cached) return cached.url;
+			if (Date.now() >= budget.deadlineAt || budget.remainingBytes <= 0) throw new Error('IMPORT_ARTWORK_BUDGET');
+			const image = await downloadOriginalImportArtwork(url, this.http.getAgentForHttps(url), budget.deadlineAt);
+			if (image.original.length > budget.remainingBytes || Date.now() >= budget.deadlineAt) throw new Error('IMPORT_ARTWORK_BUDGET');
+			budget.remainingBytes -= image.original.length;
+			const [path, cleanup] = await createTemp();
+			try {
+				await writeFile(path, image.original);
+				const file = await this.drive.addFile({ user: null, path, name: `zalip-artwork-original-${uri.slice(-16)}.${image.originalExtension}`, uri, isLink: false, sensitive: false });
+				return file.url;
+			} finally { cleanup(); }
+		} finally {
+			try { if (locked) await connection.query('SELECT pg_advisory_unlock(hashtext($1))', [uri]); } finally { await connection.release(); }
+		}
+	}
 
 	public async prepare(record: ImportRecord, work: MiZalipWork | null, fields?: readonly ImportField[], extraLocks: readonly string[] = [], inputSettings?: ImportArtworkSettingsInput, mode: 'local-webp' | 'local' = 'local-webp', selectedArtworkFields: readonly ImportArtworkField[] = []): Promise<PreparedImportRecord> {
 		const result: PreparedImportRecord = structuredClone(record);

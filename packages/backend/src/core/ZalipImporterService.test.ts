@@ -182,7 +182,7 @@ function fixture(seed: { runs?: MiZalipImportRun[]; items?: MiZalipImportItem[];
 		if (!jobs.has(options.jobId)) jobs.set(options.jobId, structuredClone(data));
 		return { id: options.jobId, name };
 	}) };
-	const catalogue = { recordAllohaAvailability: vi.fn(), dispatchPendingAllohaAvailabilityNotifications: vi.fn() };
+	const catalogue = { recordAllohaAvailability: vi.fn(), dispatchPendingAllohaAvailabilityNotifications: vi.fn(), dispatchPendingReleaseNotifications: vi.fn() };
 	const taxonomy = { syncImportedWork: vi.fn(), linkWork: vi.fn(), upsertImportedEntry: vi.fn().mockResolvedValue({ id: 'collection' }) };
 	const artwork = { prepare: vi.fn().mockImplementation(async (incoming: ImportRecord) => incoming) };
 	let nextId = 0;
@@ -642,6 +642,19 @@ describe('Zalip importer orchestration', () => {
 		await context.service.tickSchedules();
 		expect(context.queue.add).toHaveBeenCalledOnce();
 		expect(context.queue.add.mock.calls[0][1]).toEqual({ runId: 'stale' });
+	});
+
+	test('scheduler retries both committed subscription outboxes without enabling profiles or fetching providers', async () => {
+		const context = fixture({ profiles: [profile({ enabled: false })] });
+		await context.service.tickSchedules();
+		expect(context.catalogue.dispatchPendingAllohaAvailabilityNotifications).toHaveBeenCalledOnce();
+		expect(context.catalogue.dispatchPendingReleaseNotifications).toHaveBeenCalledOnce();
+		expect(context.queue.add).not.toHaveBeenCalled();
+		expect(context.profiles.rows[0].enabled).toBe(false);
+		for (const provider of Object.values(context.providers)) expect(provider.fetch).not.toHaveBeenCalled();
+		context.catalogue.dispatchPendingAllohaAvailabilityNotifications.mockRejectedValueOnce(new Error('Availability delivery failed'));
+		await expect(context.service.tickSchedules()).rejects.toThrow('Availability delivery failed');
+		expect(context.catalogue.dispatchPendingReleaseNotifications).toHaveBeenCalledTimes(2);
 	});
 
 	test('repeated scheduler recovery uses the same persisted dispatch generation and one Bull job', async () => {

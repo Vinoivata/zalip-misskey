@@ -8,7 +8,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<XTitlebar v-if="prefer.r.showTitlebar.value" style="flex-shrink: 0;"/>
 
 	<div :class="$style.nonTitlebarArea">
-		<XSidebar v-if="!isMobile" :class="$style.sidebar" :showWidgetButton="!showWidgetsSide" @widgetButtonClick="widgetsShowing = true"/>
+		<XSidebar v-if="!isMobile" :class="$style.sidebar" :showWidgetButton="false"/>
 
 		<div :class="[$style.contents, { [$style.threadContents]: isThread, [$style.chromeHidden]: headerHidden }, !isMobile && prefer.r.showTitlebar.value ? $style.withSidebarAndTitlebar : null]" @contextmenu.stop="onContextmenu" @scroll.capture.passive="onContentScroll">
 			<div>
@@ -23,11 +23,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<RouterView v-else :class="$style.content"/>
 			<XMobileFooterMenu v-if="isMobile && !isThread && !isChatRoom" :hidden="chromeHidden"/>
 			<div v-if="isThread" id="zalip-reply-slot" :class="$style.replySlot"></div>
-		</div>
-
-		<div v-if="showWidgetsSide && !pageMetadata?.needWideArea" :class="$style.widgets">
-			<XWidgets v-if="$i"/>
-			<XDiscovery v-else/>
 		</div>
 	</div>
 
@@ -61,8 +56,6 @@ import { shouldSuggestRestoreBackup } from '@/preferences/utility.js';
 import { DI } from '@/di.js';
 import { shouldSuggestReload } from '@/utility/reload-suggest.js';
 
-const XWidgets = defineAsyncComponent(() => import('./_common_/widgets.vue'));
-const XDiscovery = defineAsyncComponent(() => import('./_common_/zalip-discovery-widgets.vue'));
 const XStatusBars = defineAsyncComponent(() => import('@/ui/_common_/statusbars.vue'));
 const XAnnouncements = defineAsyncComponent(() => import('@/ui/_common_/announcements.vue'));
 
@@ -101,7 +94,6 @@ watch(() => mainRouter.currentRoute.value, () => {
 	scrollElement = null;
 });
 
-const DESKTOP_THRESHOLD = 1400;
 // Tablets are neither a narrow desktop nor a large phone.  Give them the
 // focused, footer-navigation layout so the 220px sidebar cannot squeeze a
 // timeline into a thin strip.
@@ -109,11 +101,9 @@ const MOBILE_THRESHOLD = 1099;
 
 // デスクトップでウィンドウを狭くしたときモバイルUIが表示されて欲しいことはあるので deviceKind === 'desktop' の判定は行わない
 const isMobile = ref(deviceKind !== 'desktop' || window.innerWidth <= MOBILE_THRESHOLD);
-const showWidgetsSide = ref(!isMobile.value && window.innerWidth >= DESKTOP_THRESHOLD);
 
 function updateViewport(): void {
 	isMobile.value = deviceKind !== 'desktop' || window.innerWidth <= MOBILE_THRESHOLD;
-	showWidgetsSide.value = !isMobile.value && window.innerWidth >= DESKTOP_THRESHOLD;
 	if (!isMobile.value) chromeHidden.value = false;
 }
 
@@ -171,8 +161,6 @@ function onContextmenu(ev: PointerEvent) {
 </script>
 
 <style lang="scss" module>
-$widgets-hide-threshold: 1399px;
-
 .root {
 	height: 100dvh;
 	overflow: clip;
@@ -206,7 +194,7 @@ $widgets-hide-threshold: 1399px;
 	flex: 1;
 	min-height: 0;
 	width: 100%;
-	max-width: 1600px;
+	max-width: 1320px;
 	margin: 0 auto;
 }
 
@@ -244,20 +232,6 @@ $widgets-hide-threshold: 1399px;
 	position: sticky;
 	top: 0;
 	left: 0;
-}
-
-.widgets {
-	flex: 0 0 280px;
-	width: 280px;
-	height: 100%;
-	box-sizing: border-box;
-	overflow: auto;
-	padding: 20px 12px 24px 20px;
-	background: var(--zalip-social-bg);
-
-	@media (max-width: $widgets-hide-threshold) {
-		display: none;
-	}
 }
 
 .mobile {

@@ -3004,7 +3004,7 @@ export interface Locale extends ILocale {
          */
         "mySpace": string;
         /**
-         * Добавляйте и переставляйте виджеты. Эти же блоки показываются в правой колонке на компьютере.
+         * Добавляйте и переставляйте личные виджеты. Их настройки сохраняются здесь.
          */
         "widgetsHint": string;
         /**
@@ -3015,6 +3015,10 @@ export interface Locale extends ILocale {
          * Не удалось загрузить библиотеку. Попробуйте ещё раз.
          */
         "libraryLoadFailed": string;
+        /**
+         * Не удалось загрузить ваши списки и оценку. Повторите загрузку, чтобы безопасно изменить их.
+         */
+        "workLibraryLoadFailed": string;
         /**
          * Zalip
          */
@@ -3748,7 +3752,7 @@ export interface Locale extends ILocale {
          */
         "catalogueUnknownYear": string;
         /**
-         * Показано {shown} из первых {total} доступных тайтлов
+         * Показано {shown} из {total} тайтлов
          */
         "catalogueResultCount": ParameterizedString<"shown" | "total">;
         /**

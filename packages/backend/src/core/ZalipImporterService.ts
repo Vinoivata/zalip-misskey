@@ -582,6 +582,12 @@ export class ZalipImporterService {
 			if (!claimed.affected) continue;
 			try { await this.runProfile(profile.id, true); } catch { /* Error code is already recorded in the profile. */ }
 		}
-		await this.catalogue.dispatchPendingAllohaAvailabilityNotifications();
+		// Retry already committed notices even when every import/discovery profile is disabled.
+		const notificationErrors: unknown[] = [];
+		// The two outboxes share a bounded dispatch claim; run them sequentially for fairness.
+		for (const dispatch of [() => this.catalogue.dispatchPendingAllohaAvailabilityNotifications(), () => this.catalogue.dispatchPendingReleaseNotifications()]) {
+			try { await dispatch(); } catch (error) { notificationErrors.push(error); }
+		}
+		if (notificationErrors.length) throw notificationErrors[0];
 	}
 }

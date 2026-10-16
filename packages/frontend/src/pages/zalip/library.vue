@@ -67,7 +67,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
+import { useZalipPageReload } from '@/composables/use-zalip-page-reload.js';
 import MkPullToRefresh from '@/components/MkPullToRefresh.vue';
 import MkZalipSectionHeader from '@/components/MkZalipSectionHeader.vue';
 import MkZalipBookmarkTabs from '@/components/MkZalipBookmarkTabs.vue';
@@ -104,6 +105,7 @@ const props = defineProps<{ filter?: string }>();
 const entries = ref<LibraryEntry[]>([]);
 const pending = ref(true);
 const loadError = ref(false);
+let latestRequest = 0;
 const activeFilter = ref<LibraryFilter>('all');
 const searchQuery = ref('');
 const sortOrder = ref<LibrarySort>('recent');
@@ -166,19 +168,20 @@ function statusLabel(status: LibraryStatus | null): string {
 }
 
 async function loadLibrary(): Promise<void> {
+	const request = ++latestRequest;
 	pending.value = true;
 	loadError.value = false;
 	try {
 		const library = await misskeyApiZalip<LibraryEntry[]>('zalip/library/list');
-		entries.value = library.filter(entry => entry.status != null || entry.isFavorite || entry.isReleaseSubscribed || entry.personalRating != null || entry.episodesWatched > 0);
+		if (request === latestRequest) entries.value = library.filter(entry => entry.status != null || entry.isFavorite || entry.isReleaseSubscribed || entry.personalRating != null || entry.episodesWatched > 0);
 	} catch {
-		loadError.value = true;
+		if (request === latestRequest) loadError.value = true;
 	} finally {
-		pending.value = false;
+		if (request === latestRequest) pending.value = false;
 	}
 }
 
-onMounted(loadLibrary);
+useZalipPageReload(loadLibrary);
 
 definePage(() => ({
 	title: props.filter === 'favorites' ? i18n.ts.zalip.bookmarksHeading : i18n.ts.zalip.libraryHeading,

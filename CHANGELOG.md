@@ -4,6 +4,7 @@
 -
 
 ### Client
+- Fix: Reconcile chat unread badges against current server state so delayed message/read events and out-of-order refreshes cannot restore a stale badge.
 - Enhance: Add per-source and per-field Zalip import settings, exact work locks, provider checks, profile controls, person enrichment and bounded category recalculation.
 - Enhance: Rebuild Zalip title hero and episode player controls, add a mobile account sheet, restore catalogue widgets, and fix nested search focus outlines.
 - Enhance: ZALIPのフィードとスレッドを参照デザインの配色・アイコン・余白に統一し、スクロール方向に追従する半透明モバイルナビゲーション、固定返信欄、管理者向けコンテンツ追加導線を実装
@@ -59,8 +60,14 @@
 - Fix: Restore provider and voice selection for imported Zalip players without resetting the selected season, episode or open player.
 - Feat: Add per-title image/source previews and configurable local artwork processing to the Zalip importer and route legacy image refreshes through the protected preview workflow.
 - Fix: Keep large importer artwork previews above site navigation and fit portrait posters within the viewport.
+- Enhance: Remove Zalip's persistent right sidebar, center the two-column layout and simplify desktop navigation without deleting saved widgets.
+- Fix: Reload cached library pages, isolate optional title loading failures, preserve exact episode links and paginate the complete catalogue.
 
 ### Server
+- Feat: Localize existing catalogue artwork into native storage with exact-image revisions, retained originals and protected editorial ownership.
+- Fix: Apply native posting limits and declared note-creation errors to Zalip shares.
+- Feat: Page the complete published Zalip catalogue with filter-scoped keyset cursors, global ordering and matching-title totals while preserving the legacy list response.
+- Fix: Serialize subscription outbox dispatch and atomically deduplicate native notifications per event and recipient across partial failures and lost delivery acknowledgements.
 - Feat: Store configurable local artwork and optional originals in Drive, validate exact-source image choices, and preserve localized/editorial images with atomic import ownership checks.
 - Enhance: Add filtered and IMDb-based draft imports, selective provider requests, persistent import options, safe local WebP artwork, source diagnostics and taxonomy enrichment without overwriting editorial data.
 - Fix: Allow clearing a Zalip library status without removing personal ratings, watch progress, favorites or release subscriptions.

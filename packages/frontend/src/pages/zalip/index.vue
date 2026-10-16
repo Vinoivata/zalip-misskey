@@ -53,7 +53,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</div>
 				<div :class="$style.releaseRail" role="list" :aria-label="showcaseTitle" @pointerdown="releaseDrag.onPointerDown" @pointermove="releaseDrag.onPointerMove" @pointerup="releaseDrag.onPointerUp" @pointercancel="releaseDrag.onPointerCancel" @click.capture="releaseDrag.onClickCapture">
 					<div v-for="item in showcaseItems" :key="item.id" :class="$style.releaseListItem" role="listitem">
-						<MkA :to="`/zalip/${item.work.slug}`" :class="$style.releaseCard">
+						<MkA :to="item.to" :class="$style.releaseCard">
 							<div :class="$style.releasePoster">
 								<img v-if="item.work.posterPath" :src="tmdbImage(item.work.posterPath)" :alt="item.work.title" loading="lazy">
 								<i v-else class="ti ti-movie"></i>
@@ -76,6 +76,7 @@ import { definePage } from '@/page.js';
 import { i18n } from '@/i18n.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { importerImageUrl } from '@/utility/zalip-importer.js';
+import { zalipWorkRoute } from '@/utility/zalip-work-route.js';
 import { useZalipHorizontalDrag } from '@/composables/use-zalip-horizontal-drag.js';
 import MkZalipFeed from '@/components/MkZalipFeed.vue';
 import MkZalipIcon from '@/components/MkZalipIcon.vue';
@@ -103,8 +104,8 @@ type ZalipReleaseEvent = {
 	id: string;
 	createdAt: string;
 	work: ZalipWork;
-	season: { seasonNumber: number; title: string };
-	episode: { episodeNumber: number; title: string };
+	season: { seasonNumber: number; title: string } | null;
+	episode: { episodeNumber: number; title: string } | null;
 };
 
 type ZalipShowcaseItem = {
@@ -112,6 +113,7 @@ type ZalipShowcaseItem = {
 	work: ZalipWork;
 	badge: string;
 	subtitle: string;
+	to: string;
 };
 
 type ZalipHeroSlide = {
@@ -230,7 +232,8 @@ const showcaseItems = computed<ZalipShowcaseItem[]>(() => {
 		id: release.id,
 		work: release.work,
 		badge: releaseLabel(release),
-		subtitle: release.episode.title || i18n.ts.zalip.newEpisode,
+		subtitle: release.episode?.title || i18n.ts.zalip.releaseAvailable,
+		to: zalipWorkRoute(release.work.slug, release.season?.seasonNumber, release.episode?.episodeNumber),
 	}));
 
 	if (!releaseEventsLoaded.value) return [];
@@ -239,6 +242,7 @@ const showcaseItems = computed<ZalipShowcaseItem[]>(() => {
 		work,
 		badge: `${kindLabel(work.kind)}${work.releaseYear == null ? '' : ` · ${work.releaseYear}`}`,
 		subtitle: work.originalTitle || i18n.ts.zalip.newCatalogueItem,
+		to: zalipWorkRoute(work.slug),
 	}));
 });
 const showcaseEyebrow = computed(() => isEpisodeShowcase.value ? i18n.ts.zalip.freshEpisodes : i18n.ts.zalip.newCatalogue);
@@ -265,6 +269,7 @@ function kindIcon(kind: WorkKind): string {
 }
 
 function releaseLabel(release: ZalipReleaseEvent): string {
+	if (release.season == null || release.episode == null) return i18n.ts.zalip.releaseAvailable;
 	const season = release.season.seasonNumber === 0 ? i18n.ts.zalip.releaseSpecial : i18n.tsx.zalip.releaseSeason({ number: release.season.seasonNumber.toString() });
 	return `${season} · ${i18n.tsx.zalip.releaseEpisode({ number: release.episode.episodeNumber.toString() })}`;
 }

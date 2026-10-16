@@ -4,6 +4,7 @@
  */
 
 import { setTimeout } from 'node:timers/promises';
+import { createHash } from 'node:crypto';
 import * as Redis from 'ioredis';
 import { Inject, Injectable, OnApplicationShutdown } from '@nestjs/common';
 import { In } from 'typeorm';
@@ -22,6 +23,16 @@ import type { Config } from '@/config.js';
 import { UserListService } from '@/core/UserListService.js';
 import { FilterUnionByProperty, groupedNotificationTypes, obsoleteNotificationTypes } from '@/types.js';
 import { trackPromise } from '@/misc/promise-tracker.js';
+
+// The receipt and native timeline insertion are one Redis operation. No expiry: a receipt
+// must survive stream trimming and an outbox retry after a lost PostgreSQL acknowledgement.
+export const notificationInsertOnceScript = `
+local previous = redis.call('GET', KEYS[2])
+if previous then return {0, previous} end
+local inserted = redis.call('XADD', KEYS[1], 'MAXLEN', '~', ARGV[1], ARGV[2], 'data', ARGV[3])
+redis.call('SET', KEYS[2], inserted)
+return {1, inserted}
+`;
 
 @Injectable()
 export class NotificationService implements OnApplicationShutdown {
@@ -102,11 +113,26 @@ export class NotificationService implements OnApplicationShutdown {
 		return await this.#createNotificationInternal(notifieeId, type, data, notifierId);
 	}
 
+	/** Idempotent native-store delivery for persistent outboxes; duplicate retries emit no events. */
+	@bindThis
+	public async createNotificationOnceAndWait<T extends MiNotification['type']>(
+		idempotencyKey: string,
+		notifieeId: MiUser['id'],
+		type: T,
+		data: Omit<FilterUnionByProperty<MiNotification, 'type', T>, 'type' | 'id' | 'createdAt' | 'notifierId'>,
+		notifierId?: MiUser['id'] | null,
+	): Promise<MiNotification | null> {
+		if (typeof idempotencyKey !== 'string' || !/^[A-Za-z0-9:_-]{1,256}$/u.test(idempotencyKey)) throw new Error('INVALID_NOTIFICATION_IDEMPOTENCY_KEY');
+		const receiptKey = `notificationReceipt:${createHash('sha256').update(JSON.stringify([idempotencyKey, notifieeId, type])).digest('hex')}`;
+		return await this.#createNotificationInternal(notifieeId, type, data, notifierId, receiptKey);
+	}
+
 	async #createNotificationInternal<T extends MiNotification['type']>(
 		notifieeId: MiUser['id'],
 		type: T,
 		data: Omit<FilterUnionByProperty<MiNotification, 'type', T>, 'type' | 'id' | 'createdAt' | 'notifierId'>,
 		notifierId?: MiUser['id'] | null,
+		receiptKey?: string,
 	): Promise<MiNotification | null> {
 		const profile = await this.cacheService.userProfileCache.fetch(notifieeId);
 
@@ -165,6 +191,7 @@ export class NotificationService implements OnApplicationShutdown {
 		let notification: FilterUnionByProperty<MiNotification, 'type', T>;
 		let redisId: string;
 
+		let attempts = 0;
 		do {
 			notification = {
 				id: this.idService.gen(),
@@ -177,14 +204,23 @@ export class NotificationService implements OnApplicationShutdown {
 			} as unknown as FilterUnionByProperty<MiNotification, 'type', T>;
 
 			try {
-				redisId = (await this.redisClient.xadd(
-					`notificationTimeline:${notifieeId}`,
-					'MAXLEN', '~', this.config.perUserNotificationsMaxCount.toString(),
-					this.toXListId(notification.id),
-					'data', JSON.stringify(notification)))!;
+				if (receiptKey) {
+					const result: unknown = await this.redisClient.eval(notificationInsertOnceScript, 2,
+						`notificationTimeline:${notifieeId}`, receiptKey,
+						this.config.perUserNotificationsMaxCount.toString(), this.toXListId(notification.id), JSON.stringify(notification));
+					if (!Array.isArray(result) || result.length !== 2 || ![0, 1].includes(result[0]) || typeof result[1] !== 'string' || !/^\d+-\d+$/u.test(result[1])) throw new Error('INVALID_NOTIFICATION_RECEIPT');
+					if (result[0] === 0) return null;
+					redisId = result[1];
+				} else {
+					redisId = (await this.redisClient.xadd(
+						`notificationTimeline:${notifieeId}`,
+						'MAXLEN', '~', this.config.perUserNotificationsMaxCount.toString(),
+						this.toXListId(notification.id),
+						'data', JSON.stringify(notification)))!;
+				}
 			} catch (e) {
 				// The ID specified in XADD is equal or smaller than the target stream top item で失敗することがあるのでリトライ
-				if (e instanceof ReplyError) continue;
+				if (e instanceof ReplyError && e instanceof Error && /ID specified in XADD.*(?:equal or smaller|greater)/u.test(e.message) && ++attempts < 8) continue;
 				throw e;
 			}
 

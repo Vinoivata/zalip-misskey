@@ -5,13 +5,23 @@
 
 import sharp from 'sharp';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { artworkCacheUri, artworkOriginalCacheUri, downloadImportArtwork, equivalentImportArtwork, importArtworkLimits, importArtworkUrl } from './artwork.js';
+import { artworkCacheUri, artworkOriginalCacheUri, downloadImportArtwork, downloadOriginalImportArtwork, equivalentImportArtwork, importArtworkLimits, importArtworkUrl } from './artwork.js';
 
 const mockedFetch = vi.hoisted(() => vi.fn());
 vi.mock('node-fetch', () => ({ default: mockedFetch }));
 afterEach(() => mockedFetch.mockReset());
 
 describe('bounded local importer artwork', () => {
+	test('exact localization validates full pixels without re-encoding the chosen original bytes', async () => {
+		const original = await sharp({ create: { width: 37, height: 53, channels: 4, background: { r: 120, g: 80, b: 20, alpha: 0.5 } } }).png().toBuffer();
+		mockedFetch.mockResolvedValue({ ok: true, headers: new Headers({ 'content-type': 'image/png' }), arrayBuffer: async () => original });
+		const result = await downloadOriginalImportArtwork(new URL('https://image.tmdb.org/t/p/w500/chosen.png'));
+		expect(result.original).toEqual(original);
+		expect(result).toMatchObject({ originalExtension: 'png', format: 'png', width: 37, height: 53 });
+		expect(result).not.toHaveProperty('processed');
+		expect(mockedFetch.mock.calls[0][0]).toBe('https://image.tmdb.org/t/p/w500/chosen.png');
+		expect(mockedFetch.mock.calls[0][1]).toMatchObject({ redirect: 'error', size: importArtworkLimits.inputBytes });
+	});
 	test('accepts exact CDN hosts only, never tokens, redirectors or arbitrary servers', () => {
 		expect(importArtworkUrl('https://image.tmdb.org/t/p/original/photo.jpg')).not.toBeNull();
 		expect(importArtworkUrl('https://st.kp.yandex.net/images/film.jpg')).not.toBeNull();

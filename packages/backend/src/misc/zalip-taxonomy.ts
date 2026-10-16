@@ -104,6 +104,7 @@ export function matchesZalipCategoryRules(
 type EditorialData = {
 	manualFields: string[];
 	fieldSources: Record<string, string>;
+	localArtwork?: Record<string, string>;
 };
 
 const editableFields = ['name', 'slug', 'description', 'imageUrl', 'data', 'parentId'] as const;
@@ -166,6 +167,7 @@ export function getZalipCatalogEditorialData(data: Record<string, unknown>): Edi
 	return {
 		manualFields: Array.isArray(metadata.manualFields) ? metadata.manualFields.filter(field => typeof field === 'string') : [],
 		fieldSources: metadata.fieldSources && typeof metadata.fieldSources === 'object' ? metadata.fieldSources : {},
+		...(metadata.localArtwork && typeof metadata.localArtwork === 'object' && !Array.isArray(metadata.localArtwork) ? { localArtwork: Object.fromEntries(Object.entries(metadata.localArtwork).filter((entry): entry is [string, string] => typeof entry[1] === 'string')) } : {}),
 	};
 }
 
@@ -179,6 +181,7 @@ export function mergeZalipCatalogEntry(
 	const editorial = getZalipCatalogEditorialData(existing.data);
 	const manualFields = new Set(editorial.manualFields);
 	const fieldSources = { ...editorial.fieldSources };
+	const localArtwork = { ...editorial.localArtwork };
 	const externalIds = { ...existing.externalIds };
 	for (const [key, value] of Object.entries(normalizeZalipExternalIds(input.externalIds))) {
 		if (externalIds[key] && externalIds[key] !== value) throw new Error('CATALOG_ID_CONFLICT');
@@ -192,6 +195,7 @@ export function mergeZalipCatalogEntry(
 		// imported base fields, while keeping explicit null clears editorially protected.
 		if (source === 'manual' && options.protectOnlyChangedBaseFields && field !== 'data' && value !== null && value === existing[field]) continue;
 		if (source !== 'manual' && (manualFields.has(field) || value === null || (typeof value === 'string' && !value.trim()) || (field === 'data' && Object.keys(value as object).length === 0))) continue;
+		if (field === 'imageUrl' && source !== 'manual' && localArtwork.imageUrl && localArtwork.imageUrl === existing.imageUrl) continue;
 		if (field === 'data') {
 			// Facts are owned separately: editing a birthday must not freeze a future biography.
 			// Preserve the older whole-data lock above for existing editorial records.
@@ -205,6 +209,7 @@ export function mergeZalipCatalogEntry(
 			continue;
 		}
 		if (source === 'manual') manualFields.add(field);
+		if (field === 'imageUrl' && value !== existing.imageUrl) delete localArtwork.imageUrl;
 		fieldSources[field] = source;
 		if (field === 'name' || field === 'slug') {
 			merged[field] = String(value).trim();
@@ -212,7 +217,7 @@ export function mergeZalipCatalogEntry(
 			merged[field] = value as string | null;
 		}
 	}
-	merged.data._zalip = { manualFields: [...manualFields], fieldSources };
+	merged.data._zalip = { manualFields: [...manualFields], fieldSources, ...(editorial.localArtwork ? { localArtwork } : {}) };
 	return merged;
 }
 

@@ -65,7 +65,7 @@ const items = computed<{ to: string; icon: ZalipIconName; label: string; unread?
 	{ to: '/timeline', icon: 'home', label: navbarItemDef.feed.title, count: 0 },
 	{ to: '/', icon: 'reels', label: navbarItemDef.zalip.title, count: 0 },
 	{ to: '/my/notifications', icon: 'heart', label: i18n.ts.notifications, unread: !!$i?.hasUnreadNotification || ($i?.unreadNotificationsCount ?? 0) > 0, count: $i?.unreadNotificationsCount ?? 0 },
-	{ to: '/chat', icon: 'messages', label: i18n.ts.zalip.messages, unread: !!$i?.hasUnreadChatMessages, count: 0 },
+	...($i?.policies?.chatAvailability !== 'unavailable' ? [{ to: '/chat', icon: 'messages' as const, label: i18n.ts.zalip.messages, unread: !!$i?.hasUnreadChatMessages, count: 0 }] : []),
 ]);
 
 function writePost(event: PointerEvent): void {

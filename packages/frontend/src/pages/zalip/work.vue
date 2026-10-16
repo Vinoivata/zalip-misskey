@@ -51,11 +51,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 						</div>
 					</div>
 				</section>
+				<div v-if="libraryLoadFailed" :class="$style.libraryWarning" role="alert"><span>{{ i18n.ts.zalip.workLibraryLoadFailed }}</span><button type="button" class="_button" :disabled="libraryPending" @click="retryPersonalLibrary">{{ i18n.ts.retry }}</button></div>
 				<div :class="$style.actionStrip" role="group" :aria-label="i18n.ts.zalip.workActions">
-					<button type="button" class="_button" :disabled="saving" :aria-label="personalRating == null ? i18n.ts.zalip.workRateAction : `${i18n.ts.zalip.myRating}: ${ratingLabel}`" @click="choosePersonalRating"><span :class="$style.actionSymbol"><span v-if="personalRating != null" :class="$style.ratingBadge"><i class="ti ti-star-filled" aria-hidden="true"></i>{{ personalRating }}</span><i v-else class="ti ti-star" aria-hidden="true"></i></span><span>{{ personalRating == null ? i18n.ts.zalip.workRateAction : i18n.ts.zalip.myRating }}</span></button>
-					<button type="button" class="_button" :class="{ [$style.actionActive]: saved || isFavorite }" :disabled="saving" aria-haspopup="menu" @click="showLibraryMenu"><span :class="$style.actionSymbol"><i :class="saved ? libraryStatusIcon(libraryStatus) : isFavorite ? 'ti ti-bookmark' : 'ti ti-bookmark-plus'" aria-hidden="true"></i></span><span>{{ saved ? libraryStatusText(libraryStatus) : isFavorite ? i18n.ts.zalip.inBookmarks : i18n.ts.zalip.addToList }}</span></button>
+					<button type="button" class="_button" :disabled="personalActionsDisabled" :aria-label="personalRating == null ? i18n.ts.zalip.workRateAction : `${i18n.ts.zalip.myRating}: ${ratingLabel}`" @click="choosePersonalRating"><span :class="$style.actionSymbol"><span v-if="personalRating != null" :class="$style.ratingBadge"><i class="ti ti-star-filled" aria-hidden="true"></i>{{ personalRating }}</span><i v-else class="ti ti-star" aria-hidden="true"></i></span><span>{{ personalRating == null ? i18n.ts.zalip.workRateAction : i18n.ts.zalip.myRating }}</span></button>
+					<button type="button" class="_button" :class="{ [$style.actionActive]: saved || isFavorite }" :disabled="personalActionsDisabled" aria-haspopup="menu" @click="showLibraryMenu"><span :class="$style.actionSymbol"><i :class="saved ? libraryStatusIcon(libraryStatus) : isFavorite ? 'ti ti-bookmark' : 'ti ti-bookmark-plus'" aria-hidden="true"></i></span><span>{{ saved ? libraryStatusText(libraryStatus) : isFavorite ? i18n.ts.zalip.inBookmarks : i18n.ts.zalip.addToList }}</span></button>
 					<button type="button" class="_button" @click="shareWork"><span :class="$style.actionSymbol"><i class="ti ti-repeat" aria-hidden="true"></i></span><span>{{ i18n.ts.zalip.workRepost }}</span></button>
-					<button ref="moreTrigger" type="button" class="_button" :aria-label="i18n.ts.zalip.more" :disabled="saving" aria-haspopup="dialog" :aria-expanded="workMenuOpen" @click="showWorkMenu"><span :class="$style.actionSymbol"><i class="ti ti-dots" aria-hidden="true"></i></span><span>{{ i18n.ts.zalip.more }}</span></button>
+					<button ref="moreTrigger" type="button" class="_button" :aria-label="i18n.ts.zalip.more" :disabled="personalActionsDisabled" aria-haspopup="dialog" :aria-expanded="workMenuOpen" @click="showWorkMenu"><span :class="$style.actionSymbol"><i class="ti ti-dots" aria-hidden="true"></i></span><span>{{ i18n.ts.zalip.more }}</span></button>
 				</div>
 				<p v-if="work.description" :class="$style.description">{{ work.description }}</p>
 				<div :class="$style.content">
@@ -68,7 +69,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<button type="button" class="_button" :class="$style.playerTab" @click="focusDiscussion"><i class="ti ti-messages" aria-hidden="true"></i><span>{{ i18n.ts.zalip.comments }}</span></button>
 						</div>
 						<div v-if="showReleaseSubscription" :class="$style.subscriptionBar">
-							<button type="button" class="_button" :class="[$style.subscribeButton, { [$style.subscribed]: releaseSubscribed }]" :disabled="saving" :aria-pressed="releaseSubscribed" @click="toggleReleaseSubscription"><i :class="releaseSubscribed ? 'ti ti-bell-check' : 'ti ti-bell-plus'" aria-hidden="true"></i><span>{{ releaseSubscribed ? i18n.ts.zalip.releaseSubscribed : releaseSubscriptionLabel }}</span></button>
+							<button type="button" class="_button" :class="[$style.subscribeButton, { [$style.subscribed]: releaseSubscribed }]" :disabled="personalActionsDisabled" :aria-pressed="releaseSubscribed" @click="toggleReleaseSubscription"><i :class="releaseSubscribed ? 'ti ti-bell-check' : 'ti ti-bell-plus'" aria-hidden="true"></i><span>{{ releaseSubscribed ? i18n.ts.zalip.releaseSubscribed : releaseSubscriptionLabel }}</span></button>
 							<small>{{ releaseSubscribed ? i18n.ts.zalip.releaseUnsubscribeHint : i18n.ts.zalip.releaseSubscribeHint }}</small>
 						</div>
 						<p v-else :class="$style.availableNotice"><i class="ti ti-circle-check" aria-hidden="true"></i>{{ i18n.ts.zalip.movieAlreadyAvailable }}</p>
@@ -88,7 +89,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 										<button type="button" class="_button" :disabled="!episodes.length" aria-haspopup="dialog" :aria-expanded="episodeMenuOpen" @click="openEpisodeMenu">{{ selectedEpisode ? i18n.tsx.zalip.playerEpisodeNumber({ number: selectedEpisode.episodeNumber }) : i18n.ts.zalip.workEpisodes }}<i class="ti ti-chevron-down" aria-hidden="true"></i></button>
 										<button type="button" class="_button" :disabled="nextEpisode == null" :aria-label="i18n.ts.zalip.playerNextEpisode" @click="selectRelativeEpisode(1)"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
 									</div>
-									<button v-if="$i && selectedEpisodeProgress != null" type="button" class="_button" :class="[$style.watched, { [$style.actionActive]: episodeWatched }]" :disabled="saving || episodeWatched" @click="markEpisodeWatched"><i :class="episodeWatched ? 'ti ti-eye-check' : 'ti ti-eye'" aria-hidden="true"></i>{{ episodeWatched ? i18n.ts.zalip.playerWatched : i18n.ts.zalip.playerMarkWatched }}</button>
+									<button v-if="$i && selectedEpisodeProgress != null" type="button" class="_button" :class="[$style.watched, { [$style.actionActive]: episodeWatched }]" :disabled="personalActionsDisabled || episodeWatched" @click="markEpisodeWatched"><i :class="episodeWatched ? 'ti ti-eye-check' : 'ti ti-eye'" aria-hidden="true"></i>{{ episodeWatched ? i18n.ts.zalip.playerWatched : i18n.ts.zalip.playerMarkWatched }}</button>
 									<button v-if="$i && activePlayback && (activeTranslations.length || availablePlaybackSources.length > 1)" type="button" class="_button" :class="$style.voiceButton" :aria-label="`${i18n.ts.zalip.playerVoices}: ${selectedVoiceLabel}`" aria-haspopup="dialog" :aria-expanded="voiceMenuOpen" @click="openVoiceMenu"><span>{{ selectedVoiceLabel }}</span><i class="ti ti-volume" aria-hidden="true"></i></button>
 									<span v-else-if="$i && activePlayback" :class="$style.voiceButton">{{ selectedProviderLabel }}</span>
 								</div>
@@ -132,7 +133,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						</div>
 						<ZalipDiscussionPanel v-if="activeDiscussionNoteId" :noteId="activeDiscussionNoteId" :heading="activeDiscussionHeading"/>
 						<section v-else :class="$style.discussionPending">
-							<p><i class="ti ti-messages" aria-hidden="true"></i> {{ activeDiscussionEmptyText }}</p>
+							<p v-if="!discussionError"><i class="ti ti-messages" aria-hidden="true"></i> {{ activeDiscussionEmptyText }}</p>
 							<button v-if="$i" type="button" class="_button" :class="$style.openDiscussion" :disabled="openingDiscussionScope != null" @click="openActiveDiscussion"><i :class="openingDiscussionScope != null ? 'ti ti-loader-2 ti-spin' : 'ti ti-message-plus'" aria-hidden="true"></i> {{ openingDiscussionScope != null ? i18n.ts.zalip.openingDiscussion : i18n.ts.zalip.startDiscussion }}</button>
 							<button v-else type="button" class="_button" :class="$style.openDiscussion" @click="signInForDiscussion"><i class="ti ti-login" aria-hidden="true"></i> {{ i18n.ts.zalip.loginToComment }}</button>
 							<p v-if="discussionError" :class="$style.discussionError">{{ discussionError }}</p>
@@ -211,6 +212,7 @@ import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { pleaseLogin } from '@/utility/please-login.js';
 import { importerImageUrl } from '@/utility/zalip-importer.js';
 import { selectablePlaybackTranslations, workPlaybackIframe, workPlaybackSources } from '@/utility/zalip-playback.js';
+import { zalipEpisodeQuery } from '@/utility/zalip-work-route.js';
 
 type ZalipWork = {
 	id: string;
@@ -318,11 +320,17 @@ const libraryStatuses = ['planned', 'watching', 'on_hold', 'completed', 'dropped
 const watchFrame = useTemplateRef('watchFrame');
 const voicePanelPosition = ref<{ top: string; left: string; width: string; height: string }>();
 const episodeQuery = ref('');
-const props = defineProps<{ slug: string }>();
+const props = defineProps<{ slug: string; initialSeason?: string; initialEpisode?: string }>();
 const work = ref<ZalipWork | null>(null);
 const workSubtitle = computed(() => [work.value?.originalTitle, work.value?.releaseYear].filter(Boolean).join(', '));
 const pending = ref(true);
 const saving = ref(false);
+const libraryReady = ref(!$i);
+const libraryPending = ref(false);
+const libraryLoadFailed = ref(false);
+const personalActionsDisabled = computed(() => saving.value || (!!$i && !libraryReady.value));
+let workRequest = 0;
+let libraryWriteRequest = 0;
 const libraryStatus = ref<LibraryStatus | null>(null);
 const saved = computed(() => libraryStatus.value != null);
 const episodesWatched = ref(0);
@@ -471,6 +479,11 @@ function libraryStatusIcon(status: LibraryStatus | null): string {
 }
 
 async function load(): Promise<void> {
+	const request = ++workRequest;
+	libraryWriteRequest++;
+	saving.value = false;
+	workMenuOpen.value = false;
+	ratingDialogOpen.value = false;
 	voiceMenuOpen.value = false;
 	episodeMenuOpen.value = false;
 	pending.value = true;
@@ -480,6 +493,9 @@ async function load(): Promise<void> {
 	personalRating.value = null;
 	isFavorite.value = false;
 	releaseSubscribed.value = false;
+	libraryReady.value = !$i;
+	libraryPending.value = false;
+	libraryLoadFailed.value = false;
 	playerView.value = 'player';
 	legacyPlayback.value = null;
 	playbackSources.value = [];
@@ -497,16 +513,22 @@ async function load(): Promise<void> {
 	selectedEpisodeId.value = null;
 	episodeRequestId.value++;
 	try {
-		work.value = await misskeyApiZalip<ZalipWork>('zalip/works/show', { slug: props.slug });
+		const loadedWork = await misskeyApiZalip<ZalipWork>('zalip/works/show', { slug: props.slug });
+		if (request !== workRequest) return;
+		work.value = loadedWork;
 		const [discussion, entries, playback, sources, links] = await Promise.all([
-			misskeyApiZalip<{ noteId: string | null }>('zalip/discussions/show', { workId: work.value.id }),
-			$i ? misskeyApiZalip<LibraryEntry[]>('zalip/library/list') : Promise.resolve([]),
+			misskeyApiZalip<{ noteId: string | null }>('zalip/discussions/show', { workId: loadedWork.id }).catch(() => null),
+			$i ? misskeyApiZalip<LibraryEntry[]>('zalip/library/list').catch(() => null) : Promise.resolve([]),
 			$i ? misskeyApiZalip<LegacyAllohaPlayback>('zalip/playback/alloha/show', { slug: work.value.slug }).catch(() => null) : Promise.resolve(null),
 			$i ? misskeyApiZalip<{ sources: PlaybackSource[]; providers?: PlaybackProviderSetting[] }>('zalip/playback/sources', { workId: work.value.id }).catch(() => ({ sources: [], providers: undefined })) : Promise.resolve({ sources: [], providers: undefined }),
 			misskeyApiZalip<{ entries: CatalogLink[] }>('zalip/taxonomy/show', { workId: work.value.id }).catch(() => ({ entries: [] })),
 		]);
-		discussionNoteId.value = discussion.noteId;
-		const entry = entries.find(candidate => candidate.work?.id === work.value?.id);
+		if (request !== workRequest) return;
+		discussionNoteId.value = discussion?.noteId ?? null;
+		if (discussion == null) discussionError.value = i18n.ts.zalip.openWorkDiscussionFailed;
+		libraryReady.value = entries != null;
+		libraryLoadFailed.value = entries == null;
+		const entry = entries?.find(candidate => candidate.work?.id === loadedWork.id);
 		libraryStatus.value = entry?.status ?? null;
 		episodesWatched.value = entry?.episodesWatched ?? 0;
 		personalRating.value = entry?.personalRating ?? null;
@@ -518,13 +540,36 @@ async function load(): Promise<void> {
 		selectedProvider.value = availablePlaybackSources.value[0]?.source ?? 'alloha';
 		catalogueLinks.value = links.entries;
 		selectedTranslationId.value = activeTranslations.value[0]?.id ?? null;
-		const initialSeason = work.value.seasons.find(season => season.seasonNumber > 0) ?? work.value.seasons[0];
-		if (initialSeason != null) await selectSeason(initialSeason);
+		const requestedSeason = zalipEpisodeQuery(props.initialSeason, 0);
+		const initialSeason = loadedWork.seasons.find(season => season.seasonNumber === requestedSeason)
+			?? loadedWork.seasons.find(season => season.seasonNumber > 0) ?? loadedWork.seasons[0];
+		if (initialSeason != null) await loadSeason(initialSeason, initialSeason.seasonNumber === requestedSeason ? zalipEpisodeQuery(props.initialEpisode, 0) : null);
 	} catch {
-		work.value = null;
-		discussionNoteId.value = null;
+		if (request === workRequest) {
+			work.value = null;
+			discussionNoteId.value = null;
+		}
 	} finally {
-		pending.value = false;
+		if (request === workRequest) pending.value = false;
+	}
+}
+
+async function retryPersonalLibrary(): Promise<void> {
+	if (!$i || work.value == null || libraryPending.value) return;
+	const request = workRequest;
+	const workId = work.value.id;
+	libraryPending.value = true;
+	try {
+		const entries = await misskeyApiZalip<LibraryEntry[]>('zalip/library/list');
+		if (request !== workRequest) return;
+		const entry = entries.find(candidate => candidate.work?.id === workId);
+		if (entry) applyLibraryEntry(entry);
+		libraryReady.value = true;
+		libraryLoadFailed.value = false;
+	} catch {
+		if (request === workRequest) libraryLoadFailed.value = true;
+	} finally {
+		if (request === workRequest) libraryPending.value = false;
 	}
 }
 
@@ -560,7 +605,7 @@ watch([selectedEpisodeId, episodesPending, playerView, episodeRail], async () =>
 	rail.scrollTo({ left: Math.max(0, left), behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
 }, { flush: 'post' });
 
-async function loadSeason(season: ZalipSeason): Promise<void> {
+async function loadSeason(season: ZalipSeason, initialEpisodeNumber: number | null = null): Promise<void> {
 	if (work.value == null) return;
 	const requestId = ++episodeRequestId.value;
 	selectedSeasonNumber.value = season.seasonNumber;
@@ -575,7 +620,8 @@ async function loadSeason(season: ZalipSeason): Promise<void> {
 		});
 		if (selectedSeasonNumber.value === season.seasonNumber && episodeRequestId.value === requestId) {
 			episodes.value = loadedEpisodes;
-			selectedEpisodeId.value = loadedEpisodes.find(episode => (getEpisodeProgress(work.value?.seasons ?? [], season.seasonNumber, episode.episodeNumber) ?? 0) > episodesWatched.value)?.id
+			selectedEpisodeId.value = loadedEpisodes.find(episode => episode.episodeNumber === initialEpisodeNumber)?.id
+				?? loadedEpisodes.find(episode => (getEpisodeProgress(work.value?.seasons ?? [], season.seasonNumber, episode.episodeNumber) ?? 0) > episodesWatched.value)?.id
 				?? loadedEpisodes[0]?.id
 				?? null;
 		}
@@ -639,11 +685,12 @@ function selectTranslation(id: string): void {
 }
 
 async function markEpisodeWatched(): Promise<void> {
-	if (!$i || saving.value || selectedEpisodeProgress.value == null || episodeWatched.value) return;
+	if (!$i || personalActionsDisabled.value || selectedEpisodeProgress.value == null || episodeWatched.value) return;
+	const context = personalStateContext();
 	try {
 		await updateLibrary({ episodesWatched: selectedEpisodeProgress.value, status: libraryStatus.value == null || libraryStatus.value === 'planned' ? 'watching' : libraryStatus.value });
 	} catch {
-		os.toast(i18n.ts.zalip.libraryUpdateFailed);
+		if (isCurrentPersonalState(context)) os.toast(i18n.ts.zalip.libraryUpdateFailed);
 	}
 }
 
@@ -726,12 +773,23 @@ function applyLibraryEntry(entry: LibraryEntry): void {
 	releaseSubscribed.value = entry.isReleaseSubscribed;
 }
 
+function personalStateContext(): { request: number; workId: string | undefined } {
+	return { request: workRequest, workId: work.value?.id };
+}
+
+function isCurrentPersonalState(context: ReturnType<typeof personalStateContext>): boolean {
+	return context.workId != null && context.request === workRequest && context.workId === work.value?.id;
+}
+
 async function updateLibrary(patch: Partial<LibraryUpdate> = {}): Promise<void> {
 	if (work.value == null || !$i) return;
+	if (!libraryReady.value) throw new Error('Personal library has not been loaded');
+	const context = personalStateContext();
+	const request = ++libraryWriteRequest;
 	saving.value = true;
 	try {
 		const entry = await misskeyApiZalip<LibraryEntry>('zalip/library/update', {
-			workId: work.value.id,
+			workId: context.workId,
 			status: libraryStatus.value,
 			episodesWatched: normalizedEpisodesWatched(),
 			personalRating: personalRating.value,
@@ -739,9 +797,9 @@ async function updateLibrary(patch: Partial<LibraryUpdate> = {}): Promise<void> 
 			isReleaseSubscribed: releaseSubscribed.value,
 			...patch,
 		});
-		applyLibraryEntry(entry);
+		if (isCurrentPersonalState(context) && request === libraryWriteRequest) applyLibraryEntry(entry);
 	} finally {
-		saving.value = false;
+		if (isCurrentPersonalState(context) && request === libraryWriteRequest) saving.value = false;
 	}
 }
 
@@ -750,7 +808,7 @@ async function showLibraryMenu(event: MouseEvent): Promise<void> {
 		await pleaseLogin({ path: window.location.pathname + window.location.search });
 		return;
 	}
-	if (work.value == null) return;
+	if (work.value == null || personalActionsDisabled.value) return;
 	void os.popupMenu([
 		{ type: 'label', text: i18n.ts.zalip.libraryMenuTitle, caption: work.value.title },
 		{
@@ -759,7 +817,7 @@ async function showLibraryMenu(event: MouseEvent): Promise<void> {
 			caption: i18n.ts.zalip.favoriteCaption,
 			icon: 'ti ti-bookmark',
 			ref: favoriteSwitch,
-			disabled: saving,
+			disabled: personalActionsDisabled,
 		},
 		null,
 		{ type: 'label', text: i18n.ts.zalip.libraryStatusHeading },
@@ -769,7 +827,7 @@ async function showLibraryMenu(event: MouseEvent): Promise<void> {
 			caption: computed(() => libraryStatus.value === status ? i18n.ts.zalip.libraryRemoveStatusHint : libraryStatusCaption(status)),
 			icon: libraryStatusIcon(status),
 			ref: computed({ get: () => libraryStatus.value === status, set: checked => { void setLibraryStatus(checked ? status : null); } }),
-			disabled: saving,
+			disabled: personalActionsDisabled,
 		})),
 	], event.currentTarget, { align: 'left', width: 320 });
 }
@@ -779,12 +837,14 @@ async function setLibraryStatus(status: LibraryStatus | null): Promise<void> {
 		await pleaseLogin({ path: window.location.pathname + window.location.search });
 		return;
 	}
-	if (saving.value) return;
+	if (personalActionsDisabled.value) return;
+	const context = personalStateContext();
 	const previousStatus = libraryStatus.value;
 	libraryStatus.value = status;
 	try {
 		await updateLibrary({ status });
 	} catch {
+		if (!isCurrentPersonalState(context)) return;
 		libraryStatus.value = previousStatus;
 		os.toast(i18n.ts.zalip.libraryUpdateFailed);
 	}
@@ -795,12 +855,14 @@ async function toggleFavorite(): Promise<void> {
 		await pleaseLogin({ path: window.location.pathname + window.location.search });
 		return;
 	}
-	if (saving.value) return;
+	if (personalActionsDisabled.value) return;
+	const context = personalStateContext();
 	const previousFavorite = isFavorite.value;
 	isFavorite.value = !isFavorite.value;
 	try {
 		await updateLibrary({ isFavorite: isFavorite.value });
 	} catch {
+		if (!isCurrentPersonalState(context)) return;
 		isFavorite.value = previousFavorite;
 		os.toast(i18n.ts.zalip.libraryUpdateFailed);
 	}
@@ -811,12 +873,14 @@ async function toggleReleaseSubscription(): Promise<void> {
 		await pleaseLogin({ path: window.location.pathname + window.location.search });
 		return;
 	}
-	if (saving.value) return;
+	if (personalActionsDisabled.value) return;
+	const context = personalStateContext();
 	const previousSubscription = releaseSubscribed.value;
 	releaseSubscribed.value = !releaseSubscribed.value;
 	try {
 		await updateLibrary({ isReleaseSubscribed: releaseSubscribed.value });
 	} catch {
+		if (!isCurrentPersonalState(context)) return;
 		releaseSubscribed.value = previousSubscription;
 		os.toast(i18n.ts.zalip.libraryUpdateFailed);
 	}
@@ -827,7 +891,7 @@ async function choosePersonalRating(): Promise<void> {
 		await pleaseLogin({ path: window.location.pathname + window.location.search });
 		return;
 	}
-	if (saving.value) return;
+	if (personalActionsDisabled.value) return;
 	ratingDialogOpen.value = true;
 	ratingError.value = null;
 	void loadRatingLibrary();
@@ -852,13 +916,14 @@ function closeRatingDialog(): void {
 }
 
 async function savePersonalRating(rating: number): Promise<void> {
-	if (saving.value) return;
+	if (personalActionsDisabled.value) return;
+	const context = personalStateContext();
 	ratingError.value = null;
 	try {
 		await updateLibrary({ personalRating: rating });
-		closeRatingDialog();
+		if (isCurrentPersonalState(context)) closeRatingDialog();
 	} catch {
-		ratingError.value = i18n.ts.zalip.libraryUpdateFailed;
+		if (isCurrentPersonalState(context)) ratingError.value = i18n.ts.zalip.libraryUpdateFailed;
 	}
 }
 
@@ -870,7 +935,7 @@ function shareWork(): void {
 	});
 }
 
-watch(() => props.slug, () => void load(), { immediate: true });
+watch(() => [props.slug, props.initialSeason, props.initialEpisode], () => void load(), { immediate: true });
 
 definePage(() => ({
 	title: work.value?.title ?? 'Zalip',
@@ -883,6 +948,8 @@ definePage(() => ({
 .page { max-width: 960px; margin: 0 auto; padding-bottom: 48px; min-width: 0; color: var(--zalip-social-fg); background: var(--zalip-social-panel); }
 .work, .content { min-width: 0; }
 .state { display: grid; place-content: center; gap: 12px; min-height: 300px; text-align: center; color: var(--zalip-social-muted); }
+.libraryWarning { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin: 16px 24px 0; padding: 12px 16px; border-radius: var(--MI-radius); background: var(--MI_THEME-infoWarnBg); color: var(--MI_THEME-infoWarnFg); font-size: 13px; }
+.libraryWarning button { padding: 8px 12px; border-radius: var(--MI-radius); background: var(--MI_THEME-panel); color: var(--MI_THEME-fg); }
 .hero { position: relative; isolation: isolate; overflow: hidden; }
 .heroBackground { position: absolute; z-index: -2; inset: 0; }
 .heroBackground img { width: 100%; height: 100%; object-fit: cover; object-position: center top; }
