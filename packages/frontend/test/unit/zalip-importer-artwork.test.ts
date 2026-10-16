@@ -11,7 +11,7 @@ import { importerArtworkChoiceSelected, importerArtworkCurrentChoices, importerA
 import Picker from '../../src/pages/zalip/importer-artwork-picker.vue';
 import { i18n } from '../../src/i18n.js';
 
-vi.mock('../../src/components/MkModalWindow.vue', () => ({ default: { template: '<div><slot /></div>' } }));
+vi.mock('../../src/components/MkModalWindow.vue', () => ({ default: { template: '<div data-testid="artwork-preview-window"><button data-testid="artwork-preview-close" @click="$emit(\'close\')">Close</button><slot /></div>' } }));
 
 const makeCandidate = (id: string, field: ImportArtworkCandidate['field'] = 'posterUrl', source: ImportArtworkCandidate['source'] = 'tmdb'): ImportArtworkCandidate => ({ id: id.repeat(64), field, source, url: `https://images.example.org/${id}.jpg`, previewUrl: `https://images.example.org/${id}-small.jpg`, width: 1000, height: 1500, language: 'ru' });
 const poster = makeCandidate('a');
@@ -192,5 +192,14 @@ describe('artwork image picker', () => {
 		expect(large.getAttribute('src')).toBe(poster.url);
 		await fireEvent.error(large);
 		expect(view.getByText(i18n.ts.zalip._importer.artworkImageUnavailable)).toBeTruthy();
+	});
+	it('teleports the large preview outside the page stacking context and closes cleanly', async () => {
+		const view = render(Picker, { props: { preview: preview(), disabled: false, galleryLimit: 18, lockedFields: [], modelValue: {} } });
+		await fireEvent.click(view.container.querySelector('img')!.closest('button')!);
+		const modal = view.getByTestId('artwork-preview-window');
+		expect(document.body.contains(modal)).toBe(true);
+		expect(view.container.contains(modal)).toBe(false);
+		await fireEvent.click(view.getByTestId('artwork-preview-close'));
+		expect(view.queryByTestId('artwork-preview-window')).toBeNull();
 	});
 });

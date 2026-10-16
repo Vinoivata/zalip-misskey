@@ -58,6 +58,7 @@
 - Enhance: Add importer maintenance controls, paginated filmographies, semantic collections and visible administrator-only source credentials, API/player addresses and playback ordering.
 - Fix: Restore provider and voice selection for imported Zalip players without resetting the selected season, episode or open player.
 - Feat: Add per-title image/source previews and configurable local artwork processing to the Zalip importer and route legacy image refreshes through the protected preview workflow.
+- Fix: Keep large importer artwork previews above site navigation and fit portrait posters within the viewport.
 
 ### Server
 - Feat: Store configurable local artwork and optional originals in Drive, validate exact-source image choices, and preserve localized/editorial images with atomic import ownership checks.

@@ -19,12 +19,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div :class="$style.information"><strong>{{ importerSourceLabel(candidate.source) }}</strong><small>{{ candidate.width != null && candidate.height != null ? `${candidate.width} × ${candidate.height}` : i18n.ts.zalip._importer.artworkUnknownSize }} · {{ candidate.language ?? i18n.ts.zalip._importer.artworkLanguageNeutral }}</small><label :class="$style.choice"><input :type="activeField === 'galleryUrls' ? 'checkbox' : 'radio'" :name="`artwork-${activeField}`" :checked="selected(candidate)" :disabled="disabled || blocked || (!selected(candidate) && activeField === 'galleryUrls' && selectedCount >= galleryLimit)" @change="choose(candidate)">{{ selected(candidate) ? i18n.ts.zalip._importer.artworkChosen : i18n.ts.zalip._importer.artworkUse }}</label></div>
 		</article>
 	</div>
-	<MkModalWindow v-if="viewing" :width="1000" :height="760" @close="viewing = null" @click="viewing = null" @esc="viewing = null"><template #header>{{ importerFieldLabel(viewing.field) }} · {{ importerSourceLabel(viewing.source) }}</template><div :class="$style.large"><img v-if="imageUrl(viewing, true)" :src="imageUrl(viewing, true)" :alt="importerFieldLabel(viewing.field)" @error="imageFailed(viewing, true)"><p v-else :class="$style.hint" role="status"><i class="ti ti-photo-off" aria-hidden="true"></i> {{ i18n.ts.zalip._importer.artworkImageUnavailable }}</p></div></MkModalWindow>
+	<Teleport to="body">
+		<MkModalWindow v-if="viewing" :width="1000" :height="760" @close="viewing = null" @click="viewing = null" @esc="viewing = null"><template #header>{{ importerFieldLabel(viewing.field) }} · {{ importerSourceLabel(viewing.source) }}</template><div :class="$style.large"><img v-if="imageUrl(viewing, true)" :src="imageUrl(viewing, true)" :alt="importerFieldLabel(viewing.field)" @error="imageFailed(viewing, true)"><p v-else :class="$style.hint" role="status"><i class="ti ti-photo-off" aria-hidden="true"></i> {{ i18n.ts.zalip._importer.artworkImageUnavailable }}</p></div></MkModalWindow>
+	</Teleport>
 </section>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onDeactivated, ref } from 'vue';
 import type { ImportArtworkCandidate, ImportArtworkChoices, ImportArtworkField, ImportPreview, ImportSource } from '@/utility/zalip-importer.js';
 import { importerFieldLabel, importerImageUrl, importerSourceLabel } from '@/utility/zalip-importer.js';
 import { importerArtworkChoiceSelected, importerArtworkFieldLocked, importerArtworkFields } from '@/utility/zalip-importer-artwork.js';
@@ -36,6 +38,7 @@ const choices = defineModel<ImportArtworkChoices>({ required: true });
 const activeField = ref<ImportArtworkField>('posterUrl');
 const source = ref<ImportSource | ''>('');
 const viewing = ref<ImportArtworkCandidate | null>(null);
+onDeactivated(() => { viewing.value = null; });
 const failedImages = ref<Record<string, number>>({});
 const candidates = computed(() => (props.preview.record.artworkCandidates ?? []).filter(candidate => importerImageUrl(candidate.url)));
 const availableSources = computed(() => [...new Set(candidates.value.map(candidate => candidate.source))]);
@@ -96,8 +99,9 @@ function choose(candidate: ImportArtworkCandidate): void {
 .information small { color: var(--MI_THEME-fgTransparentWeak); font-size: .75rem; }
 .choice { display: flex; align-items: center; gap: 6px; font-size: .83rem; }
 .choice input { accent-color: var(--MI_THEME-accent); }
-.large { display: grid; place-items: center; height: 100%; min-height: 0; padding: 16px; box-sizing: border-box; }
-.large img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+// Keep below the native window's 64px outer margin and 46px header, including rounding.
+.large { display: grid; grid-template-rows: minmax(0, 1fr); place-items: center; width: 100%; height: min(660px, calc(100dvh - 112px)); max-height: 100%; min-width: 0; min-height: 0; overflow: hidden; padding: 16px; box-sizing: border-box; }
+.large img { display: block; width: auto; height: auto; min-width: 0; min-height: 0; max-width: 100%; max-height: min(620px, calc(100dvh - 144px)); object-fit: contain; }
 .root button:focus-visible, .root input:focus-visible, .root select:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; }
 @media (max-width: 450px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>
