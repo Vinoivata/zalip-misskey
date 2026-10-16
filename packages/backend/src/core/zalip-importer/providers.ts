@@ -199,6 +199,26 @@ export function configuredImportPlayerUrl(value: unknown, source: 'alloha' | 'co
 	return safe ? rewriteImportPlayerOrigin(safe, origin) : null;
 }
 
+/** The caller supplies an already validated iframe, never a direct media URL. */
+export function importPlayerTranslationUrl(iframe: string, source: ImportPlayer['source'], translation: Pick<ImportPlayer['translations'][number], 'id' | 'name'>): string | null {
+	try {
+		const url = new URL(iframe);
+		if (source === 'alloha') {
+			// Older importer snapshots kept IDs but lost the upstream per-voice iframe.
+			if (!/^[1-9]\d{0,15}$/u.test(translation.id) || !Number.isSafeInteger(Number(translation.id))) return null;
+			url.searchParams.set('translation', translation.id);
+		} else {
+			// Collaps documents oneSound as the full voice name, not its catalogue ID.
+			const name = text(translation.name, 256);
+			if (name == null) return null;
+			url.searchParams.set('oneSound', name);
+		}
+		return url.toString();
+	} catch {
+		return null;
+	}
+}
+
 function imagePath(value: unknown): string | null {
 	return typeof value === 'string' && /^\/[A-Za-z0-9._-]{1,256}$/.test(value) ? value : null;
 }
@@ -470,8 +490,11 @@ export function normalizeCollapsRecord(value: unknown, iframeHosts: readonly str
 	}
 	const iframeUrl = safeImportUrl(item.iframe_url, iframeHosts);
 	const translations = array(item.voiceActing ?? item.voice_acting).map(object).flatMap(voice => {
-		const name = text(voice.name);
-		return name == null ? [] : [{ id: externalId(voice.id) ?? name, name }];
+		const name = text(voice.name, 256);
+		if (name == null) return [];
+		const translation = { id: externalId(voice.id) ?? name, name };
+		const iframe = iframeUrl == null ? null : importPlayerTranslationUrl(iframeUrl, 'collaps', translation);
+		return [{ ...translation, ...(iframe == null ? {} : { iframe }) }];
 	});
 	if (iframeUrl != null) record.players.push({ source: 'collaps', externalId: id, iframeUrl, quality: text(item.quality, 64) ?? (integer(item.quality, 0, 4) == null ? null : String(item.quality)), translations, episodes });
 	if (item.iframe_url != null && iframeUrl == null) record.warnings.push('collaps-player-url-rejected');
@@ -494,12 +517,13 @@ export function normalizeAllohaRecord(value: unknown, ref: ImportRef, iframeHost
 	record.releaseYear = year(item.year);
 	record.kind = mediaKind(ref.mediaType, [], [], category);
 	const iframeUrl = safeAllohaPlayerUrl(item.iframe, iframeHosts, playerToken);
-	const translations = array(item.translations, 40).map(object).filter(voice => externalId(voice.id) != null && text(voice.name) != null && safeAllohaPlayerUrl(voice.iframe, iframeHosts, playerToken) != null);
+	const translations = array(item.translations, 40).map(object).filter(voice => externalId(voice.id) != null && text(voice.name, 256) != null && safeAllohaPlayerUrl(voice.iframe, iframeHosts, playerToken) != null);
 	const fallbackIframe = iframeUrl ?? safeAllohaPlayerUrl(translations[0]?.iframe, iframeHosts, playerToken);
 	if (fallbackIframe != null) record.players.push({ source: 'alloha', externalId: ref.externalId, iframeUrl: fallbackIframe, quality: text(translations[0]?.quality, 64), translations: translations.flatMap(voice => {
 		const id = externalId(voice.id);
-		const name = text(voice.name);
-		return id == null || name == null ? [] : [{ id, name }];
+		const name = text(voice.name, 256);
+		const iframe = safeAllohaPlayerUrl(voice.iframe, iframeHosts, playerToken);
+		return id == null || name == null || iframe == null ? [] : [{ id, name, iframe, quality: text(voice.quality, 64), resolutions: [...new Set(array(voice.resolutions, 12).map(value => text(value, 32)).filter((value): value is string => value != null))] }];
 	}), episodes: [] });
 	if (item.iframe != null && iframeUrl == null) record.warnings.push('alloha-player-url-rejected');
 	return record;
@@ -767,7 +791,10 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 			if (ref.source !== 'alloha' || match == null || match[1] !== ref.mediaType || externalId(match[2]) == null) throw new ImportProviderError('invalid-ref');
 			const response = await allohaRequest(`/v2/movies/tmdb/${match[2]}`, { category: ref.mediaType === 'movie' ? 'movie' : 'serial' });
 			const record = normalizeAllohaRecord(response, ref, allohaHosts, config.allohaPlayerToken);
-			for (const player of record.players) player.iframeUrl = rewriteImportPlayerOrigin(player.iframeUrl, config.allohaPlayerOrigin);
+			for (const player of record.players) {
+				player.iframeUrl = rewriteImportPlayerOrigin(player.iframeUrl, config.allohaPlayerOrigin);
+				for (const translation of player.translations) if (translation.iframe) translation.iframe = rewriteImportPlayerOrigin(translation.iframe, config.allohaPlayerOrigin);
+			}
 			return record;
 		},
 		async lookup(identities, mediaType) {
@@ -794,7 +821,10 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 			validRef(ref, 'collaps');
 			const response = await collapsRequest('/franchise/details', { id: ref.externalId, format: 'json' });
 			const result = normalizeCollapsRecord(response, collapsHosts);
-			for (const player of result.players) player.iframeUrl = rewriteImportPlayerOrigin(player.iframeUrl, config.collapsPlayerOrigin);
+			for (const player of result.players) {
+				player.iframeUrl = rewriteImportPlayerOrigin(player.iframeUrl, config.collapsPlayerOrigin);
+				for (const translation of player.translations) if (translation.iframe) translation.iframe = rewriteImportPlayerOrigin(translation.iframe, config.collapsPlayerOrigin);
+			}
 			if (result.ref.externalId !== ref.externalId || result.ref.mediaType !== ref.mediaType) throw new ImportProviderError('malformed-response');
 			const details = object(object(response).result ?? object(response).data ?? response);
 			if (details.genre == null && details.genres == null) {
@@ -811,7 +841,10 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 			if (kpId == null && imdb == null) return null;
 			const response = await collapsRequest('/franchise/details', { ...(kpId == null ? {} : { kinopoisk_id: kpId }), ...(imdb == null ? {} : { imdb_id: imdb }), format: 'json' });
 			const result = normalizeCollapsRecord(response, collapsHosts);
-			for (const player of result.players) player.iframeUrl = rewriteImportPlayerOrigin(player.iframeUrl, config.collapsPlayerOrigin);
+			for (const player of result.players) {
+				player.iframeUrl = rewriteImportPlayerOrigin(player.iframeUrl, config.collapsPlayerOrigin);
+				for (const translation of player.translations) if (translation.iframe) translation.iframe = rewriteImportPlayerOrigin(translation.iframe, config.collapsPlayerOrigin);
+			}
 			if (result.ref.mediaType !== mediaType) return null;
 			if (!result.identities.some(identity => (identity.provider === 'kinopoisk' && identity.externalId === kpId) || (identity.provider === 'imdb' && identity.externalId === imdb))) throw new ImportProviderError('malformed-response');
 			return result;

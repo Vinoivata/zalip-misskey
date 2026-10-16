@@ -56,6 +56,7 @@
 - Enhance: Frame the mobile title poster over a softly blurred cover without changing title controls or desktop layout, and restore mobile header auto-hiding on title pages.
 - Feat: Add a Zalip importer console with previews, batch jobs, directories and schedules, public filmographies and selectable playback sources.
 - Enhance: Add importer maintenance controls, paginated filmographies, semantic collections and visible administrator-only source credentials, API/player addresses and playback ordering.
+- Fix: Restore provider and voice selection for imported Zalip players without resetting the selected season, episode or open player.
 
 ### Server
 - Enhance: Add filtered and IMDb-based draft imports, selective provider requests, persistent import options, safe local WebP artwork, source diagnostics and taxonomy enrichment without overwriting editorial data.
@@ -74,6 +75,7 @@
 - Fix: Include film playback arrivals in subscription updates, atomically record movie availability notifications, retry delivery during upstream failures, and rotate provider checks across the catalogue.
 - Feat: Add provenance-aware draft imports from TMDB, Kinopoisk, Alloha and Collaps with canonical identities, taxonomy, resumable queues and quota-aware scheduled updates.
 - Feat: Add durable collection/person maintenance and encrypted administrator-managed provider settings with runtime rotation, protected collection backfill, safe configurable transports and explicitly approved Alloha iframe tokens.
+- Fix: Preserve and safely rotate imported voice iframe URLs, and restore voice selection for existing Alloha and Collaps playback records.
 
 ## 2026.7.0
 

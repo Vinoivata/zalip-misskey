@@ -60,8 +60,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<p v-if="work.description" :class="$style.description">{{ work.description }}</p>
 				<div :class="$style.content">
 					<section ref="playerSection" :class="$style.player" :aria-label="i18n.ts.zalip.playerTab">
-						<div v-if="playbackSources.length" :class="$style.playerTabs" role="group" :aria-label="i18n.ts.zalip._importer.workSources"><button v-for="source in playbackSources" :key="source.source" type="button" class="_button" :class="[$style.playerTab, { [$style.playerTabActive]: selectedProvider === source.source }]" :aria-pressed="selectedProvider === source.source" @click="selectProvider(source.source)">{{ source.label }}</button></div>
-						<p v-if="importedPlayback" :class="$style.availableNotice">{{ i18n.ts.zalip._importer.nativeVoicesHint }}</p>
+						<div v-if="availablePlaybackSources.length" :class="$style.playerTabs" role="group" :aria-label="i18n.ts.zalip._importer.workSources"><button v-for="source in availablePlaybackSources" :key="source.source" type="button" class="_button" :class="[$style.playerTab, { [$style.playerTabActive]: selectedProvider === source.source }]" :aria-pressed="selectedProvider === source.source" @click="selectProvider(source.source)">{{ source.label }}</button></div>
+						<p v-if="activePlayback && !activeTranslations.length" :class="$style.availableNotice">{{ i18n.ts.zalip._importer.nativeVoicesHint }}</p>
 						<div :class="$style.playerTabs">
 							<button type="button" class="_button" :class="[$style.playerTab, { [$style.playerTabActive]: playerView === 'player' }]" :aria-pressed="playerView === 'player'" @click="playerView = 'player'"><i class="ti ti-list" aria-hidden="true"></i><span>{{ work.seasons.length ? i18n.ts.zalip.workEpisodes : i18n.ts.zalip.playerTab }}</span></button>
 							<button v-if="work.trailerYoutubeKey" type="button" class="_button" :class="[$style.playerTab, { [$style.playerTabActive]: playerView === 'trailer' }]" :aria-pressed="playerView === 'trailer'" @click="openTrailer"><i class="ti ti-player-play" aria-hidden="true"></i><span>{{ i18n.ts.zalip.trailerTab }}</span></button>
@@ -75,12 +75,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<div v-if="work.trailerYoutubeKey && playerView === 'trailer'" :class="$style.playerFrame"><iframe :src="youtubeEmbed(work.trailerYoutubeKey)" :title="i18n.ts.zalip.trailerTab + ': ' + work.title" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>
 						<template v-if="playerView === 'player'">
 							<div ref="watchFrame" :class="$style.watchFrame">
-								<div v-if="$i && allohaPlayerOpen && activeAllohaIframe" :class="$style.playerFrame"><iframe :key="activeAllohaIframeKey" :src="activeAllohaIframe" :title="i18n.ts.zalip.playerTab + ': ' + work.title" loading="lazy" referrerpolicy="origin" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>
+								<div v-if="$i && playerOpen && activePlayerIframe" :class="$style.playerFrame"><iframe :key="activePlayerIframeKey" :src="activePlayerIframe" :title="i18n.ts.zalip.playerTab + ': ' + work.title" loading="lazy" referrerpolicy="origin" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>
 								<div v-else :class="$style.playerPreview">
 									<img v-if="selectedEpisode?.stillPath || work.backdropPath" :src="tmdbBackdrop(selectedEpisode?.stillPath || work.backdropPath!)" alt="" loading="lazy">
-									<button v-if="$i && allohaPlayback?.available" type="button" class="_button" :class="$style.playOverlay" :aria-label="i18n.ts.zalip.watchTitle" @click="openAllohaPlayer"><i class="ti ti-player-play-filled" aria-hidden="true"></i></button>
+									<button v-if="$i && activePlayback" type="button" class="_button" :class="$style.playOverlay" :aria-label="i18n.ts.zalip.watchTitle" @click="openSelectedPlayer"><i class="ti ti-player-play-filled" aria-hidden="true"></i></button>
 									<button v-else-if="!$i" type="button" class="_button" :class="$style.playerState" @click="signInForDiscussion"><i class="ti ti-login" aria-hidden="true"></i>{{ i18n.ts.zalip.playerSignIn }}</button>
-									<p v-else :class="$style.playerState"><i :class="allohaPlayback == null ? 'ti ti-loader-2 ti-spin' : 'ti ti-clock'" aria-hidden="true"></i>{{ allohaPlayback == null ? i18n.ts.zalip.playerChecking : i18n.ts.zalip.playerUnavailable }}</p>
+									<p v-else :class="$style.playerState"><i class="ti ti-clock" aria-hidden="true"></i>{{ i18n.ts.zalip.playerUnavailable }}</p>
 								</div>
 								<div :class="$style.playerToolbar">
 									<div v-if="work.seasons.length" :class="$style.episodeControls">
@@ -89,8 +89,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 										<button type="button" class="_button" :disabled="nextEpisode == null" :aria-label="i18n.ts.zalip.playerNextEpisode" @click="selectRelativeEpisode(1)"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
 									</div>
 									<button v-if="$i && selectedEpisodeProgress != null" type="button" class="_button" :class="[$style.watched, { [$style.actionActive]: episodeWatched }]" :disabled="saving || episodeWatched" @click="markEpisodeWatched"><i :class="episodeWatched ? 'ti ti-eye-check' : 'ti ti-eye'" aria-hidden="true"></i>{{ episodeWatched ? i18n.ts.zalip.playerWatched : i18n.ts.zalip.playerMarkWatched }}</button>
-									<span v-if="$i && importedPlayback" :class="$style.voiceButton">{{ selectedProviderLabel }}</span>
-									<button v-else-if="$i && allohaPlayback?.available && allohaPlayback.translations.length" type="button" class="_button" :class="$style.voiceButton" aria-haspopup="dialog" :aria-expanded="voiceMenuOpen" @click="openVoiceMenu"><span>{{ selectedVoiceLabel }}</span><i class="ti ti-volume" aria-hidden="true"></i></button>
+									<button v-if="$i && activePlayback && (activeTranslations.length || availablePlaybackSources.length > 1)" type="button" class="_button" :class="$style.voiceButton" :aria-label="`${i18n.ts.zalip.playerVoices}: ${selectedVoiceLabel}`" aria-haspopup="dialog" :aria-expanded="voiceMenuOpen" @click="openVoiceMenu"><span>{{ selectedVoiceLabel }}</span><i class="ti ti-volume" aria-hidden="true"></i></button>
+									<span v-else-if="$i && activePlayback" :class="$style.voiceButton">{{ selectedProviderLabel }}</span>
 								</div>
 							</div>
 							<div v-if="work.seasons.length" :class="$style.playerEpisodes">
@@ -175,14 +175,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<MkModal v-if="voiceMenuOpen" ref="voiceModal" :class="$style.voiceOverlay" preferType="dialog" :returnFocusTo="voiceAnchor" @click="voiceModal?.close()" @esc="voiceModal?.close()" @closed="voiceMenuOpen = false">
 			<section :class="$style.voiceDrawer" :style="viewportWidth <= 600 ? undefined : voicePanelPosition" role="dialog" aria-modal="true" :aria-label="i18n.ts.zalip.playerVoices">
 				<header><h2>{{ i18n.ts.zalip.playerTab }}</h2><button type="button" class="_button" :aria-label="i18n.ts.close" @click="voiceModal?.close()"><i class="ti ti-x" aria-hidden="true"></i></button></header>
-				<span :class="$style.providerPill">{{ selectedProviderLabel }}</span>
-				<p v-if="playbackSources.length">{{ i18n.ts.zalip._importer.workVoiceovers }}</p>
-				<h3>{{ i18n.ts.zalip.playerVoices }}</h3>
-				<label :class="$style.menuSearch"><i class="ti ti-search" aria-hidden="true"></i><input v-model="voiceQuery" type="search" :placeholder="i18n.ts.zalip.playerVoiceSearch" :aria-label="i18n.ts.zalip.playerVoiceSearch" @keydown.esc.stop.prevent="voiceModal?.close()"></label>
-				<div :class="$style.voiceList">
-					<button v-for="translation in filteredTranslations" :key="translation.id" type="button" class="_button" :class="{ [$style.menuSelected]: selectedAllohaTranslationId === translation.id }" :aria-pressed="selectedAllohaTranslationId === translation.id" @click="selectTranslation(translation.id)"><span>{{ translation.name }}</span><small v-if="translation.quality">{{ translation.quality }}</small><i v-if="selectedAllohaTranslationId === translation.id" class="ti ti-check" aria-hidden="true"></i></button>
-					<p v-if="!filteredTranslations.length">{{ i18n.ts.zalip.searchNoResults }}</p>
-				</div>
+				<div :class="$style.providerChoices" role="group" :aria-label="i18n.ts.zalip._importer.workSources"><button v-for="source in availablePlaybackSources" :key="source.source" type="button" class="_button" :class="[$style.playerTab, { [$style.playerTabActive]: selectedProvider === source.source }]" :aria-pressed="selectedProvider === source.source" @click="selectProvider(source.source)">{{ source.label }}</button></div>
+				<template v-if="activeTranslations.length">
+					<h3>{{ i18n.ts.zalip.playerVoices }}</h3>
+					<label :class="$style.menuSearch"><i class="ti ti-search" aria-hidden="true"></i><input v-model="voiceQuery" type="search" :placeholder="i18n.ts.zalip.playerVoiceSearch" :aria-label="i18n.ts.zalip.playerVoiceSearch" @keydown.esc.stop.prevent="voiceModal?.close()"></label>
+					<div :class="$style.voiceList">
+						<button v-for="translation in filteredTranslations" :key="translation.id" type="button" class="_button" :class="{ [$style.menuSelected]: selectedTranslationId === translation.id }" :aria-pressed="selectedTranslationId === translation.id" @click="selectTranslation(translation.id)"><span>{{ translation.name }}</span><small v-if="translation.quality">{{ translation.quality }}</small><i v-if="selectedTranslationId === translation.id" class="ti ti-check" aria-hidden="true"></i></button>
+						<p v-if="!filteredTranslations.length">{{ i18n.ts.zalip.searchNoResults }}</p>
+					</div>
+				</template>
+				<p v-else :class="$style.availableNotice">{{ i18n.ts.zalip._importer.nativeVoicesHint }}</p>
 			</section>
 		</MkModal>
 	</Teleport>
@@ -193,6 +195,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed, nextTick, onBeforeUnmount, onDeactivated, ref, useTemplateRef, watch } from 'vue';
 import type { RatedLibraryEntry } from '@/components/ZalipRatingDialog.vue';
 import type { TaxonomyEntry } from '@/utility/zalip-importer.js';
+import type { LegacyAllohaPlayback, PlaybackProvider, PlaybackProviderSetting, PlaybackSource } from '@/utility/zalip-playback.js';
 import MkModal from '@/components/MkModal.vue';
 import MkPullToRefresh from '@/components/MkPullToRefresh.vue';
 import { prefer } from '@/preferences.js';
@@ -207,6 +210,7 @@ import { useZalipHorizontalDrag } from '@/composables/use-zalip-horizontal-drag.
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { pleaseLogin } from '@/utility/please-login.js';
 import { importerImageUrl } from '@/utility/zalip-importer.js';
+import { selectablePlaybackTranslations, workPlaybackIframe, workPlaybackSources } from '@/utility/zalip-playback.js';
 
 type ZalipWork = {
 	id: string;
@@ -267,24 +271,28 @@ type LibraryEntry = {
 
 type LibraryUpdate = Pick<LibraryEntry, 'status' | 'episodesWatched' | 'personalRating' | 'isFavorite' | 'isReleaseSubscribed'>;
 
-type AllohaPlayback = {
-	label?: string;
-	available: boolean;
-	iframe: string | null;
-	translations: Array<{ id: number; name: string; quality: string | null; resolutions: string[]; iframe: string }>;
-	lastCheckedAt: string | null;
-};
-
-type PlaybackSource = { source: 'alloha' | 'collaps'; label: string; iframe: string; quality: string | null; translations: { id: string; name: string }[]; episodes: { seasonNumber: number; episodeNumber: number }[] };
 type CatalogLink = { entry: TaxonomyEntry; role: string; character: string | null; position: number };
 const playbackSources = ref<PlaybackSource[]>([]);
-const selectedProvider = ref<'alloha' | 'collaps'>('alloha');
+const playbackProviders = ref<PlaybackProviderSetting[]>();
+const selectedProvider = ref<PlaybackProvider>('alloha');
+const selectedProviderVoices = ref<Partial<Record<PlaybackProvider, string>>>({});
 const catalogueLinks = ref<CatalogLink[]>([]);
 
-function selectProvider(source: 'alloha' | 'collaps'): void {
+function selectProvider(source: PlaybackProvider): void {
+	if (!availablePlaybackSources.value.some(candidate => candidate.source === source)) return;
+	if (selectedProvider.value === source) {
+		if (playerView.value === 'trailer') {
+			playerView.value = 'player';
+			playerOpen.value = true;
+		}
+		return;
+	}
 	selectedProvider.value = source;
-	selectedAllohaTranslationId.value = null;
-	allohaPlayerOpen.value = false;
+	const translations = activeTranslations.value;
+	selectedTranslationId.value = translations.find(translation => translation.id === selectedProviderVoices.value[source])?.id ?? translations[0]?.id ?? null;
+	voiceQuery.value = '';
+	if (playerView.value === 'trailer') playerOpen.value = true;
+	playerView.value = 'player';
 }
 
 const viewportWidth = ref(window.innerWidth);
@@ -324,24 +332,20 @@ const releaseSubscribed = ref(false);
 // Menu switches must remain clickable when selected. `active` menu buttons intentionally do not.
 const favoriteSwitch = computed({ get: () => isFavorite.value, set: () => { void toggleFavorite(); } });
 const episodic = computed(() => work.value?.kind === 'series' || !!work.value?.seasons.length);
-const showReleaseSubscription = computed(() => episodic.value || releaseSubscribed.value || allohaPlayback.value?.available !== true);
+const showReleaseSubscription = computed(() => episodic.value || releaseSubscribed.value || activePlayback.value == null);
 const releaseSubscriptionLabel = computed(() => episodic.value ? i18n.ts.zalip.subscribeEpisodes : i18n.ts.zalip.subscribePremiere);
 const playerView = ref<'player' | 'trailer'>('player');
-const legacyPlayback = ref<AllohaPlayback | null>(null);
-const importedPlayback = computed(() => playbackSources.value.find(item => item.source === selectedProvider.value));
-const selectedProviderLabel = computed(() => importedPlayback.value?.label ?? legacyPlayback.value?.label ?? selectedProvider.value.toUpperCase());
-const allohaPlayback = computed<AllohaPlayback | null>(() => {
-	const source = importedPlayback.value;
-	if (!source) return legacyPlayback.value;
-	// Provider-native controls select voices inside the embed; legacy Alloha URLs remain supported.
-	return { available: true, iframe: source.iframe, translations: [], lastCheckedAt: null };
-});
-const allohaPlayerOpen = ref(false);
-const selectedAllohaTranslationId = ref<number | null>(null);
+const legacyPlayback = ref<LegacyAllohaPlayback | null>(null);
+const availablePlaybackSources = computed(() => workPlaybackSources(playbackSources.value, legacyPlayback.value, playbackProviders.value));
+const activePlayback = computed(() => availablePlaybackSources.value.find(item => item.source === selectedProvider.value) ?? null);
+const selectedProviderLabel = computed(() => activePlayback.value?.label ?? selectedProvider.value.toUpperCase());
+const activeTranslations = computed(() => selectablePlaybackTranslations(activePlayback.value));
+const playerOpen = ref(false);
+const selectedTranslationId = ref<string | null>(null);
 const voiceQuery = ref('');
-const filteredTranslations = computed(() => (allohaPlayback.value?.translations ?? []).filter(translation => translation.name.toLocaleLowerCase('ru').includes(voiceQuery.value.trim().toLocaleLowerCase('ru'))));
+const filteredTranslations = computed(() => activeTranslations.value.filter(translation => translation.name.toLocaleLowerCase('ru').includes(voiceQuery.value.trim().toLocaleLowerCase('ru'))));
 const selectedVoiceLabel = computed(() => {
-	const translation = allohaPlayback.value?.translations.find(item => item.id === selectedAllohaTranslationId.value);
+	const translation = activeTranslations.value.find(item => item.id === selectedTranslationId.value);
 	return translation?.name ?? selectedProviderLabel.value;
 });
 const discussionNoteId = ref<string | null>(null);
@@ -377,27 +381,12 @@ const filteredEpisodes = computed(() => episodes.value.filter(episode => `${epis
 const selectedEpisodeProgress = computed(() => getEpisodeProgress(work.value?.seasons ?? [], selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null));
 const episodeWatched = computed(() => selectedEpisodeProgress.value != null && episodesWatched.value >= selectedEpisodeProgress.value);
 
-const activeAllohaIframe = computed(() => {
-	if (allohaPlayback.value == null) return null;
-	const iframe = allohaPlayback.value.translations.find(translation => translation.id === selectedAllohaTranslationId.value)?.iframe
-		?? allohaPlayback.value.iframe
-		?? allohaPlayback.value.translations[0]?.iframe
-		?? null;
-	if (iframe == null || selectedEpisode.value == null || selectedSeasonNumber.value == null) return iframe;
-	try {
-		const url = new URL(iframe);
-		url.searchParams.set('season', selectedSeasonNumber.value.toString());
-		url.searchParams.set('episode', selectedEpisode.value.episodeNumber.toString());
-		return url.toString();
-	} catch {
-		return iframe;
-	}
-});
+const activePlayerIframe = computed(() => workPlaybackIframe(activePlayback.value, selectedTranslationId.value, selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null));
 
-const activeAllohaIframeKey = computed(() => [
+const activePlayerIframeKey = computed(() => [
 	selectedSeasonNumber.value ?? 'movie',
 	selectedEpisode.value?.id ?? 'title',
-	selectedAllohaTranslationId.value ?? 'default',
+	selectedTranslationId.value ?? 'default',
 	selectedProvider.value,
 ].join(':'));
 const selectedEpisodeIndex = computed(() => selectedEpisode.value == null ? -1 : episodes.value.findIndex(episode => episode.id === selectedEpisode.value?.id));
@@ -494,10 +483,12 @@ async function load(): Promise<void> {
 	playerView.value = 'player';
 	legacyPlayback.value = null;
 	playbackSources.value = [];
+	playbackProviders.value = undefined;
 	catalogueLinks.value = [];
 	selectedProvider.value = 'alloha';
-	allohaPlayerOpen.value = false;
-	selectedAllohaTranslationId.value = null;
+	selectedProviderVoices.value = {};
+	playerOpen.value = false;
+	selectedTranslationId.value = null;
 	discussionError.value = null;
 	discussionScope.value = 'work';
 	openingDiscussionScope.value = null;
@@ -510,8 +501,8 @@ async function load(): Promise<void> {
 		const [discussion, entries, playback, sources, links] = await Promise.all([
 			misskeyApiZalip<{ noteId: string | null }>('zalip/discussions/show', { workId: work.value.id }),
 			$i ? misskeyApiZalip<LibraryEntry[]>('zalip/library/list') : Promise.resolve([]),
-			$i ? misskeyApiZalip<AllohaPlayback>('zalip/playback/alloha/show', { slug: work.value.slug }).catch(() => null) : Promise.resolve(null),
-			$i ? misskeyApiZalip<{ sources: PlaybackSource[] }>('zalip/playback/sources', { workId: work.value.id }).catch(() => ({ sources: [] })) : Promise.resolve({ sources: [] }),
+			$i ? misskeyApiZalip<LegacyAllohaPlayback>('zalip/playback/alloha/show', { slug: work.value.slug }).catch(() => null) : Promise.resolve(null),
+			$i ? misskeyApiZalip<{ sources: PlaybackSource[]; providers?: PlaybackProviderSetting[] }>('zalip/playback/sources', { workId: work.value.id }).catch(() => ({ sources: [], providers: undefined })) : Promise.resolve({ sources: [], providers: undefined }),
 			misskeyApiZalip<{ entries: CatalogLink[] }>('zalip/taxonomy/show', { workId: work.value.id }).catch(() => ({ entries: [] })),
 		]);
 		discussionNoteId.value = discussion.noteId;
@@ -523,9 +514,10 @@ async function load(): Promise<void> {
 		releaseSubscribed.value = entry?.isReleaseSubscribed ?? false;
 		legacyPlayback.value = playback;
 		playbackSources.value = sources.sources;
-		selectedProvider.value = sources.sources[0]?.source ?? 'alloha';
+		playbackProviders.value = sources.providers;
+		selectedProvider.value = availablePlaybackSources.value[0]?.source ?? 'alloha';
 		catalogueLinks.value = links.entries;
-		selectedAllohaTranslationId.value = playback?.translations[0]?.id ?? null;
+		selectedTranslationId.value = activeTranslations.value[0]?.id ?? null;
 		const initialSeason = work.value.seasons.find(season => season.seasonNumber > 0) ?? work.value.seasons[0];
 		if (initialSeason != null) await selectSeason(initialSeason);
 	} catch {
@@ -638,8 +630,11 @@ function updateVoicePanelPosition(): void {
 	};
 }
 
-function selectTranslation(id: number): void {
-	selectedAllohaTranslationId.value = id;
+function selectTranslation(id: string): void {
+	if (!activeTranslations.value.some(translation => translation.id === id)) return;
+	selectedTranslationId.value = id;
+	selectedProviderVoices.value[selectedProvider.value] = id;
+	playerView.value = 'player';
 	voiceModal.value?.close();
 }
 
@@ -661,8 +656,8 @@ function closeWorkMenu(): void {
 	if (!saving.value) workModal.value?.close();
 }
 
-function openAllohaPlayer(): void {
-	if (allohaPlayback.value?.available) allohaPlayerOpen.value = true;
+function openSelectedPlayer(): void {
+	if (activePlayback.value) playerOpen.value = true;
 }
 
 async function selectDiscussionScope(scope: 'work' | 'episode'): Promise<void> {
@@ -683,7 +678,7 @@ function focusPlayer(): void {
 function openPlayer(): void {
 	playerView.value = 'player';
 	focusPlayer();
-	if ($i && allohaPlayback.value?.available) allohaPlayerOpen.value = true;
+	if ($i && activePlayback.value) playerOpen.value = true;
 }
 
 function openTrailer(): void {
@@ -1017,7 +1012,7 @@ definePage(() => ({
 .voiceDrawer header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .voiceDrawer h2 { margin: 0; font-size: 18px; }
 .voiceDrawer header button { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 12px; background: var(--zalip-social-hover); }
-.providerPill { display: inline-block; margin: 18px 0; padding: 9px 12px; border-radius: 99px; background: var(--zalip-social-hover); font-size: 13px; font-weight: 700; }
+.providerChoices { display: flex; flex-wrap: wrap; gap: 6px; margin: 18px 0; }
 .voiceDrawer h3 { margin: 0 0 14px; padding-top: 18px; border-top: 1px solid var(--zalip-social-border); font-size: 16px; }
 .voiceList { display: grid; gap: 6px; margin-top: 12px; }
 .voiceList button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 42px; padding: 10px 12px; box-sizing: border-box; border-radius: 12px; background: var(--zalip-social-hover); text-align: left; }

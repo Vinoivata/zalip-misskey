@@ -704,6 +704,78 @@ describe('Zalip importer orchestration', () => {
 		expect(JSON.stringify(playback)).not.toContain('old-player-fixture');
 	});
 
+	test('public playback preserves each voice iframe and rotates its mirror and approved embed token', async () => {
+		const player: ImportRecord['players'][number] = {
+			source: 'alloha', externalId: 'private-id', iframeUrl: 'https://ascorbic-as.stravers.live/?token_movie=title-fixture&token=old-player-fixture', quality: 'HD', episodes: [],
+			translations: [
+				{ id: '3', name: 'Studio One', iframe: 'https://ascorbic-as.stravers.live/?token_movie=voice-one&translation=3&season=1&episode=2&token=old-player-fixture', quality: 'HD', resolutions: ['1080p'] },
+				{ id: '4', name: 'Studio Two', iframe: 'https://ascorbic-as.stravers.live/?token_movie=voice-two&translation=4&token=old-player-fixture', quality: null, resolutions: [] },
+			],
+		};
+		const context = fixture({ works: [work({ importData: { values: { players: [player] } } })] });
+		context.sourceSettings.getRuntime.mockResolvedValue({ apiOrigins: defaultImportApiOrigins, allohaApiToken: 'new-api-fixture', allohaPlayerToken: 'new-public-fixture', allohaPlayerOrigin: 'https://mirror.example.org' });
+		const playback = await context.service.playback('canonical');
+		expect(playback.sources[0].translations).toHaveLength(2);
+		for (const translation of playback.sources[0].translations) {
+			const iframe = new URL(translation.iframe!);
+			expect(iframe.origin).toBe('https://mirror.example.org');
+			expect(iframe.searchParams.get('token')).toBe('new-public-fixture');
+			expect(iframe.searchParams.get('translation')).toBe(translation.id);
+		}
+		expect(new URL(playback.sources[0].translations[0].iframe!).searchParams.get('token_movie')).toBe('voice-one');
+		expect(new URL(playback.sources[0].translations[1].iframe!).searchParams.get('token_movie')).toBe('voice-two');
+		expect(playback.sources[0].translations[0]).toMatchObject({ quality: 'HD', resolutions: ['1080p'] });
+		expect(JSON.stringify(playback)).not.toContain('new-api-fixture');
+		expect(JSON.stringify(playback)).not.toContain('old-player-fixture');
+	});
+
+	test('old label-only snapshots get provider-specific voice iframes without reimport or writes', async () => {
+		const alloha: ImportRecord['players'][number] = { source: 'alloha', externalId: 'private-alloha', iframeUrl: 'https://ascorbic-as.stravers.live/?token_movie=title-fixture&season=1&episode=2&token=old-player-fixture', translations: [{ id: '246', name: 'Studio' }, { id: 'arbitrary-id', name: 'Not a documented selector' }], quality: 'HD', episodes: [] };
+		const collaps: ImportRecord['players'][number] = { source: 'collaps', externalId: 'private-collaps', iframeUrl: 'https://api.nextembed.ws/embed/50?season=1&episode=2', translations: [{ id: '5', name: 'Творческая студия МИР' }], quality: 'HD', episodes: [] };
+		const stored = { values: { players: [alloha, collaps] } };
+		const context = fixture({ works: [work({ importData: stored })] });
+		context.sourceSettings.getRuntime.mockResolvedValue({ apiOrigins: defaultImportApiOrigins, allohaPlayerToken: 'new-public-fixture', allohaPlayerOrigin: 'https://mirror.example.org', collapsPlayerOrigin: 'https://collaps.example.org' });
+		const playback = await context.service.playback('canonical');
+		const first = new URL(playback.sources.find(player => player.source === 'alloha')!.translations[0].iframe!);
+		const second = new URL(playback.sources.find(player => player.source === 'collaps')!.translations[0].iframe!);
+		expect(first.origin).toBe('https://mirror.example.org');
+		expect(first.searchParams.get('token')).toBe('new-public-fixture');
+		expect(first.searchParams.get('translation')).toBe('246');
+		expect(first.searchParams.get('oneSound')).toBeNull();
+		expect(second.origin).toBe('https://collaps.example.org');
+		expect(second.searchParams.get('oneSound')).toBe('Творческая студия МИР');
+		expect(second.searchParams.get('translation')).toBeNull();
+		for (const iframe of [first, second]) {
+			expect(iframe.searchParams.get('season')).toBe('1');
+			expect(iframe.searchParams.get('episode')).toBe('2');
+		}
+		expect(playback.sources.find(player => player.source === 'alloha')!.translations[1]).not.toHaveProperty('iframe');
+		expect(context.works.rows[0].importData).toEqual(stored);
+		expect(context.works.save).not.toHaveBeenCalled();
+		expect(context.catalogue.recordAllohaAvailability).not.toHaveBeenCalled();
+	});
+
+	test('malformed cached voice fields and rejected iframe URLs never leave the playback boundary', async () => {
+		const player = {
+			source: 'alloha', externalId: 'private-id', iframeUrl: 'https://ascorbic-as.stravers.live/embed', quality: 'HD', episodes: [],
+			translations: [
+				null, 'invalid', { id: 2, name: 'Invalid ID' }, { id: '3', name: {} },
+				{ id: '4', name: 'Unsafe origin', iframe: 'https://untrusted.example.org/embed?token=private-fixture' },
+				{ id: '5', name: 'Unsafe credentials', iframe: 'https://ascorbic-as.stravers.live/embed?api_key=private-fixture' },
+				{ id: '6', name: 'Safe label', quality: { token: 'private-fixture' }, resolutions: ['1080p', { token: 'private-fixture' }, '1080p'], raw: { token: 'private-fixture' } },
+				{ id: '6', name: 'Duplicate' },
+			],
+		};
+		const context = fixture({ works: [work({ importData: { values: { players: [player] } } })] });
+		const playback = await context.service.playback('canonical');
+		expect(playback.sources[0].translations).toEqual([
+			{ id: '4', name: 'Unsafe origin' },
+			{ id: '5', name: 'Unsafe credentials' },
+			{ id: '6', name: 'Safe label', iframe: 'https://ascorbic-as.stravers.live/embed?translation=6', resolutions: ['1080p'] },
+		]);
+		expect(JSON.stringify(playback)).not.toContain('private-fixture');
+	});
+
 	test('public playback follows administrator order, hides disabled players and deduplicates canonical sources without events', async () => {
 		const alloha = { source: 'alloha', externalId: 'private-alloha', iframeUrl: 'https://ascorbic-as.stravers.live/alloha', translations: [], quality: 'HD', episodes: [] } as const;
 		const collaps = { ...alloha, source: 'collaps', externalId: 'private-collaps', iframeUrl: 'https://api.nextembed.ws/collaps' } as const;

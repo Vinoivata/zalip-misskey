@@ -10,7 +10,8 @@ import { MiZalipSeason } from '@/models/ZalipSeason.js';
 import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
 import { MiZalipExternalIdentity } from '@/models/ZalipExternalIdentity.js';
 import { canUpdateField, importFieldSelected, nonEmpty, normalizeImportOptions, readImportState, sameValue } from './policy.js';
-import { importFields, type ExternalIdentity, type ImportOptions, type ImportRecord } from './types.js';
+import { safeAllohaPlayerUrl, safeImportUrl } from './providers.js';
+import { importFields, type ExternalIdentity, type ImportOptions, type ImportPlayer, type ImportRecord } from './types.js';
 import type { DataSource, EntityManager } from 'typeorm';
 
 export type ApplyImportOptions = {
@@ -105,6 +106,28 @@ function safeArtwork(value: string | null | undefined): string | null {
 	}
 }
 
+/** Keep only normalized voice fields, and never persist URL credentials other than an approved embed token. */
+function playerTranslationSnapshot(player: ImportPlayer, translation: ImportPlayer['translations'][number]): ImportPlayer['translations'][number] {
+	let iframe: string | null = null;
+	if (typeof translation.iframe === 'string') {
+		if (player.source === 'alloha') {
+			try {
+				const parent = new URL(player.iframeUrl);
+				const token = parent.searchParams.get('token') ?? undefined;
+				iframe = safeAllohaPlayerUrl(translation.iframe, [parent.hostname], token);
+			} catch { /* Invalid cached URLs are omitted rather than stored as selectable voices. */ }
+		} else {
+			iframe = safeImportUrl(translation.iframe);
+		}
+	}
+	return {
+		id: translation.id.slice(0, 100), name: translation.name.slice(0, 256),
+		...(iframe == null ? {} : { iframe }),
+		...(translation.quality === undefined ? {} : { quality: boundedText(translation.quality, 64) }),
+		...(Array.isArray(translation.resolutions) ? { resolutions: [...new Set(translation.resolutions.map(value => boundedText(value, 32)).filter((value): value is string => value != null))].slice(0, 12) } : {}),
+	};
+}
+
 /** Explicit projection strips accidental raw provider objects and enforces database field sizes. */
 function normalizedSnapshot(record: ImportRecord): ImportRecord {
 	const snapshot = Object.fromEntries(importFields.map(field => [field, structuredClone(record[field])])) as Omit<ImportRecord, 'ref' | 'identities' | 'complete' | 'warnings'>;
@@ -138,7 +161,7 @@ function normalizedSnapshot(record: ImportRecord): ImportRecord {
 		})),
 		players: record.players.map(player => ({
 			source: player.source, externalId: player.externalId.trim().slice(0, 100), iframeUrl: player.iframeUrl,
-			quality: boundedText(player.quality, 128), translations: player.translations.map(translation => ({ id: translation.id.slice(0, 100), name: translation.name.slice(0, 256) })),
+			quality: boundedText(player.quality, 128), translations: player.translations.map(translation => playerTranslationSnapshot(player, translation)),
 			episodes: player.episodes.map(episode => ({ seasonNumber: episode.seasonNumber, episodeNumber: episode.episodeNumber })),
 		})),
 		seasons: record.seasons.map(season => ({

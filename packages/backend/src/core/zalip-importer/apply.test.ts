@@ -94,6 +94,27 @@ describe('Zalip transactional import application', () => {
 		expect(context.identities()).toHaveLength(1);
 	});
 
+	test('persists selectable voice iframes, quality and resolutions without raw provider fields or unsafe URLs', async () => {
+		const context = fixture();
+		const result = await applyImportRecord(context.db, context.idService, record({ players: [{
+			source: 'alloha', externalId: 'tmdb:movie:100', iframeUrl: 'https://ascorbic-as.stravers.live/?token_movie=title-fixture&token=public-player-fixture', quality: 'HD', episodes: [],
+			translations: [
+				{ id: '3', name: 'Studio', iframe: 'https://ascorbic-as.stravers.live/?token_movie=voice-fixture&translation=3&token=public-player-fixture', quality: ' HD ', resolutions: ['1080p', '1080p', '720p'] },
+				{ id: '4', name: 'Unsafe', iframe: 'https://user:password@ascorbic-as.stravers.live/embed/4', quality: null, resolutions: [] },
+				{ id: '5', name: 'Legacy' },
+				{ id: '6', name: 'Foreign origin', iframe: 'https://untrusted.example.org/embed/6?token=untrusted-token-fixture' },
+			],
+		}] }), {});
+		expect((result.work.importData.values as Row).players).toEqual([expect.objectContaining({ translations: [
+			{ id: '3', name: 'Studio', iframe: 'https://ascorbic-as.stravers.live/?token_movie=voice-fixture&translation=3&token=public-player-fixture', quality: 'HD', resolutions: ['1080p', '720p'] },
+			{ id: '4', name: 'Unsafe', quality: null, resolutions: [] },
+			{ id: '5', name: 'Legacy' },
+			{ id: '6', name: 'Foreign origin' },
+		] })]);
+		expect(JSON.stringify(result.work.importData)).not.toContain('password');
+		expect(JSON.stringify(result.work.importData)).not.toContain('untrusted.example.org');
+	});
+
 	test('repeated imports deduplicate by identities and update provider-owned fields', async () => {
 		const context = fixture();
 		const first = await applyImportRecord(context.db, context.idService, record(), {});

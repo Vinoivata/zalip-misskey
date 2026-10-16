@@ -22,7 +22,7 @@ import { MiZalipCatalogEntry } from '@/models/ZalipCatalogEntry.js';
 import { applyImportRecord, currentImportFields, findImportWork } from './zalip-importer/apply.js';
 import { budgetedTransport } from './zalip-importer/budget.js';
 import { canUpdateField, importFieldSelected, matchesCreatePlayerFilter, matchesImportFilters, mergeImportRecords, nonEmpty, normalizeImportOptions, readImportState, sameValue, selectedImportSources } from './zalip-importer/policy.js';
-import { configuredImportPlayerUrl, createImportProviders, createConfiguredImportTransport, ImportProviderError } from './zalip-importer/providers.js';
+import { configuredImportPlayerUrl, createImportProviders, createConfiguredImportTransport, ImportProviderError, importPlayerTranslationUrl } from './zalip-importer/providers.js';
 import { importFields, importSources, type ExternalIdentity, type ImportField, type ImportMediaType, type ImportOptions, type ImportPreview, type ImportProvider, type ImportRecord, type ImportRef, type ImportSource } from './zalip-importer/types.js';
 
 export type CreateImportRun = {
@@ -369,7 +369,27 @@ export class ZalipImporterService {
 			sources: providers.filter(setting => setting.enabled).flatMap(setting => {
 				const player = players.find(candidate => candidate.source === setting.source);
 				const iframe = player ? configuredImportPlayerUrl(player.iframeUrl, setting.source, config) : null;
-				return player && iframe ? [{ source: player.source, label: setting.label, iframe, translations: player.translations, quality: player.quality, episodes: player.episodes }] : [];
+				if (!player || !iframe) return [];
+				const seen = new Set<string>();
+				const translations = (Array.isArray(player.translations) ? player.translations : []).slice(0, 100).flatMap(translation => {
+					if (translation == null || typeof translation !== 'object' || typeof translation.id !== 'string' || typeof translation.name !== 'string') return [];
+					const id = translation.id.trim();
+					const name = translation.name.trim();
+					if (!id || id.length > 100 || !name || name.length > 256 || seen.has(id)) return [];
+					seen.add(id);
+					const voiceIframe = translation.iframe === undefined
+						? importPlayerTranslationUrl(iframe, player.source, { id, name })
+						: configuredImportPlayerUrl(translation.iframe, player.source, config);
+					const quality = translation.quality === null ? null : typeof translation.quality === 'string' ? translation.quality.trim().slice(0, 64) || null : undefined;
+					const resolutions = Array.isArray(translation.resolutions) ? [...new Set(translation.resolutions.filter((value): value is string => typeof value === 'string').map(value => value.trim().slice(0, 32)).filter(Boolean))].slice(0, 12) : undefined;
+					return [{
+						id, name,
+						...(voiceIframe == null ? {} : { iframe: voiceIframe }),
+						...(quality === undefined ? {} : { quality }),
+						...(resolutions === undefined ? {} : { resolutions }),
+					}];
+				});
+				return [{ source: player.source, label: setting.label, iframe, translations, quality: player.quality, episodes: player.episodes }];
 			}),
 		};
 	}

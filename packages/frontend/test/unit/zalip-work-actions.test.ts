@@ -67,7 +67,9 @@ beforeEach(() => {
 		if (endpoint === 'zalip/seasons/episodes') return testEpisodes;
 		if (endpoint === 'zalip/discussions/show') return { noteId: null };
 		if (endpoint === 'zalip/library/list') return [entry];
-		if (endpoint === 'zalip/playback/alloha/show') return { available, translations: [], iframe: null };
+		if (endpoint === 'zalip/playback/alloha/show') return { available, translations: [], iframe: available ? 'https://player.example/?token_movie=fixture' : null, lastCheckedAt: null };
+		if (endpoint === 'zalip/playback/sources') return { sources: [] };
+		if (endpoint === 'zalip/taxonomy/show') return { entries: [] };
 		if (endpoint === 'zalip/library/update') {
 			if (failUpdate) throw new Error('Network failure');
 			entry = { ...entry, ...data };

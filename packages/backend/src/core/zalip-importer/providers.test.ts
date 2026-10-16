@@ -88,7 +88,7 @@ describe('importer normalizers', () => {
 		const record = normalizeCollapsRecord({ id: 50, name: 'Сериал', type: 'serials', kinopoisk_id: '10', imdb_id: 'tt1234567', poster: 'https://images.example.org/poster.jpg', iframe_url: 'https://api.nextembed.ws/embed/movie/50', actors: [{ id: 6, name: 'Actor' }], director: ['Director'], voiceActing: [{ id: 5, name: 'Studio' }], seasons: [{ season: 1, episodes: [{ episode: 1, name: 'First' }] }] });
 		expect(record.identities).toContainEqual({ provider: 'kinopoisk', externalId: '10', entityType: 'tv' });
 		expect(record.credits.map(value => value.role)).toEqual(['actor', 'director']);
-		expect(record.players[0].translations).toEqual([{ id: '5', name: 'Studio' }]);
+		expect(record.players[0].translations).toEqual([{ id: '5', name: 'Studio', iframe: 'https://api.nextembed.ws/embed/movie/50?oneSound=Studio' }]);
 		expect(record.players[0].episodes).toEqual([{ seasonNumber: 1, episodeNumber: 1 }]);
 		const rejected = normalizeCollapsRecord({ id: 50, name: 'Film', iframe_url: 'https://untrusted.example.org/embed/50' });
 		expect(rejected.players).toEqual([]);
@@ -100,9 +100,36 @@ describe('importer normalizers', () => {
 		const ref = { source: 'alloha', externalId: 'tmdb:tv:123', mediaType: 'tv' } as const;
 		const record = normalizeAllohaRecord({ data: { category: { slug: 'serial' }, iframe: 'https://ascorbic-as.stravers.live/?tmdb=123', translations: [{ id: 3, name: 'Studio', iframe: 'https://ascorbic-as.stravers.live/?translation=3' }] } }, ref);
 		expect(record.identities).toContainEqual({ provider: 'tmdb', externalId: '123', entityType: 'tv' });
-		expect(record.players[0].translations).toEqual([{ id: '3', name: 'Studio' }]);
+		expect(record.players[0].translations).toEqual([{ id: '3', name: 'Studio', iframe: 'https://ascorbic-as.stravers.live/?translation=3', quality: null, resolutions: [] }]);
 		expect(record.complete).toBe(false);
 		expect(() => normalizeAllohaRecord({ data: { category: { slug: 'movie' } } }, ref)).toThrow('not-found');
+	});
+
+	test('Alloha retains distinct validated voice iframes and bounded quality metadata for later selection', () => {
+		const ref = { source: 'alloha', externalId: 'tmdb:tv:123', mediaType: 'tv' } as const;
+		const record = normalizeAllohaRecord({ data: {
+			category: { slug: 'serial' }, iframe: 'https://ascorbic-as.stravers.live/?token_movie=title-fixture&token=api-fixture',
+			translations: [
+				{ id: 3, name: 'Первый голос', iframe: 'https://ascorbic-as.stravers.live/?token_movie=voice-one&translation=3&token=api-fixture', quality: 'HD', resolutions: ['1080p', '720p', '1080p', null] },
+				{ id: 4, name: 'Второй голос', iframe: 'https://ascorbic-as.stravers.live/?token_movie=voice-two&translation=4&token=api-fixture', quality: '4K', resolutions: ['2160p'] },
+				{ id: 5, name: 'Unsafe', iframe: 'https://untrusted.example.org/embed/5?token=api-fixture' },
+			],
+		} }, ref, ['ascorbic-as.stravers.live'], 'public-player-fixture');
+		expect(record.players[0].translations).toEqual([
+			{ id: '3', name: 'Первый голос', iframe: 'https://ascorbic-as.stravers.live/?token_movie=voice-one&translation=3&token=public-player-fixture', quality: 'HD', resolutions: ['1080p', '720p'] },
+			{ id: '4', name: 'Второй голос', iframe: 'https://ascorbic-as.stravers.live/?token_movie=voice-two&translation=4&token=public-player-fixture', quality: '4K', resolutions: ['2160p'] },
+		]);
+		expect(JSON.stringify(record)).not.toContain('api-fixture');
+	});
+
+	test('Collaps selects a full Cyrillic voice name using documented oneSound without Alloha selectors', () => {
+		const record = normalizeCollapsRecord({ id: 50, name: 'Сериал', type: 'serials', iframe_url: 'https://api.nextembed.ws/embed/movie/50?season=1&episode=2', voiceActing: [{ id: 5, name: 'Творческая студия МИР' }] });
+		const iframe = new URL(record.players[0].translations[0].iframe!);
+		expect(iframe.searchParams.get('oneSound')).toBe('Творческая студия МИР');
+		expect(iframe.searchParams.get('translation')).toBeNull();
+		expect(iframe.searchParams.get('season')).toBe('1');
+		expect(iframe.searchParams.get('episode')).toBe('2');
+		expect(iframe.href).not.toContain(' ');
 	});
 
 	test('episode limits are explicit rather than silently claiming complete coverage', () => {
