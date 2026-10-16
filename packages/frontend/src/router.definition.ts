@@ -62,6 +62,7 @@ export const ROUTE_DEF = [{
 	loginRequired: true,
 }, {
 	path: '/zalip/importer',
+	query: { source: 'source', type: 'mediaType', id: 'externalId', images: 'imagesOnly', workId: 'workId' },
 	component: page(() => import('@/pages/zalip/importer.vue')),
 	loginRequired: true,
 }, {

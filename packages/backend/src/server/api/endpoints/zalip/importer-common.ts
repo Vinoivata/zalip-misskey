@@ -4,7 +4,7 @@
  */
 
 import { ImportProviderError } from '@/core/zalip-importer/providers.js';
-import { importFields, importSources, type ImportField } from '@/core/zalip-importer/types.js';
+import { importArtworkFields, importFields, importSources, type ImportArtworkField, type ImportField } from '@/core/zalip-importer/types.js';
 import type { RoleService } from '@/core/RoleService.js';
 import type { MiLocalUser } from '@/models/User.js';
 import { ApiError } from '@/server/api/error.js';
@@ -14,6 +14,7 @@ export const importerApiErrors = {
 	forbidden: { message: 'Administrator permission is required.', code: 'ZALIP_ADMIN_REQUIRED', id: '0ef8ee51-6cad-4533-b55d-50e64553f04b', httpStatusCode: 403 },
 	notFound: { message: 'The requested catalogue resource was not found.', code: 'ZALIP_IMPORT_NOT_FOUND', id: '1725efd9-8bfc-4ac0-a6e9-63b0c6e4e53d', httpStatusCode: 404 },
 	invalid: { message: 'The import or catalogue parameters are invalid.', code: 'ZALIP_IMPORT_INVALID', id: 'e28b4b27-7353-47a9-9a25-63e2e2505916', httpStatusCode: 400 },
+	artworkSelectionStale: { message: 'The selected image is no longer available. Refresh the import preview.', code: 'ZALIP_IMPORT_ARTWORK_SELECTION_STALE', id: '9bed2678-7883-41a5-accf-4fbd48f1fdac', httpStatusCode: 400 },
 	conflict: { message: 'The catalogue identity or operation conflicts with existing data.', code: 'ZALIP_IMPORT_CONFLICT', id: 'f3178194-1238-44b1-a615-643a9720019f', httpStatusCode: 409 },
 	notConfigured: { message: 'The requested content provider is not configured.', code: 'ZALIP_IMPORT_NOT_CONFIGURED', id: '5885a859-b71e-45f2-b7d1-53723b3fd8f1', httpStatusCode: 503 },
 	quota: { message: 'The content provider request budget is exhausted.', code: 'ZALIP_IMPORT_QUOTA_EXCEEDED', id: '893afe56-50ed-490c-839c-efacdabdec43', httpStatusCode: 429 },
@@ -29,10 +30,57 @@ export const importerTaxonomyTypeProperty = { type: 'string', enum: ['person', '
 export const importerIdProperty = { type: 'string', format: 'misskey:id', minLength: 1, maxLength: 32 } as const;
 export const importerLockedFieldsProperty = { type: 'array', uniqueItems: true, maxItems: importFields.length, items: { type: 'string', enum: importFields } } as const;
 export const importerCategoryIdsProperty = { type: 'array', uniqueItems: true, maxItems: 50, items: importerIdProperty } as const;
+export const importerRefProperty = {
+	type: 'object', additionalProperties: false,
+	properties: {
+		source: importerSourceProperty,
+		externalId: { type: 'string', minLength: 1, maxLength: 64, pattern: '^(?:[1-9][0-9]{0,15}|tmdb:(?:movie|tv):[1-9][0-9]{0,15}|imdb:tt[0-9]{5,12})$' },
+		mediaType: importerMediaTypeProperty,
+	},
+	required: ['source', 'externalId', 'mediaType'],
+} as const;
+const artworkSizeProperty = {
+	type: 'object', additionalProperties: false,
+	properties: {
+		width: { type: 'integer', minimum: 0, maximum: 5000 },
+		height: { type: 'integer', minimum: 0, maximum: 5000 },
+		fit: { type: 'string', enum: ['inside', 'cover'] },
+	},
+} as const;
+const artworkCandidateIdProperty = { type: 'string', pattern: '^[a-f0-9]{64}$', minLength: 64, maxLength: 64 } as const;
 export const importerOptionsProperty = {
 	type: 'object', additionalProperties: false,
 	properties: {
-		artwork: { type: 'string', enum: ['remote', 'local-webp'] },
+		artwork: { type: 'string', enum: ['remote', 'local-webp', 'local'] },
+		artworkSettings: {
+			type: 'object', additionalProperties: false,
+			properties: {
+				format: { type: 'string', enum: ['original', 'webp', 'avif', 'jpeg', 'png'] },
+				quality: { type: 'integer', minimum: 1, maximum: 100 },
+				keepOriginal: { type: 'boolean' },
+				galleryLimit: { type: 'integer', minimum: 0, maximum: 18 },
+				sizes: { type: 'object', additionalProperties: false, properties: Object.fromEntries(importArtworkFields.map(field => [field, artworkSizeProperty])) as Record<ImportArtworkField, typeof artworkSizeProperty> },
+			},
+		},
+		artworkSelections: {
+			type: 'array', maxItems: 100, uniqueItems: true,
+			items: {
+				type: 'object', additionalProperties: false,
+				properties: {
+					ref: importerRefProperty,
+					choices: {
+						type: 'object', additionalProperties: false, minProperties: 1,
+						properties: {
+							posterUrl: artworkCandidateIdProperty,
+							backdropUrl: artworkCandidateIdProperty,
+							logoUrl: artworkCandidateIdProperty,
+							galleryUrls: { type: 'array', maxItems: 18, uniqueItems: true, items: artworkCandidateIdProperty },
+						},
+					},
+				},
+				required: ['ref', 'choices'],
+			},
+		},
 		sources: { type: 'array', uniqueItems: true, maxItems: importSources.length, items: importerSourceProperty },
 		fields: importerLockedFieldsProperty,
 		fieldSources: { type: 'object', additionalProperties: false, properties: Object.fromEntries(importFields.map(field => [field, importerSourceProperty])) as Record<ImportField, typeof importerSourceProperty> },
@@ -50,15 +98,6 @@ export const importerOptionsProperty = {
 			},
 		},
 	},
-} as const;
-export const importerRefProperty = {
-	type: 'object', additionalProperties: false,
-	properties: {
-		source: importerSourceProperty,
-		externalId: { type: 'string', minLength: 1, maxLength: 64, pattern: '^(?:[1-9][0-9]{0,15}|tmdb:(?:movie|tv):[1-9][0-9]{0,15}|imdb:tt[0-9]{5,12})$' },
-		mediaType: importerMediaTypeProperty,
-	},
-	required: ['source', 'externalId', 'mediaType'],
 } as const;
 
 export const importerAdminReadMeta = {
@@ -96,6 +135,7 @@ export async function safeImporterCall<T>(action: () => Promise<T> | T): Promise
 			}
 		}
 		if (error instanceof Error) {
+			if (error.message === 'IMPORT_ARTWORK_SELECTION_STALE') throw new ApiError(importerApiErrors.artworkSelectionStale);
 			if (missingResources.has(error.message)) throw new ApiError(importerApiErrors.notFound);
 			if (invalidResources.has(error.message)) throw new ApiError(importerApiErrors.invalid);
 			if (resourceConflicts.has(error.message)) throw new ApiError(importerApiErrors.conflict);

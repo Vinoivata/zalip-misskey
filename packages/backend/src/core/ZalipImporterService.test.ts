@@ -13,6 +13,7 @@ import { MiZalipCatalogEntry } from '@/models/ZalipCatalogEntry.js';
 import { defaultImportApiOrigins, ImportProviderError } from './zalip-importer/providers.js';
 import { importSources, type ImportProvider, type ImportRecord, type ImportRef, type ImportSource } from './zalip-importer/types.js';
 import { defaultPlaybackSettings } from './zalip-importer/playback-settings.js';
+import { artworkCandidate } from './zalip-importer/artwork-candidates.js';
 
 const isolated = vi.hoisted(() => ({ providers: vi.fn(), apply: vi.fn() }));
 
@@ -203,6 +204,88 @@ function deferred<T>() {
 
 beforeEach(() => { vi.clearAllMocks(); });
 
+describe('Zalip importer image choices', () => {
+	const picture = () => artworkCandidate({ source: 'tmdb', field: 'posterUrl', url: 'https://image.tmdb.org/t/p/original/chosen.jpg', previewUrl: 'https://image.tmdb.org/t/p/w300/chosen.jpg', width: 600, height: 900, language: 'ru' });
+
+	test('preview exposes only selected provider/field candidates and applies a bound manual choice', async () => {
+		const context = fixture();
+		enable(context, 'kinopoisk');
+		const candidate = picture();
+		context.providers.tmdb.fetch.mockResolvedValueOnce(record({ posterUrl: 'https://image.tmdb.org/t/p/original/main.jpg', backdropUrl: 'https://image.tmdb.org/t/p/original/backdrop.jpg', artworkCandidates: [candidate] }));
+		const preview = await context.service.preview(record().ref, undefined, { sources: [], fields: ['posterUrl'], artworkSelections: [{ ref: record().ref, choices: { posterUrl: candidate.id } }] });
+		expect(preview.record.posterUrl).toBe(candidate.url);
+		expect(preview.record.artworkCandidates).toEqual(expect.arrayContaining([candidate]));
+		expect(preview.record.artworkCandidates?.every(value => value.field === 'posterUrl' && value.source === 'tmdb')).toBe(true);
+		expect(context.providers.kinopoisk.fetch).not.toHaveBeenCalled();
+		expect(context.providers.kinopoisk.lookup).not.toHaveBeenCalled();
+		expect(context.artwork.prepare).not.toHaveBeenCalled();
+	});
+
+	test('worker rejects changed provider candidates before any image or work writes', async () => {
+		const candidate = picture();
+		const context = fixture({ runs: [run({ options: { artwork: 'local', artworkSelections: [{ ref: record().ref, choices: { posterUrl: candidate.id } }] } })], items: [item()] });
+		await context.service.processRun('run');
+		expect(context.items.rows[0]).toMatchObject({ state: 'failed', error: 'IMPORT_ARTWORK_SELECTION_STALE' });
+		expect(context.artwork.prepare).not.toHaveBeenCalled();
+		expect(isolated.apply).not.toHaveBeenCalled();
+	});
+
+	test('one title choice cannot leak into the next item in a batch', async () => {
+		const candidate = picture();
+		const options = { fields: ['posterUrl'] as const, artworkSelections: [{ ref: record().ref, choices: { posterUrl: candidate.id } }] };
+		const context = fixture({ runs: [run({ options: { ...options, fields: [...options.fields] } })], items: [item(), item({ id: 'second', position: 1, ref: { source: 'tmdb', externalId: '101', mediaType: 'movie' } })] });
+		context.providers.tmdb.fetch.mockImplementation(async (ref: ImportRef) => record({ ref, identities: [{ provider: ref.source, externalId: ref.externalId, entityType: ref.mediaType }], posterUrl: `https://image.tmdb.org/t/p/original/${ref.externalId}.jpg`, artworkCandidates: [candidate] }));
+		await context.service.processRun('run');
+		expect(isolated.apply).toHaveBeenCalledTimes(2);
+		expect(isolated.apply.mock.calls[0][2].posterUrl).toBe(candidate.url);
+		expect(isolated.apply.mock.calls[1][2].posterUrl).toBe('https://image.tmdb.org/t/p/original/101.jpg');
+		expect(isolated.apply.mock.calls[0][4].artworkSelectedFields).toEqual(['posterUrl']);
+		expect(isolated.apply.mock.calls[1][4].artworkSelectedFields).toEqual([]);
+	});
+
+	test('run creation rejects choices for titles outside its exact target set', async () => {
+		const context = fixture();
+		await expect(context.service.createRun({ mode: 'import', refs: [record().ref], options: { artworkSelections: [{ ref: { ...record().ref, externalId: '101' }, choices: { posterUrl: picture().id } }] } })).rejects.toThrow('INVALID_IMPORT_OPTIONS');
+		expect(context.runs.rows).toEqual([]);
+		expect(context.queue.add).not.toHaveBeenCalled();
+	});
+
+	test('new processing settings and successful localization snapshots reach the locked commit', async () => {
+		const candidate = picture();
+		const settings = { format: 'avif' as const, quality: 70, keepOriginal: true };
+		const context = fixture({ runs: [run({ options: { artwork: 'local', fields: ['posterUrl'], artworkSettings: settings, artworkSelections: [{ ref: record().ref, choices: { posterUrl: candidate.id } }] } })], items: [item({ workId: 'canonical' })], works: [work({ posterPath: '/old.jpg' })] });
+		context.providers.tmdb.fetch.mockResolvedValueOnce(record({ artworkCandidates: [candidate] }));
+		context.artwork.prepare.mockResolvedValueOnce({ ...record({ posterUrl: '/files/chosen.avif' }), artworkExpected: { posterUrl: '/old.jpg' } });
+		await context.service.processRun('run');
+		expect(context.artwork.prepare).toHaveBeenCalledWith(expect.objectContaining({ posterUrl: candidate.url }), expect.anything(), ['posterUrl'], [], settings, 'local', ['posterUrl']);
+		expect(isolated.apply.mock.calls[0][4]).toMatchObject({ artworkExpected: { posterUrl: '/old.jpg' }, artworkLocalizedFields: ['posterUrl'], artworkSelectedFields: ['posterUrl'] });
+	});
+
+	test('legacy localization preview changes only image ownership and keeps metadata protected', async () => {
+		const context = fixture({ works: [work({ posterPath: '/main.jpg' })] });
+		context.providers.tmdb.fetch.mockResolvedValueOnce(record({ posterUrl: 'https://image.tmdb.org/t/p/w780/main.jpg' }));
+		const preview = await context.service.preview(record().ref, 'canonical', { artwork: 'local', fields: ['posterUrl'] });
+		expect(preview.changes.find(value => value.field === 'posterUrl')).toMatchObject({ selected: true, protected: false });
+		expect(preview.changes.find(value => value.field === 'title')).toMatchObject({ selected: false, protected: true });
+	});
+
+	test('an explicit empty gallery on a new local draft remains an editorial choice without downloaded bytes', async () => {
+		const context = fixture({ runs: [run({ options: { artwork: 'local', fields: ['galleryUrls'], artworkSelections: [{ ref: record().ref, choices: { galleryUrls: [] } }] } })], items: [item()] });
+		context.providers.tmdb.fetch.mockResolvedValueOnce(record({ galleryUrls: ['https://image.tmdb.org/t/p/original/frame.jpg'] }));
+		await context.service.processRun('run');
+		expect(context.artwork.prepare).toHaveBeenCalledWith(expect.objectContaining({ galleryUrls: [] }), null, ['galleryUrls'], [], undefined, 'local', ['galleryUrls']);
+		expect(isolated.apply.mock.calls[0][4]).toMatchObject({ artworkSelectedFields: ['galleryUrls'], artworkLocalizedFields: [] });
+	});
+
+	test('a zero gallery download limit without an empty choice does not acquire an editorial clear lock', async () => {
+		const context = fixture({ runs: [run({ options: { artwork: 'local', fields: ['galleryUrls'], artworkSettings: { galleryLimit: 0 } } })], items: [item()] });
+		context.providers.tmdb.fetch.mockResolvedValueOnce(record({ galleryUrls: ['https://image.tmdb.org/t/p/original/frame.jpg'] }));
+		context.artwork.prepare.mockImplementationOnce(async incoming => ({ ...incoming, galleryUrls: [] }));
+		await context.service.processRun('run');
+		expect(isolated.apply.mock.calls[0][4]).toMatchObject({ artworkSelectedFields: [], artworkLocalizedFields: [] });
+	});
+});
+
 describe('Zalip importer orchestration', () => {
 	test('new works without a player are skipped before artwork, while existing sync proceeds', async () => {
 		const fresh = fixture({ runs: [run({ options: { filters: { requirePlayer: true }, artwork: 'local-webp' } })], items: [item()] });
@@ -307,7 +390,7 @@ describe('Zalip importer orchestration', () => {
 		const context = fixture({ runs: [run({ options: { artwork: 'local-webp', fields: ['posterUrl'] }, lockedFields: ['logoUrl'] })], items: [item({ workId: 'canonical' })], works: [work()] });
 		context.artwork.prepare.mockResolvedValueOnce(record({ posterUrl: 'https://cdn.example.test/local.webp' }));
 		await context.service.processRun('run');
-		expect(context.artwork.prepare).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: 'canonical' }), ['posterUrl'], ['logoUrl']);
+		expect(context.artwork.prepare).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: 'canonical' }), ['posterUrl'], ['logoUrl'], undefined, 'local-webp', []);
 		expect(isolated.apply.mock.calls[0][2].posterUrl).toBe('https://cdn.example.test/local.webp');
 		const remote = fixture({ runs: [run()], items: [item()] });
 		await remote.service.processRun('run');
@@ -370,7 +453,7 @@ describe('Zalip importer orchestration', () => {
 		const context = fixture({ runs: [run({ mode: 'sync', lockedFields: ['credits'], categoryIds: ['category'] })], items: [item({ workId: 'canonical' })], works: [work()] });
 		isolated.apply.mockResolvedValue({ work: work(), created: false, protectedFields: ['credits', 'genres'] });
 		await context.service.processRun('run');
-		expect(isolated.apply).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ title: 'Provider title' }), expect.objectContaining({ title: 'tmdb' }), { workId: 'canonical', lockedFields: ['credits'], mode: 'sync', options: {} });
+		expect(isolated.apply).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ title: 'Provider title' }), expect.objectContaining({ title: 'tmdb' }), expect.objectContaining({ workId: 'canonical', lockedFields: ['credits'], mode: 'sync', options: {} }));
 		expect(context.taxonomy.syncImportedWork).toHaveBeenCalledWith('canonical', expect.anything(), ['credits', 'genres']);
 		expect(context.taxonomy.linkWork).toHaveBeenCalledWith({ entryId: 'category', workId: 'canonical' });
 		expect(context.runs.rows[0].state).toBe('completed');

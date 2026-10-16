@@ -11,7 +11,7 @@ import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
 import { MiZalipExternalIdentity } from '@/models/ZalipExternalIdentity.js';
 import { canUpdateField, importFieldSelected, nonEmpty, normalizeImportOptions, readImportState, sameValue } from './policy.js';
 import { safeAllohaPlayerUrl, safeImportUrl } from './providers.js';
-import { importFields, type ExternalIdentity, type ImportOptions, type ImportPlayer, type ImportRecord } from './types.js';
+import { importFields, type ExternalIdentity, type ImportArtworkExpected, type ImportArtworkField, type ImportOptions, type ImportPlayer, type ImportRecord } from './types.js';
 import type { DataSource, EntityManager } from 'typeorm';
 
 export type ApplyImportOptions = {
@@ -19,6 +19,10 @@ export type ApplyImportOptions = {
 	lockedFields?: string[];
 	mode?: 'import' | 'sync' | 'availability';
 	options?: ImportOptions;
+	/** Internal only: exact pre-download values, checked again under the row lock. */
+	artworkExpected?: ImportArtworkExpected;
+	artworkSelectedFields?: readonly ImportArtworkField[];
+	artworkLocalizedFields?: readonly ImportArtworkField[];
 };
 
 export type ApplyImportResult = { work: MiZalipWork; created: boolean; protectedFields: string[] };
@@ -130,7 +134,7 @@ function playerTranslationSnapshot(player: ImportPlayer, translation: ImportPlay
 
 /** Explicit projection strips accidental raw provider objects and enforces database field sizes. */
 function normalizedSnapshot(record: ImportRecord): ImportRecord {
-	const snapshot = Object.fromEntries(importFields.map(field => [field, structuredClone(record[field])])) as Omit<ImportRecord, 'ref' | 'identities' | 'complete' | 'warnings'>;
+	const snapshot = Object.fromEntries(importFields.map(field => [field, structuredClone(record[field])])) as unknown as Omit<ImportRecord, 'ref' | 'identities' | 'complete' | 'warnings' | 'artworkCandidates'>;
 	const title = boundedText(record.title, 256);
 	if (!title || !['movie', 'series', 'anime', 'animation'].includes(record.kind)) throw new Error('INVALID_IMPORT_RECORD');
 	if (record.releaseYear !== null && (!Number.isInteger(record.releaseYear) || record.releaseYear < 1800 || record.releaseYear > 3000)) throw new Error('INVALID_IMPORT_RECORD');
@@ -293,6 +297,7 @@ export async function applyImportRecord(
 		const protectedFields = new Set<string>();
 		const values = { ...state.values };
 		const fieldSources = { ...state.sources };
+		const localArtwork: Record<string, unknown> = work.importData.localArtwork && typeof work.importData.localArtwork === 'object' && !Array.isArray(work.importData.localArtwork) ? { ...work.importData.localArtwork as Record<string, unknown> } : {};
 		for (const field of importFields) {
 			if (!importFieldSelected(field, importOptions, created)) {
 				protectedFields.add(field);
@@ -300,8 +305,13 @@ export async function applyImportRecord(
 			}
 			let incoming: unknown = normalized[field];
 			if (field === 'players' && !normalized.complete) incoming = mergePartialPlayers(current.players, normalized.players);
-			const protectedField = !created && (locks.includes(field) || (mode === 'availability' && field !== 'players') || changedSinceImport(current[field], state.values[field]));
-			if (protectedField || (!created && !canUpdateField(current[field], state.values[field], incoming, false))) {
+			const expectedArtwork = options.artworkExpected;
+			const hasArtworkExpected = expectedArtwork !== undefined && Object.hasOwn(expectedArtwork, field);
+			const artworkCAS = hasArtworkExpected && sameValue(current[field], expectedArtwork[field as ImportArtworkField]);
+			const preserveLocalized = Object.hasOwn(localArtwork, field) && sameValue(current[field], localArtwork[field]) && !artworkCAS;
+			const protectedField = !created && (locks.includes(field) || (mode === 'availability' && field !== 'players') || (hasArtworkExpected && !artworkCAS) || preserveLocalized || (!artworkCAS && changedSinceImport(current[field], state.values[field])));
+			const explicitEmptyGallery = field === 'galleryUrls' && normalized.galleryUrls.length === 0 && options.artworkSelectedFields?.includes('galleryUrls');
+			if (protectedField || (!created && !artworkCAS && !explicitEmptyGallery && !canUpdateField(current[field], state.values[field], incoming, false))) {
 				if (protectedField || nonEmpty(current[field])) protectedFields.add(field);
 				continue;
 			}
@@ -311,6 +321,9 @@ export async function applyImportRecord(
 			}
 			values[field] = structuredClone(incoming);
 			fieldSources[field] = sources[field] ?? normalized.ref.source;
+			if (options.artworkLocalizedFields?.includes(field as ImportArtworkField)) localArtwork[field] = structuredClone(incoming);
+			else if (artworkCAS) delete localArtwork[field];
+			if (options.artworkSelectedFields?.includes(field as ImportArtworkField) && !locks.includes(field)) locks.push(field);
 		}
 		const tmdb = tmdbIdentity(identities);
 		if (tmdb && work.tmdbId === null) Object.assign(work, tmdb);
@@ -318,6 +331,7 @@ export async function applyImportRecord(
 			...work.importData, locks, values, sources: fieldSources,
 			countries: values.countries ?? state.countries, ratings: values.ratings ?? state.ratings,
 			ageRating: values.ageRating ?? state.ageRating,
+			...(Object.keys(localArtwork).length || Object.hasOwn(work.importData, 'localArtwork') ? { localArtwork } : {}),
 		};
 		work.updatedAt = now;
 		await works.save(work);

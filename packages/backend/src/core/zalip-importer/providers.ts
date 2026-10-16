@@ -8,6 +8,7 @@ import { lookup } from 'node:dns/promises';
 import { Agent as HttpsAgent } from 'node:https';
 import { isIP } from 'node:net';
 import ipaddr from 'ipaddr.js';
+import { artworkCandidate } from './artwork-candidates.js';
 import type { ExternalIdentity, ImportCredit, ImportEpisode, ImportField, ImportMediaType, ImportPlayer, ImportProvider, ImportProviderStatus, ImportRecord, ImportRef, ImportSearchPage, ImportSearchResult, ImportSource } from './types.js';
 
 export type ImportProviderErrorCode = 'not-configured' | 'not-found' | 'quota-exceeded' | 'rate-limited' | 'upstream-failure' | 'invalid-ref' | 'unsupported' | 'malformed-response';
@@ -319,6 +320,15 @@ export function normalizeTmdbRecord(value: unknown, mediaType: ImportMediaType, 
 	const logos = array(images.logos).map(object).filter(logo => imagePath(logo.file_path) != null).sort((a, b) => languageScore(a.iso_639_1) - languageScore(b.iso_639_1));
 	record.logoUrl = tmdbImage(logos[0]?.file_path);
 	record.galleryUrls = [...new Set(array(images.backdrops).map(item => tmdbImage(object(item).file_path)).filter((url): url is string => url != null))].slice(0, 18);
+	record.artworkCandidates = [];
+	for (const [field, values] of [['posterUrl', images.posters], ['backdropUrl', images.backdrops], ['logoUrl', logos], ['galleryUrls', images.backdrops]] as const) {
+		for (const raw of array(values, 18)) {
+			const image = object(raw);
+			const url = tmdbImage(image.file_path);
+			if (!url) continue;
+			record.artworkCandidates.push(artworkCandidate({ source: 'tmdb', field, url, previewUrl: url.replace('/t/p/original/', field === 'posterUrl' ? '/t/p/w342/' : '/t/p/w300/'), width: integer(image.width, 1, 100000), height: integer(image.height, 1, 100000), language: text(image.iso_639_1, 16) }));
+		}
+	}
 	const videos = array(object(item.videos).results).map(object).filter(video => video.site === 'YouTube' && youtubeKey(video.key) != null)
 		.sort((a, b) => (b.type === 'Trailer' ? 2 : 0) + (b.iso_639_1 === 'ru' ? 1 : 0) - (a.type === 'Trailer' ? 2 : 0) - (a.iso_639_1 === 'ru' ? 1 : 0));
 	record.trailerYoutubeKey = youtubeKey(videos[0]?.key);
@@ -664,7 +674,7 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 			if (ref.externalId.startsWith('imdb:')) return fetchImdbReference(tmdb, ref, fields);
 			validRef(ref, 'tmdb');
 			const wants = (field: ImportField) => fields === undefined || fields.includes(field);
-			const append = ['external_ids', ...(wants('credits') ? ['credits'] : []), ...(wants('trailerYoutubeKey') ? ['videos'] : []), ...(wants('logoUrl') || wants('galleryUrls') ? ['images'] : [])];
+			const append = ['external_ids', ...(wants('credits') ? ['credits'] : []), ...(wants('trailerYoutubeKey') ? ['videos'] : []), ...(['posterUrl', 'backdropUrl', 'logoUrl', 'galleryUrls'].some(field => wants(field as ImportField)) ? ['images'] : [])];
 			const payload = object(await tmdbRequest(`/3/${ref.mediaType}/${ref.externalId}`, { language: 'ru-RU', append_to_response: append.join(','), include_image_language: 'ru,en,null' }));
 			if (externalId(payload.id) !== ref.externalId) throw new ImportProviderError('malformed-response');
 			const seasonDetails: unknown[] = [];
@@ -743,12 +753,26 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 			const seasons = ref.mediaType === 'tv' && wants('seasons') ? await kpRequest(`/api/v2.2/films/${ref.externalId}/seasons`) : {};
 			if (ref.mediaType === 'tv' && wants('seasons') && !Array.isArray(object(seasons).items)) throw new ImportProviderError('malformed-response');
 			const result = normalizeKinopoiskRecord(details, staff, seasons);
-			if (!result.backdropUrl && (wants('backdropUrl') || wants('galleryUrls'))) {
+			result.artworkCandidates = [];
+			for (const type of [...(wants('posterUrl') ? ['POSTER'] : []), ...(wants('backdropUrl') || wants('galleryUrls') ? ['STILL'] : [])]) {
 				try {
-					const images = object(await kpRequest(`/api/v2.2/films/${ref.externalId}/images`, { type: 'STILL', page: '1' }));
+					const images = object(await kpRequest(`/api/v2.2/films/${ref.externalId}/images`, { type, page: '1' }));
 					if (!Array.isArray(images.items)) throw new ImportProviderError('malformed-response');
-					result.galleryUrls = [...new Set(array(images.items, 18).map(item => safeImportUrl(object(item).imageUrl)).filter((url): url is string => url !== null))];
-					result.backdropUrl = result.galleryUrls[0] ?? null;
+					const urls: string[] = [];
+					for (const raw of array(images.items, 18)) {
+						const image = object(raw);
+						const url = safeImportUrl(image.imageUrl);
+						if (!url) continue;
+						urls.push(url);
+						for (const field of type === 'POSTER' ? ['posterUrl'] as const : ['backdropUrl', 'galleryUrls'] as const) {
+							if (!wants(field)) continue;
+							result.artworkCandidates.push(artworkCandidate({ source: 'kinopoisk', field, url, previewUrl: safeImportUrl(image.previewUrl) ?? url, width: integer(image.width, 1, 100000), height: integer(image.height, 1, 100000), language: null }));
+						}
+					}
+					if (type === 'STILL') {
+						if (wants('galleryUrls')) result.galleryUrls = [...new Set(urls)];
+						if (!result.backdropUrl && wants('backdropUrl')) result.backdropUrl = urls[0] ?? null;
+					}
 				} catch (error) {
 					if (error instanceof ImportProviderError && ['quota-exceeded', 'rate-limited', 'not-configured'].includes(error.code)) throw error;
 					result.warnings.push('kinopoisk-artwork-unavailable');

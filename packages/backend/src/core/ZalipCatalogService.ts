@@ -841,23 +841,25 @@ export class ZalipCatalogService {
 			trailerYoutubeKey: string | null;
 		},
 	): Promise<MiZalipWork | null> {
-		const repository = this.db.getRepository(MiZalipWork);
-		const work = await repository.findOneBy({ id: workId });
-		if (work == null) return null;
-
-		// Imported titles are refreshed through the provenance-aware importer, not the legacy cron.
-		if (work.importData?.values && Object.keys(work.importData.values).length > 0) return work;
-		work.posterPath = input.posterPath;
-		work.backdropPath = input.backdropPath;
-		work.logoPath = input.logoPath;
-		work.genres = input.genres;
-		work.runtimeMinutes = input.runtimeMinutes;
-		work.galleryPaths = input.galleryPaths;
-		work.trailerYoutubeKey = input.trailerYoutubeKey;
-		work.updatedAt = new Date();
-		const saved = await repository.save(work);
-		if (saved.publicationState === 'published') this.publishedGenreCache.delete();
-		return saved;
+		const result = await this.db.transaction(async manager => {
+			const repository = manager.getRepository(MiZalipWork);
+			// The importer uses the same work lock: never save a pre-import snapshot over its commit.
+			const work = await repository.findOne({ where: { id: workId }, lock: { mode: 'pessimistic_write' } });
+			if (work == null) return { work: null, updated: false };
+			// Imported titles are refreshed through the provenance-aware importer, not the legacy cron.
+			if ((work.importData?.values && Object.keys(work.importData.values).length > 0) || (work.importData?.localArtwork && typeof work.importData.localArtwork === 'object' && Object.keys(work.importData.localArtwork).length > 0)) return { work, updated: false };
+			work.posterPath = input.posterPath;
+			work.backdropPath = input.backdropPath;
+			work.logoPath = input.logoPath;
+			work.genres = input.genres;
+			work.runtimeMinutes = input.runtimeMinutes;
+			work.galleryPaths = input.galleryPaths;
+			work.trailerYoutubeKey = input.trailerYoutubeKey;
+			work.updatedAt = new Date();
+			return { work: await repository.save(work), updated: true };
+		});
+		if (result.updated && result.work?.publicationState === 'published') this.publishedGenreCache.delete();
+		return result.work;
 	}
 
 	/**
@@ -881,8 +883,8 @@ export class ZalipCatalogService {
 			const seasons = manager.getRepository(MiZalipSeason);
 			const season = await seasons.findOneBy({ id: seasonId });
 			if (season == null) return { added: 0, updated: 0, total: 0 };
-			const work = await manager.getRepository(MiZalipWork).findOneBy({ id: season.workId });
-			if (work?.importData?.values && Object.keys(work.importData.values).length > 0) {
+			const work = await manager.getRepository(MiZalipWork).findOne({ where: { id: season.workId }, lock: { mode: 'pessimistic_write' } });
+			if ((work?.importData?.values && Object.keys(work.importData.values).length > 0) || (work?.importData?.localArtwork && typeof work.importData.localArtwork === 'object' && Object.keys(work.importData.localArtwork).length > 0)) {
 				return { added: 0, updated: 0, total: await manager.getRepository(MiZalipEpisode).countBy({ seasonId }) };
 			}
 			const previousEpisodeCount = season.episodeCount;

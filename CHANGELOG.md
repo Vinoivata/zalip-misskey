@@ -57,8 +57,10 @@
 - Feat: Add a Zalip importer console with previews, batch jobs, directories and schedules, public filmographies and selectable playback sources.
 - Enhance: Add importer maintenance controls, paginated filmographies, semantic collections and visible administrator-only source credentials, API/player addresses and playback ordering.
 - Fix: Restore provider and voice selection for imported Zalip players without resetting the selected season, episode or open player.
+- Feat: Add per-title image/source previews and configurable local artwork processing to the Zalip importer and route legacy image refreshes through the protected preview workflow.
 
 ### Server
+- Feat: Store configurable local artwork and optional originals in Drive, validate exact-source image choices, and preserve localized/editorial images with atomic import ownership checks.
 - Enhance: Add filtered and IMDb-based draft imports, selective provider requests, persistent import options, safe local WebP artwork, source diagnostics and taxonomy enrichment without overwriting editorial data.
 - Fix: Allow clearing a Zalip library status without removing personal ratings, watch progress, favorites or release subscriptions.
 - Feat: ZALIP作品の公開API、ライブラリ、更新、管理画面で匿名のコミュニティ評価と評価数を一貫して返すように

@@ -39206,7 +39206,55 @@ export interface operations {
                     workId?: string;
                     options?: {
                         /** @enum {string} */
-                        artwork?: 'remote' | 'local-webp';
+                        artwork?: 'remote' | 'local-webp' | 'local';
+                        artworkSettings?: {
+                            /** @enum {string} */
+                            format?: 'original' | 'webp' | 'avif' | 'jpeg' | 'png';
+                            quality?: number;
+                            keepOriginal?: boolean;
+                            galleryLimit?: number;
+                            sizes?: {
+                                posterUrl?: {
+                                    width?: number;
+                                    height?: number;
+                                    /** @enum {string} */
+                                    fit?: 'inside' | 'cover';
+                                };
+                                backdropUrl?: {
+                                    width?: number;
+                                    height?: number;
+                                    /** @enum {string} */
+                                    fit?: 'inside' | 'cover';
+                                };
+                                logoUrl?: {
+                                    width?: number;
+                                    height?: number;
+                                    /** @enum {string} */
+                                    fit?: 'inside' | 'cover';
+                                };
+                                galleryUrls?: {
+                                    width?: number;
+                                    height?: number;
+                                    /** @enum {string} */
+                                    fit?: 'inside' | 'cover';
+                                };
+                            };
+                        };
+                        artworkSelections?: {
+                            ref: {
+                                /** @enum {string} */
+                                source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                                externalId: string;
+                                /** @enum {string} */
+                                mediaType: 'movie' | 'tv';
+                            };
+                            choices: {
+                                posterUrl?: string;
+                                backdropUrl?: string;
+                                logoUrl?: string;
+                                galleryUrls?: string[];
+                            };
+                        }[];
                         sources?: ('tmdb' | 'kinopoisk' | 'alloha' | 'collaps')[];
                         fields?: ('title' | 'originalTitle' | 'description' | 'releaseYear' | 'runtimeMinutes' | 'kind' | 'genres' | 'countries' | 'posterUrl' | 'backdropUrl' | 'logoUrl' | 'galleryUrls' | 'trailerYoutubeKey' | 'ratings' | 'ageRating' | 'credits' | 'companies' | 'collections' | 'seasons' | 'players')[];
                         fieldSources?: {
@@ -39515,7 +39563,55 @@ export interface operations {
                     profileId?: string;
                     options?: {
                         /** @enum {string} */
-                        artwork?: 'remote' | 'local-webp';
+                        artwork?: 'remote' | 'local-webp' | 'local';
+                        artworkSettings?: {
+                            /** @enum {string} */
+                            format?: 'original' | 'webp' | 'avif' | 'jpeg' | 'png';
+                            quality?: number;
+                            keepOriginal?: boolean;
+                            galleryLimit?: number;
+                            sizes?: {
+                                posterUrl?: {
+                                    width?: number;
+                                    height?: number;
+                                    /** @enum {string} */
+                                    fit?: 'inside' | 'cover';
+                                };
+                                backdropUrl?: {
+                                    width?: number;
+                                    height?: number;
+                                    /** @enum {string} */
+                                    fit?: 'inside' | 'cover';
+                                };
+                                logoUrl?: {
+                                    width?: number;
+                                    height?: number;
+                                    /** @enum {string} */
+                                    fit?: 'inside' | 'cover';
+                                };
+                                galleryUrls?: {
+                                    width?: number;
+                                    height?: number;
+                                    /** @enum {string} */
+                                    fit?: 'inside' | 'cover';
+                                };
+                            };
+                        };
+                        artworkSelections?: {
+                            ref: {
+                                /** @enum {string} */
+                                source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                                externalId: string;
+                                /** @enum {string} */
+                                mediaType: 'movie' | 'tv';
+                            };
+                            choices: {
+                                posterUrl?: string;
+                                backdropUrl?: string;
+                                logoUrl?: string;
+                                galleryUrls?: string[];
+                            };
+                        }[];
                         sources?: ('tmdb' | 'kinopoisk' | 'alloha' | 'collaps')[];
                         fields?: ('title' | 'originalTitle' | 'description' | 'releaseYear' | 'runtimeMinutes' | 'kind' | 'genres' | 'countries' | 'posterUrl' | 'backdropUrl' | 'logoUrl' | 'galleryUrls' | 'trailerYoutubeKey' | 'ratings' | 'ageRating' | 'credits' | 'companies' | 'collections' | 'seasons' | 'players')[];
                         fieldSources?: {
@@ -40022,7 +40118,55 @@ export interface operations {
                     categoryIds?: string[];
                     options?: {
                         /** @enum {string} */
-                        artwork?: 'remote' | 'local-webp';
+                        artwork?: 'remote' | 'local-webp' | 'local';
+                        artworkSettings?: {
+                            /** @enum {string} */
+                            format?: 'original' | 'webp' | 'avif' | 'jpeg' | 'png';
+                            quality?: number;
+                            keepOriginal?: boolean;
+                            galleryLimit?: number;
+                            sizes?: {
+                                posterUrl?: {
+                                    width?: number;
+                                    height?: number;
+                                    /** @enum {string} */
+                                    fit?: 'inside' | 'cover';
+                                };
+                                backdropUrl?: {
+                                    width?: number;
+                                    height?: number;
+                                    /** @enum {string} */
+                                    fit?: 'inside' | 'cover';
+                                };
+                                logoUrl?: {
+                                    width?: number;
+                                    height?: number;
+                                    /** @enum {string} */
+                                    fit?: 'inside' | 'cover';
+                                };
+                                galleryUrls?: {
+                                    width?: number;
+                                    height?: number;
+                                    /** @enum {string} */
+                                    fit?: 'inside' | 'cover';
+                                };
+                            };
+                        };
+                        artworkSelections?: {
+                            ref: {
+                                /** @enum {string} */
+                                source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                                externalId: string;
+                                /** @enum {string} */
+                                mediaType: 'movie' | 'tv';
+                            };
+                            choices: {
+                                posterUrl?: string;
+                                backdropUrl?: string;
+                                logoUrl?: string;
+                                galleryUrls?: string[];
+                            };
+                        }[];
                         sources?: ('tmdb' | 'kinopoisk' | 'alloha' | 'collaps')[];
                         fields?: ('title' | 'originalTitle' | 'description' | 'releaseYear' | 'runtimeMinutes' | 'kind' | 'genres' | 'countries' | 'posterUrl' | 'backdropUrl' | 'logoUrl' | 'galleryUrls' | 'trailerYoutubeKey' | 'ratings' | 'ageRating' | 'credits' | 'companies' | 'collections' | 'seasons' | 'players')[];
                         fieldSources?: {

@@ -32,10 +32,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<p v-if="message" :class="$style.message" role="status">{{ message }}</p>
 				<p v-if="actionError" :class="$style.error" role="alert">{{ actionError }}</p>
 
-				<details v-if="tab === 'import' || tab === 'schedules'" :class="[$style.panel, $style.details]">
+				<details v-if="tab === 'import' || tab === 'schedules'" :open="props.imagesOnly === '1' && tab === 'import'" :class="[$style.panel, $style.details]">
 					<summary>{{ i18n.ts.zalip._importer.importOptions }}</summary>
 					<p :class="$style.hint">{{ i18n.ts.zalip._importer.optionsHint }}</p>
-					<div :class="$style.form"><label><span>{{ i18n.ts.zalip._importer.artworkStorage }}</span><select v-model="currentSelection.artwork" :disabled="busy || profileOptionsLocked"><option value="remote">{{ i18n.ts.zalip._importer.artworkRemote }}</option><option value="local-webp">{{ i18n.ts.zalip._importer.artworkLocal }}</option></select></label><p :class="$style.hint">{{ i18n.ts.zalip._importer.artworkStorageHint }}</p></div>
+					<ImporterArtworkSettings v-model:mode="currentSelection.artwork" v-model:settings="currentSelection.artworkSettings" :disabled="busy || profileOptionsLocked"/>
 					<label :class="$style.check"><input v-model="currentSelection.filters.requirePlayer" type="checkbox" :disabled="busy || profileOptionsLocked">{{ i18n.ts.zalip._importer.requirePlayer }}</label><p :class="$style.hint">{{ i18n.ts.zalip._importer.requirePlayerHint }}</p>
 					<fieldset :class="$style.locks"><legend>{{ i18n.ts.zalip._importer.enrichmentSources }}</legend><label v-for="source in importerSources" :key="source"><input v-model="currentSelection.sources" type="checkbox" :value="source" :disabled="busy || profileOptionsLocked || !sourceStatus(source)?.configured">{{ importerSourceLabel(source) }}</label></fieldset>
 					<h3 :class="$style.optionsHeading">{{ i18n.ts.zalip._importer.selectedFields }}</h3>
@@ -93,20 +93,21 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</details>
 
 					<section v-if="previewLoading || preview || previewError" ref="previewPanel" :class="$style.panel" aria-live="polite">
-						<div :class="$style.sectionHeading"><h2>{{ i18n.ts.zalip._importer.previewHeading }}</h2><button type="button" class="_button" :class="$style.button" :disabled="previewLoading" :aria-label="i18n.ts.zalip._importer.closePreview" @click="preview = null; previewError = ''"><i class="ti ti-x" aria-hidden="true"></i></button></div>
+						<div :class="$style.sectionHeading"><h2>{{ i18n.ts.zalip._importer.previewHeading }}</h2><button type="button" class="_button" :class="$style.button" :disabled="previewLoading" :aria-label="i18n.ts.zalip._importer.closePreview" @click="previewBase = null; artworkChoices = {}; previewError = ''"><i class="ti ti-x" aria-hidden="true"></i></button></div>
 						<p v-if="previewLoading"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.previewLoading }}</p>
 						<p v-if="previewError" :class="$style.error" role="alert">{{ previewError }}</p>
 						<template v-if="preview && !previewLoading">
 							<p v-if="previewStale" :class="$style.hint" role="status">{{ i18n.ts.zalip._importer.optionsChangedPreview }} <button type="button" class="_textButton" :disabled="busy" @click="showPreview(preview.record.ref)">{{ i18n.ts.zalip._importer.refreshPreview }}</button></p>
 							<p v-if="preview.matchesFilters === false" :class="$style.hint" role="status">{{ i18n.ts.zalip._importer.previewFiltered }}</p>
 							<div :class="$style.previewHero"><div :class="$style.previewPoster"><img v-if="importerImageUrl(preview.record.posterUrl)" :src="importerImageUrl(preview.record.posterUrl)!" alt=""><i v-else class="ti ti-movie" aria-hidden="true"></i></div><div><span :class="$style.badge">{{ preview.workId ? i18n.ts.zalip._importer.existingWork : i18n.ts.zalip._importer.newDraft }}</span><h3>{{ preview.record.title }}</h3><p>{{ [preview.record.releaseYear, preview.record.originalTitle].filter(Boolean).join(' · ') }}</p><p>{{ preview.record.genres.join(' · ') }}</p><p>{{ preview.record.description }}</p><div :class="$style.chips"><span v-for="identity in preview.record.identities" :key="`${identity.provider}:${identity.entityType}:${identity.externalId}`">{{ identity.provider }} · {{ identity.entityType }} · {{ identity.externalId }}</span></div></div></div>
+							<ImporterArtworkPicker v-if="previewBase" :key="importerReferenceKey(previewBase.record.ref)" v-model="artworkChoices" :preview="previewBase" :lockedFields="lockedFields" :disabled="busy || previewStale" :galleryLimit="artworkGalleryLimit"/>
 							<ul v-if="previewWarnings.length" :class="$style.warnings" :aria-label="i18n.ts.zalip._importer.warningsTitle"><li v-for="warning in previewWarnings" :key="warning">{{ warning }}</li></ul>
 							<div :class="$style.chips"><span>{{ i18n.tsx.zalip._importer.peopleCount({ count: String(preview.record.credits.length) }) }}</span><span>{{ i18n.tsx.zalip._importer.studiosCount({ count: String(preview.record.companies.length) }) }}</span><span>{{ i18n.tsx.zalip._importer.collectionsCount({ count: String(preview.record.collections.length) }) }}</span><span>{{ i18n.tsx.zalip._importer.seasonsCount({ count: String(preview.record.seasons.length) }) }}</span><span>{{ i18n.tsx.zalip._importer.playersCount({ count: String(preview.record.players.length) }) }}</span></div>
 							<details :class="$style.details"><summary>{{ i18n.ts.zalip._importer.peopleAndCollections }}</summary><p v-if="preview.record.credits.length">{{ preview.record.credits.map(credit => `${credit.name} (${credit.role})`).join(' · ') }}</p><p v-if="preview.record.companies.length">{{ preview.record.companies.map(company => company.name).join(' · ') }}</p><p v-if="preview.record.collections.length">{{ preview.record.collections.map(collection => collection.name).join(' · ') }}</p></details>
 							<h3>{{ i18n.ts.zalip._importer.changes }}</h3><p :class="$style.hint">{{ i18n.ts.zalip._importer.locksHint }}</p>
-							<div :class="$style.diffList"><article v-for="change in preview.changes" :key="change.field" :class="$style.diff"><label><input type="checkbox" :checked="change.protected || lockedFields.includes(change.field)" :disabled="busy || change.protected || change.selected === false || previewStale" @change="toggleLock(change.field)"><strong>{{ importerFieldLabel(change.field) }}</strong><span v-if="change.protected" :class="$style.badge"><i class="ti ti-lock" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.protected }}</span><small v-if="change.selected === false">{{ i18n.ts.zalip._importer.skippedField }}</small></label><div :class="$style.diffValues"><div><small>{{ i18n.ts.zalip._importer.before }}</small><p>{{ formatImporterValue(change.before) }}</p></div><div><small>{{ i18n.ts.zalip._importer.after }}</small><p>{{ formatImporterValue(change.after) }}</p></div></div></article></div>
+							<div :class="$style.diffList"><article v-for="change in preview.changes" :key="change.field" :class="$style.diff"><label><input type="checkbox" :checked="previewLockChecked(change.field)" :disabled="previewLockDisabled(change.field)" @change="toggleLock(change.field)"><strong>{{ importerFieldLabel(change.field) }}</strong><span v-if="change.protected || lockedFields.includes(change.field)" :class="$style.badge"><i class="ti ti-lock" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.protected }}</span><small v-if="change.selected === false">{{ i18n.ts.zalip._importer.skippedField }}</small></label><div :class="$style.diffValues"><div><small>{{ i18n.ts.zalip._importer.before }}</small><p>{{ formatImporterValue(change.before) }}</p></div><div><small>{{ i18n.ts.zalip._importer.after }}</small><p>{{ formatImporterValue(change.after) }}</p></div></div></article></div>
 							<p v-if="preview.changes.length === 0" :class="$style.hint">{{ i18n.ts.zalip._importer.noChanges }}</p>
-							<div :class="$style.actions"><button type="button" class="_button" :class="$style.primary" :disabled="busy || previewStale" @click="queueReferences([preview.record.ref])"><i class="ti ti-download" aria-hidden="true"></i>{{ preview.workId ? i18n.ts.zalip._importer.enqueueUpdate : i18n.ts.zalip._importer.enqueueDraft }}</button><span :class="$style.hint">{{ i18n.ts.zalip._importer.noPublishing }}</span></div>
+							<div :class="$style.actions"><button type="button" class="_button" :class="$style.primary" :disabled="busy || previewStale" @click="queueReferences([preview.record.ref], true)"><i class="ti ti-download" aria-hidden="true"></i>{{ preview.workId ? i18n.ts.zalip._importer.enqueueUpdate : i18n.ts.zalip._importer.enqueueDraft }}</button><span :class="$style.hint">{{ i18n.ts.zalip._importer.noPublishing }}</span></div>
 						</template>
 					</section>
 				</template>
@@ -122,7 +123,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<section v-if="selectedRun" :class="$style.panel">
 						<div :class="$style.sectionHeading"><div><h2>{{ importerStateLabel(selectedRun.state) }}</h2><p>{{ selectedRun.id }}</p></div><div :class="$style.actions"><button v-if="['queued', 'running'].includes(selectedRun.state)" type="button" class="_button" :class="$style.button" :disabled="busy" @click="runAction('pause')"><i class="ti ti-player-pause" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.pause }}</button><button v-if="selectedRun.state === 'paused'" type="button" class="_button" :class="$style.button" :disabled="busy" @click="runAction('resume')"><i class="ti ti-player-play" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.resume }}</button><button v-if="selectedRun.failed > 0 || selectedRun.state === 'failed'" type="button" class="_button" :class="$style.button" :disabled="busy || selectedRun.state === 'running'" @click="runAction('retry')"><i class="ti ti-refresh" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.retryFailed }}</button><button v-if="['queued', 'running', 'paused'].includes(selectedRun.state)" type="button" class="_button" :class="$style.danger" :disabled="busy" @click="runAction('cancel')">{{ i18n.ts.zalip._importer.cancel }}</button></div></div>
 						<p v-if="selectedRun.error" :class="$style.error" role="alert">{{ selectedRun.error }}</p>
-						<div :class="$style.rows"><article v-for="item in runItems" :key="item.id" :class="$style.itemRow"><div :class="$style.grow"><strong>{{ item.position + 1 }}. {{ importerSourceLabel(item.ref.source) }} · {{ item.ref.externalId }}</strong><small>{{ item.ref.mediaType }} · {{ importerStateLabel(item.state) }}</small><p v-if="item.error" :class="$style.error">{{ item.error }}</p><div v-if="runWarnings.get(item.id)?.length" :class="$style.itemWarnings"><p><i class="ti ti-alert-triangle" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.warningsTitle }}</p><ul :class="$style.warnings" :aria-label="i18n.ts.zalip._importer.warningsTitle"><li v-for="warning in runWarnings.get(item.id)" :key="warning">{{ warning }}</li></ul></div></div><span v-if="item.workId" :class="$style.hint">{{ i18n.tsx.zalip._importer.itemWorkId({ id: item.workId }) }}</span></article></div>
+						<div :class="$style.rows"><article v-for="item in runItems" :key="item.id" :class="$style.itemRow"><div :class="$style.grow"><strong>{{ item.position + 1 }}. {{ importerSourceLabel(item.ref.source) }} · {{ item.ref.externalId }}</strong><small>{{ item.ref.mediaType }} · {{ importerStateLabel(item.state) }}</small><p v-if="item.error" :class="$style.error">{{ importerArtworkSelectionStale(item.error) ? i18n.ts.zalip._importer.artworkSelectionStale : item.error }}</p><button v-if="importerArtworkSelectionStale(item.error)" type="button" class="_textButton" :disabled="busy || previewLoading" @click="previewRunArtwork(item)">{{ i18n.ts.zalip._importer.refreshPreview }}</button><div v-if="runWarnings.get(item.id)?.length" :class="$style.itemWarnings"><p><i class="ti ti-alert-triangle" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.warningsTitle }}</p><ul :class="$style.warnings" :aria-label="i18n.ts.zalip._importer.warningsTitle"><li v-for="warning in runWarnings.get(item.id)" :key="warning">{{ warning }}</li></ul></div></div><span v-if="item.workId" :class="$style.hint">{{ i18n.tsx.zalip._importer.itemWorkId({ id: item.workId }) }}</span></article></div>
 					</section>
 				</template>
 
@@ -256,7 +257,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script lang="ts" setup>
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, useTemplateRef, watch } from 'vue';
-import type { ImportField, ImportMaintenanceKind, ImportMaintenanceProfile, ImportMaintenanceRun, ImportMaintenanceSource, ImportMediaType, ImportPlaybackProvider, ImportPreview, ImportProfile, ImportRef, ImportRun, ImportRunItem, ImportSearchItem, ImportServiceForm, ImportServiceSave, ImportServiceSettingsResponse, ImportSource, ImportSourceCheck, ImportSourceStatus, ImportWorkState, TaxonomyEntry, TaxonomyType, TaxonomyWork } from '@/utility/zalip-importer.js';
+import type { ImportArtworkChoices, ImportField, ImportMaintenanceKind, ImportMaintenanceProfile, ImportMaintenanceRun, ImportMaintenanceSource, ImportMediaType, ImportPlaybackProvider, ImportPreview, ImportProfile, ImportRef, ImportRun, ImportRunItem, ImportSearchItem, ImportServiceForm, ImportServiceSave, ImportServiceSettingsResponse, ImportSource, ImportSourceCheck, ImportSourceStatus, ImportWorkState, TaxonomyEntry, TaxonomyType, TaxonomyWork } from '@/utility/zalip-importer.js';
+import ImporterArtworkSettings from '@/pages/zalip/importer-artwork-settings.vue';
+import ImporterArtworkPicker from '@/pages/zalip/importer-artwork-picker.vue';
+import { importerArtworkCurrentChoices, importerArtworkFieldLocked, importerArtworkFields, importerArtworkLimitChoices, importerArtworkOptions, importerArtworkPreview, importerArtworkSameRef, importerArtworkSelectionStale } from '@/utility/zalip-importer-artwork.js';
 import { i18n } from '@/i18n.js';
 import { formatImporterValue, importerCredentialOriginLabel, importerFieldGroups, importerFieldLabel, importerFiltersValid, importerGroupLabel, importerImageUrl, importerImdbId, importerMaintenanceLabel, importerMaintenanceRequest, importerOptions, importerPlaybackSettings, importerProgress, importerReference, importerReferenceKey, importerRefreshSequence, importerRequestCurrent, importerRequestFinish, importerRequestInvalidate, importerRequestStart, importerRequestState, importerSelection, importerServiceForm, importerServiceRequest, importerServiceSettingsUpdate, importerSourceLabel, importerSources, importerStateLabel, importerWarningLabels, importerWorkIds, splitImporterReferenceLines, taxonomyAppendWorks, taxonomyBaseChanges, taxonomyCollectionChanges, taxonomyFactLabel, taxonomyPersonChanges, taxonomyTypeLabel, taxonomyTypes } from '@/utility/zalip-importer.js';
 import { iAmAdmin } from '@/i.js';
@@ -265,6 +269,7 @@ import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import * as os from '@/os.js';
 
 type Tab = 'import' | 'runs' | 'taxonomy' | 'schedules' | 'maintenance' | 'sources';
+const props = withDefaults(defineProps<{ source?: string; mediaType?: string; externalId?: string; imagesOnly?: string; workId?: string }>(), { source: '', mediaType: '', externalId: '', imagesOnly: '', workId: '' });
 const tabs: { id: Tab; title: string; icon: string }[] = [{ id: 'import', title: i18n.ts.zalip._importer.import, icon: 'ti ti-download' }, { id: 'runs', title: i18n.ts.zalip._importer.runs, icon: 'ti ti-list-check' }, { id: 'taxonomy', title: i18n.ts.zalip._importer.directories, icon: 'ti ti-tags' }, { id: 'schedules', title: i18n.ts.zalip._importer.schedules, icon: 'ti ti-clock' }, { id: 'maintenance', title: i18n.ts.zalip._importer.maintenance, icon: 'ti ti-tool' }, { id: 'sources', title: i18n.ts.zalip._importer.serviceSettings, icon: 'ti ti-key' }];
 const tab = ref<Tab>('import');
 const sources = ref<ImportSourceStatus[]>([]);
@@ -293,14 +298,17 @@ const selectedRefs = ref<ImportRef[]>([]);
 const batch = reactive({ source: 'tmdb' as ImportSource, mediaType: 'movie' as ImportMediaType, references: '' });
 const categoryIds = ref<string[]>([]);
 const lockedFields = ref<string[]>([]);
-const importSelection = reactive(importerSelection());
+const importSelection = reactive(importerSelection({ artwork: 'local' }));
+const artworkGalleryLimit = computed(() => importSelection.artwork === 'local' ? importSelection.artworkSettings.galleryLimit : 18);
 const profileSelection = reactive(importerSelection());
 const workStateId = ref('');
 const workState = ref<ImportWorkState | null>(null);
 const persistedLocks = ref<string[]>([]);
 const workStateLoading = ref(false);
 const workStateError = ref('');
-const preview = ref<ImportPreview | null>(null);
+const previewBase = ref<ImportPreview | null>(null);
+const artworkChoices = ref<ImportArtworkChoices>({});
+const preview = computed(() => previewBase.value ? importerArtworkPreview(previewBase.value, artworkChoices.value, lockedFields.value, artworkGalleryLimit.value) : null);
 const previewLoading = ref(false);
 const previewError = ref('');
 const previewOptionsKey = ref('');
@@ -395,6 +403,7 @@ const profileCapabilityWarning = computed(() => {
 });
 
 function errorMessage(error: unknown): string {
+	if (importerArtworkSelectionStale(error)) return i18n.ts.zalip._importer.artworkSelectionStale;
 	const code = typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string' ? error.code : '';
 	if (code.includes('NOT_CONFIGURED')) return i18n.ts.zalip._importer.errorConfiguration;
 	if (code.includes('NOT_FOUND')) return i18n.ts.zalip._importer.errorNotFound;
@@ -553,6 +562,19 @@ function toggleSelection(value: ImportRef): void {
 
 function toggleLock(field: string): void { lockedFields.value = lockedFields.value.includes(field) ? lockedFields.value.filter(item => item !== field) : [...lockedFields.value, field]; }
 
+function previewLockChecked(field: string): boolean {
+	const imageField = importerArtworkFields.find(item => item === field);
+	return lockedFields.value.includes(field) || (imageField && previewBase.value ? importerArtworkFieldLocked(previewBase.value, imageField) : preview.value?.changes.find(change => change.field === field)?.protected === true);
+}
+
+function previewLockDisabled(field: string): boolean {
+	if (busy.value || previewStale.value || !previewBase.value) return true;
+	const imageField = importerArtworkFields.find(item => item === field);
+	if (imageField) return importerArtworkFieldLocked(previewBase.value, imageField);
+	const change = previewBase.value.changes.find(item => item.field === field);
+	return change?.protected === true || change?.selected === false;
+}
+
 function batchReferences(): ImportRef[] | null {
 	const lines = splitImporterReferenceLines(batch.references);
 	if (lines.length === 0 || lines.length > 100) { actionError.value = i18n.ts.zalip._importer.errorBatchSize; return null; }
@@ -566,26 +588,42 @@ async function previewBatch(): Promise<void> { const refs = batchReferences(); i
 
 async function queueBatch(): Promise<void> { const refs = batchReferences(); if (refs) await queueReferences(refs); }
 
+async function previewRunArtwork(item: ImportRunItem): Promise<void> {
+	if (busy.value || previewLoading.value) return;
+	Object.assign(importSelection, importerSelection(selectedRun.value?.options ?? { artwork: 'local' }));
+	Object.assign(batch, { source: item.ref.source, mediaType: item.ref.mediaType, references: item.ref.externalId });
+	Object.assign(searchForm, { source: item.ref.source, mediaType: item.ref.mediaType });
+	artworkChoices.value = {};
+	message.value = i18n.ts.zalip._importer.artworkSelectionStale;
+	tab.value = 'import';
+	await showPreview({ ...item.ref });
+}
+
 async function showPreview(value: ImportRef): Promise<void> {
 	if (busy.value || !importerFiltersValid(importSelection)) { if (!busy.value) actionError.value = i18n.ts.zalip._importer.invalidFilters; return; }
 	const options = importerOptions(importSelection);
 	const revision = ++previewRevision;
 	previewLoading.value = true;
 	previewError.value = '';
-	preview.value = null;
+	if (!previewBase.value || !importerArtworkSameRef(previewBase.value.record.ref, value)) artworkChoices.value = {};
+	previewBase.value = null;
 	lockedFields.value = [];
 	await nextTick();
 	previewPanel.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 	try {
-		const result = await misskeyApiZalip<ImportPreview>('zalip/admin/importer/preview', { ref: { ...value }, options });
-		if (revision === previewRevision) { preview.value = result; previewOptionsKey.value = JSON.stringify(options); if (result.workId) workStateId.value = result.workId; }
+		const initialRef = initialArtworkReference();
+		const workId = initialRef && importerArtworkSameRef(initialRef, value) && /^[a-zA-Z0-9]{1,32}$/u.test(props.workId) ? props.workId : undefined;
+		const result = await misskeyApiZalip<ImportPreview>('zalip/admin/importer/preview', { ref: { ...value }, options, ...(workId ? { workId } : {}) });
+		if (revision === previewRevision) { artworkChoices.value = importerArtworkLimitChoices(importerArtworkCurrentChoices(result, artworkChoices.value), artworkGalleryLimit.value); previewBase.value = result; previewOptionsKey.value = JSON.stringify(options); if (result.workId) workStateId.value = result.workId; }
 	} catch (error) { if (revision === previewRevision) previewError.value = errorMessage(error); } finally { if (revision === previewRevision) previewLoading.value = false; }
 }
 
-async function queueReferences(refs: ImportRef[]): Promise<void> {
+async function queueReferences(refs: ImportRef[], fromPreview = false): Promise<void> {
 	if (busy.value || refs.length === 0 || refs.length > 100) return;
+	if (fromPreview && (previewStale.value || !preview.value || refs.length !== 1 || !importerArtworkSameRef(refs[0], preview.value.record.ref))) return;
 	if (!importerFiltersValid(importSelection)) { actionError.value = i18n.ts.zalip._importer.invalidFilters; return; }
-	const params = { refs: refs.map(value => ({ ...value })), mode: 'import', lockedFields: [...lockedFields.value], categoryIds: [...categoryIds.value], options: importerOptions(importSelection) };
+	const options = importerOptions(importSelection);
+	const params = { refs: refs.map(value => ({ ...value })), mode: 'import', lockedFields: [...lockedFields.value], categoryIds: [...categoryIds.value], options: fromPreview ? importerArtworkOptions(options, refs[0], importerArtworkLimitChoices(artworkChoices.value, artworkGalleryLimit.value)) : options };
 	busy.value = true;
 	actionError.value = '';
 	try {
@@ -929,10 +967,24 @@ function startPolling(): void { if (iAmAdmin && pollTimer === null) pollTimer = 
 
 function stopPolling(): void { if (pollTimer !== null) window.clearInterval(pollTimer); pollTimer = null; }
 
+function initialArtworkReference(): ImportRef | null {
+	if (!importerSources.includes(props.source as ImportSource) || !['movie', 'tv'].includes(props.mediaType)) return null;
+	return importerReference(props.source as ImportSource, props.mediaType as ImportMediaType, props.externalId);
+}
+
+function loadInitialReference(): void {
+	const initialRef = initialArtworkReference();
+	if (!initialRef) return;
+	Object.assign(batch, { source: initialRef.source, mediaType: initialRef.mediaType, references: initialRef.externalId });
+	Object.assign(searchForm, { source: initialRef.source, mediaType: initialRef.mediaType });
+	if (props.imagesOnly === '1') { importSelection.fields = [...importerArtworkFields]; message.value = i18n.ts.zalip._importer.artworkOnlyHint; }
+	void showPreview(initialRef);
+}
+
 watch(tab, value => { actionError.value = ''; if (value === 'runs') void loadRuns(); if (value === 'taxonomy') void loadTaxonomy(); if (value === 'schedules') void loadProfiles(); if (value === 'maintenance') void Promise.all([playbackProviders.value.length ? Promise.resolve() : loadPlaybackSettings(), loadMaintenanceRuns(), loadMaintenanceProfiles()]); if (value === 'sources' && !serviceSettings.value) void loadServiceSettings(); });
 watch(() => maintenanceForm.kind, kind => { if (!maintenanceSources(kind).includes(maintenanceForm.source)) maintenanceForm.source = maintenanceSources(kind)[0]; });
 watch(() => maintenanceProfileForm.kind, kind => { if (!maintenanceSources(kind).includes(maintenanceProfileForm.source)) maintenanceProfileForm.source = maintenanceSources(kind)[0]; });
-onMounted(() => { if (iAmAdmin) { void Promise.all([loadSources(), loadCategories(), loadRuns(), loadProfiles()]); startPolling(); } });
+onMounted(() => { if (iAmAdmin) { void Promise.all([loadSources(), loadCategories(), loadRuns(), loadProfiles()]).then(loadInitialReference); startPolling(); } });
 onActivated(startPolling);
 onDeactivated(stopPolling);
 onBeforeUnmount(stopPolling);

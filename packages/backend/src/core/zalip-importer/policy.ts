@@ -3,17 +3,93 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { importFields, importSources, type ImportField, type ImportFilters, type ImportOptions, type ImportRecord, type ImportSource, type ImportWorkState } from './types.js';
+import { importArtworkFields, importFields, importSources, type ImportArtworkSelection, type ImportArtworkSettings, type ImportArtworkSettingsInput, type ImportField, type ImportFilters, type ImportOptions, type ImportRecord, type ImportSource, type ImportWorkState } from './types.js';
+
+/** Zero dimensions deliberately mean unbounded on that axis; the decoder still enforces its pixel limit. */
+export function normalizeImportArtworkSettings(input?: ImportArtworkSettingsInput, legacy = false): ImportArtworkSettings {
+	const settings: ImportArtworkSettings = {
+		format: 'webp', quality: legacy ? 80 : 85, keepOriginal: true, galleryLimit: legacy ? 12 : 18,
+		sizes: {
+			posterUrl: { width: 780, height: 1170, fit: 'inside' }, backdropUrl: { width: 1920, height: 1080, fit: 'inside' },
+			logoUrl: { width: 1000, height: 600, fit: 'inside' }, galleryUrls: { width: 1280, height: 720, fit: 'inside' },
+		},
+	};
+	if (input === undefined) return settings;
+	if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => !['format', 'quality', 'keepOriginal', 'galleryLimit', 'sizes'].includes(key))) throw new Error('INVALID_IMPORT_OPTIONS');
+	if (input.format !== undefined) {
+		if (!['original', 'webp', 'avif', 'jpeg', 'png'].includes(input.format)) throw new Error('INVALID_IMPORT_OPTIONS');
+		settings.format = input.format;
+	}
+	if (input.quality !== undefined) {
+		if (!Number.isInteger(input.quality) || input.quality < 1 || input.quality > 100) throw new Error('INVALID_IMPORT_OPTIONS');
+		settings.quality = input.quality;
+	}
+	if (input.keepOriginal !== undefined) {
+		if (typeof input.keepOriginal !== 'boolean') throw new Error('INVALID_IMPORT_OPTIONS');
+		settings.keepOriginal = input.keepOriginal;
+	}
+	if (input.galleryLimit !== undefined) {
+		if (!Number.isInteger(input.galleryLimit) || input.galleryLimit < 0 || input.galleryLimit > 18) throw new Error('INVALID_IMPORT_OPTIONS');
+		settings.galleryLimit = input.galleryLimit;
+	}
+	if (input.sizes !== undefined) {
+		if (!input.sizes || typeof input.sizes !== 'object' || Array.isArray(input.sizes) || Object.keys(input.sizes).some(key => !importArtworkFields.includes(key as typeof importArtworkFields[number]))) throw new Error('INVALID_IMPORT_OPTIONS');
+		for (const field of importArtworkFields) {
+			const size = input.sizes[field];
+			if (size === undefined) continue;
+			if (!size || typeof size !== 'object' || Array.isArray(size) || Object.keys(size).some(key => !['width', 'height', 'fit'].includes(key))) throw new Error('INVALID_IMPORT_OPTIONS');
+			for (const axis of ['width', 'height'] as const) {
+				if (size[axis] === undefined) continue;
+				if (!Number.isInteger(size[axis]) || size[axis]! < 0 || size[axis]! > 5000) throw new Error('INVALID_IMPORT_OPTIONS');
+				settings.sizes[field][axis] = size[axis]!;
+			}
+			if (size.fit !== undefined) {
+				if (!['inside', 'cover'].includes(size.fit)) throw new Error('INVALID_IMPORT_OPTIONS');
+				settings.sizes[field].fit = size.fit;
+			}
+		}
+	}
+	return settings;
+}
+
+/** Choices are scoped to one exact provider reference; URLs cannot enter this contract. */
+export function normalizeImportArtworkSelections(input: ImportArtworkSelection[]): ImportArtworkSelection[] {
+	if (!Array.isArray(input) || input.length > 100) throw new Error('INVALID_IMPORT_OPTIONS');
+	const references = new Set<string>();
+	return input.map(selection => {
+		if (!selection || typeof selection !== 'object' || Array.isArray(selection) || Object.keys(selection).some(key => !['ref', 'choices'].includes(key))) throw new Error('INVALID_IMPORT_OPTIONS');
+		const ref = selection.ref;
+		if (!ref || typeof ref !== 'object' || Array.isArray(ref) || Object.keys(ref).some(key => !['source', 'externalId', 'mediaType'].includes(key)) || !importSources.includes(ref.source) || !['movie', 'tv'].includes(ref.mediaType) || typeof ref.externalId !== 'string' || !/^(?:[1-9][0-9]{0,15}|tmdb:(?:movie|tv):[1-9][0-9]{0,15}|imdb:tt[0-9]{5,12})$/u.test(ref.externalId)) throw new Error('INVALID_IMPORT_OPTIONS');
+		const referenceKey = `${ref.source}:${ref.mediaType}:${ref.externalId}`;
+		if (references.has(referenceKey)) throw new Error('INVALID_IMPORT_OPTIONS');
+		references.add(referenceKey);
+		const choices = selection.choices;
+		if (!choices || typeof choices !== 'object' || Array.isArray(choices) || Object.keys(choices).some(key => !importArtworkFields.includes(key as typeof importArtworkFields[number]))) throw new Error('INVALID_IMPORT_OPTIONS');
+		const normalized: ImportArtworkSelection = { ref: { source: ref.source, externalId: ref.externalId, mediaType: ref.mediaType }, choices: {} };
+		for (const field of importArtworkFields) {
+			const value = choices[field];
+			if (value === undefined) continue;
+			const ids = field === 'galleryUrls' ? value : [value];
+			if (!Array.isArray(ids) || ids.length > (field === 'galleryUrls' ? 18 : 1) || new Set(ids).size !== ids.length || ids.some(id => typeof id !== 'string' || !/^[a-f0-9]{64}$/u.test(id))) throw new Error('INVALID_IMPORT_OPTIONS');
+			if (field === 'galleryUrls') normalized.choices.galleryUrls = [...ids] as string[];
+			else normalized.choices[field] = ids[0] as string;
+		}
+		if (!Object.keys(normalized.choices).length) throw new Error('INVALID_IMPORT_OPTIONS');
+		return normalized;
+	});
+}
 
 /** Service callers and persisted JSON receive the same validation as the HTTP boundary. */
 export function normalizeImportOptions(input?: ImportOptions): ImportOptions {
 	if (input === undefined) return {};
-	if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => !['sources', 'fields', 'fieldSources', 'filters', 'artwork'].includes(key))) throw new Error('INVALID_IMPORT_OPTIONS');
+	if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => !['sources', 'fields', 'fieldSources', 'filters', 'artwork', 'artworkSettings', 'artworkSelections'].includes(key))) throw new Error('INVALID_IMPORT_OPTIONS');
 	const result: ImportOptions = {};
 	if (input.artwork !== undefined) {
-		if (!['remote', 'local-webp'].includes(input.artwork)) throw new Error('INVALID_IMPORT_OPTIONS');
+		if (!['remote', 'local-webp', 'local'].includes(input.artwork)) throw new Error('INVALID_IMPORT_OPTIONS');
 		result.artwork = input.artwork;
 	}
+	if (input.artworkSettings !== undefined) result.artworkSettings = normalizeImportArtworkSettings(input.artworkSettings);
+	if (input.artworkSelections !== undefined) result.artworkSelections = normalizeImportArtworkSelections(input.artworkSelections);
 	if (input.sources !== undefined) {
 		if (!Array.isArray(input.sources) || input.sources.length > importSources.length || input.sources.some(source => !importSources.includes(source))) throw new Error('INVALID_IMPORT_OPTIONS');
 		result.sources = importSources.filter(source => input.sources!.includes(source));

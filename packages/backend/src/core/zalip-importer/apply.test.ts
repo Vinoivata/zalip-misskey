@@ -306,3 +306,67 @@ describe('Zalip imported seasons and playback', () => {
 		expect((applied.work.importData.values as Row).players).toEqual([alloha, collaps]);
 	});
 });
+
+describe('Zalip artwork commit compare-and-swap', () => {
+	test('localizes a confirmed legacy TMDB path without claiming unrelated editorial metadata', async () => {
+		const context = fixture({ works: [work({ posterPath: '/poster.jpg', description: 'Editorial description' })] });
+		const result = await applyImportRecord(context.db, context.idService, record({ posterUrl: '/files/local-poster.webp' }), {}, { options: { fields: ['posterUrl'], artwork: 'local' }, artworkExpected: { posterUrl: '/poster.jpg' }, artworkLocalizedFields: ['posterUrl'] });
+		expect(result.work).toMatchObject({ posterPath: '/files/local-poster.webp', title: 'Editorial legacy title', description: 'Editorial description', publicationState: 'published' });
+		expect(result.work.importData).toMatchObject({ values: { posterUrl: '/files/local-poster.webp' }, localArtwork: { posterUrl: '/files/local-poster.webp' } });
+		expect(result.work.importData.values).not.toHaveProperty('title');
+		expect(result.protectedFields).not.toContain('posterUrl');
+	});
+
+	test('a stale prepared image cannot overwrite a newer provider-owned commit', async () => {
+		const context = fixture({ works: [work({ posterPath: '/files/newer.webp', importData: { values: { posterUrl: '/files/newer.webp' } } })] });
+		const result = await applyImportRecord(context.db, context.idService, record({ posterUrl: '/files/stale.webp' }), {}, { options: { fields: ['posterUrl'] }, artworkExpected: { posterUrl: '/files/old.webp' }, artworkLocalizedFields: ['posterUrl'] });
+		expect(result.work.posterPath).toBe('/files/newer.webp');
+		expect(result.protectedFields).toContain('posterUrl');
+		expect(result.work.importData).not.toHaveProperty('localArtwork');
+	});
+
+	test('persistent and per-run locks always beat an explicit image choice', async () => {
+		for (const persistent of [true, false]) {
+			const context = fixture({ works: [work({ posterPath: '/files/editorial.webp', importData: { locks: persistent ? ['posterUrl'] : [] } })] });
+			const result = await applyImportRecord(context.db, context.idService, record({ posterUrl: '/files/chosen.webp' }), {}, { lockedFields: persistent ? [] : ['posterUrl'], options: { fields: ['posterUrl'] }, artworkExpected: { posterUrl: '/files/editorial.webp' }, artworkSelectedFields: ['posterUrl'], artworkLocalizedFields: ['posterUrl'] });
+			expect(result.work.posterPath).toBe('/files/editorial.webp');
+			expect(result.protectedFields).toContain('posterUrl');
+		}
+	});
+
+	test('an explicit unlocked editorial replacement is saved and then protected from automatic refresh', async () => {
+		const context = fixture({ works: [work({ posterPath: '/files/editorial.webp' })] });
+		const chosen = await applyImportRecord(context.db, context.idService, record({ posterUrl: '/files/chosen.webp' }), {}, { options: { fields: ['posterUrl'] }, artworkExpected: { posterUrl: '/files/editorial.webp' }, artworkSelectedFields: ['posterUrl'], artworkLocalizedFields: ['posterUrl'] });
+		expect(chosen.work.posterPath).toBe('/files/chosen.webp');
+		expect(chosen.work.importData.locks).toContain('posterUrl');
+		const refreshed = await applyImportRecord(context.db, context.idService, record(), {}, { options: { fields: ['posterUrl'], artwork: 'remote' } });
+		expect(refreshed.work.posterPath).toBe('/files/chosen.webp');
+	});
+
+	test('ordinary remote sync cannot turn a localized image back into a CDN link', async () => {
+		const context = fixture();
+		await applyImportRecord(context.db, context.idService, record({ posterUrl: '/files/local.webp' }), {}, { artworkLocalizedFields: ['posterUrl'] });
+		const result = await applyImportRecord(context.db, context.idService, record({ description: 'Refreshed metadata' }), {}, { mode: 'sync' });
+		expect(result.work.posterPath).toBe('/files/local.webp');
+		expect(result.work.description).toBe('Refreshed metadata');
+		expect(result.protectedFields).toContain('posterUrl');
+	});
+
+	test('explicit empty gallery clears only that unlocked image role', async () => {
+		const context = fixture({ works: [work({ galleryPaths: ['/files/one.webp'], posterPath: '/files/poster.webp' })] });
+		const result = await applyImportRecord(context.db, context.idService, record({ galleryUrls: [] }), {}, { options: { fields: ['galleryUrls'] }, artworkExpected: { galleryUrls: ['/files/one.webp'] }, artworkSelectedFields: ['galleryUrls'] });
+		expect(result.work.galleryPaths).toEqual([]);
+		expect(result.work.posterPath).toBe('/files/poster.webp');
+		expect(result.work.importData.locks).toContain('galleryUrls');
+	});
+
+	test('an explicit empty gallery on a newly created draft is locked against later automatic filling', async () => {
+		const context = fixture();
+		const created = await applyImportRecord(context.db, context.idService, record({ galleryUrls: [] }), {}, { options: { fields: ['galleryUrls'], artwork: 'local' }, artworkSelectedFields: ['galleryUrls'] });
+		expect(created.work.galleryPaths).toEqual([]);
+		expect(created.work.importData.locks).toContain('galleryUrls');
+		const refreshed = await applyImportRecord(context.db, context.idService, record({ galleryUrls: ['https://image.tmdb.org/t/p/original/frame.jpg'] }), {}, { options: { fields: ['galleryUrls'] }, mode: 'sync' });
+		expect(refreshed.work.galleryPaths).toEqual([]);
+		expect(refreshed.protectedFields).toContain('galleryUrls');
+	});
+});

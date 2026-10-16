@@ -20,11 +20,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</header>
 
 					<section :class="$style.create">
-						<div><h2>Импорт из TMDB</h2><p>Сервер сам получает метаданные по ID. Ключ TMDB остаётся только в конфигурации сервера и никогда не попадает в браузер.</p></div>
+						<div><h2>Импорт из TMDB</h2><p>{{ i18n.ts.zalip._importer.artworkManageHint }}</p></div>
 						<form :class="$style.importForm" @submit.prevent="importTmdb">
 							<select v-model="tmdb.mediaType" class="_input" aria-label="Тип в TMDB"><option value="movie">Фильм</option><option value="tv">Сериал</option></select>
 							<input v-model.trim="tmdb.id" class="_input" inputmode="numeric" required placeholder="TMDB ID, например 11">
-							<button class="_button" :class="$style.createButton" :disabled="tmdbSubmitting"><i class="ti ti-download"></i> {{ tmdbSubmitting ? 'Импортируем…' : 'Импортировать черновик' }}</button>
+							<button class="_button" :class="$style.createButton"><i class="ti ti-eye" aria-hidden="true"></i> {{ i18n.ts.zalip._importer.artworkImportPreview }}</button>
 							<span v-if="tmdbMessage" :class="$style.importMessage">{{ tmdbMessage }}</span>
 						</form>
 					</section>
@@ -43,7 +43,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</section>
 
 					<section :class="$style.works">
-						<div :class="$style.sectionHeader"><div><p :class="$style.eyebrow">ПОСЛЕДНИЕ</p><h2>Тайтлы</h2></div><div :class="$style.sectionActions"><button class="_button" :class="$style.reload" :disabled="loading || bulkSyncing || allohaSyncing" @click="load"><i class="ti ti-refresh"></i></button><button class="_button" :class="$style.reload" :disabled="loading || bulkSyncing || allohaSyncing" @click="syncAllTmdbMedia"><i class="ti ti-database-import"></i> {{ bulkSyncing ? 'Обновляем TMDB…' : 'Обновить все TMDB' }}</button><button class="_button" :class="$style.reload" :disabled="loading || bulkSyncing || allohaSyncing" @click="syncAlloha"><i class="ti ti-device-tv"></i> {{ allohaSyncing ? 'Проверяем Alloha…' : 'Проверить Alloha' }}</button></div></div>
+						<div :class="$style.sectionHeader"><div><p :class="$style.eyebrow">ПОСЛЕДНИЕ</p><h2>Тайтлы</h2></div><div :class="$style.sectionActions"><button class="_button" :class="$style.reload" :disabled="loading || allohaSyncing" @click="load"><i class="ti ti-refresh"></i></button><button class="_button" :class="$style.reload" :disabled="loading || allohaSyncing" @click="syncAllTmdbMedia"><i class="ti ti-database-import" aria-hidden="true"></i> {{ i18n.ts.zalip._importer.manageImport }}</button><button class="_button" :class="$style.reload" :disabled="loading || allohaSyncing" @click="syncAlloha"><i class="ti ti-device-tv"></i> {{ allohaSyncing ? 'Проверяем Alloha…' : 'Проверить Alloha' }}</button></div></div>
 						<p v-if="bulkMessage" :class="$style.bulkMessage">{{ bulkMessage }}</p>
 						<div v-if="loading" :class="$style.empty"><i class="ti ti-loader-2 ti-spin"></i> Загружаем…</div>
 						<div v-else-if="works.length === 0" :class="$style.empty"><i class="ti ti-movie-off"></i> Черновиков пока нет.</div>
@@ -55,7 +55,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 									<button v-if="work.publicationState !== 'published'" class="_button" :class="$style.smallButton" :disabled="savingId === work.id" @click="setState(work, 'published')"><i class="ti ti-world"></i> Опубликовать</button>
 									<button v-else class="_button" :class="$style.smallButton" :disabled="savingId === work.id" @click="setState(work, 'archived')"><i class="ti ti-eye-off"></i> Снять</button>
 									<button v-if="work.publicationState === 'published'" class="_button" :class="$style.smallButton" :disabled="savingId === work.id" @click="openDiscussion(work)"><i class="ti ti-messages"></i> Обсуждение</button>
-									<button v-if="work.tmdbMediaType" class="_button" :class="$style.smallButton" :disabled="mediaSyncingId === work.id" @click="syncTmdbMedia(work)"><i class="ti ti-refresh"></i> {{ mediaSyncingId === work.id ? 'Обновляем данные…' : 'Данные из TMDB' }}</button>
+									<button v-if="work.tmdbMediaType" class="_button" :class="$style.smallButton" @click="syncTmdbMedia(work)"><i class="ti ti-photo" aria-hidden="true"></i> {{ i18n.ts.zalip._importer.artworkEditor }}</button>
 									<button v-for="season in work.tmdbMediaType === 'tv' ? work.seasons : []" :key="season.id" class="_button" :class="$style.smallButton" :disabled="syncingSeasonKey === seasonKey(work, season.seasonNumber)" @click="syncSeason(work, season.seasonNumber)"><i class="ti ti-list-details"></i> {{ syncingSeasonKey === seasonKey(work, season.seasonNumber) ? 'Загружаем…' : `Серии: ${season.seasonNumber === 0 ? 'спец.' : season.seasonNumber}` }}</button>
 								</div>
 								<p v-if="seasonMessage.workId === work.id" :class="$style.syncMessage">{{ seasonMessage.text }}</p>
@@ -102,13 +102,10 @@ const savingId = ref<string | null>(null);
 const message = ref('');
 const form = reactive({ title: '', slug: '', kind: 'movie' as WorkKind, releaseYear: '', originalTitle: '', description: '' });
 const tmdb = reactive({ mediaType: 'movie' as 'movie' | 'tv', id: '' });
-const tmdbSubmitting = ref(false);
 const tmdbMessage = ref('');
 const syncingSeasonKey = ref<string | null>(null);
 const seasonMessage = reactive({ workId: '', text: '' });
-const mediaSyncingId = ref<string | null>(null);
 const mediaMessage = reactive({ workId: '', text: '' });
-const bulkSyncing = ref(false);
 const bulkMessage = ref('');
 const allohaSyncing = ref(false);
 const edits = reactive<Record<string, { title: string; originalTitle: string; description: string; releaseYear: string; }>>({});
@@ -121,20 +118,6 @@ function kindLabel(kind: WorkKind): string {
 
 function stateLabel(state: PublicationState): string {
 	return ({ draft: 'Черновик', published: 'Опубликован', archived: 'Снят с публикации' })[state];
-}
-
-function tmdbImportErrorMessage(error: unknown): string {
-	const code = typeof error === 'object' && error != null && 'code' in error && typeof error.code === 'string'
-		? error.code
-		: null;
-
-	switch (code) {
-		case 'ZALIP_TMDB_NOT_CONFIGURED': return 'TMDB не настроен на сервере.';
-		case 'ZALIP_TMDB_NOT_FOUND': return 'TMDB не нашёл тайтл с этим ID и выбранным типом.';
-		case 'ZALIP_TMDB_DUPLICATE': return 'Этот тайтл уже есть в каталоге.';
-		case 'ZALIP_TMDB_UNAVAILABLE': return 'TMDB временно недоступен с сервера. Повторите попытку позже.';
-		default: return 'Импорт не выполнен. Проверьте ID, выбранный тип и права администратора.';
-	}
 }
 
 async function load(): Promise<void> {
@@ -267,25 +250,15 @@ async function createDraft(): Promise<void> {
 	}
 }
 
-async function importTmdb(): Promise<void> {
+function importTmdb(): void {
 	const tmdbId = Number(tmdb.id);
 	if (!Number.isSafeInteger(tmdbId) || tmdbId < 1) {
 		tmdbMessage.value = 'Укажите корректный числовой TMDB ID.';
 		return;
 	}
 
-	tmdbSubmitting.value = true;
 	tmdbMessage.value = '';
-	try {
-		const work = await misskeyApiZalip<{ title: string }>('zalip/admin/works/import-tmdb', { tmdbMediaType: tmdb.mediaType, tmdbId });
-		tmdb.id = '';
-		tmdbMessage.value = `Создан черновик: ${work.title}.`;
-		await load();
-	} catch (error) {
-		tmdbMessage.value = tmdbImportErrorMessage(error);
-	} finally {
-		tmdbSubmitting.value = false;
-	}
+	router.push('/zalip/importer', { query: { source: 'tmdb', type: tmdb.mediaType, id: String(tmdbId) } });
 }
 
 async function setState(work: AdminWork, publicationState: PublicationState): Promise<void> {
@@ -329,37 +302,13 @@ async function syncSeason(work: AdminWork, seasonNumber: number): Promise<void> 
 	}
 }
 
-async function syncTmdbMedia(work: AdminWork): Promise<void> {
-	mediaSyncingId.value = work.id;
-	mediaMessage.workId = '';
-	mediaMessage.text = '';
-	try {
-		await misskeyApiZalip('zalip/admin/works/sync-tmdb-media', { workId: work.id });
-		mediaMessage.workId = work.id;
-		mediaMessage.text = `Жанры, длительность, кадры и трейлер для «${work.title}» обновлены из TMDB.`;
-		await load();
-	} catch (error) {
-		mediaMessage.workId = work.id;
-		mediaMessage.text = tmdbImportErrorMessage(error);
-	} finally {
-		mediaSyncingId.value = null;
-	}
+function syncTmdbMedia(work: AdminWork): void {
+	if (!work.tmdbMediaType || !work.tmdbId) return;
+	router.push('/zalip/importer', { query: { source: 'tmdb', type: work.tmdbMediaType, id: String(work.tmdbId), images: '1', workId: work.id } });
 }
 
-async function syncAllTmdbMedia(): Promise<void> {
-	bulkSyncing.value = true;
-	bulkMessage.value = '';
-	try {
-		const result = await misskeyApiZalip<{ total: number; updated: number; failed: number }>('zalip/admin/works/sync-all-tmdb-media', {});
-		bulkMessage.value = result.failed === 0
-			? `TMDB обновлён: ${result.updated} из ${result.total} тайтлов.`
-			: `TMDB обновлён: ${result.updated} из ${result.total}; не удалось обновить: ${result.failed}.`;
-		await load();
-	} catch (error) {
-		bulkMessage.value = tmdbImportErrorMessage(error);
-	} finally {
-		bulkSyncing.value = false;
-	}
+function syncAllTmdbMedia(): void {
+	router.push('/zalip/importer');
 }
 
 async function syncAlloha(): Promise<void> {

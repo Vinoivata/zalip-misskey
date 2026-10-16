@@ -207,6 +207,30 @@ describe('importer adapter contracts', () => {
 		expect(transport.mock.calls).toHaveLength(2);
 	});
 
+	test('TMDB picture choices share the one detail request and preserve dimensions and language', async () => {
+		const transport = vi.fn<ImportTransport>(async () => ({ id: 1, title: 'Film', genres: [], production_companies: [], images: { posters: [{ file_path: '/poster.jpg', width: 600, height: 900, iso_639_1: 'ru', id: 'untrusted' }], backdrops: [{ file_path: '/frame.jpg', width: 1920, height: 1080 }], logos: [{ file_path: '/logo.png', iso_639_1: 'en' }] } }));
+		const result = await createImportProviders({ tmdbApiKey: 'fixture' }, transport).tmdb.fetch({ source: 'tmdb', externalId: '1', mediaType: 'movie' }, ['posterUrl', 'backdropUrl', 'logoUrl', 'galleryUrls']);
+		expect(transport).toHaveBeenCalledTimes(1);
+		expect(new URL(transport.mock.calls[0][0]).searchParams.get('append_to_response')).toBe('external_ids,images');
+		expect(result.artworkCandidates).toEqual(expect.arrayContaining([expect.objectContaining({ source: 'tmdb', field: 'posterUrl', width: 600, height: 900, language: 'ru', url: 'https://image.tmdb.org/t/p/original/poster.jpg' })]));
+		expect(result.artworkCandidates?.every(value => /^[a-f0-9]{64}$/u.test(value.id))).toBe(true);
+	});
+
+	test('Kinopoisk picture choices request only selected roles and still expose alternate frames when a cover exists', async () => {
+		const transport = vi.fn<ImportTransport>(async raw => {
+			const url = new URL(raw);
+			if (!url.pathname.endsWith('/images')) return { kinopoiskId: 1, nameRu: 'Film', type: 'FILM', genres: [], posterUrl: 'https://st.kp.yandex.net/main.jpg', coverUrl: 'https://st.kp.yandex.net/cover.jpg' };
+			return { items: [{ imageUrl: `https://st.kp.yandex.net/${url.searchParams.get('type')}.jpg`, previewUrl: 'https://st.kp.yandex.net/small.jpg' }] };
+		});
+		const provider = createImportProviders({ kinopoiskApiKey: 'fixture' }, transport).kinopoisk;
+		const result = await provider.fetch({ source: 'kinopoisk', externalId: '1', mediaType: 'movie' }, ['posterUrl', 'backdropUrl']);
+		expect(transport.mock.calls).toHaveLength(3);
+		expect(transport.mock.calls.slice(1).map(([raw]) => new URL(raw).searchParams.get('type'))).toEqual(['POSTER', 'STILL']);
+		expect(result.backdropUrl).toBe('https://st.kp.yandex.net/cover.jpg');
+		expect(result.artworkCandidates).toEqual(expect.arrayContaining([expect.objectContaining({ field: 'backdropUrl', url: 'https://st.kp.yandex.net/STILL.jpg' }), expect.objectContaining({ field: 'posterUrl', url: 'https://st.kp.yandex.net/POSTER.jpg' })]));
+		expect(result.artworkCandidates?.some(value => value.field === 'galleryUrls')).toBe(false);
+	});
+
 	test('an artwork failure cannot hide a quota pause or leak upstream errors', async () => {
 		const transport = vi.fn<ImportTransport>(async url => {
 			if (new URL(url).pathname.endsWith('/images')) throw new ImportProviderError('quota-exceeded');

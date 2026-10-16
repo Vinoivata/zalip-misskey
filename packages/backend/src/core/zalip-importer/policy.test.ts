@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, test } from 'vitest';
-import { canUpdateField, importFieldSelected, matchesCreatePlayerFilter, matchesImportFilters, mergeImportRecords, normalizeImportOptions, readImportState, selectedImportSources } from './policy.js';
+import { canUpdateField, importFieldSelected, matchesCreatePlayerFilter, matchesImportFilters, mergeImportRecords, normalizeImportArtworkSettings, normalizeImportOptions, readImportState, selectedImportSources } from './policy.js';
 import type { ImportOptions, ImportRecord } from './types.js';
 
 function record(source: ImportRecord['ref']['source'], values: Partial<ImportRecord> = {}): ImportRecord {
@@ -48,6 +48,25 @@ describe('Zalip import ownership', () => {
 		expect(normalizeImportOptions()).toEqual({});
 		expect(normalizeImportOptions({ sources: ['collaps', 'tmdb', 'tmdb'], fields: ['ratings', 'title', 'ratings'], fieldSources: { description: 'tmdb' }, artwork: 'local-webp' })).toEqual({ sources: ['tmdb', 'collaps'], fields: ['title', 'ratings'], fieldSources: { description: 'tmdb' }, artwork: 'local-webp' });
 		for (const input of [{ token: 'fixture' }, { sources: ['unknown'] }, { fields: ['unknown'] }, { fieldSources: { raw: 'tmdb' } }, { fieldSources: { title: 'unknown' } }, { artwork: 'arbitrary-url' }]) expect(() => normalizeImportOptions(input as ImportOptions)).toThrow('INVALID_IMPORT_OPTIONS');
+	});
+
+	test('configurable artwork preserves legacy policy and validates every conversion setting', () => {
+		expect(normalizeImportArtworkSettings()).toMatchObject({ format: 'webp', quality: 85, galleryLimit: 18, keepOriginal: true, sizes: { posterUrl: { width: 780, height: 1170, fit: 'inside' } } });
+		expect(normalizeImportArtworkSettings(undefined, true)).toMatchObject({ quality: 80, galleryLimit: 12 });
+		const normalized = normalizeImportOptions({ artwork: 'local', artworkSettings: { format: 'avif', quality: 100, galleryLimit: 0, keepOriginal: false, sizes: { posterUrl: { width: 0, height: 5000, fit: 'cover' } } } });
+		expect(normalized.artworkSettings).toMatchObject({ format: 'avif', quality: 100, galleryLimit: 0, keepOriginal: false, sizes: { posterUrl: { width: 0, height: 5000, fit: 'cover' }, logoUrl: { width: 1000, height: 600, fit: 'inside' } } });
+		for (const settings of [null, [], { format: 'svg' }, { quality: 0 }, { quality: 101 }, { quality: 50.5 }, { keepOriginal: 'yes' }, { galleryLimit: 19 }, { galleryLimit: -1 }, { unknown: true }, { sizes: [] }, { sizes: { posterUrl: null } }, { sizes: { posterUrl: { width: -1 } } }, { sizes: { posterUrl: { height: 5001 } } }, { sizes: { posterUrl: { width: 10.5 } } }, { sizes: { posterUrl: { fit: 'fill' } } }, { sizes: { posterUrl: { background: 'black' } } }, { sizes: { random: {} } }]) expect(() => normalizeImportOptions({ artworkSettings: settings } as ImportOptions)).toThrow('INVALID_IMPORT_OPTIONS');
+		const fresh = normalizeImportArtworkSettings();
+		fresh.sizes.posterUrl.width = 42;
+		expect(normalizeImportArtworkSettings().sizes.posterUrl.width).toBe(780);
+	});
+
+	test('artwork choices contain IDs only and bind one unambiguous exact reference', () => {
+		const ref = { source: 'tmdb', externalId: '100', mediaType: 'movie' } as const;
+		const id = 'a'.repeat(64);
+		const selection = { ref, choices: { posterUrl: id, galleryUrls: ['b'.repeat(64)] } };
+		expect(normalizeImportOptions({ artworkSelections: [selection] }).artworkSelections).toEqual([selection]);
+		for (const selections of [null, {}, [selection, selection], Array.from({ length: 101 }, () => selection), [{ ...selection, url: 'https://127.0.0.1' }], [{ ...selection, ref: { ...ref, externalId: '../admin' } }], [{ ...selection, ref: { ...ref, source: 'unknown' } }], [{ ...selection, ref: { ...ref, mediaType: 'person' } }], [{ ...selection, choices: {} }], [{ ...selection, choices: { posterUrl: 'https://image.tmdb.org/poster.jpg' } }], [{ ...selection, choices: { posterUrl: 'a'.repeat(65) } }], [{ ...selection, choices: { galleryUrls: [id, id] } }], [{ ...selection, choices: { galleryUrls: Array.from({ length: 19 }, (_, i) => i.toString(16).padStart(64, '0')) } }], [{ ...selection, choices: { galleryUrls: id } }], [{ ...selection, choices: { stillUrl: id } }]]) expect(() => normalizeImportOptions({ artworkSelections: selections } as ImportOptions)).toThrow('INVALID_IMPORT_OPTIONS');
 	});
 
 	test('primary is mandatory while an empty enrichment selection means primary only', () => {

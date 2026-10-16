@@ -18,6 +18,69 @@ import { MiZalipAllohaAvailabilityEvent } from '@/models/ZalipAllohaAvailability
 import { MiZalipAllohaSource } from '@/models/ZalipAllohaSource.js';
 
 describe('ZalipCatalogService', () => {
+	const mediaRefresh = { genres: ['Provider genre'], runtimeMinutes: 90, posterPath: '/remote.jpg', backdropPath: '/remote-backdrop.jpg', logoPath: '/remote-logo.png', galleryPaths: ['/remote-frame.jpg'], trailerYoutubeKey: 'trailer01' };
+
+	it.each(['values', 'localArtwork'] as const)('legacy media refresh re-reads %s ownership after acquiring the importer work lock', async ownership => {
+		let grantLock!: () => void;
+		const lock = new Promise<void>(resolve => { grantLock = resolve; });
+		let persisted: Partial<MiZalipWork> = { id: 'work', posterPath: '/legacy.jpg', importData: {} };
+		const repository = { findOne: vi.fn().mockImplementation(async () => { await lock; return structuredClone(persisted); }), save: vi.fn() };
+		const manager = { getRepository: (model: unknown) => { expect(model).toBe(MiZalipWork); return repository; } };
+		const db = { transaction: vi.fn(async action => action(manager)) };
+		const service = new ZalipCatalogService(db as never, {} as never, {} as never, {} as never);
+		const pending = service.updateTmdbMedia('work', mediaRefresh);
+		// The provenance-aware importer commits while the legacy worker is waiting for its row lock.
+		persisted = { ...persisted, posterPath: '/files/processed.webp', description: 'Editorial description', importData: { [ownership]: { posterUrl: '/files/processed.webp' }, preserved: true } };
+		grantLock();
+		const result = await pending;
+		expect(repository.findOne).toHaveBeenCalledExactlyOnceWith({ where: { id: 'work' }, lock: { mode: 'pessimistic_write' } });
+		expect(db.transaction).toHaveBeenCalledOnce();
+		expect(repository.save).not.toHaveBeenCalled();
+		expect(result).toMatchObject({ posterPath: '/files/processed.webp', description: 'Editorial description', importData: { preserved: true } });
+	});
+
+	it('legacy media refresh still updates unowned titles inside the work transaction', async () => {
+		const work = { id: 'work', publicationState: 'published', title: 'Editorial title', description: 'Editorial description', importData: {} };
+		const repository = { findOne: vi.fn().mockResolvedValue(work), save: vi.fn().mockImplementation(async value => value) };
+		const manager = { getRepository: () => repository };
+		const service = new ZalipCatalogService({ transaction: async (action: (value: typeof manager) => Promise<unknown>) => action(manager) } as never, {} as never, {} as never, {} as never);
+		expect(await service.updateTmdbMedia('work', mediaRefresh)).toMatchObject({ ...mediaRefresh, title: 'Editorial title', description: 'Editorial description', importData: {} });
+		expect(repository.findOne).toHaveBeenCalledWith({ where: { id: 'work' }, lock: { mode: 'pessimistic_write' } });
+		expect(repository.save).toHaveBeenCalledOnce();
+	});
+
+	it('public work cards and details expose processed assets but no import ownership or originals', async () => {
+		const work = { id: 'work', slug: 'title', title: 'Title', kind: 'movie', posterPath: '/files/processed.webp', galleryPaths: ['/files/frame.webp'], importData: { localArtwork: { posterUrl: '/files/processed.webp' }, values: { posterUrl: 'https://original.private.invalid/poster.jpg' }, artworkOriginals: ['https://original.private.invalid/frame.jpg'], countries: ['Россия'], ratings: [] } };
+		const works = { findOneBy: vi.fn().mockResolvedValue(work) };
+		const seasons = { find: vi.fn().mockResolvedValue([]) };
+		const db = { getRepository: (model: unknown) => model === MiZalipWork ? works : seasons, query: vi.fn().mockResolvedValue([]) };
+		const service = new ZalipCatalogService(db as never, {} as never, {} as never, {} as never);
+		const card = service.packWork(work as never);
+		const detail = await service.showPublished('title');
+		for (const result of [card, detail]) {
+			expect(result).toMatchObject({ posterPath: '/files/processed.webp' });
+			expect(result).not.toHaveProperty('importData');
+			expect(result).not.toHaveProperty('localArtwork');
+			expect(JSON.stringify(result)).not.toContain('original.private.invalid');
+		}
+		expect(detail?.galleryPaths).toEqual(['/files/frame.webp']);
+	});
+
+	it('legacy season refresh checks importer ownership under the same work row lock', async () => {
+		const season = { id: 'season', workId: 'work' };
+		const seasons = { findOneBy: vi.fn().mockResolvedValue(season), save: vi.fn() };
+		const works = { findOne: vi.fn().mockResolvedValue({ id: 'work', importData: { localArtwork: { posterUrl: '/files/processed.webp' } } }) };
+		const episodes = { countBy: vi.fn().mockResolvedValue(7), findBy: vi.fn(), save: vi.fn() };
+		const manager = { getRepository: (model: unknown) => model === MiZalipWork ? works : model === MiZalipSeason ? seasons : episodes };
+		const service = new ZalipCatalogService({ transaction: async (action: (value: typeof manager) => Promise<unknown>) => action(manager) } as never, {} as never, {} as never, {} as never);
+		vi.spyOn(service as unknown as { dispatchPendingReleaseNotifications: () => Promise<void> }, 'dispatchPendingReleaseNotifications').mockResolvedValue();
+		expect(await service.syncSeasonEpisodes('season', [])).toEqual({ added: 0, updated: 0, total: 7 });
+		expect(works.findOne).toHaveBeenCalledWith({ where: { id: 'work' }, lock: { mode: 'pessimistic_write' } });
+		expect(episodes.findBy).not.toHaveBeenCalled();
+		expect(episodes.save).not.toHaveBeenCalled();
+		expect(seasons.save).not.toHaveBeenCalled();
+	});
+
 	it('selects the joined ordering column inside real TypeORM pagination', async () => {
 		class MetadataOnlyDataSource extends DataSource {
 			async prepare() { await this.buildMetadatas(); }
@@ -507,7 +570,7 @@ describe('ZalipCatalogService', () => {
 			save: vi.fn().mockResolvedValue(season),
 		};
 		const worksRepository = {
-			findOneBy: vi.fn().mockResolvedValue(work),
+			findOne: vi.fn().mockResolvedValue(work),
 		};
 		const episodesRepository = {
 			findBy: vi.fn().mockResolvedValue([firstEpisode]),

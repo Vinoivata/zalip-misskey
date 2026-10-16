@@ -4,12 +4,19 @@
  */
 
 import { i18n } from '@/i18n.js';
+import { importerArtworkSettings, importerArtworkSettingsValid } from '@/utility/zalip-importer-artwork.js';
 
 export type ImportSource = 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
 export type ImportPlayerSource = 'alloha' | 'collaps';
 export type ImportPlaybackProvider = { source: ImportPlayerSource; label: string; enabled: boolean; position: 0 | 1 };
 export type ImportMediaType = 'movie' | 'tv';
 export type ImportRef = { source: ImportSource; externalId: string; mediaType: ImportMediaType };
+export type ImportArtworkField = 'posterUrl' | 'backdropUrl' | 'logoUrl' | 'galleryUrls';
+export type ImportArtworkSize = { width: number; height: number; fit: 'inside' | 'cover' };
+export type ImportArtworkSettings = { format: 'original' | 'webp' | 'avif' | 'jpeg' | 'png'; quality: number; keepOriginal: boolean; galleryLimit: number; sizes: Record<ImportArtworkField, ImportArtworkSize> };
+export type ImportArtworkCandidate = { id: string; source: ImportSource; field: ImportArtworkField; url: string; previewUrl: string; width: number | null; height: number | null; language: string | null };
+export type ImportArtworkChoices = { posterUrl?: string; backdropUrl?: string; logoUrl?: string; galleryUrls?: string[] };
+export type ImportArtworkSelection = { ref: ImportRef; choices: ImportArtworkChoices };
 export type ImportSearchItem = { ref: ImportRef; title: string; originalTitle: string | null; releaseYear: number | null; posterUrl: string | null };
 export type ImportSourceStatus = { source: ImportSource; configured: boolean; capabilities: { search: boolean; collections: boolean; updates: boolean }; dailyLimit: number | null };
 export type ImportSourceCheck = { source: ImportSource; configured: boolean; checkedAt: string; latencyMs: number; ok: boolean; error: string | null; cached: boolean };
@@ -33,6 +40,7 @@ export type ImportRecord = {
 	backdropUrl: string | null;
 	logoUrl: string | null;
 	galleryUrls: string[];
+	artworkCandidates?: ImportArtworkCandidate[];
 	trailerYoutubeKey: string | null;
 	ratings: { source: string; value: number; votes: number | null }[];
 	ageRating: string | null;
@@ -46,11 +54,11 @@ export type ImportRecord = {
 };
 export type ImportField = typeof importerFields[number];
 export type ImportFilters = { mediaTypes?: ImportMediaType[]; kinds?: ('movie' | 'series' | 'anime' | 'animation')[]; yearFrom?: number; yearTo?: number; genres?: string[]; countries?: string[]; ratingMin?: number; requirePlayer?: boolean };
-export type ImportOptions = { sources?: ImportSource[]; fields?: ImportField[]; fieldSources?: Partial<Record<ImportField, ImportSource>>; filters?: ImportFilters; artwork?: 'remote' | 'local-webp' };
-export type ImportSelection = { sources: ImportSource[]; fields: ImportField[]; fieldSources: Partial<Record<ImportField, ImportSource | ''>>; artwork: 'remote' | 'local-webp'; filters: { mediaTypes: ImportMediaType[]; kinds: NonNullable<ImportFilters['kinds']>; yearFrom: string; yearTo: string; genres: string; countries: string; ratingMin: string; requirePlayer: boolean } };
+export type ImportOptions = { sources?: ImportSource[]; fields?: ImportField[]; fieldSources?: Partial<Record<ImportField, ImportSource>>; filters?: ImportFilters; artwork?: 'remote' | 'local-webp' | 'local'; artworkSettings?: ImportArtworkSettings; artworkSelections?: ImportArtworkSelection[] };
+export type ImportSelection = { sources: ImportSource[]; fields: ImportField[]; fieldSources: Partial<Record<ImportField, ImportSource | ''>>; artwork: 'remote' | 'local-webp' | 'local'; artworkSettings: ImportArtworkSettings; filters: { mediaTypes: ImportMediaType[]; kinds: NonNullable<ImportFilters['kinds']>; yearFrom: string; yearTo: string; genres: string; countries: string; ratingMin: string; requirePlayer: boolean } };
 export type ImportPreview = { record: ImportRecord; workId: string | null; changes: { field: string; before: unknown; after: unknown; protected: boolean; selected?: boolean }[]; warnings: string[]; locks?: string[]; options?: ImportOptions; matchesFilters?: boolean };
 export type ImportWorkState = { workId: string; title: string; locks: string[]; fields: { field: string; source: string | null; editorial: boolean }[] };
-export type ImportRun = { id: string; state: string; mode: 'import' | 'sync' | 'availability'; createdAt: string; updatedAt: string; total: number; completed: number; failed: number; error: string | null; profileId: string | null };
+export type ImportRun = { id: string; state: string; mode: 'import' | 'sync' | 'availability'; createdAt: string; updatedAt: string; total: number; completed: number; failed: number; error: string | null; profileId: string | null; options?: ImportOptions };
 export type ImportRunItem = { id: string; position: number; state: string; ref: ImportRef; workId: string | null; error: string | null; warnings: string[] };
 export type TaxonomyType = 'person' | 'studio' | 'genre' | 'category' | 'collection';
 export type TaxonomyEntry = { id: string; type: TaxonomyType; slug: string; name: string; description: string | null; imageUrl: string | null; parentId: string | null; externalIds?: Record<string, unknown>; data?: Record<string, unknown> };
@@ -86,7 +94,8 @@ export function importerSelection(options?: ImportOptions): ImportSelection {
 		sources: sources ? importerSources.filter(source => sources.includes(source)) : [...importerSources],
 		fields: fields ? importerFields.filter(field => fields.includes(field)) : [...importerFields],
 		fieldSources: { ...Object.fromEntries(importerFields.map(field => [field, ''])), ...Object.fromEntries(Object.entries(options?.fieldSources ?? {}).filter(([field, source]) => importerFields.includes(field as ImportField) && importerSources.includes(source))) },
-		artwork: options?.artwork === 'local-webp' ? 'local-webp' : 'remote',
+		artwork: options?.artwork === 'local-webp' || options?.artwork === 'local' ? options.artwork : 'remote',
+		artworkSettings: importerArtworkSettings(options?.artworkSettings, options?.artwork === 'local-webp'),
 		filters: { mediaTypes: [...options?.filters?.mediaTypes ?? []], kinds: [...options?.filters?.kinds ?? []], yearFrom: options?.filters?.yearFrom == null ? '' : String(options.filters.yearFrom), yearTo: options?.filters?.yearTo == null ? '' : String(options.filters.yearTo), genres: options?.filters?.genres?.join(', ') ?? '', countries: options?.filters?.countries?.join(', ') ?? '', ratingMin: options?.filters?.ratingMin == null ? '' : String(options.filters.ratingMin), requirePlayer: options?.filters?.requirePlayer === true },
 	};
 }
@@ -110,6 +119,7 @@ export function importerOptions(selection: ImportSelection): ImportOptions {
 		fields: importerFields.filter(field => selection.fields.includes(field)),
 		fieldSources: Object.fromEntries(Object.entries(selection.fieldSources).filter(([field, source]) => importerFields.includes(field as ImportField) && importerSources.includes(source as ImportSource))),
 		artwork: selection.artwork,
+		...(selection.artwork === 'local' ? { artworkSettings: importerArtworkSettings(selection.artworkSettings) } : {}),
 		...(Object.keys(filters).length ? { filters } : {}),
 	};
 }
@@ -117,7 +127,7 @@ export function importerOptions(selection: ImportSelection): ImportOptions {
 export function importerFiltersValid(selection: ImportSelection): boolean {
 	const { yearFrom, yearTo, ratingMin } = selection.filters;
 	const boundedList = (value: string): boolean => { const entries = [...new Set(value.split(',').map(item => item.trim().replace(/\s+/gu, ' ')).filter(Boolean))]; return entries.length <= 50 && entries.every(item => item.length <= 100); };
-	return [yearFrom, yearTo].every(value => value === '' || (Number.isInteger(Number(value)) && Number(value) >= 1888 && Number(value) <= 3000)) && (yearFrom === '' || yearTo === '' || Number(yearFrom) <= Number(yearTo)) && (ratingMin === '' || (Number.isFinite(Number(ratingMin)) && Number(ratingMin) >= 0 && Number(ratingMin) <= 10)) && boundedList(selection.filters.genres) && boundedList(selection.filters.countries);
+	return [yearFrom, yearTo].every(value => value === '' || (Number.isInteger(Number(value)) && Number(value) >= 1888 && Number(value) <= 3000)) && (yearFrom === '' || yearTo === '' || Number(yearFrom) <= Number(yearTo)) && (ratingMin === '' || (Number.isFinite(Number(ratingMin)) && Number(ratingMin) >= 0 && Number(ratingMin) <= 10)) && boundedList(selection.filters.genres) && boundedList(selection.filters.countries) && (selection.artwork !== 'local' || importerArtworkSettingsValid(selection.artworkSettings));
 }
 
 export function importerWorkIds(value: string): string[] | null {

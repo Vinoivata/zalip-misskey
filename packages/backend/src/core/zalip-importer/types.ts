@@ -29,6 +29,8 @@ export type ImportRecord = {
 	backdropUrl: string | null;
 	logoUrl: string | null;
 	galleryUrls: string[];
+	/** Bounded provider-normalized alternatives, never supplied as arbitrary download URLs by clients. */
+	artworkCandidates?: ImportArtworkCandidate[];
 	trailerYoutubeKey: string | null;
 	ratings: { source: string; value: number; votes: number | null }[];
 	ageRating: string | null;
@@ -59,6 +61,17 @@ export interface ImportProvider {
 }
 export const importFields = ['title', 'originalTitle', 'description', 'releaseYear', 'runtimeMinutes', 'kind', 'genres', 'countries', 'posterUrl', 'backdropUrl', 'logoUrl', 'galleryUrls', 'trailerYoutubeKey', 'ratings', 'ageRating', 'credits', 'companies', 'collections', 'seasons', 'players'] as const;
 export type ImportField = typeof importFields[number];
+export const importArtworkFields = ['posterUrl', 'backdropUrl', 'logoUrl', 'galleryUrls'] as const;
+export type ImportArtworkField = typeof importArtworkFields[number];
+export type ImportArtworkFormat = 'original' | 'webp' | 'avif' | 'jpeg' | 'png';
+export type ImportArtworkSize = { width: number; height: number; fit: 'inside' | 'cover' };
+export type ImportArtworkSettings = { format: ImportArtworkFormat; quality: number; keepOriginal: boolean; galleryLimit: number; sizes: Record<ImportArtworkField, ImportArtworkSize> };
+export type ImportArtworkSettingsInput = Partial<Omit<ImportArtworkSettings, 'sizes'>> & { sizes?: Partial<Record<ImportArtworkField, Partial<ImportArtworkSize>>> };
+export type ImportArtworkCandidate = { id: string; source: ImportSource; field: ImportArtworkField; url: string; previewUrl: string; width: number | null; height: number | null; language: string | null };
+export type ImportArtworkChoices = Partial<Record<Exclude<ImportArtworkField, 'galleryUrls'>, string>> & { galleryUrls?: string[] };
+export type ImportArtworkSelection = { ref: ImportRef; choices: ImportArtworkChoices };
+export type ImportArtworkExpected = Partial<{ posterUrl: string | null; backdropUrl: string | null; logoUrl: string | null; galleryUrls: string[] }>;
+export type PreparedImportRecord = ImportRecord & { artworkExpected?: ImportArtworkExpected };
 export type ImportFilters = {
 	mediaTypes?: ImportMediaType[];
 	kinds?: ImportRecord['kind'][];
@@ -71,7 +84,7 @@ export type ImportFilters = {
 	requirePlayer?: boolean;
 };
 /** A persisted job policy contains no credentials or arbitrary provider parameters. */
-export type ImportOptions = { sources?: ImportSource[]; fields?: ImportField[]; fieldSources?: Partial<Record<ImportField, ImportSource>>; filters?: ImportFilters; artwork?: 'remote' | 'local-webp' };
+export type ImportOptions = { sources?: ImportSource[]; fields?: ImportField[]; fieldSources?: Partial<Record<ImportField, ImportSource>>; filters?: ImportFilters; artwork?: 'remote' | 'local-webp' | 'local'; artworkSettings?: ImportArtworkSettingsInput; artworkSelections?: ImportArtworkSelection[] };
 export type ImportWorkState = { locks: string[]; values: Record<string, unknown>; sources: Record<string, string>; countries: string[]; ratings: ImportRecord['ratings']; ageRating: string | null };
 export type ImportPreview = { record: ImportRecord; workId: string | null; options: ImportOptions; locks: string[]; matchesFilters: boolean; changes: { field: string; before: unknown; after: unknown; protected: boolean; selected: boolean }[]; warnings: string[] };
 

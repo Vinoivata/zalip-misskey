@@ -231,6 +231,90 @@ describe('importer API permissions and contracts', () => {
 		expect(sourceCheckMeta.limit.max).toBeLessThanOrEqual(10);
 	});
 
+	test('image settings forward through preview, manual jobs and schedules with exact numeric bounds', async () => {
+		const service = importer();
+		const preview = new Preview(role(true), importerAsService(service));
+		const create = new CreateRun(role(true), importerAsService(service));
+		const schedule = new SaveSchedule(role(true), importerAsService(service));
+		for (const format of ['original', 'webp', 'avif', 'jpeg', 'png']) {
+			const options = { artwork: 'local', artworkSettings: { format, quality: 100, keepOriginal: false, galleryLimit: 18, sizes: { posterUrl: { width: 5000, height: 0, fit: 'cover' }, backdropUrl: { width: 0, height: 5000, fit: 'inside' }, logoUrl: { width: 0, height: 0 }, galleryUrls: {} } } };
+			await preview.exec({ i: 'body-auth-placeholder', ref, options }, user, null);
+			expect(service.preview).toHaveBeenLastCalledWith(ref, undefined, options);
+			await create.exec({ refs: [ref], mode: 'import', options }, user, null);
+			expect(service.createRun).toHaveBeenLastCalledWith(expect.objectContaining({ options }), user.id);
+			await schedule.exec({ ...profile, options }, user, null);
+			expect(service.saveProfile).toHaveBeenLastCalledWith(expect.objectContaining({ options }));
+		}
+		const minimal = { artwork: 'local', artworkSettings: { quality: 1, galleryLimit: 0, keepOriginal: true } };
+		await preview.exec({ ref, options: minimal }, user, null);
+		expect(service.preview).toHaveBeenLastCalledWith(ref, undefined, minimal);
+		for (const invalid of [
+			{ format: 'jpg' }, { format: 'gif' }, { quality: 0 }, { quality: 101 }, { quality: 80.5 }, { quality: '85' },
+			{ keepOriginal: 1 }, { galleryLimit: -1 }, { galleryLimit: 19 }, { galleryLimit: 2.5 },
+			{ sizes: { posterUrl: { width: -1 } } }, { sizes: { posterUrl: { height: 5001 } } },
+			{ sizes: { posterUrl: { width: 1.5 } } }, { sizes: { posterUrl: { fit: 'stretch' } } },
+			{ sizes: { unknown: {} } }, { sizes: { posterUrl: { url: 'https://private.invalid/image.jpg' } } },
+			{ url: 'https://private.invalid/image.jpg' }, { apiToken: 'never-forward' },
+		]) {
+			const options = { artwork: 'local', artworkSettings: invalid };
+			await expect(preview.exec({ ref, options }, user, null)).rejects.toMatchObject({ code: 'INVALID_PARAM' });
+			await expect(create.exec({ refs: [ref], mode: 'import', options }, user, null)).rejects.toMatchObject({ code: 'INVALID_PARAM' });
+			await expect(schedule.exec({ ...profile, options }, user, null)).rejects.toMatchObject({ code: 'INVALID_PARAM' });
+		}
+		expect(service.preview).toHaveBeenCalledTimes(6);
+		expect(service.createRun).toHaveBeenCalledTimes(5);
+		expect(service.saveProfile).toHaveBeenCalledTimes(5);
+	});
+
+	test('image selections accept only bounded IDs and exact references, never raw image URLs', async () => {
+		const service = importer();
+		const preview = new Preview(role(true), importerAsService(service));
+		const create = new CreateRun(role(true), importerAsService(service));
+		const galleryIds = Array.from({ length: 18 }, (_, index) => index.toString(16).padStart(64, '0'));
+		const options = { artwork: 'local', artworkSelections: [{ ref, choices: { posterUrl: 'a'.repeat(64), backdropUrl: 'b'.repeat(64), logoUrl: 'c'.repeat(64), galleryUrls: galleryIds } }] };
+		await preview.exec({ i: 'body-auth-placeholder', ref, options }, user, null);
+		expect(service.preview).toHaveBeenLastCalledWith(ref, undefined, options);
+		await create.exec({ refs: [ref], mode: 'import', options }, user, null);
+		expect(service.createRun).toHaveBeenLastCalledWith(expect.objectContaining({ options }), user.id);
+		const clearGallery = { artworkSelections: [{ ref, choices: { galleryUrls: [] } }] };
+		await preview.exec({ ref, options: clearGallery }, user, null);
+		expect(service.preview).toHaveBeenLastCalledWith(ref, undefined, clearGallery);
+		const hundred = Array.from({ length: 100 }, (_, index) => ({ ref: { ...ref, externalId: String(index + 1) }, choices: { posterUrl: 'a'.repeat(64) } }));
+		await preview.exec({ ref, options: { artworkSelections: hundred } }, user, null);
+		for (const invalid of [
+			[{ ref, choices: {} }], [{ choices: { posterUrl: 'a'.repeat(64) } }], [{ ref }],
+			[{ ref: { ...ref, source: 'unknown' }, choices: { posterUrl: 'a'.repeat(64) } }],
+			[{ ref: { ...ref, externalId: 'https://private.invalid/1' }, choices: { posterUrl: 'a'.repeat(64) } }],
+			[{ ref: { ...ref, mediaType: 'anime' }, choices: { posterUrl: 'a'.repeat(64) } }],
+			[{ ref, choices: { posterUrl: 'a'.repeat(63) } }], [{ ref, choices: { posterUrl: 'a'.repeat(65) } }],
+			[{ ref, choices: { posterUrl: 'G'.repeat(64) } }], [{ ref, choices: { posterUrl: 'https://image.tmdb.org/t/p/original/one.jpg' } }],
+			[{ ref, choices: { galleryUrls: [...galleryIds, 'f'.repeat(64)] } }], [{ ref, choices: { galleryUrls: [galleryIds[0], galleryIds[0]] } }],
+			[{ ref, choices: { galleryUrls: ['a'.repeat(63)] } }], [{ ref, choices: { originalUrl: 'a'.repeat(64) } }],
+			[{ ref, choices: { posterUrl: 'a'.repeat(64) }, url: 'https://private.invalid/one.jpg' }],
+			[hundred[0], hundred[0]], [...hundred, { ref: { ...ref, externalId: '101' }, choices: { posterUrl: 'a'.repeat(64) } }],
+		]) {
+			await expect(preview.exec({ ref, options: { artworkSelections: invalid } }, user, null)).rejects.toMatchObject({ code: 'INVALID_PARAM' });
+			await expect(create.exec({ refs: [ref], mode: 'import', options: { artworkSelections: invalid } }, user, null)).rejects.toMatchObject({ code: 'INVALID_PARAM' });
+		}
+		expect(service.preview).toHaveBeenCalledTimes(3);
+		expect(service.createRun).toHaveBeenCalledTimes(1);
+	});
+
+	test('stale image choices return a dedicated safe client error rather than upstream details', async () => {
+		const service = importer();
+		const stale = new Error('IMPORT_ARTWORK_SELECTION_STALE', { cause: { url: 'https://private.invalid/?api_key=never-return' } });
+		service.preview.mockRejectedValueOnce(stale);
+		service.createRun.mockRejectedValueOnce(stale);
+		for (const [endpoint, params] of [[new Preview(role(true), importerAsService(service)), { ref }], [new CreateRun(role(true), importerAsService(service)), { refs: [ref], mode: 'import' }]] as const) {
+			const error: unknown = await endpoint.exec(params, user, null).then(() => null, value => value);
+			expect(error).toBeInstanceOf(ApiError);
+			expect(error).toMatchObject({ code: 'ZALIP_IMPORT_ARTWORK_SELECTION_STALE', httpStatusCode: 400, id: importerApiErrors.artworkSelectionStale.id });
+			expect(JSON.stringify(error)).not.toContain('private.invalid');
+			expect(JSON.stringify(error)).not.toContain('never-return');
+			expect(error).not.toHaveProperty('cause');
+		}
+	});
+
 	test('IMDb resolution requires an exact typed ID and a supported provider', async () => {
 		const checks = diagnostics();
 		const resolve = new Resolve(role(true), diagnosticsAsService(checks));

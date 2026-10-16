@@ -21,9 +21,11 @@ import { MiZalipImportProfile } from '@/models/ZalipImportProfile.js';
 import { MiZalipCatalogEntry } from '@/models/ZalipCatalogEntry.js';
 import { applyImportRecord, currentImportFields, findImportWork } from './zalip-importer/apply.js';
 import { budgetedTransport } from './zalip-importer/budget.js';
+import { recordArtworkCandidates, sameImportRef, selectImportArtwork } from './zalip-importer/artwork-candidates.js';
+import { equivalentImportArtwork } from './zalip-importer/artwork.js';
 import { canUpdateField, importFieldSelected, matchesCreatePlayerFilter, matchesImportFilters, mergeImportRecords, nonEmpty, normalizeImportOptions, readImportState, sameValue, selectedImportSources } from './zalip-importer/policy.js';
 import { configuredImportPlayerUrl, createImportProviders, createConfiguredImportTransport, ImportProviderError, importPlayerTranslationUrl } from './zalip-importer/providers.js';
-import { importFields, importSources, type ExternalIdentity, type ImportField, type ImportMediaType, type ImportOptions, type ImportPreview, type ImportProvider, type ImportRecord, type ImportRef, type ImportSource } from './zalip-importer/types.js';
+import { importArtworkFields, importFields, importSources, type ExternalIdentity, type ImportArtworkExpected, type ImportArtworkField, type ImportField, type ImportMediaType, type ImportOptions, type ImportPreview, type ImportProvider, type ImportRecord, type ImportRef, type ImportSource, type PreparedImportRecord } from './zalip-importer/types.js';
 
 export type CreateImportRun = {
 	refs?: ImportRef[];
@@ -49,7 +51,7 @@ export type SaveImportProfile = {
 
 export function safeImportError(error: unknown): string {
 	if (error instanceof ImportProviderError) return error.code;
-	if (error instanceof Error && ['NO_SUCH_WORK', 'IMPORT_IDENTITY_CONFLICT', 'IMPORT_INVALID_RECORD', 'ZALIP_CATALOG_ENTRY_NOT_FOUND'].includes(error.message)) return error.message;
+	if (error instanceof Error && ['NO_SUCH_WORK', 'IMPORT_IDENTITY_CONFLICT', 'IMPORT_INVALID_RECORD', 'ZALIP_CATALOG_ENTRY_NOT_FOUND', 'IMPORT_ARTWORK_SELECTION_STALE'].includes(error.message)) return error.message;
 	return 'import-failed';
 }
 
@@ -171,21 +173,30 @@ export class ZalipImporterService {
 				}
 			}
 		}
-		return mergeImportRecords(records, options);
+		const merged = mergeImportRecords(records, options);
+		merged.record.artworkCandidates = records.flatMap(record => recordArtworkCandidates(record, fields));
+		return selectImportArtwork(merged.record, ref, options, merged.sources);
 	}
 
 	public async preview(ref: ImportRef, workId?: string, inputOptions?: ImportOptions): Promise<ImportPreview> {
 		const options = normalizeImportOptions(inputOptions);
-		const { record } = await this.fetchRecord(ref, false, options, workId);
+		const { record, selectedFields } = await this.fetchRecord(ref, false, options, workId);
 		const work = await findImportWork(this.db, record, workId);
 		const state = readImportState(work?.importData);
 		const fields = work ? currentImportFields(work) : {};
+		const localArtwork = work?.importData.localArtwork && typeof work.importData.localArtwork === 'object' && !Array.isArray(work.importData.localArtwork) ? work.importData.localArtwork as Record<string, unknown> : {};
 		return {
 			record,
 			workId: work?.id ?? null,
 			options, locks: state.locks,
 			matchesFilters: matchesImportFilters(record, options.filters) && matchesCreatePlayerFilter(record, work != null, options.filters),
-			changes: importFields.map(field => ({ field, before: fields[field] ?? null, after: record[field], selected: importFieldSelected(field, options, !work), protected: !importFieldSelected(field, options, !work) || (work != null && !canUpdateField(fields[field], state.values[field], record[field], state.locks.includes(field))) })),
+			changes: importFields.map(field => {
+				const artworkField = importArtworkFields.includes(field as ImportArtworkField);
+				const explicitArtwork = selectedFields.includes(field as ImportArtworkField);
+				const localizingLegacyArtwork = artworkField && nonEmpty(record[field]) && options.artwork !== undefined && options.artwork !== 'remote' && state.values[field] === undefined && equivalentImportArtwork(fields[field], record[field], Boolean(work?.tmdbId && work.tmdbMediaType));
+				const preserveLocalized = !explicitArtwork && options.artwork !== 'local' && options.artwork !== 'local-webp' && Object.hasOwn(localArtwork, field) && sameValue(fields[field], localArtwork[field]);
+				return { field, before: fields[field] ?? null, after: record[field], selected: importFieldSelected(field, options, !work), protected: !importFieldSelected(field, options, !work) || (work != null && (state.locks.includes(field) || preserveLocalized || (!explicitArtwork && !localizingLegacyArtwork && !canUpdateField(fields[field], state.values[field], record[field], false)))) };
+			}),
 			warnings: record.warnings,
 		};
 	}
@@ -213,6 +224,7 @@ export class ZalipImporterService {
 		if (targets.length > 100) throw new ImportProviderError('invalid-ref');
 		if (targets.length === 0 && boundTargets === undefined) throw new ImportProviderError('invalid-ref');
 		if (targets.some(item => !providers[item.ref.source]?.status().configured)) throw new ImportProviderError('not-configured');
+		if (options.artworkSelections?.some(selection => !targets.some(target => sameImportRef(target.ref, selection.ref)))) throw new Error('INVALID_IMPORT_OPTIONS');
 		const categoryIds = [...new Set(input.categoryIds ?? [])];
 		if (categoryIds.length > 50 || (categoryIds.length && await this.db.getRepository(MiZalipCatalogEntry).countBy({ id: In(categoryIds), type: 'category' }) !== categoryIds.length)) throw new Error('ZALIP_CATALOG_ENTRY_NOT_FOUND');
 		const now = new Date();
@@ -292,8 +304,8 @@ export class ZalipImporterService {
 				await items.update(item.id, { state: 'running', warnings: [], updatedAt: new Date() });
 				let warnings: string[] = [];
 				try {
-					const { record: fetchedRecord, sources } = await this.fetchRecord(item.ref, run.mode === 'availability', run.options, item.workId ?? undefined);
-					let record = fetchedRecord;
+					const { record: fetchedRecord, sources, selectedFields } = await this.fetchRecord(item.ref, run.mode === 'availability', run.options, item.workId ?? undefined);
+					let record: PreparedImportRecord = fetchedRecord;
 					warnings = safeImportWarnings(record.warnings);
 					if (warnings.length) await items.update(item.id, { warnings });
 					if ((await runs.findOneBy({ id: runId }))?.state !== 'running') { await items.update(item.id, { state: 'pending', warnings }); return; }
@@ -307,13 +319,23 @@ export class ZalipImporterService {
 						continue;
 					}
 					const establishedAvailability = before != null && readImportState(before.importData).values.players !== undefined;
-					if (run.mode !== 'availability' && run.options?.artwork === 'local-webp') record = await this.artwork.prepare(record, before, run.options.fields, run.lockedFields);
+					const localArtwork = run.mode !== 'availability' && (run.options?.artwork === 'local-webp' || run.options?.artwork === 'local');
+					if (localArtwork) record = await this.artwork.prepare(record, before, run.options.fields, run.lockedFields, run.options.artworkSettings, run.options.artwork === 'local' ? 'local' : 'local-webp', selectedFields);
+					let artworkExpected = record.artworkExpected;
+					if (!localArtwork && before && selectedFields.length) {
+						const current = currentImportFields(before);
+						artworkExpected = Object.fromEntries(selectedFields.map(field => [field, structuredClone(current[field])])) as ImportArtworkExpected;
+					}
+					const localizedFields = localArtwork ? importArtworkFields.filter(field => !record.warnings.includes(`artwork-local-unavailable:${field}`) && ((artworkExpected && Object.hasOwn(artworkExpected, field)) || (nonEmpty(record[field]) && !sameValue(record[field], fetchedRecord[field])))) : [];
+					// An intentional empty gallery has no bytes to localize, but remains an editorial choice.
+					// Do not confuse it with galleryLimit: 0 truncating a nonempty provider selection.
+					const manualArtworkFields = selectedFields.filter(field => !localArtwork || localizedFields.includes(field) || (field === 'galleryUrls' && fetchedRecord.galleryUrls.length === 0 && !record.warnings.includes('artwork-local-unavailable:galleryUrls')));
 					const preparedWarnings = safeImportWarnings(record.warnings);
 					if (!sameValue(warnings, preparedWarnings)) await items.update(item.id, { warnings: preparedWarnings });
 					warnings = preparedWarnings;
 					// Optional local artwork involves network work: a late pause/cancel still wins.
 					if ((await runs.findOneBy({ id: runId }))?.state !== 'running') { await items.update(item.id, { state: 'pending', warnings }); return; }
-					const result = await applyImportRecord(this.db, this.idService, record, sources, { workId: item.workId ?? undefined, lockedFields: run.lockedFields, mode: run.mode, options: run.options });
+					const result = await applyImportRecord(this.db, this.idService, record, sources, { workId: item.workId ?? undefined, lockedFields: run.lockedFields, mode: run.mode, options: run.options, artworkExpected, artworkSelectedFields: manualArtworkFields, artworkLocalizedFields: localizedFields });
 					await items.update(item.id, { workId: result.work.id });
 					if (run.mode !== 'availability') await this.taxonomy.syncImportedWork(result.work.id, record, result.protectedFields);
 					for (const entryId of run.categoryIds) await this.taxonomy.linkWork({ entryId, workId: result.work.id });
@@ -444,6 +466,8 @@ export class ZalipImporterService {
 			const existing = input.id ? await repository.findOne({ where: { id: input.id }, lock: { mode: 'pessimistic_write' } }) : null;
 			if (input.id && !existing) throw new ImportProviderError('not-found');
 			const options = normalizeImportOptions(input.options ?? existing?.options);
+			// A title-specific manual choice is a one-off action, not a catalogue-wide cron policy.
+			if (options.artworkSelections?.length) throw new Error('INVALID_IMPORT_OPTIONS');
 			const lockedFields = normalizeImportOptions({ fields: (input.lockedFields ?? existing?.lockedFields ?? []) as ImportField[] }).fields!;
 			const categoryIds = [...new Set(input.categoryIds ?? existing?.categoryIds ?? [])];
 			if (categoryIds.length > 50 || (categoryIds.length && await manager.getRepository(MiZalipCatalogEntry).countBy({ id: In(categoryIds), type: 'category' }) !== categoryIds.length)) throw new Error('ZALIP_CATALOG_ENTRY_NOT_FOUND');
