@@ -18,6 +18,8 @@ vi.mock('@/core/ZalipImporterArtworkService.js', () => ({ ZalipImporterArtworkSe
 
 const poster = 'https://image.tmdb.org/t/p/w500/chosen.jpg';
 const local = 'https://zalip.example.org/files/native.jpg';
+const originalLogo = 'https://image.tmdb.org/t/p/original/chosen-logo.png';
+const boundedLogo = 'https://image.tmdb.org/t/p/w1280/chosen-logo.png';
 const lockedMetadata = { locks: ['posterUrl', 'title'], values: { posterUrl: poster, title: 'Original' }, sources: { posterUrl: 'kinopoisk' }, custom: { untouched: true } };
 
 function fixture(kind: ArtworkLocalizationKind = 'work', additions: Record<string, unknown> = {}) {
@@ -37,7 +39,7 @@ function fixture(kind: ArtworkLocalizationKind = 'work', additions: Record<strin
 	const manager = { getRepository, query: vi.fn().mockResolvedValue([]) };
 	const connection = { connect: vi.fn(), release: vi.fn(), query: vi.fn().mockResolvedValue([{ locked: true }]) };
 	const db = { manager, getRepository, createQueryRunner: () => connection, transaction: vi.fn(async action => action(manager)) };
-	const artwork = { cacheOriginal: vi.fn(async () => { nativeFiles.add(local); return local; }) };
+	const artwork = { cacheOriginal: vi.fn(async (_value: string, _budget: { deadlineAt: number; remainingBytes: number }) => { nativeFiles.add(local); return local; }) };
 	const service = new ZalipArtworkLocalizationService(db as never, artwork as never);
 	const field: ArtworkLocalizationField = kind === 'episode' ? 'stillPath' : kind === 'catalog' ? 'imageUrl' : 'posterPath';
 	const expected = () => artworkLocalizationRevision(kind, 'row01', field, row[field] as string);
@@ -45,6 +47,78 @@ function fixture(kind: ArtworkLocalizationKind = 'work', additions: Record<strin
 }
 
 describe('exact existing catalogue image localization', () => {
+	test('successful original logos stay byte-preserving without requesting a resized variant', async () => {
+		const f = fixture('work', { logoPath: originalLogo });
+		const expected = artworkLocalizationRevision('work', 'row01', 'logoPath', originalLogo);
+		expect((await f.service.step('work', 'row01', 'logoPath', expected)).status).toBe('localized');
+		expect(f.artwork.cacheOriginal).toHaveBeenCalledExactlyOnceWith(originalLogo, expect.any(Object));
+	});
+
+	test('a rejected canonical original work logo retries only its same-basename bounded variant, retaining exact CAS and locks', async () => {
+		const metadata = { locks: ['logoUrl', 'title'], values: { logoUrl: originalLogo, title: 'Keep' }, sources: { logoUrl: 'tmdb' } };
+		const f = fixture('work', { logoPath: originalLogo, importData: metadata });
+		f.artwork.cacheOriginal.mockRejectedValueOnce(new Error('IMPORT_ARTWORK_UNAVAILABLE'));
+		const expected = artworkLocalizationRevision('work', 'row01', 'logoPath', originalLogo);
+		expect((await f.service.step('work', 'row01', 'logoPath', expected)).status).toBe('localized');
+		expect(f.artwork.cacheOriginal.mock.calls.map(args => args[0])).toEqual([originalLogo, boundedLogo]);
+		expect(f.artwork.cacheOriginal.mock.calls[0][1]).toBe(f.artwork.cacheOriginal.mock.calls[1][1]);
+		expect(f.row.logoPath).toBe(local);
+		expect(f.row.importData).toEqual({ ...metadata, values: { ...metadata.values, logoUrl: local }, localArtwork: { logoUrl: local } });
+	});
+
+	test.each([
+		['work', 'posterPath', originalLogo],
+		['catalog', 'imageUrl', originalLogo],
+		['work', 'logoPath', 'https://st.kp.yandex.net/images/logo.png'],
+		['work', 'logoPath', 'https://image.tmdb.org/t/p/w500/chosen-logo.png'],
+		['work', 'logoPath', 'https://image.tmdb.org/t/p/original/nested/chosen-logo.png'],
+		['work', 'logoPath', 'https://image.tmdb.org/t/p/original/chosen-logo.png?language=ru'],
+	] as const)('never derives logo variants for an ineligible %s/%s source', async (kind, field, value) => {
+		const f = fixture(kind, { [field]: value });
+		f.artwork.cacheOriginal.mockRejectedValue(new Error('IMPORT_ARTWORK_UNAVAILABLE'));
+		const expected = artworkLocalizationRevision(kind, 'row01', field, value);
+		expect((await f.service.step(kind, 'row01', field, expected)).status).toBe('unavailable');
+		expect(f.artwork.cacheOriginal).toHaveBeenCalledExactlyOnceWith(value, expect.any(Object));
+		expect(f.row[field]).toBe(value);
+		expect(f.repository.update).not.toHaveBeenCalled();
+	});
+
+	test('a failed bounded logo leaves the exact selected URL, manual baseline and locks intact', async () => {
+		const metadata = { locks: ['logoUrl'], values: { logoUrl: 'https://manual.example.org/earlier.png' }, sources: { logoUrl: 'manual' } };
+		const f = fixture('work', { logoPath: originalLogo, importData: metadata });
+		f.artwork.cacheOriginal.mockRejectedValue(new Error('IMPORT_ARTWORK_UNAVAILABLE'));
+		const expected = artworkLocalizationRevision('work', 'row01', 'logoPath', originalLogo);
+		expect((await f.service.step('work', 'row01', 'logoPath', expected)).status).toBe('unavailable');
+		expect(f.artwork.cacheOriginal.mock.calls.map(args => args[0])).toEqual([originalLogo, boundedLogo]);
+		expect(f.row.logoPath).toBe(originalLogo);
+		expect(f.row.importData).toEqual(metadata);
+		expect(f.repository.update).not.toHaveBeenCalled();
+	});
+
+	test('a newer editor logo during the bounded retry wins CAS without changing the newer metadata', async () => {
+		const f = fixture('work', { logoPath: originalLogo });
+		f.artwork.cacheOriginal.mockRejectedValueOnce(new Error('IMPORT_ARTWORK_UNAVAILABLE')).mockImplementationOnce(async () => {
+			f.row.logoPath = 'https://manual.example.org/newer.png';
+			f.row.importData = { locks: ['logoUrl'], values: { title: 'Newer' } };
+			return local;
+		});
+		const expected = artworkLocalizationRevision('work', 'row01', 'logoPath', originalLogo);
+		expect((await f.service.step('work', 'row01', 'logoPath', expected)).status).toBe('stale');
+		expect(f.row.logoPath).toBe('https://manual.example.org/newer.png');
+		expect(f.row.importData).toEqual({ locks: ['logoUrl'], values: { title: 'Newer' } });
+		expect(f.repository.update).not.toHaveBeenCalled();
+	});
+
+	test('the bounded logo retry cannot extend the original field deadline', async () => {
+		const f = fixture('work', { logoPath: originalLogo });
+		const clock = vi.spyOn(Date, 'now').mockReturnValue(1000);
+		f.artwork.cacheOriginal.mockImplementationOnce(async () => { clock.mockReturnValue(46001); throw new Error('IMPORT_ARTWORK_UNAVAILABLE'); });
+		try {
+			const expected = artworkLocalizationRevision('work', 'row01', 'logoPath', originalLogo);
+			expect((await f.service.step('work', 'row01', 'logoPath', expected)).status).toBe('unavailable');
+			expect(f.artwork.cacheOriginal).toHaveBeenCalledOnce();
+		} finally { clock.mockRestore(); }
+	});
 	test('taxonomy refresh preserves localized photos, manual edits can replace them, and private aliases never pack publicly', () => {
 		const entry = { name: 'Person', slug: 'person', description: 'Original', imageUrl: local, externalIds: { tmdb: '10' }, parentId: null, data: { biography: 'Biography', _zalip: { manualFields: [], fieldSources: { imageUrl: 'tmdb' }, localArtwork: { imageUrl: local } } } };
 		const refreshed = mergeZalipCatalogEntry(entry, { type: 'person', name: 'New name', description: 'New description', imageUrl: poster }, 'tmdb');

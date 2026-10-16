@@ -114,6 +114,20 @@ export class ZalipArtworkLocalizationService {
 		} finally { this.stepActive = false; }
 	}
 
+	private async cacheExisting(kind: ArtworkLocalizationKind, field: ArtworkLocalizationField, source: URL, budget: { deadlineAt: number; remainingBytes: number }): Promise<string> {
+		try {
+			return await this.artwork.cacheOriginal(source.href, budget);
+		} catch (error) {
+			// Some TMDB logo originals have enormous transparent canvases. Keep the
+			// selected basename, use only the CDN's bounded variant, and retain the same
+			// byte/pixel/deadline checks instead of increasing the global decoder limit.
+			if (kind !== 'work' || field !== 'logoPath' || source.origin !== 'https://image.tmdb.org' || source.search || source.hash || !/^\/t\/p\/original\/[A-Za-z0-9._-]{1,256}$/u.test(source.pathname) || Date.now() >= budget.deadlineAt || budget.remainingBytes <= 0) throw error;
+			const variant = new URL(source.href);
+			variant.pathname = variant.pathname.replace('/t/p/original/', '/t/p/w1280/');
+			return await this.artwork.cacheOriginal(variant.href, budget);
+		}
+	}
+
 	private async localize(kind: ArtworkLocalizationKind, id: string, field: ArtworkLocalizationField, expected: string): Promise<{ kind: ArtworkLocalizationKind; id: string; field: ArtworkLocalizationField; status: StepStatus; images: number }> {
 		const report = (status: StepStatus, images = 0) => ({ kind, id, field, status, images });
 		const connection = this.db.createQueryRunner();
@@ -138,7 +152,7 @@ export class ZalipArtworkLocalizationService {
 			const budget = { deadlineAt: Date.now() + (field === 'galleryPaths' ? 60000 : 45000), remainingBytes: importArtworkLimits.batchBytes };
 			const localized: string[] = [];
 			try {
-				for (const current of values) localized.push(await this.native(current) ? current : await this.artwork.cacheOriginal(existingArtworkSource(current, tmdbOwned)!.href, budget));
+				for (const current of values) localized.push(await this.native(current) ? current : await this.cacheExisting(kind, field, existingArtworkSource(current, tmdbOwned)!, budget));
 			} catch { return report('unavailable', values.length); }
 			const nextValue = Array.isArray(oldValue) ? localized : localized[0];
 			const applied = await this.db.transaction(async manager => {

@@ -64,6 +64,7 @@
 - Fix: Reload cached library pages, isolate optional title loading failures, preserve exact episode links and paginate the complete catalogue.
 
 ### Server
+- Fix: Localize rejected oversized TMDB logo originals through a bounded same-image w1280 variant without raising image limits or changing editorial locks.
 - Feat: Localize existing catalogue artwork into native storage with exact-image revisions, retained originals and protected editorial ownership.
 - Fix: Apply native posting limits and declared note-creation errors to Zalip shares.
 - Feat: Page the complete published Zalip catalogue with filter-scoped keyset cursors, global ordering and matching-title totals while preserving the legacy list response.
