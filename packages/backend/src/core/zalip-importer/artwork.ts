@@ -63,17 +63,19 @@ async function readImportArtwork(url: URL, agent: Agent | undefined, deadlineAt:
 	if (Date.now() >= deadlineAt) throw new Error('IMPORT_ARTWORK_UNAVAILABLE');
 	const timer = setTimeout(() => controller.abort(), Math.max(1, Math.min(importArtworkLimits.requestTimeoutMs, deadlineAt - Date.now())));
 	try {
-		const mayFollowPlaceholder = originalOnly && url.origin === 'https://st.kp.yandex.net' && !url.username && !url.password && !url.port && !url.hash && !url.href.includes('?') && url.pathname.startsWith('/images/') && url.href !== kinopoiskPlaceholder;
+		const mayFollowKinopoiskImage = originalOnly && url.origin === 'https://st.kp.yandex.net' && !url.username && !url.password && !url.port && !url.hash && !url.href.includes('?') && url.pathname.startsWith('/images/') && url.href !== kinopoiskPlaceholder;
 		let imageUrl = url;
-		let response = await fetch(url.href, { redirect: mayFollowPlaceholder ? 'manual' : 'error', size: importArtworkLimits.inputBytes, signal: controller.signal, agent });
-		if (mayFollowPlaceholder && response.status === 302) {
+		let response = await fetch(url.href, { redirect: mayFollowKinopoiskImage ? 'manual' : 'error', size: importArtworkLimits.inputBytes, signal: controller.signal, agent });
+		if (mayFollowKinopoiskImage && response.status === 302) {
 			const location = response.headers.get('location');
 			(response.body as Readable | null)?.destroy();
 			if (!location || location.length > 2048) throw new Error('IMPORT_ARTWORK_REJECTED');
 			const destination = new URL(location, url);
-			// Exactly one same-origin hop to the known static placeholder, not a general
-			// CDN redirect policy. The old body is closed and the same agent/deadline apply.
-			if (destination.href !== kinopoiskPlaceholder || Date.now() >= deadlineAt) throw new Error('IMPORT_ARTWORK_REJECTED');
+			// Exactly one known image-family or static-placeholder hop, not a general
+			// CDN redirect policy. The same protected agent, byte cap and deadline apply.
+			const knownImageFamily = /^(?:https:)?\/\/avatars\.mds\.yandex\.net\/get-kinopoisk-image\/[A-Za-z0-9._/-]+$/u.test(location)
+				&& destination.origin === 'https://avatars.mds.yandex.net' && destination.pathname.startsWith('/get-kinopoisk-image/');
+			if (!importArtworkUrl(destination.href) || (destination.href !== kinopoiskPlaceholder && !knownImageFamily) || Date.now() >= deadlineAt) throw new Error('IMPORT_ARTWORK_REJECTED');
 			imageUrl = destination;
 			response = await fetch(destination.href, { redirect: 'error', size: importArtworkLimits.inputBytes, signal: controller.signal, agent });
 		}

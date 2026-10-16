@@ -12,6 +12,20 @@ vi.mock('node-fetch', () => ({ default: mockedFetch }));
 afterEach(() => mockedFetch.mockReset());
 
 describe('bounded local importer artwork', () => {
+	test.each(['https:', ''])('retains exact JPEG bytes through one approved Kinopoisk image-family hop (%s)', async scheme => {
+		const original = await sharp({ create: { width: 225, height: 350, channels: 3, background: '#789abc' } }).jpeg().toBuffer();
+		const destination = 'https://avatars.mds.yandex.net/get-kinopoisk-image/123/fixture-chosen/orig';
+		const destroy = vi.fn();
+		mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: destination.replace('https:', scheme) }), body: { destroy } });
+		mockedFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers({ 'content-type': 'image/jpeg', 'content-length': String(original.length) }), arrayBuffer: async () => original });
+		const agent = {} as never;
+		expect(await downloadOriginalImportArtwork(new URL('https://st.kp.yandex.net/images/actor_iphone/chosen.jpg'), agent)).toMatchObject({ original, originalExtension: 'jpg', format: 'jpeg', width: 225, height: 350 });
+		expect(destroy).toHaveBeenCalledOnce();
+		expect(mockedFetch).toHaveBeenCalledTimes(2);
+		expect(mockedFetch.mock.calls[1]).toEqual([destination, expect.objectContaining({ redirect: 'error', agent, size: importArtworkLimits.inputBytes })]);
+		expect(mockedFetch.mock.calls[0][1].signal).toBe(mockedFetch.mock.calls[1][1].signal);
+	});
+
 	test('retains exact PNG bytes through one known same-origin Kinopoisk placeholder hop only for original storage', async () => {
 		const original = await sharp({ create: { width: 208, height: 304, channels: 4, background: '#789abc' } }).png().toBuffer();
 		const destroy = vi.fn();
@@ -46,12 +60,65 @@ describe('bounded local importer artwork', () => {
 		'/images/other.gif', '/other/no-poster.gif', '/images/no-poster.gif?cache=1',
 		'/images/no-poster.gif?token=private', '/images/no-poster.gif#fragment',
 		'//127.0.0.1/images/no-poster.gif',
-	])('never follows an unapproved placeholder redirect destination %s', async location => {
+		'https://avatars.mds.yandex.net.evil.example.org/get-kinopoisk-image/123/chosen/orig',
+		'https://evil.avatars.mds.yandex.net/get-kinopoisk-image/123/chosen/orig',
+		'http://avatars.mds.yandex.net/get-kinopoisk-image/123/chosen/orig',
+		'https://avatars.mds.yandex.net:443/get-kinopoisk-image/123/chosen/orig',
+		'https://avatars.mds.yandex.net:8443/get-kinopoisk-image/123/chosen/orig',
+		'https://user:private@avatars.mds.yandex.net/get-kinopoisk-image/123/chosen/orig',
+		'https://avatars.mds.yandex.net/get-kinopoisk-image/123/chosen/orig?cache=1',
+		'https://avatars.mds.yandex.net/get-kinopoisk-image/123/chosen/orig?',
+		'https://avatars.mds.yandex.net/get-kinopoisk-image/123/chosen/orig#',
+		'https://avatars.mds.yandex.net/get-kinopoisk-image/123/chosen/orig#fragment',
+		'https://avatars.mds.yandex.net/get-kinopoisk-image/',
+		'https://avatars.mds.yandex.net/get-other-image/123/chosen/orig',
+		'https://avatars.mds.yandex.net/get-kinopoisk-image/../get-other-image/123/chosen/orig',
+		'https://avatars.mds.yandex.net/get-kinopoisk-image/%2f../get-other-image/123/chosen/orig',
+	])('never follows an unapproved Kinopoisk image redirect destination %s', async location => {
 		const destroy = vi.fn();
 		mockedFetch.mockResolvedValue({ ok: false, status: 302, headers: new Headers({ location }), body: { destroy } });
 		await expect(downloadOriginalImportArtwork(new URL('https://st.kp.yandex.net/images/person.jpg'))).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
 		expect(mockedFetch).toHaveBeenCalledOnce();
 		expect(destroy).toHaveBeenCalledOnce();
+	});
+
+	test.each([301, 303, 307, 308])('does not follow a Kinopoisk image-family redirect with status %s', async status => {
+		mockedFetch.mockResolvedValue({ ok: false, status, headers: new Headers({ location: 'https://avatars.mds.yandex.net/get-kinopoisk-image/123/chosen/orig' }), body: { destroy: vi.fn() } });
+		await expect(downloadOriginalImportArtwork(new URL('https://st.kp.yandex.net/images/person.jpg'))).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+		expect(mockedFetch).toHaveBeenCalledOnce();
+	});
+
+	test('image-family hop cannot redirect back, chain onward, use the GIF MIME exception or enter the conversion pipeline', async () => {
+		const destination = 'https://avatars.mds.yandex.net/get-kinopoisk-image/123/chosen/orig';
+		const source = new URL('https://st.kp.yandex.net/images/person.jpg');
+		for (const next of [source.href, 'https://avatars.mds.yandex.net/get-kinopoisk-image/456/other/orig']) {
+			mockedFetch.mockReset();
+			mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: destination }), body: { destroy: vi.fn() } });
+			mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: next }), body: { destroy: vi.fn() } });
+			await expect(downloadOriginalImportArtwork(source)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+			expect(mockedFetch).toHaveBeenCalledTimes(2);
+			expect(mockedFetch.mock.calls[1][1].redirect).toBe('error');
+		}
+		mockedFetch.mockReset();
+		const body = vi.fn();
+		mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: destination }), body: { destroy: vi.fn() } });
+		mockedFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers({ 'content-type': 'image/gif' }), arrayBuffer: body });
+		await expect(downloadOriginalImportArtwork(source)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+		expect(body).not.toHaveBeenCalled();
+		mockedFetch.mockReset();
+		mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: destination }), body: { destroy: vi.fn() } });
+		await expect(downloadImportArtwork(source, 'posterUrl')).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+		expect(mockedFetch).toHaveBeenCalledOnce();
+		expect(mockedFetch.mock.calls[0][1].redirect).toBe('error');
+	});
+
+	test('image-family hop retains the original byte cap', async () => {
+		const body = vi.fn();
+		mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: 'https://avatars.mds.yandex.net/get-kinopoisk-image/123/chosen/orig' }), body: { destroy: vi.fn() } });
+		mockedFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers({ 'content-type': 'image/jpeg', 'content-length': String(importArtworkLimits.inputBytes + 1) }), arrayBuffer: body });
+		await expect(downloadOriginalImportArtwork(new URL('https://st.kp.yandex.net/images/person.jpg'))).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+		expect(body).not.toHaveBeenCalled();
+		expect(mockedFetch.mock.calls[1][1].size).toBe(importArtworkLimits.inputBytes);
 	});
 
 	test.each([
@@ -109,9 +176,9 @@ describe('bounded local importer artwork', () => {
 		} finally { clock.mockRestore(); }
 	});
 
-	test('both placeholder requests share one twelve-second timeout instead of resetting the clock per hop', async () => {
+	test.each(['/images/no-poster.gif', 'https://avatars.mds.yandex.net/get-kinopoisk-image/123/chosen/orig'])('both requests share one twelve-second timeout instead of resetting the clock per hop (%s)', async location => {
 		vi.useFakeTimers();
-		mockedFetch.mockImplementationOnce(async () => await new Promise(resolve => setTimeout(() => resolve({ ok: false, status: 302, headers: new Headers({ location: '/images/no-poster.gif' }), body: { destroy: vi.fn() } }), 7000)));
+		mockedFetch.mockImplementationOnce(async () => await new Promise(resolve => setTimeout(() => resolve({ ok: false, status: 302, headers: new Headers({ location }), body: { destroy: vi.fn() } }), 7000)));
 		mockedFetch.mockImplementationOnce(async (_url, options: { signal: AbortSignal }) => await new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => reject(new Error('fixture-aborted')), { once: true })));
 		try {
 			const operation = downloadOriginalImportArtwork(new URL('https://st.kp.yandex.net/images/person.jpg'));
