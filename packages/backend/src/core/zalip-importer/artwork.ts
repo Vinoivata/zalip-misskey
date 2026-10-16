@@ -10,6 +10,7 @@ import { safeImportUrl } from './providers.js';
 import { normalizeImportArtworkSettings } from './policy.js';
 import type { ImportArtworkField, ImportArtworkSettingsInput } from './types.js';
 import type { Agent } from 'node:https';
+import type { Readable } from 'node:stream';
 
 const artworkHosts = ['image.tmdb.org', 'st.kp.yandex.net', 'avatars.mds.yandex.net', 'kinopoiskapiunofficial.tech'];
 export type { ImportArtworkField } from './types.js';
@@ -54,15 +55,31 @@ export function artworkOriginalCacheUri(url: URL): string {
 	return `zalip:import-artwork:original:v2:${createHash('sha256').update(url.href).digest('hex')}`;
 }
 
-async function readImportArtwork(url: URL, agent: Agent | undefined, deadlineAt: number) {
+const kinopoiskPlaceholder = 'https://st.kp.yandex.net/images/no-poster.gif';
+
+async function readImportArtwork(url: URL, agent: Agent | undefined, deadlineAt: number, originalOnly = false) {
 	if (!importArtworkUrl(url.href)) throw new Error('IMPORT_ARTWORK_REJECTED');
 	const controller = new AbortController();
 	if (Date.now() >= deadlineAt) throw new Error('IMPORT_ARTWORK_UNAVAILABLE');
 	const timer = setTimeout(() => controller.abort(), Math.max(1, Math.min(importArtworkLimits.requestTimeoutMs, deadlineAt - Date.now())));
 	try {
-		const response = await fetch(url.href, { redirect: 'error', size: importArtworkLimits.inputBytes, signal: controller.signal, agent });
+		const mayFollowPlaceholder = originalOnly && url.origin === 'https://st.kp.yandex.net' && !url.username && !url.password && !url.port && !url.hash && !url.href.includes('?') && url.pathname.startsWith('/images/') && url.href !== kinopoiskPlaceholder;
+		let imageUrl = url;
+		let response = await fetch(url.href, { redirect: mayFollowPlaceholder ? 'manual' : 'error', size: importArtworkLimits.inputBytes, signal: controller.signal, agent });
+		if (mayFollowPlaceholder && response.status === 302) {
+			const location = response.headers.get('location');
+			(response.body as Readable | null)?.destroy();
+			if (!location || location.length > 2048) throw new Error('IMPORT_ARTWORK_REJECTED');
+			const destination = new URL(location, url);
+			// Exactly one same-origin hop to the known static placeholder, not a general
+			// CDN redirect policy. The old body is closed and the same agent/deadline apply.
+			if (destination.href !== kinopoiskPlaceholder || Date.now() >= deadlineAt) throw new Error('IMPORT_ARTWORK_REJECTED');
+			imageUrl = destination;
+			response = await fetch(destination.href, { redirect: 'error', size: importArtworkLimits.inputBytes, signal: controller.signal, agent });
+		}
 		const mime = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
-		if (!response.ok || !mime || !['image/jpeg', 'image/png', 'image/webp', 'image/avif'].includes(mime)) throw new Error('IMPORT_ARTWORK_REJECTED');
+		const placeholderMime = originalOnly && imageUrl.href === kinopoiskPlaceholder && mime === 'image/gif';
+		if (!response.ok || !mime || (!['image/jpeg', 'image/png', 'image/webp', 'image/avif'].includes(mime) && !placeholderMime)) throw new Error('IMPORT_ARTWORK_REJECTED');
 		const declaredSize = response.headers.get('content-length');
 		if (declaredSize && (!/^\d+$/u.test(declaredSize) || Number(declaredSize) > importArtworkLimits.inputBytes)) throw new Error('IMPORT_ARTWORK_REJECTED');
 		const original = Buffer.from(await response.arrayBuffer());
@@ -71,11 +88,15 @@ async function readImportArtwork(url: URL, agent: Agent | undefined, deadlineAt:
 		const image = sharp(original, { limitInputPixels: importArtworkLimits.pixels, animated: false }).timeout({ seconds: Math.max(1, Math.min(importArtworkLimits.processingTimeoutSeconds, Math.floor((deadlineAt - Date.now()) / 1000))) });
 		const metadata = await image.metadata();
 		if (!metadata.format || !['jpeg', 'png', 'webp', 'avif', 'heif'].includes(metadata.format) || (metadata.pages ?? 1) > 1 || !metadata.width || !metadata.height || metadata.width * metadata.height > importArtworkLimits.pixels) throw new Error('IMPORT_ARTWORK_REJECTED');
+		// The historical .gif endpoint is actually a static PNG. Never admit GIF
+		// pixel data (animated or otherwise) through this narrow MIME exception.
+		if (placeholderMime && metadata.format !== 'png') throw new Error('IMPORT_ARTWORK_REJECTED');
 		const originalFormat = metadata.format === 'heif' ? 'avif' : metadata.format;
 		return { original, image, metadata, originalFormat };
 	} catch {
 		throw new Error('IMPORT_ARTWORK_UNAVAILABLE');
 	} finally {
+		controller.abort();
 		clearTimeout(timer);
 	}
 }
@@ -83,7 +104,7 @@ async function readImportArtwork(url: URL, agent: Agent | undefined, deadlineAt:
 /** Validate a complete bounded image while retaining its exact bytes, dimensions and transparency. */
 export async function downloadOriginalImportArtwork(url: URL, agent?: Agent, deadlineAt = Date.now() + importArtworkLimits.requestTimeoutMs + importArtworkLimits.processingTimeoutSeconds * 1000): Promise<ImportArtworkOriginal> {
 	try {
-		const { original, image, metadata, originalFormat } = await readImportArtwork(url, agent, deadlineAt);
+		const { original, image, metadata, originalFormat } = await readImportArtwork(url, agent, deadlineAt, true);
 		// metadata() alone does not decode the pixels of a truncated or otherwise corrupt image.
 		await image.stats();
 		if (Date.now() >= deadlineAt) throw new Error('IMPORT_ARTWORK_UNAVAILABLE');

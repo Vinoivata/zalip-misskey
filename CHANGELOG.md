@@ -64,6 +64,7 @@
 - Fix: Reload cached library pages, isolate optional title loading failures, preserve exact episode links and paginate the complete catalogue.
 
 ### Server
+- Fix: Preserve Kinopoisk's existing static PNG placeholder through one exact same-origin redirect during original-only artwork localization without allowing GIF images or general redirects.
 - Fix: Localize rejected oversized TMDB logo originals through a bounded same-image w1280 variant without raising image limits or changing editorial locks.
 - Feat: Localize existing catalogue artwork into native storage with exact-image revisions, retained originals and protected editorial ownership.
 - Fix: Apply native posting limits and declared note-creation errors to Zalip shares.
