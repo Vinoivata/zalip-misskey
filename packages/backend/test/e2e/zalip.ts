@@ -17,7 +17,7 @@ import { MiZalipSeason } from '@/models/ZalipSeason.js';
 import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
 import { MiZalipLibraryEntry } from '@/models/ZalipLibraryEntry.js';
 import { MiZalipWatchProgress } from '@/models/ZalipWatchProgress.js';
-import { api, castAsError, createAppToken, initTestDb, sendEnvResetRequest, sendEnvUpdateRequest, signup } from '../utils.js';
+import { api, castAsError, createAppToken, initTestDb, sendEnvUpdateRequest, signup } from '../utils.js';
 import type * as misskey from 'misskey-js';
 
 type ImporterTaxonomyEntry = { id: string; name: string; data: Record<string, unknown> };
@@ -35,7 +35,9 @@ describe('Zalip discussions', () => {
 
 	beforeAll(async () => {
 		admin = await signup({ username: 'zalipdiscussionadmin' });
-		viewer = await signup({ username: 'zalipdiscussionviewer' });
+		viewer = await signup({ username: 'zalipdiscviewer' });
+		assert.ok(admin.id && admin.token, 'administrator signup fixture must authenticate');
+		assert.ok(viewer.id && viewer.token, 'viewer signup fixture must authenticate');
 
 		const createdWork = await api('zalip/admin/works/create', {
 			slug: 'zalip-discussion-test',
@@ -235,7 +237,8 @@ describe('Zalip discussions', () => {
 		for (const [endpoint, params] of cases) {
 			const anonymous = await api(endpoint, params);
 			const nativeOnly = endpoint === 'zalip/admin/importer/artwork/inspect' || endpoint === 'zalip/admin/importer/artwork/step';
-			assert.strictEqual(anonymous.status, nativeOnly ? 403 : 401, endpoint);
+			assert.strictEqual(anonymous.status, nativeOnly ? 400 : 401, endpoint);
+			assert.strictEqual(castAsError(anonymous.body as Record<string, unknown>).error.code, nativeOnly ? 'ACCESS_DENIED' : 'CREDENTIAL_REQUIRED', endpoint);
 			const denied = await api(endpoint, params, viewer);
 			assert.strictEqual(denied.status, 403, endpoint);
 			assert.strictEqual(castAsError(denied.body as Record<string, unknown>).error.code, 'ZALIP_ADMIN_REQUIRED');
@@ -288,6 +291,7 @@ describe('Zalip discussions', () => {
 	});
 
 	test('Kodik settings support null mirror, encrypted credentials and canonical refs without upstream calls or queued jobs', async () => {
+		assert.ok(!process.env.ZALIP_IMPORTER_SETTINGS_KEY, 'the isolated fixture requires no developer encryption key');
 		const db = await initTestDb(true);
 		const repository = db.getRepository(MiZalipImporterSourceSetting);
 		// This isolated test database must not contain a developer's encrypted credentials.
@@ -330,7 +334,9 @@ describe('Zalip discussions', () => {
 			assert.strictEqual(await db.getRepository(MiZalipImportRun).count(), beforeRuns);
 		} finally {
 			await repository.delete({ source: 'kodik' });
-			await sendEnvResetRequest();
+			// A full Nest reset drops the test schema and invalidates shared fixtures.
+			// This service reads its key dynamically; an empty value restores no key.
+			await sendEnvUpdateRequest({ key: 'ZALIP_IMPORTER_SETTINGS_KEY', value: '' });
 			await db.destroy();
 		}
 	});
