@@ -21,7 +21,7 @@ export const zalipProgressMaxSeconds = 48 * 60 * 60;
 @Check('CHK_zalip_progress_sequence', '"sequence" >= 0')
 @Check('CHK_zalip_progress_duration', '"durationSeconds" IS NULL OR ("durationSeconds" > 0 AND "durationSeconds" <= 172800)')
 @Check('CHK_zalip_progress_position', '"positionSeconds" IS NULL OR ("durationSeconds" IS NOT NULL AND "positionSeconds" >= 0 AND "positionSeconds" <= "durationSeconds")')
-@Check('CHK_zalip_progress_time_provider', '("mode" = \'time\' AND "provider" = \'kodik\') OR ("mode" = \'episode\' AND "positionSeconds" IS NULL AND "durationSeconds" IS NULL)')
+@Check('CHK_zalip_progress_time_provider', '("mode" = \'time\' AND "provider" IN (\'alloha\', \'collaps\', \'kodik\')) OR ("mode" = \'episode\' AND "positionSeconds" IS NULL AND "durationSeconds" IS NULL)')
 export class MiZalipWatchProgress {
 	@PrimaryColumn({ ...id(), primaryKeyConstraintName: 'PK_zalip_watch_progress' })
 	public userId: MiUser['id'];
@@ -49,7 +49,7 @@ export class MiZalipWatchProgress {
 	@Column('varchar', { length: 16 }) public provider: ZalipProgressProvider;
 	@Column('varchar', { length: 16 }) public mode: 'time' | 'episode';
 	@Column('varchar', { length: 100, nullable: true }) public translationId: string | null;
-	/** Resource identity (opaque media-path fingerprint for Kodik), never an iframe URL or credential. */
+	/** Resource identity (opaque media fingerprint for verified timelines), never an iframe URL or credential. */
 	@Column('varchar', { length: 100 }) public resourceId: string;
 	@Column('double precision', { nullable: true }) public positionSeconds: number | null;
 	@Column('double precision', { nullable: true }) public durationSeconds: number | null;
