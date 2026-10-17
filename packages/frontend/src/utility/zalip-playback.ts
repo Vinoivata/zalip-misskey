@@ -56,18 +56,28 @@ export function playbackTranslationLabel(translation: PlaybackTranslation, subti
 /** Unknown legacy coverage stays playable; a known Kodik voice never silently opens another episode. */
 export function playbackEpisodeAvailable(source: PlaybackSource | null, translationId: string | null, seasonNumber: number | null, episodeNumber: number | null): boolean {
 	if (!source) return false;
-	if (source.source !== 'kodik' || seasonNumber == null || episodeNumber == null) return true;
+	if (seasonNumber == null || episodeNumber == null) return true;
 	const episodes = selectablePlaybackTranslations(source).find(translation => translation.id === translationId)?.episodes;
 	return episodes === undefined || episodes.some(episode => episode.seasonNumber === seasonNumber && episode.episodeNumber === episodeNumber);
 }
 
 /** Provider-specific voice selectors are supplied by the server; the page owns only season/episode. */
-export function workPlaybackIframe(source: PlaybackSource | null, translationId: string | null, seasonNumber: number | null, episodeNumber: number | null): string | null {
+export function workPlaybackIframe(source: PlaybackSource | null, translationId: string | null, seasonNumber: number | null, episodeNumber: number | null, lockClip = false): string | null {
 	if (!source || !playbackEpisodeAvailable(source, translationId, seasonNumber, episodeNumber)) return null;
 	const iframe = selectablePlaybackTranslations(source).find(translation => translation.id === translationId)?.iframe ?? source.iframe;
 	try {
 		const url = new URL(iframe);
 		if (url.protocol !== 'https:' || url.username || url.password) return null;
+		if (source.source === 'alloha') url.searchParams.delete('start');
+		if (source.source === 'collaps') url.searchParams.delete('time');
+		if (lockClip && source.source === 'alloha') {
+			// Native selectors do not report their identity. Keep source changes in our canonical UI.
+			url.searchParams.set('hidden', 'episode,season,translation');
+		} else if (lockClip && source.source === 'collaps') {
+			// showMenu=false removes the playlist itself (including auto-next), not merely its CSS.
+			url.searchParams.set('showMenu', 'false');
+			url.searchParams.set('showPreNext', 'false');
+		}
 		if (seasonNumber != null && episodeNumber != null) {
 			url.searchParams.set('season', String(seasonNumber));
 			url.searchParams.set('episode', String(episodeNumber));

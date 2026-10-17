@@ -16,7 +16,7 @@ import { MiZalipAllohaSource } from '@/models/ZalipAllohaSource.js';
 import { MiZalipWatchProgress, zalipProgressMaxSeconds, zalipProgressProviders } from '@/models/ZalipWatchProgress.js';
 import type { ZalipProgressProvider } from '@/models/ZalipWatchProgress.js';
 import type { MiLocalUser } from '@/models/User.js';
-import { configuredImportPlayerUrl } from './zalip-importer/providers.js';
+import { configuredImportPlayerUrl, importPlayerTranslationUrl } from './zalip-importer/providers.js';
 import { readImportState } from './zalip-importer/policy.js';
 import type { ImportPlayer } from './zalip-importer/types.js';
 import { ZalipPlaybackSettingsService } from './ZalipPlaybackSettingsService.js';
@@ -79,7 +79,8 @@ export class ZalipWatchProgressService {
 		const stored = readImportState(work.importData).values.players;
 		// Match the public playback projection: snapshots may retain multiple resource slots per provider.
 		const player = (Array.isArray(stored) ? stored : []).find(candidate => candidate && typeof candidate === 'object' && candidate.source === target.provider) as ImportPlayer | undefined;
-		if (player && configuredImportPlayerUrl(player.iframeUrl, target.provider, runtime.config)) {
+		const parentUrl = player ? configuredImportPlayerUrl(player.iframeUrl, target.provider, runtime.config) : null;
+		if (player && parentUrl) {
 			const translations = Array.isArray(player.translations) ? player.translations.slice(0, 100) : [];
 			const translation = target.translationId == null ? null : translations.find(voice => voice?.id === target.translationId);
 			if (target.translationId != null && (!translation || (translation.iframe && !configuredImportPlayerUrl(translation.iframe, target.provider, runtime.config)))) throw new ZalipProgressError('ZALIP_PROGRESS_UNAVAILABLE');
@@ -90,24 +91,35 @@ export class ZalipWatchProgressService {
 				if ((target.provider === 'kodik' && !Array.isArray(coverage)) || (Array.isArray(coverage) && !coverage.some(item => item.seasonNumber === episode.season!.seasonNumber && item.episodeNumber === episode.episodeNumber))) throw new ZalipProgressError('ZALIP_PROGRESS_UNAVAILABLE');
 			}
 			const identity = target.provider === 'kodik' && translation ? translation.id : player.externalId;
-			const voiceUrl = translation?.iframe ? configuredImportPlayerUrl(translation.iframe, target.provider, runtime.config) : null;
+			// Match public playback's legacy selector reconstruction exactly, including an omitted iframe.
+			const voiceUrl = translation ? translation.iframe === undefined
+				? importPlayerTranslationUrl(parentUrl, target.provider, { id: translation.id, name: translation.name })
+				: configuredImportPlayerUrl(translation.iframe, target.provider, runtime.config) : null;
+			// Collaps selects the first substring match, not necessarily an exact label.
+			// Serial coverage already proves uniqueness per episode; movies need the same catalogue check here.
+			const movieVoiceUnique = target.provider !== 'collaps' || episode !== null || (typeof translation?.name === 'string' && translations.filter(voice => typeof voice?.name === 'string' && voice.name.trim().toLowerCase().includes(translation.name.trim().toLowerCase())).length === 1);
+			const lockedTimeline = target.provider === 'kodik' || !movieVoiceUnique ? null : lockedProviderTimeline(target.provider, translation ? voiceUrl : parentUrl, target.translationId, translation, episode);
 			// A new resource path/hash is a different cut, even if the upstream edition ID is reused.
 			// Approved mirror-origin and token changes alone do not invalidate the same media timeline.
 			const resourceId = target.provider === 'kodik' && translation && voiceUrl
 				? createHash('sha256').update(JSON.stringify([translation.id, new URL(voiceUrl).pathname, translation.providerTranslationId ?? null])).digest('hex')
-				: identity;
+				: lockedTimeline ?? identity;
 			if (typeof resourceId !== 'string' || !resourceId || resourceId.length > 100) throw new ZalipProgressError('ZALIP_PROGRESS_UNAVAILABLE');
-			const mode = target.provider === 'kodik' && typeof translation?.providerTranslationId === 'string' && /^[1-9]\d{0,15}$/u.test(translation.providerTranslationId) ? 'time' as const : 'episode' as const;
+			const timeEligible = target.provider === 'kodik' ? typeof translation?.providerTranslationId === 'string' && /^[1-9]\d{0,15}$/u.test(translation.providerTranslationId) : lockedTimeline !== null;
+			const mode = timeEligible ? 'time' as const : 'episode' as const;
 			return { resourceId, mode };
 		}
 		// Legacy Alloha is a separate local cache; never fetch its upstream API during playback.
 		if (target.provider === 'alloha') {
 			const legacy = await manager.getRepository(MiZalipAllohaSource).findOneBy({ workId: work.id });
-			if (legacy?.isAvailable && configuredImportPlayerUrl(legacy.iframe, 'alloha', runtime.config)) {
+			const parentUrl = legacy?.isAvailable ? configuredImportPlayerUrl(legacy.iframe, 'alloha', runtime.config) : null;
+			if (legacy && parentUrl) {
 				const translation = legacy.translations.find(voice => String(voice.id) === target.translationId);
 				if (target.translationId != null && (!translation || !configuredImportPlayerUrl(translation.iframe, 'alloha', runtime.config))) throw new ZalipProgressError('ZALIP_PROGRESS_UNAVAILABLE');
 				if (target.translationId == null && legacy.translations.length) throw new ZalipProgressError('INVALID_ZALIP_PROGRESS_TARGET');
-				return { resourceId: legacy.id, mode: 'episode' as const };
+				const voiceUrl = translation ? configuredImportPlayerUrl(translation.iframe, 'alloha', runtime.config) : parentUrl;
+				const timeline = lockedProviderTimeline('alloha', voiceUrl, target.translationId, translation, episode);
+				return { resourceId: timeline ?? legacy.id, mode: timeline ? 'time' as const : 'episode' as const };
 			}
 		}
 		throw new ZalipProgressError('ZALIP_PROGRESS_UNAVAILABLE');
@@ -198,6 +210,31 @@ export class ZalipWatchProgressService {
 			nextCursor: rows.length > limit && last ? Buffer.from(JSON.stringify({ played: last.lastPlayedAt.toISOString(), workId: last.workId })).toString('base64url') : null,
 		};
 	}
+}
+
+/** The app locks iframe controls; these cached identities bind its seconds to one concrete media target. */
+function lockedProviderTimeline(provider: 'alloha' | 'collaps', iframe: string | null, translationId: string | null, translation: { name: unknown; episodes?: { seasonNumber: number; episodeNumber: number }[] } | null | undefined, episode: MiZalipEpisode | null): string | null {
+	if (!iframe) return null;
+	try {
+		const url = new URL(iframe);
+		if (url.protocol !== 'https:' || url.username || url.password || url.port || url.hash) return null;
+		let identity: string | null = null;
+		const selectorKey = provider === 'alloha' ? 'translation' : 'oneSound';
+		const selector = url.searchParams.get(selectorKey);
+		if (url.searchParams.getAll(selectorKey).length > 1 || (selector !== null && (!selector.trim() || selector.length > 256 || /[\u0000-\u001f\u007f-\u009f]/u.test(selector)))) return null;
+		if (provider === 'alloha') {
+			// Movie embeds may silently restore another native type/quality, even with hidden controls.
+			if (!episode) return null;
+			identity = url.searchParams.get('token_movie');
+			if (url.searchParams.getAll('token_movie').length !== 1 || !identity || !/^[A-Za-z0-9_-]{8,256}$/u.test(identity) || (translationId !== null && selector !== translationId)) return null;
+		} else {
+			if (translationId === null || !selector || typeof translation?.name !== 'string' || selector !== translation.name.trim()) return null;
+			// Collaps falls back to other audio when oneSound is absent in an episode.
+			// Only a provider-verified per-voice snapshot can make a serial target time eligible.
+			if (episode && (!Array.isArray(translation.episodes) || !translation.episodes.some(item => item && item.seasonNumber === episode.season!.seasonNumber && item.episodeNumber === episode.episodeNumber))) return null;
+		}
+		return createHash('sha256').update(JSON.stringify([provider, 'v1', translationId, url.pathname, identity, selector, episode?.season?.seasonNumber ?? null, episode?.episodeNumber ?? null])).digest('hex');
+	} catch { return null; }
 }
 
 export function validatedProgressValues(row: Pick<MiZalipWatchProgress, 'provider' | 'mode' | 'positionSeconds' | 'durationSeconds' | 'completed'>, input: Pick<ProgressUpdate, 'positionSeconds' | 'durationSeconds' | 'completed'>) {

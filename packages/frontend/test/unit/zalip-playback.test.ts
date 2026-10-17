@@ -50,19 +50,32 @@ describe('work playback helpers', () => {
 	});
 
 	it('preserves server-provided voice selectors and credentials while updating only the episode', () => {
-		const url = new URL(workPlaybackIframe(alloha, '246', 2, 3)!);
+		const url = new URL(workPlaybackIframe(alloha, '246', 2, 3, true)!);
 		expect(url.searchParams.get('token')).toBe('public-fixture');
 		expect(url.searchParams.get('translation')).toBe('246');
 		expect(url.searchParams.get('season')).toBe('2');
 		expect(url.searchParams.get('episode')).toBe('3');
+		expect(url.searchParams.get('hidden')).toBe('episode,season,translation');
+		expect(url.searchParams.has('time')).toBe(false);
 		const collaps: PlaybackSource = { ...alloha, source: 'collaps', iframe: 'https://collaps.example/embed/fixture', translations: [{ id: 'studio', name: 'Studio', iframe: 'https://collaps.example/embed/fixture?oneSound=Studio' }] };
 		expect(new URL(workPlaybackIframe(collaps, 'studio', 2, 3)!).searchParams.get('oneSound')).toBe('Studio');
 		expect(new URL(workPlaybackIframe(collaps, 'studio', 2, 3)!).searchParams.has('translation')).toBe(false);
+		const collapsUrl = new URL(workPlaybackIframe(collaps, 'studio', 2, 3, true)!);
+		expect(collapsUrl.searchParams.get('showMenu')).toBe('false');
+		expect(collapsUrl.searchParams.get('showPreNext')).toBe('false');
+		expect(collapsUrl.searchParams.has('only_episode')).toBe(false);
+		expect(collapsUrl.searchParams.has('time')).toBe(false);
 	});
 
 	it('uses the source iframe for unknown voices and does not add partial episode coordinates', () => {
-		expect(workPlaybackIframe(alloha, 'missing', null, 3)).toBe(alloha.iframe);
-		expect(workPlaybackIframe(alloha, null, 2, null)).toBe(alloha.iframe);
+		for (const iframe of [workPlaybackIframe(alloha, 'missing', null, 3), workPlaybackIframe(alloha, null, 2, null)]) {
+			const url = new URL(iframe!);
+			expect(url.origin).toBe(new URL(alloha.iframe).origin);
+			expect(url.searchParams.get('token_movie')).toBe('fixture');
+			expect(url.searchParams.has('season')).toBe(false);
+			expect(url.searchParams.has('episode')).toBe(false);
+			expect(url.searchParams.has('hidden')).toBe(false);
+		}
 		expect(workPlaybackIframe(null, null, null, null)).toBeNull();
 	});
 	it('preserves Kodik edition paths without adding another provider voice selector', () => {
@@ -88,8 +101,38 @@ describe('work playback helpers', () => {
 		expect(workPlaybackIframe(knownEmpty, 'serial-123', null, null)).not.toBeNull();
 		const unknown = { ...kodik, translations: [{ ...kodik.translations[0], episodes: undefined }] };
 		expect(workPlaybackIframe(unknown, 'serial-123', 2, 1)).not.toBeNull();
-		expect(workPlaybackIframe({ ...alloha, translations: [{ ...alloha.translations[0], episodes: [] }] }, '246', 2, 3)).not.toBeNull();
+		expect(workPlaybackIframe({ ...alloha, translations: [{ ...alloha.translations[0], episodes: [] }] }, '246', 2, 3)).toBeNull();
 		expect(playbackEpisodeAvailable(null, null, 2, 3)).toBe(false);
+	});
+	it.each(['alloha', 'collaps'] as const)('honors exact known %s voice coverage and preserves legacy unknown coverage', source => {
+		const base: PlaybackSource = { ...alloha, source, translations: [{ ...alloha.translations[0], episodes: [{ seasonNumber: 0, episodeNumber: 1 }] }] };
+		expect(playbackEpisodeAvailable(base, '246', 0, 1)).toBe(true);
+		expect(playbackEpisodeAvailable(base, '246', 1, 1)).toBe(false);
+		expect(workPlaybackIframe(base, '246', 1, 1)).toBeNull();
+		expect(playbackEpisodeAvailable({ ...base, translations: [{ ...base.translations[0], episodes: undefined }] }, '246', 1, 1)).toBe(true);
+		expect(workPlaybackIframe(base, '246', null, null)).not.toBeNull();
+	});
+	it('overrides inherited balancer control flags without mutating stored voice URLs', () => {
+		const raw = 'https://collaps.example/embed/movie/50?oneSound=Studio&showMenu=true&showPreNext=true';
+		const source: PlaybackSource = { ...alloha, source: 'collaps', iframe: raw, translations: [{ id: 'studio', name: 'Studio', iframe: raw }] };
+		const url = new URL(workPlaybackIframe(source, 'studio', 0, 1, true)!);
+		expect(url.searchParams.get('oneSound')).toBe('Studio');
+		expect(url.searchParams.get('showMenu')).toBe('false');
+		expect(url.searchParams.get('showPreNext')).toBe('false');
+		expect(url.searchParams.get('season')).toBe('0');
+		expect(source.translations[0].iframe).toBe(raw);
+	});
+	it.each(['alloha', 'collaps'] as const)('leaves native-only %s series selectors intact until a canonical clip is known', source => {
+		const base: PlaybackSource = { ...alloha, source };
+		const url = new URL(workPlaybackIframe(base, '246', null, null)!);
+		for (const flag of ['hidden', 'showMenu', 'showPreNext', 'only_episode']) expect(url.searchParams.has(flag)).toBe(false);
+	});
+	it.each(['alloha', 'collaps'] as const)('strips stale %s offsets before either locked or native iframe is opened', source => {
+		const offset = source === 'alloha' ? 'start' : 'time';
+		const raw = `https://${source}.example/player?${offset}=120&${offset}=240`;
+		const base: PlaybackSource = { ...alloha, source, iframe: raw, translations: [] };
+		for (const lock of [false, true]) expect(new URL(workPlaybackIframe(base, null, null, null, lock)!).searchParams.has(offset)).toBe(false);
+		expect(base.iframe).toBe(raw);
 	});
 	it('keeps all three providers isolated and ordered while retaining legacy Alloha support', () => {
 		const collaps: PlaybackSource = { ...alloha, source: 'collaps', iframe: 'https://collaps.example/embed/fixture', translations: [] };

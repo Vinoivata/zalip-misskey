@@ -4,6 +4,7 @@
 -
 
 ### Client
+- Enhance: Save and restore Zalip playback time for fixed Alloha episodes and Collaps clips with verified voice coverage, excluding ad time and invalidated player contexts; keep unsupported editions in episode-only mode.
 - Fix: Reconcile chat unread badges against current server state so delayed message/read events and out-of-order refreshes cannot restore a stale badge.
 - Enhance: Add per-source and per-field Zalip import settings, exact work locks, provider checks, profile controls, person enrichment and bounded category recalculation.
 - Enhance: Rebuild Zalip title hero and episode player controls, add a mobile account sheet, restore catalogue widgets, and fix nested search focus outlines.

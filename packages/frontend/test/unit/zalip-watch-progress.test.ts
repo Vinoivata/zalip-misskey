@@ -6,7 +6,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createHash, webcrypto } from 'node:crypto';
 import type { ContinueWatchingItem, ProgressUpdate, ProgressUpdateResult } from '@/utility/zalip-watch-progress.js';
-import { continueWatchingRoute, kodikResourceFingerprint, parseKodikEvent, sameWatchTarget, WatchProgressWriter, watchProgressPercent, watchTimeLabel } from '@/utility/zalip-watch-progress.js';
+import { balancerResourceFingerprint, continueWatchingRoute, kodikResourceFingerprint, parseKodikEvent, sameWatchTarget, WatchProgressWriter, watchProgressPercent, watchTimeLabel } from '@/utility/zalip-watch-progress.js';
 
 const source = {} as Window;
 const binding = { origin: 'https://kodik.example', source, generation: 3 };
@@ -82,6 +82,39 @@ describe('watch progress single-flight queue', () => {
 });
 
 describe('continue watching presentation', () => {
+	it.each(['alloha', 'collaps'] as const)('matches the backend %s digest and excludes mirror origins and authentication tokens', async provider => {
+		const subtle = webcrypto.subtle as unknown as SubtleCrypto;
+		const translationId = provider === 'alloha' ? '246' : 'name:studio-one';
+		const path = provider === 'alloha' ? '/player' : '/embed/movie/50';
+		const selector = provider === 'alloha' ? '246' : 'Studio One';
+		const identity = provider === 'alloha' ? 'title-fixture' : null;
+		const url = new URL(`https://player.example${path}`);
+		url.search = provider === 'alloha' ? 'token_movie=title-fixture&translation=246&hidden=episode,season,translation' : 'oneSound=Studio+One&showMenu=false&showPreNext=false';
+		url.searchParams.set('season', '2'); url.searchParams.set('episode', '1'); url.searchParams.set('token', 'public-one');
+		const actual = await balancerResourceFingerprint(provider, translationId, url.toString(), 2, 1, subtle);
+		expect(actual).toBe(createHash('sha256').update(JSON.stringify([provider, 'v1', translationId, path, identity, selector, 2, 1])).digest('hex'));
+		url.hostname = 'mirror.example'; url.searchParams.set('token', 'public-two'); url.searchParams.set('time', '120');
+		expect(await balancerResourceFingerprint(provider, translationId, url.toString(), 2, 1, subtle)).toBe(actual);
+		url.pathname += '/another-cut';
+		expect(await balancerResourceFingerprint(provider, translationId, url.toString(), 2, 1, subtle)).not.toBe(actual);
+	});
+	it('never fingerprints an Alloha movie or an unlocked or mismatched serial', async () => {
+		const subtle = webcrypto.subtle as unknown as SubtleCrypto;
+		const url = 'https://alloha.example/?token_movie=title-fixture&translation=246&hidden=episode,season,translation&season=2&episode=1';
+		expect(await balancerResourceFingerprint('alloha', '246', url, null, null, subtle)).toBeNull();
+		for (const bad of [url.replace('&hidden=episode,season,translation', ''), url.replace('hidden=episode,season,translation', 'hidden=episode,season'), url.replace('translation=246', 'translation=999'), `${url}&translation=246`, `${url}&token_movie=other-fixture`, url.replace('season=2', 'season=3'), url.replace('episode=1', 'episode=2'), url.replace('https:', 'http:'), url.replace('https://', 'https://secret@')]) expect(await balancerResourceFingerprint('alloha', '246', bad, 2, 1, subtle)).toBeNull();
+		expect(await balancerResourceFingerprint('alloha', '246', url, 2, null, subtle)).toBeNull();
+		expect(await balancerResourceFingerprint('alloha', '246', url, 2, 1, null)).toBeNull();
+	});
+	it('requires locked Collaps menu, navigation and a single voice selector', async () => {
+		const subtle = webcrypto.subtle as unknown as SubtleCrypto;
+		const url = 'https://collaps.example/embed/movie/50?oneSound=Studio&showMenu=false&showPreNext=false&season=0&episode=1';
+		for (const bad of [url.replace('showMenu=false', 'showMenu=true'), url.replace('&showPreNext=false', ''), `${url}&oneSound=Other`, url.replace('oneSound=Studio', 'oneSound='), url.replace('episode=1', 'episode=2')]) expect(await balancerResourceFingerprint('collaps', 'voice-one', bad, 0, 1, subtle)).toBeNull();
+		expect(await balancerResourceFingerprint('collaps', null, url, 0, 1, subtle)).toBeNull();
+		expect(await balancerResourceFingerprint('collaps', 'voice-one', url, -1, 1, subtle)).toBeNull();
+		expect(await balancerResourceFingerprint('collaps', 'voice-one', url, 0, 1.5, subtle)).toBeNull();
+		expect(await balancerResourceFingerprint('collaps', 'voice-two', url, 0, 1, subtle)).not.toBe(await balancerResourceFingerprint('collaps', 'voice-one', url, 0, 1, subtle));
+	});
 	it('binds the mounted edition path to the server digest without including mirrors or public URL tokens', async () => {
 		const subtle = webcrypto.subtle as unknown as SubtleCrypto;
 		const actual = await kodikResourceFingerprint('serial-123', 'https://kodik.example/serial/123/cut-one/720p?token=public-fixture&season=2', '718', subtle);

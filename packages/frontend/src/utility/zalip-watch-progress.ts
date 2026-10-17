@@ -48,6 +48,32 @@ export async function kodikResourceFingerprint(translationId: string, mountedIfr
 	} catch { return null; }
 }
 
+/** Bind a fixed balancer clip/voice to its canonical episode; never hash an authentication token. */
+export async function balancerResourceFingerprint(provider: 'alloha' | 'collaps', translationId: string | null, mountedIframeUrl: string, seasonNumber: number | null, episodeNumber: number | null, subtle: SubtleCrypto | null = (window as unknown as { crypto?: { subtle?: SubtleCrypto } }).crypto?.subtle ?? null): Promise<string | null> {
+	if (!subtle || (translationId != null && (!translationId || translationId.length > 100))) return null;
+	if ((seasonNumber == null) !== (episodeNumber == null) || (seasonNumber != null && (!Number.isSafeInteger(seasonNumber) || seasonNumber < 0 || seasonNumber > 1000 || !Number.isSafeInteger(episodeNumber) || episodeNumber! < 0 || episodeNumber! > 100000))) return null;
+	try {
+		const url = new URL(mountedIframeUrl);
+		if (url.protocol !== 'https:' || url.username || url.password || url.port || url.hash) return null;
+		const one = (key: string) => url.searchParams.getAll(key).length === 1 ? url.searchParams.get(key) : null;
+		let identity: string | null = null;
+		let selector: string | null = null;
+		if (provider === 'alloha') {
+			// Movie native resume can switch cuts without an identity event. Do not claim a fixed movie cut.
+			if (seasonNumber == null || !one('hidden')?.split(',').every(value => ['episode', 'season', 'translation'].includes(value)) || !['episode', 'season', 'translation'].every(value => one('hidden')?.split(',').includes(value))) return null;
+			identity = one('token_movie'); selector = one('translation');
+			if (!identity || !/^[A-Za-z0-9_-]{8,256}$/u.test(identity) || (translationId != null && selector !== translationId)) return null;
+		} else {
+			if (one('showMenu') !== 'false' || one('showPreNext') !== 'false' || translationId == null) return null;
+			selector = one('oneSound');
+			if (!selector || selector.length > 256) return null;
+		}
+		if (seasonNumber != null && (one('season') !== String(seasonNumber) || one('episode') !== String(episodeNumber))) return null;
+		const input = new TextEncoder().encode(JSON.stringify([provider, 'v1', translationId, url.pathname, identity, selector, seasonNumber, episodeNumber]));
+		return [...new Uint8Array(await subtle.digest('SHA-256', input))].map(byte => byte.toString(16).padStart(2, '0')).join('');
+	} catch { return null; }
+}
+
 export function watchProgressPercent(progress: Pick<WatchProgress, 'positionSeconds' | 'durationSeconds'>): number | null {
 	return validSeconds(progress.positionSeconds) && validSeconds(progress.durationSeconds) && progress.durationSeconds > 0
 		? Math.min(100, progress.positionSeconds / progress.durationSeconds * 100) : null;

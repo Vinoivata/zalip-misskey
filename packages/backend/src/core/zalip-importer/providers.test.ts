@@ -88,7 +88,7 @@ describe('importer normalizers', () => {
 		const record = normalizeCollapsRecord({ id: 50, name: 'Сериал', type: 'serials', kinopoisk_id: '10', imdb_id: 'tt1234567', poster: 'https://images.example.org/poster.jpg', iframe_url: 'https://api.nextembed.ws/embed/movie/50', actors: [{ id: 6, name: 'Actor' }], director: ['Director'], voiceActing: [{ id: 5, name: 'Studio' }], seasons: [{ season: 1, episodes: [{ episode: 1, name: 'First' }] }] });
 		expect(record.identities).toContainEqual({ provider: 'kinopoisk', externalId: '10', entityType: 'tv' });
 		expect(record.credits.map(value => value.role)).toEqual(['actor', 'director']);
-		expect(record.players[0].translations).toEqual([{ id: '5', name: 'Studio', iframe: 'https://api.nextembed.ws/embed/movie/50?oneSound=Studio' }]);
+		expect(record.players[0].translations).toEqual([{ id: '5', name: 'Studio', iframe: 'https://api.nextembed.ws/embed/movie/50?oneSound=Studio', episodes: [] }]);
 		expect(record.players[0].episodes).toEqual([{ seasonNumber: 1, episodeNumber: 1 }]);
 		const rejected = normalizeCollapsRecord({ id: 50, name: 'Film', iframe_url: 'https://untrusted.example.org/embed/50' });
 		expect(rejected.players).toEqual([]);
@@ -181,6 +181,77 @@ describe('importer normalizers', () => {
 		const rejected = normalizeCollapsRecord({ ...input, iframe_url: 'https://untrusted.example.org/embed/50', voiceActing: ['Studio'] });
 		expect(rejected.players).toEqual([]);
 		expect(rejected.warnings).toContain('collaps-player-url-rejected');
+	});
+
+	test('Collaps binds each full voice to only its confirmed canonical episode links, including specials', () => {
+		const iframe = 'https://api.nextembed.ws/embed/movie/50';
+		const episode = (season: number, number: number, voices: unknown[], extra = {}) => ({ episode: number, iframe_url: `${iframe}?season=${season}&episode=${number}`, voiceActing: voices, ...extra });
+		const input = { id: 50, name: 'Series', type: 'serials', iframe_url: iframe, voiceActing: [{ id: 5, name: 'First Studio' }, { id: 6, name: 'Second Studio' }], seasons: [
+			{ season: 1, episodes: [episode(1, 3, ['FIRST STUDIO', 'Second Studio']), episode(1, 2, [{ name: 'Second Studio' }]), episode(1, 1, ['First Studio']), episode(1, 4, ['First Studio'], { availability: false })] },
+			{ season: 0, episodes: [episode(0, 0, ['First Studio'])] },
+		] };
+		const result = normalizeCollapsRecord(input);
+		expect(result.players[0].translations).toEqual([
+			{ id: '5', name: 'First Studio', iframe: `${iframe}?oneSound=First+Studio`, episodes: [{ seasonNumber: 0, episodeNumber: 0 }, { seasonNumber: 1, episodeNumber: 1 }, { seasonNumber: 1, episodeNumber: 3 }] },
+			{ id: '6', name: 'Second Studio', iframe: `${iframe}?oneSound=Second+Studio`, episodes: [{ seasonNumber: 1, episodeNumber: 2 }, { seasonNumber: 1, episodeNumber: 3 }] },
+		]);
+		expect(result.players[0].episodes).toHaveLength(5);
+		expect(input.seasons[0].episodes[0].voiceActing).toEqual(['FIRST STUDIO', 'Second Studio']);
+	});
+
+	test('Collaps never infers coverage from global voices or unknown per-episode voice metadata', () => {
+		const iframe = 'https://api.nextembed.ws/embed/movie/50';
+		const episode = (number: number, extra = {}) => ({ episode: number, iframe_url: `${iframe}?season=1&episode=${number}`, ...extra });
+		const record = normalizeCollapsRecord({ id: 50, name: 'Series', type: 'serials', iframe_url: iframe, voiceActing: ['Studio'], seasons: [{ season: 1, episodes: [
+			episode(1), episode(2, { voiceActing: null }), episode(3, { voiceActing: [] }), episode(4, { voiceActing: 'Studio' }),
+			episode(5, { voiceActing: [{ id: 5 }] }), episode(6, { voiceActing: ['Studio', null] }), { episode: 7, voiceActing: ['Studio'] },
+		] }] });
+		expect(record.players[0].translations[0].episodes).toEqual([]);
+		expect(record.players[0].episodes).toHaveLength(7);
+	});
+
+	test('Collaps requires a unique case-insensitive full-name substring match in both global and episode lists', () => {
+		const iframe = 'https://api.nextembed.ws/embed/movie/50';
+		const make = (global: string[], voices: string[]) => normalizeCollapsRecord({ id: 50, name: 'Series', type: 'serials', iframe_url: iframe, voiceActing: global, seasons: [{ season: 1, episodes: [{ episode: 1, iframe_url: `${iframe}?season=1&episode=1`, voiceActing: voices }] }] }).players[0].translations;
+		expect(make(['Studio'], ['Studio', 'Studio Extra'])[0].episodes).toEqual([]);
+		expect(make(['Studio'], ['Studio Extra'])[0].episodes).toEqual([]);
+		expect(make(['Studio'], ['Studio', 'studio'])[0].episodes).toEqual([]);
+		expect(make(['Studio', 'Studio Extra'], ['Studio'])[0].episodes).toEqual([]);
+		expect(make(['Studio', 'STUDIO'], ['Studio']).every(voice => voice.episodes?.length === 0)).toBe(true);
+		expect(make(['Studio Extra'], ['studio extra'])[0].episodes).toEqual([{ seasonNumber: 1, episodeNumber: 1 }]);
+	});
+
+	test('Collaps accepts existing voice aliases but not unchecked episode URLs or coordinates derived from query fields', () => {
+		const iframe = 'https://api.nextembed.ws/embed/movie/50';
+		const urls = [
+			undefined, 'http://api.nextembed.ws/embed/movie/50?season=1&episode=1',
+			'https://untrusted.example.org/embed/movie/50?season=1&episode=1',
+			'https://api.nextembed.ws/embed/movie/51?season=1&episode=1',
+			`${iframe}?season=2&episode=1`, `${iframe}?season=1&episode=2`, `${iframe}?season=1&season=1&episode=1`,
+			`${iframe}?season=1&episode=1&episode=1`, `${iframe}?season=1`, `${iframe}?season=1&episode=1&token=private-fixture`,
+		];
+		for (const url of urls) {
+			const record = normalizeCollapsRecord({ id: 50, name: 'Series', type: 'serials', iframe_url: iframe, voice_acting: ['Studio'], seasons: [{ number: 1, episodes: [{ number: 1, iframe_url: url, voice_acting: ['Studio'] }] }] });
+			expect(record.players[0].translations[0].episodes).toEqual([]);
+		}
+		const record = normalizeCollapsRecord({ id: 50, name: 'Series', type: 'serials', iframe_url: iframe, voice_acting: ['Studio'], seasons: [{ number: 1, episodes: [{ number: 1, iframe_url: `${iframe}?season=1&episode=1`, voice_acting: ['Studio'], availability: 1 }] }] });
+		expect(record.players[0].translations[0].episodes).toEqual([{ seasonNumber: 1, episodeNumber: 1 }]);
+		expect(JSON.stringify(record)).not.toContain('private-fixture');
+	});
+
+	test('Collaps does not claim unique coverage from duplicate canonical rows or truncated voice metadata', () => {
+		const iframe = 'https://api.nextembed.ws/embed/movie/50';
+		const episode = { episode: 1, iframe_url: `${iframe}?season=1&episode=1`, voiceActing: ['Studio'] };
+		const make = (seasons: unknown[], global: unknown[] = ['Studio']) => normalizeCollapsRecord({ id: 50, name: 'Series', type: 'serials', iframe_url: iframe, voiceActing: global, seasons }).players[0].translations[0].episodes;
+		expect(make([{ season: 1, episodes: [episode, { ...episode, voiceActing: ['Other'] }] }])).toEqual([]);
+		expect(make([{ season: 1, episodes: [episode] }, { season: 1, episodes: [] }])).toEqual([]);
+		expect(make([{ season: 1, episodes: [{ ...episode, voiceActing: ['Studio', ...Array.from({ length: 99 }, (_, i) => `Other ${i}`), 'Studio Extra'] }] }])).toEqual([]);
+		expect(make([{ season: 1, episodes: [episode] }], ['Studio', ...Array.from({ length: 99 }, (_, i) => `Other ${i}`), 'Studio Extra'])).toEqual([]);
+	});
+
+	test('Collaps movie voices retain their original identity and iframe without invented episode coverage', () => {
+		const record = normalizeCollapsRecord({ id: 50, name: 'Film', type: 'films', iframe_url: 'https://api.nextembed.ws/embed/movie/50', voiceActing: [{ id: 5, name: 'Studio' }] });
+		expect(record.players[0].translations).toEqual([{ id: '5', name: 'Studio', iframe: 'https://api.nextembed.ws/embed/movie/50?oneSound=Studio' }]);
 	});
 
 	test('episode limits are explicit rather than silently claiming complete coverage', () => {

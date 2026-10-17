@@ -82,7 +82,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<div v-if="work.trailerYoutubeKey && playerView === 'trailer'" :class="$style.playerFrame"><iframe :src="youtubeEmbed(work.trailerYoutubeKey)" :title="i18n.ts.zalip.trailerTab + ': ' + work.title" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>
 						<template v-if="playerView === 'player'">
 							<div ref="watchFrame" :class="$style.watchFrame">
-								<div v-if="$i && playerOpen && activePlayerIframe" :class="$style.playerFrame"><iframe :key="activePlayerIframeKey" ref="playbackIframe" :src="activePlayerIframe" :title="i18n.ts.zalip.playerTab + ': ' + work.title" loading="lazy" referrerpolicy="origin" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>
+								<div v-if="$i && playerOpen && activePlayerIframe" :class="$style.playerFrame"><iframe :key="`${activePlayerIframeKey}:${resumeFrameRevision}`" ref="playbackIframe" :src="resumeIframeUrl ?? activePlayerIframe" :title="i18n.ts.zalip.playerTab + ': ' + work.title" loading="lazy" referrerpolicy="origin" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>
 								<div v-else :class="$style.playerPreview">
 									<img v-if="selectedEpisode?.stillPath || work.backdropPath" :src="tmdbBackdrop(selectedEpisode?.stillPath || work.backdropPath!)" alt="" loading="lazy">
 									<button v-if="$i && activePlayback && selectedEpisodeAvailable" type="button" class="_button" :class="$style.playOverlay" :aria-label="i18n.ts.zalip.watchTitle" @click="openSelectedPlayer"><i class="ti ti-player-play-filled" aria-hidden="true"></i></button>
@@ -102,7 +102,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 									<span v-else-if="$i && activePlayback" :class="$style.voiceButton">{{ selectedProviderLabel }}</span>
 								</div>
 							</div>
-							<p v-if="$i && playerOpen && selectedProvider !== 'kodik'" :class="$style.availableNotice">{{ i18n.ts.zalip._progress.episodeHint }}</p>
+							<p v-if="$i && playerOpen && (watchTracker.mode.value === 'episode' || !watchPlayerContext)" :class="$style.availableNotice">{{ i18n.ts.zalip._progress.episodeHint }}</p>
 							<div v-if="work.seasons.length" :class="$style.playerEpisodes">
 								<div v-if="work.seasons.length > 1" :class="$style.seasonPicker"><span>{{ i18n.ts.zalip.workSeason }}</span><div><button v-for="season in work.seasons" :key="season.id" type="button" class="_button" :class="{ [$style.selectedSeasonPill]: selectedSeasonNumber === season.seasonNumber }" :aria-pressed="selectedSeasonNumber === season.seasonNumber" @click="selectSeason(season)">{{ season.seasonNumber === 0 ? i18n.ts.zalip.releaseSpecial : season.seasonNumber }}</button></div></div>
 								<p v-if="episodesPending" :class="$style.episodeRailState"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i>{{ i18n.ts.zalip.playerEpisodesLoading }}</p>
@@ -449,7 +449,10 @@ const episodeWatched = computed(() => selectedEpisodeProgress.value != null && e
 
 const kodikEpisodeContextBlocked = computed(() => activePlayback.value?.source === 'kodik' && (selectedSeasonNumber.value != null || !!work.value?.seasons.length) && (episodesPending.value || selectedEpisode.value == null));
 const selectedEpisodeAvailable = computed(() => !kodikEpisodeContextBlocked.value && playbackEpisodeAvailable(activePlayback.value, selectedTranslationId.value, selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null));
-const activePlayerIframe = computed(() => selectedEpisodeAvailable.value ? workPlaybackIframe(activePlayback.value, selectedTranslationId.value, selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null) : null);
+const fixedPlayerClip = computed(() => selectedEpisode.value != null || (!!work.value && !episodic.value && work.value.kind === 'movie'));
+const activePlayerIframe = computed(() => selectedEpisodeAvailable.value ? workPlaybackIframe(activePlayback.value, selectedTranslationId.value, selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null, fixedPlayerClip.value) : null);
+const resumeIframeUrl = ref<string | null>(null);
+const resumeFrameRevision = ref(0);
 
 const activePlayerIframeKey = computed(() => [
 	selectedSeasonNumber.value ?? 'movie',
@@ -457,7 +460,8 @@ const activePlayerIframeKey = computed(() => [
 	selectedTranslationId.value ?? 'default',
 	selectedProvider.value,
 ].join(':'));
-watch(activePlayerIframeKey, () => { resumeSelection.value = null; }, { flush: 'sync' });
+watch(activePlayerIframeKey, () => { resumeSelection.value = null; resumeIframeUrl.value = null; resumeFrameRevision.value = 0; }, { flush: 'sync' });
+watch(playerOpen, () => { resumeIframeUrl.value = null; resumeFrameRevision.value = 0; }, { flush: 'sync' });
 const watchPlayerContext = computed(() => {
 	if (!playerOpen.value || playerView.value !== 'player' || !activePlayerIframe.value || !work.value) return null;
 	// Native-selector serials without canonical episode IDs remain playable, but cannot invent a progress target.
@@ -466,9 +470,9 @@ const watchPlayerContext = computed(() => {
 	const resume = resumeSelection.value && sameWatchTarget(resumeSelection.value, target) ? resumeSelection.value : null;
 	return { ...target, iframeUrl: activePlayerIframe.value, seasonNumber: selectedSeasonNumber.value, episodeNumber: selectedEpisode.value?.episodeNumber ?? null,
 										providerTranslationId: activeTranslations.value.find(translation => translation.id === selectedTranslationId.value)?.providerTranslationId ?? null,
-										resumeSeconds: resume?.mode === 'time' && resume.provider === 'kodik' ? resume.positionSeconds : null };
+										resumeSeconds: resume?.mode === 'time' ? resume.positionSeconds : null };
 });
-const watchTracker = useZalipWatchProgress(watchPlayerContext, playbackIframe, progress => { if (work.value?.id === progress.workId) { watchHistoryGeneration++; savedWatchProgress.value = progress; } });
+const watchTracker = useZalipWatchProgress(watchPlayerContext, playbackIframe, progress => { if (work.value?.id === progress.workId) { watchHistoryGeneration++; savedWatchProgress.value = progress; } }, async url => { resumeIframeUrl.value = url; resumeFrameRevision.value++; await nextTick(); });
 const watchProgressError = computed(() => watchActionError.value ?? ({ failed: i18n.ts.zalip._progress.saveFailed, conflict: i18n.ts.zalip._progress.sessionConflict, unmapped: i18n.ts.zalip._progress.contextUnmapped } as Partial<Record<string, string>>)[watchTracker.state.value] ?? null);
 const selectedEpisodeIndex = computed(() => selectedEpisode.value == null ? -1 : episodes.value.findIndex(episode => episode.id === selectedEpisode.value?.id));
 const previousEpisode = computed(() => selectedEpisodeIndex.value > 0 ? episodes.value[selectedEpisodeIndex.value - 1] ?? null : null);

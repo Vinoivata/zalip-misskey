@@ -15,12 +15,22 @@ import { MiZalipExternalIdentity } from '@/models/ZalipExternalIdentity.js';
 import { MiZalipAllohaSource } from '@/models/ZalipAllohaSource.js';
 import type { MiLocalUser } from '@/models/User.js';
 import { defaultPlaybackSettings } from './zalip-importer/playback-settings.js';
+import type { ImportPlayer } from './zalip-importer/types.js';
 
 const owner = { id: 'owner' } as MiLocalUser;
 const other = { id: 'other' } as MiLocalUser;
 const fingerprint = (id = 'serial-1', path = '/serial/1/hash/720p', providerTranslationId = '12') => createHash('sha256').update(JSON.stringify([id, path, providerTranslationId])).digest('hex');
 const target: ProgressTarget = { workId: 'work', episodeId: 'episode1', provider: 'kodik', translationId: 'serial-1', expectedResourceFingerprint: fingerprint() };
 const kodik = () => ({ source: 'kodik', externalId: 'shikimori-123', iframeUrl: 'https://kodikplayer.com/serial/1/hash/720p', translations: [{ id: 'serial-1', providerTranslationId: '12', name: 'Voice', iframe: 'https://kodikplayer.com/serial/1/hash/720p', episodes: [{ seasonNumber: 1, episodeNumber: 1 }, { seasonNumber: 1, episodeNumber: 2 }] }], episodes: [] });
+const lockedPlayer = (provider: 'alloha' | 'collaps'): ImportPlayer => {
+	const iframeUrl = provider === 'alloha' ? 'https://ascorbic-as.stravers.live/?token_movie=title-fixture' : 'https://api.nextembed.ws/embed/movie/123';
+	return { source: provider, externalId: '123', iframeUrl, quality: null, translations: [{ id: '246', name: 'LE-Production', iframe: `${iframeUrl}${provider === 'alloha' ? '&translation=246' : '?oneSound=LE-Production'}`, episodes: [{ seasonNumber: 1, episodeNumber: 1 }, { seasonNumber: 1, episodeNumber: 2 }] }], episodes: [{ seasonNumber: 1, episodeNumber: 1 }, { seasonNumber: 1, episodeNumber: 2 }] };
+};
+const lockedFingerprint = (provider: 'alloha' | 'collaps', translationId: string | null, iframe: string, season: number | null = 1, episode: number | null = 1) => {
+	const url = new URL(iframe);
+	return createHash('sha256').update(JSON.stringify([provider, 'v1', translationId, url.pathname, provider === 'alloha' ? url.searchParams.get('token_movie') : null, url.searchParams.get(provider === 'alloha' ? 'translation' : 'oneSound'), season, episode])).digest('hex');
+};
+const lockedTarget = (player: ImportPlayer, episode = 1): ProgressTarget => ({ workId: 'work', episodeId: `episode${episode}`, provider: player.source, translationId: player.translations[0].id, expectedResourceFingerprint: lockedFingerprint(player.source as 'alloha' | 'collaps', player.translations[0].id, player.translations[0].iframe!, 1, episode) });
 
 function fixture() {
 	const work = { id: 'work', title: 'Title', kind: 'series', tmdbMediaType: 'tv', publicationState: 'published', importData: { values: { players: [kodik()] }, locks: ['players'], preserved: true } } as unknown as MiZalipWork;
@@ -220,6 +230,150 @@ describe('ZalipWatchProgressService private playback state', () => {
 		expect(session.progress).toMatchObject({ mode: 'episode', positionSeconds: null, durationSeconds: null });
 		expect((await f.service.update(owner, { workId: 'work', sessionId: session.sessionId, sequence: 1 })).accepted).toBe(true);
 		await expect(f.service.update(owner, { workId: 'work', sessionId: session.sessionId, sequence: 2, positionSeconds: 1, durationSeconds: 10 })).rejects.toThrow('INVALID_ZALIP_PROGRESS');
+	});
+
+	it.each(['alloha', 'collaps'] as const)('%s accepts locked canonical serial seconds only with the mounted-resource proof', async provider => {
+		const f = fixture(); const player = lockedPlayer(provider); const selection = lockedTarget(player);
+		f.work.importData = { values: { players: [player] } };
+		await expect(f.service.start(owner, { ...selection, expectedResourceFingerprint: undefined })).rejects.toThrow('ZALIP_PROGRESS_UNAVAILABLE');
+		await expect(f.service.start(owner, { ...selection, expectedResourceFingerprint: '0'.repeat(64) })).rejects.toThrow('ZALIP_PROGRESS_UNAVAILABLE');
+		expect(f.rows.size).toBe(0);
+		const session = await f.service.start(owner, selection);
+		expect(session.progress.mode).toBe('time');
+		expect((await f.service.update(owner, { workId: 'work', sessionId: session.sessionId, sequence: 1, positionSeconds: 100, durationSeconds: 1000 })).progress).toMatchObject({ positionSeconds: 100, durationSeconds: 1000 });
+		await f.service.update(owner, { workId: 'work', sessionId: session.sessionId, sequence: 2, positionSeconds: 20 });
+		expect((await f.service.start(owner, selection)).progress.positionSeconds).toBe(20);
+	});
+
+	it.each(['alloha', 'collaps'] as const)('%s derives an omitted legacy voice iframe with the same selector as public playback', async provider => {
+		const f = fixture(); const player = lockedPlayer(provider); const selection = lockedTarget(player);
+		delete player.translations[0].iframe;
+		f.work.importData = { values: { players: [player] } };
+		expect((await f.service.start(owner, selection)).progress.mode).toBe('time');
+	});
+
+	it.each(['alloha', 'collaps'] as const)('%s keeps an identical timeline through approved mirror, public-token and start-time rotation', async provider => {
+		const f = fixture(); const player = lockedPlayer(provider); const selection = lockedTarget(player);
+		f.work.importData = { values: { players: [player] } };
+		const first = await f.service.start(owner, selection);
+		await f.service.update(owner, { workId: 'work', sessionId: first.sessionId, sequence: 1, positionSeconds: 100, durationSeconds: 1000 });
+		player.translations[0].iframe += provider === 'alloha' ? '&start=500' : '&time=500';
+		f.settings.getRuntime.mockResolvedValue(provider === 'alloha' ? { allohaPlayerOrigin: 'https://approved.example.org', allohaPlayerToken: 'new-public-fixture' } : { collapsPlayerOrigin: 'https://approved.example.org' });
+		const rotated = await f.service.start(owner, selection);
+		expect(rotated.progress).toMatchObject({ mode: 'time', positionSeconds: 100 });
+		expect((await f.service.update(owner, { workId: 'work', sessionId: rotated.sessionId, sequence: 1, positionSeconds: 120 })).accepted).toBe(true);
+	});
+
+	it.each(['alloha', 'collaps'] as const)('%s binds the fingerprint to the canonical episode and rejects a stale target proof', async provider => {
+		const f = fixture(); const player = lockedPlayer(provider); const selection = lockedTarget(player);
+		f.work.importData = { values: { players: [player] } };
+		const first = await f.service.start(owner, selection);
+		await f.service.update(owner, { workId: 'work', sessionId: first.sessionId, sequence: 1, positionSeconds: 100, durationSeconds: 1000 });
+		await expect(f.service.start(owner, { ...selection, episodeId: 'episode2' })).rejects.toThrow('ZALIP_PROGRESS_UNAVAILABLE');
+		const second = await f.service.start(owner, lockedTarget(player, 2));
+		expect(second.progress).toMatchObject({ episodeId: 'episode2', positionSeconds: null });
+		expect((await f.service.update(owner, { workId: 'work', sessionId: first.sessionId, sequence: 2, positionSeconds: 200 })).accepted).toBe(false);
+	});
+
+	it.each(['alloha', 'collaps'] as const)('%s invalidates old seconds when a media path or chosen voice changes', async provider => {
+		for (const change of ['path', 'voice'] as const) {
+			const f = fixture(); const player = lockedPlayer(provider); const selection = lockedTarget(player);
+			f.work.importData = { values: { players: [player] } };
+			const first = await f.service.start(owner, selection);
+			await f.service.update(owner, { workId: 'work', sessionId: first.sessionId, sequence: 1, positionSeconds: 100, durationSeconds: 1000 });
+			const url = new URL(player.translations[0].iframe!);
+			if (change === 'path') url.pathname = '/replaced-cut';
+			else {
+				player.translations[0].id = '247'; player.translations[0].name = 'Another voice';
+				url.searchParams.set(provider === 'alloha' ? 'translation' : 'oneSound', provider === 'alloha' ? '247' : 'Another voice');
+			}
+			player.translations[0].iframe = url.href;
+			await expect(f.service.update(owner, { workId: 'work', sessionId: first.sessionId, sequence: 2, positionSeconds: 200 })).rejects.toThrow('ZALIP_PROGRESS_UNAVAILABLE');
+			await expect(f.service.start(owner, selection)).rejects.toThrow('ZALIP_PROGRESS_UNAVAILABLE');
+			expect((await f.service.start(owner, lockedTarget(player))).progress.positionSeconds).toBeNull();
+		}
+	});
+
+	it('Alloha changes in token_movie invalidate the timeline while malformed identities/selectors retain episode-only playability', async () => {
+		const f = fixture(); const player = lockedPlayer('alloha'); f.work.importData = { values: { players: [player] } };
+		const selection = lockedTarget(player); const session = await f.service.start(owner, selection);
+		await f.service.update(owner, { workId: 'work', sessionId: session.sessionId, sequence: 1, positionSeconds: 100, durationSeconds: 1000 });
+		player.translations[0].iframe = player.translations[0].iframe!.replace('title-fixture', 'new-title-fixture');
+		await expect(f.service.update(owner, { workId: 'work', sessionId: session.sessionId, sequence: 2, positionSeconds: 120 })).rejects.toThrow('ZALIP_PROGRESS_UNAVAILABLE');
+		expect((await f.service.start(owner, lockedTarget(player))).progress.positionSeconds).toBeNull();
+		for (const query of ['translation=246', 'token_movie=short&translation=246', `token_movie=${'x'.repeat(257)}&translation=246`, 'token_movie=title.fixture&translation=246', 'token_movie=title-fixture&token_movie=other-fixture&translation=246', 'token_movie=title-fixture&translation=246&translation=246', 'token_movie=title-fixture&translation=247', 'token_movie=title-fixture']) {
+			player.translations[0].iframe = `https://ascorbic-as.stravers.live/?${query}`;
+			const fallback = await f.service.start(owner, selection);
+			expect(fallback.progress).toMatchObject({ mode: 'episode', positionSeconds: null });
+			await expect(f.service.update(owner, { workId: 'work', sessionId: fallback.sessionId, sequence: 1, positionSeconds: 10, durationSeconds: 1000 })).rejects.toThrow('INVALID_ZALIP_PROGRESS');
+		}
+	});
+
+	it('Collaps serial seconds require exact per-voice episode coverage, not only parent coverage', async () => {
+		const f = fixture(); const player = lockedPlayer('collaps'); f.work.importData = { values: { players: [player] } };
+		delete player.translations[0].episodes;
+		const fallback = await f.service.start(owner, lockedTarget(player));
+		expect(fallback.progress.mode).toBe('episode');
+		await expect(f.service.update(owner, { workId: 'work', sessionId: fallback.sessionId, sequence: 1, positionSeconds: 10, durationSeconds: 1000 })).rejects.toThrow('INVALID_ZALIP_PROGRESS');
+		player.translations[0].episodes = [];
+		await expect(f.service.start(owner, lockedTarget(player))).rejects.toThrow('ZALIP_PROGRESS_UNAVAILABLE');
+		player.translations[0].episodes = [{ seasonNumber: 1, episodeNumber: 2 }];
+		await expect(f.service.start(owner, lockedTarget(player))).rejects.toThrow('ZALIP_PROGRESS_UNAVAILABLE');
+		player.translations[0].episodes.push({ seasonNumber: 1, episodeNumber: 1 });
+		expect((await f.service.start(owner, lockedTarget(player))).progress.mode).toBe('time');
+	});
+
+	it('malformed or mismatched Collaps selectors preserve playback without claiming a verified timeline', async () => {
+		const f = fixture(); const player = lockedPlayer('collaps'); const selection = lockedTarget(player); f.work.importData = { values: { players: [player] } };
+		for (const query of ['', '?oneSound=', '?oneSound=Another+voice', '?oneSound=LE-Production&oneSound=LE-Production', '?oneSound=LE-Production%00']) {
+			player.translations[0].iframe = `https://api.nextembed.ws/embed/movie/123${query}`;
+			const fallback = await f.service.start(owner, selection);
+			expect(fallback.progress).toMatchObject({ mode: 'episode', positionSeconds: null, durationSeconds: null });
+			await expect(f.service.update(owner, { workId: 'work', sessionId: fallback.sessionId, sequence: 1, positionSeconds: 10, durationSeconds: 100 })).rejects.toThrow('INVALID_ZALIP_PROGRESS');
+		}
+	});
+
+	it('Alloha movie seconds remain disabled despite a valid selected voice; explicit Collaps movies can track seconds', async () => {
+		for (const provider of ['alloha', 'collaps'] as const) {
+			const f = fixture(); f.work.kind = 'movie'; f.work.tmdbMediaType = 'movie'; const player = lockedPlayer(provider); delete player.translations[0].episodes;
+			f.work.importData = { values: { players: [player] } };
+			const selection = { ...lockedTarget(player), episodeId: null, expectedResourceFingerprint: lockedFingerprint(provider, '246', player.translations[0].iframe!, null, null) };
+			const result = await f.service.start(owner, selection);
+			expect(result.progress.mode).toBe(provider === 'alloha' ? 'episode' : 'time');
+			if (provider === 'alloha') await expect(f.service.update(owner, { workId: 'work', sessionId: result.sessionId, sequence: 1, positionSeconds: 10, durationSeconds: 100 })).rejects.toThrow('INVALID_ZALIP_PROGRESS');
+		}
+	});
+
+	it('Collaps movie seconds reject ambiguous case-insensitive substring voice matches', async () => {
+		const f = fixture(); f.work.kind = 'movie'; f.work.tmdbMediaType = 'movie'; const player = lockedPlayer('collaps');
+		const selection = { ...lockedTarget(player), episodeId: null, expectedResourceFingerprint: lockedFingerprint('collaps', '246', player.translations[0].iframe!, null, null) };
+		player.translations.push({ id: '247', name: ' LE-PRODUCTION Commentary ', iframe: 'https://api.nextembed.ws/embed/movie/123?oneSound=LE-PRODUCTION+Commentary' });
+		f.work.importData = { values: { players: [player] } };
+		expect((await f.service.start(owner, selection)).progress.mode).toBe('episode');
+		const exactLonger = { ...selection, translationId: '247', expectedResourceFingerprint: lockedFingerprint('collaps', '247', player.translations[1].iframe!, null, null) };
+		expect((await f.service.start(owner, exactLonger)).progress.mode).toBe('time');
+		player.translations[1].name = 'LE-Production';
+		expect((await f.service.start(owner, selection)).progress.mode).toBe('episode');
+	});
+
+	it('Alloha default serial embeds can use their concrete identity only when no explicit voices exist', async () => {
+		const f = fixture(); const player = lockedPlayer('alloha'); player.translations = []; f.work.importData = { values: { players: [player] } };
+		const selection: ProgressTarget = { ...target, provider: 'alloha', translationId: null, expectedResourceFingerprint: lockedFingerprint('alloha', null, player.iframeUrl) };
+		expect((await f.service.start(owner, selection)).progress.mode).toBe('time');
+		player.translations = lockedPlayer('alloha').translations;
+		await expect(f.service.start(owner, selection)).rejects.toThrow('INVALID_ZALIP_PROGRESS_TARGET');
+	});
+
+	it('legacy Alloha serials share mounted identity checks and resume without contacting upstream', async () => {
+		const f = fixture(); f.work.importData = {}; const player = lockedPlayer('alloha');
+		const translation = { id: 246, name: 'LE-Production', iframe: player.translations[0].iframe!, quality: null, resolutions: [] };
+		f.legacy.findOneBy.mockResolvedValue({ id: 'legacy-cache', isAvailable: true, iframe: player.iframeUrl, translations: [translation] } as unknown as MiZalipAllohaSource);
+		const selection = lockedTarget(player); const first = await f.service.start(owner, selection);
+		expect(first.progress.mode).toBe('time');
+		await f.service.update(owner, { workId: 'work', sessionId: first.sessionId, sequence: 1, positionSeconds: 50, durationSeconds: 1000 });
+		expect((await f.service.start(owner, selection)).progress.positionSeconds).toBe(50);
+		f.legacy.findOneBy.mockResolvedValue({ id: 'legacy-cache', isAvailable: true, iframe: player.iframeUrl, translations: [{ ...translation, iframe: translation.iframe.replace('title-fixture', 'new-title-fixture') }] } as unknown as MiZalipAllohaSource);
+		await expect(f.service.start(owner, selection)).rejects.toThrow('ZALIP_PROGRESS_UNAVAILABLE');
 	});
 
 	it('legacy cached Alloha works locally and snapshots/resource replacement invalidates old saves', async () => {

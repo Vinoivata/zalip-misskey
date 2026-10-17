@@ -16,30 +16,49 @@ import { $i } from '@/i.js';
 vi.mock('@/i.js', () => ({ $i: { id: 'viewer' } }));
 vi.mock('@/utility/misskey-api.js', () => ({ misskeyApiZalip: vi.fn() }));
 const target: WatchPlayerContext = { workId: 'work', episodeId: 'episode1', provider: 'kodik', translationId: 'serial-123', iframeUrl: 'https://kodik.example/serial/123/code/720p?season=2&episode=1', seasonNumber: 2, episodeNumber: 1, providerTranslationId: '718', resumeSeconds: null };
+const allohaTarget: WatchPlayerContext = { ...target, provider: 'alloha', translationId: '246', providerTranslationId: null, iframeUrl: 'https://alloha.example/player?token_movie=title-fixture&token=public-fixture&translation=246&hidden=episode,season,translation&season=2&episode=1' };
+const collapsTarget: WatchPlayerContext = { ...target, provider: 'collaps', translationId: 'voice-one', providerTranslationId: null, iframeUrl: 'https://collaps.example/embed/movie/50?oneSound=Studio&showMenu=false&showPreNext=false&season=2&episode=1' };
 const progress = { ...target, mode: 'time', positionSeconds: null, durationSeconds: null, completed: false, lastPlayedAt: '2026-10-17T10:00:00Z' };
 const nativeSubtle = webcrypto.subtle;
 
-function setup() {
+function setup(withRemount = true) {
 	const context = ref<WatchPlayerContext | null>(null);
+	const overrideUrl = ref<string | null>(null);
+	const revision = ref(0);
 	const saved = vi.fn();
 	let tracker!: ReturnType<typeof useZalipWatchProgress>;
 	const Host = defineComponent({ setup() {
 		const iframe = ref<HTMLIFrameElement | null>(null);
-		tracker = useZalipWatchProgress(context, iframe, saved);
-		return () => h('iframe', { ref: iframe, src: context.value?.iframeUrl, key: context.value?.episodeId ?? 'movie' });
+		const remount = async (url: string) => { overrideUrl.value = url; revision.value++; await nextTick(); };
+		tracker = useZalipWatchProgress(context, iframe, saved, withRemount ? remount : undefined);
+		return () => h('iframe', { ref: iframe, src: overrideUrl.value ?? context.value?.iframeUrl, key: [context.value?.provider, context.value?.translationId, context.value?.episodeId ?? 'movie', revision.value].join(':') });
 	} });
 	const view = render(Host);
 	const frame = () => view.container.querySelector('iframe')!;
-	function event(key: string, value?: unknown, options: Partial<MessageEventInit> = {}) {
-		window.dispatchEvent(new MessageEvent('message', { origin: 'https://kodik.example', source: frame().contentWindow, data: { key, value }, ...options }));
-	}
+	function dispatch(data: unknown, options: Partial<MessageEventInit> = {}) { window.dispatchEvent(new MessageEvent('message', { origin: new URL(frame().src).origin, source: frame().contentWindow, data, ...options })); }
+	const event = (key: string, value?: unknown, options: Partial<MessageEventInit> = {}) => dispatch({ key, value }, options);
+	const alloha = (event: string, time: number, options: Partial<MessageEventInit> = {}) => dispatch(JSON.stringify({ event, time }), options);
+	const collaps = (event: string, fields: Record<string, unknown> = {}, options: Partial<MessageEventInit> = {}) => dispatch({ event, ...fields }, options);
 	async function start(value: WatchPlayerContext = target) {
+		overrideUrl.value = null;
 		context.value = { ...value };
-		await waitFor(() => expect(misskeyApiZalip).toHaveBeenCalledWith('zalip/progress/start', expect.objectContaining({ episodeId: value.episodeId })));
+		await waitFor(() => expect(misskeyApiZalip).toHaveBeenCalledWith('zalip/progress/start', expect.objectContaining({ episodeId: value.episodeId, provider: value.provider, translationId: value.translationId })));
 		await nextTick(); await Promise.resolve();
 	}
 	const identity = (season: number | null = 2, episode: number | null = 1, translationId = 718) => event('kodik_player_current_episode', { season, episode, translation: { id: translationId, title: 'Studio' } });
-	return { view, context, saved, frame, event, identity, start, tracker: () => tracker };
+	return { view, context, saved, frame, dispatch, event, alloha, collaps, identity, start, tracker: () => tracker };
+}
+
+const updates = () => vi.mocked(misskeyApiZalip).mock.calls.filter(call => call[0] === 'zalip/progress/update');
+function content(host: ReturnType<typeof setup>, value: WatchPlayerContext, position = 25, options: Partial<MessageEventInit> = {}): void {
+	if (value.provider === 'alloha') {
+		host.alloha('duration', 1000, options); host.alloha('play', position, options); host.alloha('timeupdate', position, options); host.alloha('pause', position, options);
+	} else if (value.provider === 'collaps') {
+		host.collaps('startWatching', { id: 7 }, options); host.collaps('viewProgress', { id: 7, time: position, duration: 1000 }, options); host.tracker().flush();
+	} else {
+		host.event('kodik_player_current_episode', { season: value.seasonNumber, episode: value.episodeNumber, translation: { id: 718 } }, options);
+		host.event('kodik_player_duration_update', 1000, options); host.event('kodik_player_play', undefined, options); host.event('kodik_player_time_update', position, options); host.event('kodik_player_pause', undefined, options);
+	}
 }
 
 beforeEach(() => {
@@ -49,7 +68,7 @@ beforeEach(() => {
 	Object.defineProperty(window.crypto, 'subtle', { configurable: true, value: nativeSubtle });
 	(window as unknown as HappyWindow).happyDOM.settings.navigation.disableChildFrameNavigation = true;
 	vi.mocked(misskeyApiZalip).mockImplementation(async (endpoint, params) => {
-		if (endpoint === 'zalip/progress/start') return { sessionId: `session-${params?.episodeId}`, sequence: 0, progress: { ...progress, ...params } };
+		if (endpoint === 'zalip/progress/start') return { sessionId: `session-${params?.episodeId}`, sequence: 0, progress: { ...progress, ...params, mode: params?.expectedResourceFingerprint ? 'time' : 'episode' } };
 		if (endpoint === 'zalip/progress/update') return { accepted: true, progress: { ...progress, ...params } };
 		throw new Error(`Unexpected endpoint: ${endpoint}`);
 	});
@@ -57,6 +76,129 @@ beforeEach(() => {
 afterEach(() => { cleanup(); Object.defineProperty(window.crypto, 'subtle', { configurable: true, value: nativeSubtle }); });
 
 describe('secure playback progress lifecycle', () => {
+	it('saves Alloha main-content time but not duration, fullscreen or storage-callback clocks', async () => {
+		const host = setup(); await host.start(allohaTarget);
+		host.alloha('duration', 1000); host.alloha('enterfullscreen', 900); host.dispatch(JSON.stringify({ event: 'getTimeSave', time: 800 }));
+		host.tracker().flush(); expect(updates()).toHaveLength(0);
+		host.alloha('timeupdate', 25); host.alloha('pause', 25);
+		await waitFor(() => expect(updates()).toHaveLength(1));
+		expect(updates()[0][1]).toMatchObject({ positionSeconds: 25, durationSeconds: 1000 });
+		expect(host.tracker().mode.value).toBe('time');
+	});
+	it('restores Alloha through one exact-origin JSON seek only after fresh claim and main-content duration/time', async () => {
+		vi.mocked(misskeyApiZalip).mockResolvedValueOnce({ sessionId: 'session', sequence: 0, progress: { ...progress, ...allohaTarget, positionSeconds: 120, durationSeconds: 1000 } });
+		const host = setup(); await host.start({ ...allohaTarget, resumeSeconds: 999 });
+		const post = vi.spyOn(host.frame().contentWindow!, 'postMessage').mockImplementation(() => {});
+		host.alloha('duration', 1000); host.alloha('timeupdate', 0); host.alloha('pause', 0);
+		expect(post.mock.calls.filter(call => JSON.parse(String(call[0])).api === 'seek')).toHaveLength(0);
+		expect(updates()).toHaveLength(0);
+		host.alloha('timeupdate', 1);
+		expect(post).toHaveBeenCalledWith(JSON.stringify({ api: 'seek', value: 120 }), 'https://alloha.example');
+		host.alloha('duration', 1000); host.alloha('timeupdate', 0); host.alloha('pause', 0);
+		expect(updates()).toHaveLength(0);
+		host.alloha('timeupdate', 121); host.alloha('pause', 121);
+		await waitFor(() => expect(updates()).toHaveLength(1));
+		expect(updates()[0][1]).toMatchObject({ positionSeconds: 121 });
+		expect(post.mock.calls.filter(call => JSON.parse(String(call[0])).api === 'seek')).toHaveLength(1);
+		expect(post.mock.calls.some(call => JSON.parse(String(call[0])).api === 'play')).toBe(false);
+	});
+	it('keeps Alloha movie tracking in episode mode without hash, time writes or seek commands', async () => {
+		const movie = { ...allohaTarget, episodeId: null, seasonNumber: null, episodeNumber: null, resumeSeconds: 120 };
+		const host = setup(); await host.start(movie);
+		const post = vi.spyOn(host.frame().contentWindow!, 'postMessage').mockImplementation(() => {});
+		content(host, movie);
+		expect(vi.mocked(misskeyApiZalip).mock.calls[0][1]).not.toHaveProperty('expectedResourceFingerprint');
+		expect(host.tracker().mode.value).toBe('episode'); expect(updates()).toHaveLength(0); expect(post).not.toHaveBeenCalled();
+	});
+	it('suppresses Collaps ad clocks and resumes saving main-content samples after midroll', async () => {
+		const host = setup(); await host.start(collapsTarget);
+		content(host, collapsTarget, 25); await waitFor(() => expect(updates()).toHaveLength(1));
+		await nextTick(); await Promise.resolve(); await Promise.resolve();
+		host.collaps('adStart'); host.collaps('viewProgress', { id: 7, time: 3, duration: 15 }); host.collaps('ended'); host.tracker().flush();
+		expect(updates()).toHaveLength(1);
+		host.collaps('adStop'); host.collaps('viewProgress', { id: 7, time: 26, duration: 1000 }); host.tracker().flush();
+		await waitFor(() => expect(updates()).toHaveLength(2));
+		expect(updates()[1][1]).toMatchObject({ positionSeconds: 26, durationSeconds: 1000, completed: false });
+	});
+	it('stops Alloha attribution when the observed main-content duration changes', async () => {
+		const host = setup(); await host.start(allohaTarget);
+		host.alloha('duration', 1000); host.alloha('duration', 1100); content(host, allohaTarget);
+		expect(host.tracker().state.value).toBe('unmapped'); expect(updates()).toHaveLength(0);
+	});
+	it('does not seek a stale Alloha show offset when the accepted fresh claim has no saved position', async () => {
+		const host = setup(); await host.start({ ...allohaTarget, resumeSeconds: 120 });
+		const post = vi.spyOn(host.frame().contentWindow!, 'postMessage').mockImplementation(() => {});
+		content(host, allohaTarget);
+		await waitFor(() => expect(updates()).toHaveLength(1));
+		expect(post.mock.calls.some(call => JSON.parse(String(call[0])).api === 'seek')).toBe(false);
+		expect(updates()[0][1]).toMatchObject({ positionSeconds: 25 });
+	});
+	it.each(['id', 'episode', 'duration'] as const)('stops Collaps attribution on a changed %s without guessing a new context', async changed => {
+		const host = setup(); await host.start(collapsTarget);
+		content(host, collapsTarget, 25); await waitFor(() => expect(updates()).toHaveLength(1));
+		if (changed === 'id') host.collaps('startWatching', { id: 8 });
+		else if (changed === 'episode') host.collaps('changeEpisode', { id: 7, season: 2, episode: 1 });
+		else host.collaps('viewProgress', { id: 7, time: 26, duration: 1100 });
+		host.collaps('viewProgress', { id: 7, time: 30, duration: 1000 }); host.tracker().flush();
+		expect(host.tracker().state.value).toBe('unmapped'); expect(updates()).toHaveLength(1);
+	});
+	it('retains the Collaps content-duration identity across midroll instead of accepting a new timeline', async () => {
+		const host = setup(); await host.start(collapsTarget);
+		content(host, collapsTarget, 25); await waitFor(() => expect(updates()).toHaveLength(1));
+		host.collaps('adStart'); host.collaps('adStop'); host.collaps('viewProgress', { id: 7, time: 26, duration: 1100 }); host.tracker().flush();
+		expect(host.tracker().state.value).toBe('unmapped'); expect(updates()).toHaveLength(1);
+	});
+	it('adds Collaps URL time only after the fresh accepted claim and ignores zero until restoration is confirmed', async () => {
+		let release!: (result: unknown) => void;
+		vi.mocked(misskeyApiZalip).mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+		const host = setup(); await host.start({ ...collapsTarget, resumeSeconds: 999 });
+		const oldFrame = host.frame();
+		const oldSource = oldFrame.contentWindow;
+		expect(new URL(host.frame().src).searchParams.has('time')).toBe(false);
+		host.collaps('viewProgress', { id: 7, time: 0, duration: 1000 }); expect(updates()).toHaveLength(0);
+		release({ sessionId: 'session', sequence: 0, progress: { ...progress, ...collapsTarget, positionSeconds: 120, durationSeconds: 1000 } });
+		await waitFor(() => expect(new URL(host.frame().src).searchParams.get('time')).toBe('120'));
+		await waitFor(() => expect(host.tracker().mode.value).toBe('time'));
+		expect(host.frame()).not.toBe(oldFrame);
+		expect(new URL(oldFrame.src).searchParams.has('time')).toBe(false);
+		expect(vi.mocked(misskeyApiZalip).mock.calls[0][1]).toMatchObject({ expectedResourceFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/u) });
+		expect(JSON.stringify(vi.mocked(misskeyApiZalip).mock.calls[0][1])).not.toContain('https://');
+		host.collaps('adStart', {}, { source: oldSource });
+		host.collaps('viewProgress', { id: 99, time: 120, duration: 1000 }, { source: oldSource });
+		host.tracker().flush(); expect(updates()).toHaveLength(0);
+		host.collaps('viewProgress', { id: 7, time: 0, duration: 1000 }); host.tracker().flush(); expect(updates()).toHaveLength(0);
+		host.collaps('viewProgress', { id: 7, time: 121, duration: 1000 }); host.tracker().flush();
+		await waitFor(() => expect(updates()).toHaveLength(1)); expect(updates()[0][1]).toMatchObject({ positionSeconds: 121 });
+	});
+	it('fails closed when Collaps resume cannot remount a new iframe window', async () => {
+		vi.mocked(misskeyApiZalip).mockResolvedValueOnce({ sessionId: 'session', sequence: 0, progress: { ...progress, ...collapsTarget, positionSeconds: 120, durationSeconds: 1000 } });
+		const host = setup(false); await host.start({ ...collapsTarget, resumeSeconds: 120 });
+		await waitFor(() => expect(host.tracker().state.value).toBe('failed'));
+		expect(new URL(host.frame().src).searchParams.has('time')).toBe(false);
+		content(host, collapsTarget, 120); expect(updates()).toHaveLength(0);
+	});
+	it.each([null, 'reject'] as const)('never restores a stale Collaps show offset when the fresh claim returns %s', async result => {
+		if (result === 'reject') vi.mocked(misskeyApiZalip).mockRejectedValueOnce({ code: 'ZALIP_PROGRESS_UNAVAILABLE' });
+		const host = setup(); await host.start({ ...collapsTarget, resumeSeconds: 120 });
+		expect(new URL(host.frame().src).searchParams.has('time')).toBe(false);
+		if (result === 'reject') { content(host, collapsTarget); expect(updates()).toHaveLength(0); expect(host.tracker().state.value).toBe('failed'); }
+	});
+	it('never stores seconds for a server episode-mode Collaps target without verified voice coverage', async () => {
+		vi.mocked(misskeyApiZalip).mockResolvedValueOnce({ sessionId: 'session', sequence: 0, progress: { ...progress, ...collapsTarget, mode: 'episode' } });
+		const host = setup(); await host.start({ ...collapsTarget, resumeSeconds: 120 });
+		content(host, collapsTarget); expect(updates()).toHaveLength(0); expect(host.tracker().mode.value).toBe('episode');
+		expect(new URL(host.frame().src).searchParams.has('time')).toBe(false);
+	});
+	it.each([allohaTarget, collapsTarget, target])('rejects wrong origins, other windows, old iframe windows and changed accounts for $provider', async value => {
+		const host = setup(); await host.start(value);
+		content(host, value, 25, { origin: `${new URL(value.iframeUrl).origin}.evil.test` });
+		content(host, value, 25, { source: window }); expect(updates()).toHaveLength(0);
+		const oldSource = host.frame().contentWindow;
+		const next = { ...value, episodeId: 'episode2', episodeNumber: 2, iframeUrl: value.iframeUrl.replace('episode=1', 'episode=2') };
+		await host.start(next); content(host, next, 25, { source: oldSource }); expect(updates()).toHaveLength(0);
+		content(host, next, 25); await waitFor(() => expect(updates()).toHaveLength(1));
+		$i!.id = 'another-viewer'; content(host, next, 30); host.tracker().flush(); expect(updates()).toHaveLength(1);
+	});
 	it('does not create a session on a title view; only an explicit opened player has a target', async () => {
 		setup(); await nextTick();
 		expect(misskeyApiZalip).not.toHaveBeenCalled();

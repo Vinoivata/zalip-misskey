@@ -480,6 +480,31 @@ function collapsTranslations(value: unknown, iframeUrl: string | null): ImportPl
 	});
 }
 
+/** A truncated or malformed list cannot prove the unique substring match used by Collaps oneSound. */
+function collapsCoverageNames(value: unknown): string[] | null {
+	if (!Array.isArray(value) || !value.length || value.length > MAX_RESULTS) return null;
+	const names = value.map(raw => collapsTranslationName(typeof raw === 'string' ? raw : object(raw).name));
+	return names.every((name): name is string => name != null) ? names : null;
+}
+
+function collapsUniqueCoverageName(names: string[] | null, selected: string): boolean {
+	if (!names) return false;
+	const fullName = selected.toLowerCase();
+	const matches = names.filter(name => name.toLowerCase().includes(fullName));
+	return matches.length === 1 && matches[0].toLowerCase() === fullName;
+}
+
+/** Do not infer episode coverage from arbitrary links or query values that disagree with the canonical API row. */
+function collapsEpisodeIframe(value: unknown, parentIframe: string | null, iframeHosts: readonly string[], season: number, episode: number): boolean {
+	const safe = safeImportUrl(value, iframeHosts);
+	if (!safe || !parentIframe) return false;
+	const url = new URL(safe);
+	const parent = new URL(parentIframe);
+	return url.origin === parent.origin && url.pathname === parent.pathname
+		&& url.searchParams.getAll('season').length === 1 && url.searchParams.get('season') === String(season)
+		&& url.searchParams.getAll('episode').length === 1 && url.searchParams.get('episode') === String(episode);
+}
+
 export function normalizeCollapsRecord(value: unknown, iframeHosts: readonly string[] = ['api.nextembed.ws']): ImportRecord {
 	const payload = object(value);
 	const item = object(payload.result ?? payload.data ?? value);
@@ -508,31 +533,52 @@ export function normalizeCollapsRecord(value: unknown, iframeHosts: readonly str
 		}
 	}
 	record.credits = uniqueCredits(credits);
+	const iframeUrl = safeImportUrl(item.iframe_url, iframeHosts);
 	const episodes: ImportPlayer['episodes'] = [];
+	const coverage: { seasonNumber: number; episodeNumber: number; names: string[] }[] = [];
+	const ambiguousSeasons = new Set<number>();
+	const ambiguousEpisodes = new Set<string>();
 	let remaining = MAX_EPISODES;
 	const seenSeasons = new Set<number>();
 	if (Array.isArray(item.seasons) && item.seasons.length > MAX_SEASONS) record.warnings.push('collaps-season-limit');
 	for (const raw of array(item.seasons, MAX_SEASONS)) {
 		const season = object(raw);
 		const seasonNumber = integer(season.season ?? season.number, 0, 1000);
-		if (seasonNumber == null || seenSeasons.has(seasonNumber)) continue;
+		if (seasonNumber == null) continue;
+		if (seenSeasons.has(seasonNumber)) { ambiguousSeasons.add(seasonNumber); continue; }
 		seenSeasons.add(seasonNumber);
-		if (Array.isArray(season.episodes) && season.episodes.length > remaining) record.warnings.push('collaps-episode-limit');
+		if (Array.isArray(season.episodes) && season.episodes.length > remaining) {
+			record.warnings.push('collaps-episode-limit');
+			ambiguousSeasons.add(seasonNumber);
+		}
 		const seenEpisodes = new Set<number>();
 		const normalizedEpisodes: ImportEpisode[] = [];
 		for (const raw of array(season.episodes, remaining)) {
 			const episode = object(raw);
 			const episodeNumber = integer(episode.episode ?? episode.number, 0, 100000);
-			if (episodeNumber == null || seenEpisodes.has(episodeNumber)) continue;
+			if (episodeNumber == null) continue;
+			if (seenEpisodes.has(episodeNumber)) { ambiguousEpisodes.add(`${seasonNumber}:${episodeNumber}`); continue; }
 			seenEpisodes.add(episodeNumber);
 			normalizedEpisodes.push({ episodeNumber, title: text(episode.name) ?? `Эпизод ${episodeNumber}`, stillUrl: safeImportUrl(episode.poster), airDate: date(episode.release_date) });
 			episodes.push({ seasonNumber, episodeNumber });
+			const names = collapsCoverageNames(episode.voiceActing ?? episode.voice_acting);
+			if (names && episode.availability !== false && collapsEpisodeIframe(episode.iframe_url, iframeUrl, iframeHosts, seasonNumber, episodeNumber)) coverage.push({ seasonNumber, episodeNumber, names });
 		}
 		remaining -= normalizedEpisodes.length;
 		record.seasons.push({ seasonNumber, title: text(season.name) ?? `Сезон ${seasonNumber}`, posterUrl: safeImportUrl(season.poster), episodeCount: normalizedEpisodes.length, episodes: normalizedEpisodes.sort((a, b) => a.episodeNumber - b.episodeNumber) });
 	}
-	const iframeUrl = safeImportUrl(item.iframe_url, iframeHosts);
 	const translations = collapsTranslations(item.voiceActing ?? item.voice_acting, iframeUrl);
+	if (mediaType === 'tv') {
+		const parentNames = collapsCoverageNames(item.voiceActing ?? item.voice_acting);
+		const completeSeasons = !Array.isArray(item.seasons) || item.seasons.length <= MAX_SEASONS;
+		for (const translation of translations) {
+			translation.episodes = completeSeasons && collapsUniqueCoverageName(parentNames, translation.name)
+				? coverage.filter(episode => !ambiguousSeasons.has(episode.seasonNumber) && !ambiguousEpisodes.has(`${episode.seasonNumber}:${episode.episodeNumber}`) && collapsUniqueCoverageName(episode.names, translation.name))
+					.map(({ seasonNumber, episodeNumber }) => ({ seasonNumber, episodeNumber }))
+					.sort((left, right) => left.seasonNumber - right.seasonNumber || left.episodeNumber - right.episodeNumber)
+				: [];
+		}
+	}
 	if (iframeUrl != null) record.players.push({ source: 'collaps', externalId: id, iframeUrl, quality: text(item.quality, 64) ?? (integer(item.quality, 0, 4) == null ? null : String(item.quality)), translations, episodes });
 	if (item.iframe_url != null && iframeUrl == null) record.warnings.push('collaps-player-url-rejected');
 	record.complete = record.warnings.length === 0;
