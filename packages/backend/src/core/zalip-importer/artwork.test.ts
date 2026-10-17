@@ -12,6 +12,20 @@ vi.mock('node-fetch', () => ({ default: mockedFetch }));
 afterEach(() => mockedFetch.mockReset());
 
 describe('bounded local importer artwork', () => {
+	test('Kodik artwork admits only verified public screenshot and Shikimori image families', () => {
+		for (const value of ['https://i.kodikres.com/screenshots/seria/123/hash/1.jpg', 'https://i.kodikres.com/screenshots/video/123/hash/2.jpg', 'https://shikimori.io/uploads/poster/animes/123/hash.jpg', 'https://shikimori.io/system/screenshots/original/123.jpg', 'https://shikimori.io/system/animes/original/123.jpg']) expect(importArtworkUrl(value)?.href).toBe(value);
+		for (const value of ['https://i.kodikres.com/private/file.jpg', 'https://i.kodikres.com/screenshots/seria/0/hash/1.jpg', 'https://i.kodikres.com/screenshots/season/123/hash/1.jpg', 'https://i.kodikres.com.evil.org/screenshots/seria/123/hash/1.jpg', 'https://cdn.kodikres.com/screenshots/seria/123/hash/1.jpg', 'https://i.kodikres.com/screenshots/seria/123/hash/1.jpg?cache=1', 'https://shikimori.io/api/animes/123', 'https://shikimori.io/uploads/poster/animes/123/hash.jpg?cache=1', 'https://shikimori.io/uploads/poster/animes/../../secret.jpg', 'https://shikimori.io/system/animes/%2fprivate.jpg', 'http://shikimori.io/system/animes/original/123.jpg']) expect(importArtworkUrl(value)).toBeNull();
+	});
+
+	test('localizes a Kodik screenshot with the same protected request and conversion bounds', async () => {
+		const original = await sharp({ create: { width: 80, height: 45, channels: 3, background: '#789abc' } }).jpeg().toBuffer();
+		mockedFetch.mockResolvedValue({ ok: true, status: 200, headers: new Headers({ 'content-type': 'image/jpeg', 'content-length': String(original.length) }), arrayBuffer: async () => original });
+		const agent = {} as never;
+		const url = new URL('https://i.kodikres.com/screenshots/seria/123/hash/1.jpg');
+		const result = await downloadImportArtwork(url, 'galleryUrls', agent);
+		expect(result).toMatchObject({ original, originalExtension: 'jpg', extension: 'webp', width: 80, height: 45 });
+		expect(mockedFetch).toHaveBeenCalledWith(url.href, expect.objectContaining({ redirect: 'error', agent, size: importArtworkLimits.inputBytes }));
+	});
 	test.each(['https:', ''])('retains exact JPEG bytes through one approved Kinopoisk image-family hop (%s)', async scheme => {
 		const original = await sharp({ create: { width: 225, height: 350, channels: 3, background: '#789abc' } }).jpeg().toBuffer();
 		const destination = 'https://avatars.mds.yandex.net/get-kinopoisk-image/123/fixture-chosen/orig';

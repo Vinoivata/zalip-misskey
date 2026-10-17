@@ -3,17 +3,26 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-export const importSources = ['tmdb', 'kinopoisk', 'alloha', 'collaps'] as const;
+export const importSources = ['tmdb', 'kinopoisk', 'alloha', 'collaps', 'kodik'] as const;
 export type ImportSource = typeof importSources[number];
 export type ImportMediaType = 'movie' | 'tv';
 export type ImportRef = { source: ImportSource; externalId: string; mediaType: ImportMediaType };
+/** Kodik uses stable material references; raw movie-/serial- edition IDs remain accepted inputs. */
+export const importRefIdPattern = '^(?:[1-9][0-9]{0,15}|tmdb:(?:movie|tv):[1-9][0-9]{0,15}|imdb:tt[0-9]{5,12}|(?:movie|serial|shikimori|kinopoisk)-[1-9][0-9]{0,15}|imdb-tt[0-9]{5,12})$';
+export function validImportRef(value: unknown): value is ImportRef {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+	const ref = value as Partial<ImportRef>;
+	if (!ref.source || !importSources.includes(ref.source) || !ref.mediaType || !['movie', 'tv'].includes(ref.mediaType) || typeof ref.externalId !== 'string') return false;
+	if (ref.source === 'kodik') return /^(?:(?:shikimori|kinopoisk)-[1-9][0-9]{0,15}|imdb-tt[0-9]{5,12})$/u.test(ref.externalId) || (ref.mediaType === 'movie' ? /^movie-[1-9][0-9]{0,15}$/u : /^serial-[1-9][0-9]{0,15}$/u).test(ref.externalId);
+	return /^(?:[1-9][0-9]{0,15}|tmdb:(?:movie|tv):[1-9][0-9]{0,15}|imdb:tt[0-9]{5,12})$/u.test(ref.externalId);
+}
 export type ExternalIdentity = { provider: string; externalId: string; entityType: ImportMediaType };
 export type ImportCredit = { externalId: string | null; source: ImportSource; name: string; role: string; character: string | null; imageUrl: string | null };
 export type ImportCompany = { externalId: string | null; source: ImportSource; name: string; imageUrl: string | null };
 export type ImportCollection = { externalId: string; source: ImportSource; name: string; description?: string | null; imageUrl?: string | null };
 export type ImportEpisode = { episodeNumber: number; title: string; originalTitle?: string | null; description?: string | null; airDate?: string | null; stillUrl?: string | null; runtimeMinutes?: number | null; tmdbEpisodeId?: number | null };
 export type ImportSeason = { seasonNumber: number; title: string; description?: string | null; posterUrl?: string | null; airDate?: string | null; episodeCount?: number | null; episodes: ImportEpisode[] };
-export type ImportPlayer = { source: 'alloha' | 'collaps'; externalId: string; iframeUrl: string; translations: { id: string; name: string; iframe?: string; quality?: string | null; resolutions?: string[] }[]; quality: string | null; episodes: { seasonNumber: number; episodeNumber: number }[] };
+export type ImportPlayer = { source: 'alloha' | 'collaps' | 'kodik'; externalId: string; iframeUrl: string; translations: { id: string; name: string; type?: 'voice' | 'subtitles'; iframe?: string; quality?: string | null; resolutions?: string[]; episodes?: { seasonNumber: number; episodeNumber: number }[] }[]; quality: string | null; episodes: { seasonNumber: number; episodeNumber: number }[] };
 export type ImportRecord = {
 	ref: ImportRef;
 	identities: ExternalIdentity[];

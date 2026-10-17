@@ -10,7 +10,7 @@ import { Agent as HttpsAgent } from 'node:https';
 import { isIP } from 'node:net';
 import ipaddr from 'ipaddr.js';
 import { artworkCandidate } from './artwork-candidates.js';
-import type { ExternalIdentity, ImportCredit, ImportEpisode, ImportField, ImportMediaType, ImportPlayer, ImportProvider, ImportProviderStatus, ImportRecord, ImportRef, ImportSearchPage, ImportSearchResult, ImportSource } from './types.js';
+import { validImportRef, type ExternalIdentity, type ImportCredit, type ImportEpisode, type ImportField, type ImportMediaType, type ImportPlayer, type ImportProvider, type ImportProviderStatus, type ImportRecord, type ImportRef, type ImportSearchPage, type ImportSearchResult, type ImportSource } from './types.js';
 
 export type ImportProviderErrorCode = 'not-configured' | 'not-found' | 'quota-exceeded' | 'rate-limited' | 'upstream-failure' | 'invalid-ref' | 'unsupported' | 'malformed-response';
 
@@ -30,11 +30,14 @@ export type ImportProviderConfig = {
 	allohaPlayerToken?: string;
 	kinopoiskApiKey?: string;
 	collapsApiToken?: string;
+	kodikApiToken?: string;
 	allohaIframeHosts?: string[];
 	collapsIframeHosts?: string[];
+	kodikIframeHosts?: string[];
 	apiOrigins?: Partial<Record<ImportSource, string>>;
 	allohaPlayerOrigin?: string;
 	collapsPlayerOrigin?: string;
+	kodikPlayerOrigin?: string;
 };
 
 const origins: Record<ImportSource, string> = {
@@ -42,6 +45,7 @@ const origins: Record<ImportSource, string> = {
 	kinopoisk: 'https://kinopoiskapiunofficial.tech',
 	alloha: 'https://apbugall.org',
 	collaps: 'https://api.bhcesh.me',
+	kodik: 'https://kodik-api.com',
 };
 export const defaultImportApiOrigins: Readonly<Record<ImportSource, string>> = Object.freeze({ ...origins });
 
@@ -192,10 +196,10 @@ export function rewriteImportPlayerOrigin(value: string, origin?: string): strin
 }
 
 /** Cached player choices also adopt token/mirror changes without exposing server API credentials. */
-export function configuredImportPlayerUrl(value: unknown, source: 'alloha' | 'collaps', config: ImportProviderConfig): string | null {
-	const origin = source === 'alloha' ? config.allohaPlayerOrigin : config.collapsPlayerOrigin;
-	const extraHosts = source === 'alloha' ? config.allohaIframeHosts : config.collapsIframeHosts;
-	const hosts = configuredIframeHosts(extraHosts, source === 'alloha' ? 'ascorbic-as.stravers.live' : 'api.nextembed.ws');
+export function configuredImportPlayerUrl(value: unknown, source: ImportPlayer['source'], config: ImportProviderConfig): string | null {
+	const origin = source === 'alloha' ? config.allohaPlayerOrigin : source === 'collaps' ? config.collapsPlayerOrigin : config.kodikPlayerOrigin;
+	const extraHosts = source === 'alloha' ? config.allohaIframeHosts : source === 'collaps' ? config.collapsIframeHosts : config.kodikIframeHosts;
+	const hosts = configuredIframeHosts(extraHosts, source === 'alloha' ? 'ascorbic-as.stravers.live' : source === 'collaps' ? 'api.nextembed.ws' : 'kodikplayer.com');
 	if (origin) hosts.push(new URL(normalizeImportApiOrigin(origin)).hostname);
 	const safe = source === 'alloha' ? safeAllohaPlayerUrl(value, hosts, config.allohaPlayerToken) : safeImportUrl(value, hosts);
 	return safe ? rewriteImportPlayerOrigin(safe, origin) : null;
@@ -216,11 +220,15 @@ export function importPlayerTranslationUrl(iframe: string, source: ImportPlayer[
 			// Older importer snapshots kept IDs but lost the upstream per-voice iframe.
 			if (!/^[1-9]\d{0,15}$/u.test(translation.id) || !Number.isSafeInteger(Number(translation.id))) return null;
 			url.searchParams.set('translation', translation.id);
-		} else {
+		} else if (source === 'collaps') {
 			// Collaps documents oneSound as the full voice name, not its catalogue ID.
 			const name = collapsTranslationName(translation.name);
 			if (name == null) return null;
 			url.searchParams.set('oneSound', name);
+		} else {
+			// Kodik voices are different edition resources; an ID cannot be substituted
+			// into a signed/hash-bearing resource path. Only its validated iframe is selectable.
+			return null;
 		}
 		return url.toString();
 	} catch {
@@ -558,6 +566,149 @@ export function normalizeAllohaRecord(value: unknown, ref: ImportRef, iframeHost
 	return record;
 }
 
+function kodikId(value: unknown): string | null {
+	return typeof value === 'string' && /^(?:movie|serial)-[1-9][0-9]{0,15}$/u.test(value) ? value : null;
+}
+
+function kodikMediaType(value: JsonObject): ImportMediaType | null {
+	const id = kodikId(value.id);
+	return id == null ? null : id.startsWith('movie-') ? 'movie' : 'tv';
+}
+
+function kodikIdentities(item: JsonObject, mediaType: ImportMediaType): ExternalIdentity[] {
+	return [...identity('kinopoisk', item.kinopoisk_id, mediaType), ...identity('imdb', item.imdb_id, mediaType, true), ...identity('shikimori', item.shikimori_id, mediaType)];
+}
+
+function kodikKind(item: JsonObject, mediaType: ImportMediaType): ImportRecord['kind'] {
+	const material = object(item.material_data);
+	if (externalId(item.shikimori_id)) return 'anime';
+	return mediaKind(mediaType, names(material.all_genres ?? material.genres, 'name'), names(material.countries, 'name'), item.type);
+}
+
+function canonicalKodikRef(item: JsonObject): ImportRef {
+	const mediaType = kodikMediaType(item);
+	const rawId = kodikId(item.id);
+	if (!mediaType || !rawId) throw new ImportProviderError('malformed-response');
+	const shikimori = externalId(item.shikimori_id);
+	if (shikimori) return { source: 'kodik', externalId: `shikimori-${shikimori}`, mediaType };
+	if (kodikKind(item, mediaType) !== 'anime') {
+		const kp = externalId(item.kinopoisk_id);
+		const imdb = imdbId(item.imdb_id);
+		if (kp) return { source: 'kodik', externalId: `kinopoisk-${kp}`, mediaType };
+		if (imdb) return { source: 'kodik', externalId: `imdb-${imdb}`, mediaType };
+	}
+	return { source: 'kodik', externalId: rawId, mediaType };
+}
+
+/** A protocol-relative provider link is HTTPS, never a general URL to be fetched by the server. */
+function kodikPlayerUrl(value: unknown, hosts: readonly string[], rawId?: string): string | null {
+	const safe = safeImportUrl(typeof value === 'string' && value.startsWith('//') ? `https:${value}` : value, hosts);
+	if (!safe) return null;
+	const path = new URL(safe).pathname;
+	if (rawId) {
+		const resource = /^(movie|serial)-([1-9][0-9]{0,15})$/u.exec(rawId);
+		const parent = /^\/(video|serial)\/([1-9][0-9]{0,15})\/[A-Za-z0-9_-]{1,128}\/[1-9][0-9]{1,3}p\/?$/u.exec(path);
+		if (!resource || !parent || parent[1] !== (resource[1] === 'movie' ? 'video' : 'serial') || parent[2] !== resource[2]) return null;
+	} else if (!/^\/seria\/[1-9][0-9]{0,15}\/[A-Za-z0-9_-]{1,128}\/[1-9][0-9]{1,3}p\/?$/u.test(path)) return null;
+	return safe;
+}
+
+function sameKodikMaterial(anchor: JsonObject, candidate: JsonObject): boolean {
+	const mediaType = kodikMediaType(anchor);
+	if (mediaType == null || kodikMediaType(candidate) !== mediaType) return false;
+	const expected = kodikIdentities(anchor, mediaType);
+	const actual = kodikIdentities(candidate, mediaType);
+	if (expected.some(left => actual.some(right => left.provider === right.provider && left.externalId !== right.externalId))) return false;
+	const shikimori = expected.find(value => value.provider === 'shikimori');
+	const actualShikimori = actual.find(value => value.provider === 'shikimori');
+	if (shikimori || actualShikimori) return shikimori?.externalId === actualShikimori?.externalId;
+	if (kodikKind(anchor, mediaType) === 'anime') return false;
+	return expected.some(left => actual.some(right => left.provider === right.provider && left.externalId === right.externalId));
+}
+
+/** One stable material reference binds the work; editions are voices, not competing work identities. */
+export function normalizeKodikRecord(value: unknown, variants: unknown[] = [], iframeHosts: readonly string[] = ['kodikplayer.com']): ImportRecord {
+	const anchor = object(value);
+	const id = kodikId(anchor.id);
+	const mediaType = kodikMediaType(anchor);
+	if (!id || !mediaType) throw new ImportProviderError('malformed-response');
+	const material = object(anchor.material_data);
+	const record = blankRecord(canonicalKodikRef(anchor), requireTitle(firstText(material.title, anchor.title)));
+	const kind = kodikKind(anchor, mediaType);
+	// A Shikimori anime season is not the whole-series KP/IMDb entity. Those IDs
+	// remain useful for provider consistency checks but cannot own a work binding.
+	record.identities.push(...kodikIdentities(anchor, mediaType).filter(value => mediaType !== 'tv' || kind !== 'anime' ? true : value.provider === 'shikimori'));
+	record.originalTitle = firstText(material.title_en, material.title_original, anchor.title_orig);
+	record.description = text(material.description, 8192);
+	record.releaseYear = year(anchor.year ?? material.year ?? material.premiere_world ?? material.aired_at);
+	record.runtimeMinutes = integer(material.duration, 1, 1440);
+	record.genres = names(material.all_genres ?? material.genres, 'name');
+	record.countries = names(material.countries, 'name');
+	record.kind = kind;
+	record.posterUrl = safeImportUrl(material.poster_url) ?? safeImportUrl(material.anime_poster_url);
+	record.galleryUrls = [...new Set([...array(material.screenshots, 18), ...array(anchor.screenshots, 18)].map(value => safeImportUrl(value)).filter((value): value is string => value != null))].slice(0, 18);
+	record.ratings = [...rating('kinopoisk', material.kinopoisk_rating, material.kinopoisk_votes), ...rating('imdb', material.imdb_rating, material.imdb_votes), ...rating('shikimori', material.shikimori_rating, material.shikimori_votes)];
+	const age = integer(material.minimal_age, 0, 21);
+	record.ageRating = age == null ? null : `${age}+`;
+	// Names without stable identities must not create or cross-merge a different real person's card.
+	if (['actors', 'directors', 'writers', 'producers', 'composers', 'operators', 'editors', 'designers'].some(field => array(material[field], 1).length)) record.warnings.push('kodik-people-without-identities');
+	if (array(material.anime_studios, 1).length) record.warnings.push('kodik-studios-without-identities');
+	if (!Object.keys(material).length) record.warnings.push('kodik-metadata-partial');
+	if (kind === 'anime' && !externalId(anchor.shikimori_id)) record.warnings.push('kodik-anime-identity-partial');
+	const editions = [anchor, ...variants.map(object).filter(candidate => candidate.id !== id)];
+	if (variants.length > MAX_RESULTS) record.warnings.push('kodik-voice-limit');
+	const seenEditions = new Set<string>();
+	const shikimoriIds = new Set(record.identities.filter(value => value.provider === 'shikimori').map(value => value.externalId));
+	const seasons = new Map<number, Set<number>>();
+	const translations: ImportPlayer['translations'] = [];
+	let remaining = MAX_EPISODES;
+	for (const edition of editions.slice(0, MAX_RESULTS)) {
+		const editionId = kodikId(edition.id);
+		if (!editionId || seenEditions.has(editionId)) continue;
+		if (editionId !== id && !sameKodikMaterial(anchor, edition)) throw new ImportProviderError('malformed-response');
+		seenEditions.add(editionId);
+		const shikimori = externalId(edition.shikimori_id);
+		if (shikimori) shikimoriIds.add(shikimori);
+		if (shikimoriIds.size > 1) throw new ImportProviderError('malformed-response');
+		const iframe = kodikPlayerUrl(edition.link, iframeHosts, editionId);
+		const voice = object(edition.translation);
+		const name = text(voice.title);
+		const voiceEpisodes: ImportPlayer['episodes'] = [];
+		if (edition.link != null && !iframe) record.warnings.push('kodik-player-url-rejected');
+		const seasonRows = Object.entries(object(edition.seasons));
+		if (seasonRows.length > MAX_SEASONS) record.warnings.push('kodik-season-limit');
+		for (const [key, raw] of seasonRows.slice(0, MAX_SEASONS)) {
+			const seasonNumber = integer(key, 0, 1000);
+			if (seasonNumber == null) { record.warnings.push('kodik-episode-data-rejected'); continue; }
+			const episodeRows = Object.entries(object(object(raw).episodes));
+			const numbers = seasons.get(seasonNumber) ?? new Set<number>();
+			if (!seasons.has(seasonNumber) && seasons.size >= MAX_SEASONS) { record.warnings.push('kodik-season-limit'); continue; }
+			seasons.set(seasonNumber, numbers);
+			for (const [episodeKey, episodeLink] of episodeRows) {
+				const episodeNumber = integer(episodeKey, 0, 100000);
+				if (episodeNumber == null || !kodikPlayerUrl(episodeLink, iframeHosts)) { record.warnings.push('kodik-episode-data-rejected'); continue; }
+				if (voiceEpisodes.length >= MAX_EPISODES) { record.warnings.push('kodik-episode-limit'); break; }
+				voiceEpisodes.push({ seasonNumber, episodeNumber });
+				if (numbers.has(episodeNumber)) continue;
+				if (remaining <= 0) { record.warnings.push('kodik-episode-limit'); break; }
+				numbers.add(episodeNumber);
+				remaining--;
+			}
+		}
+		if (iframe && name) translations.push({ id: editionId, name, iframe, ...(voice.type === 'voice' || voice.type === 'subtitles' ? { type: voice.type } : {}), quality: text(edition.quality, 64), ...(edition.seasons != null && typeof edition.seasons === 'object' && !Array.isArray(edition.seasons) ? { episodes: voiceEpisodes.sort((left, right) => left.seasonNumber - right.seasonNumber || left.episodeNumber - right.episodeNumber) } : {}) });
+	}
+	const iframe = kodikPlayerUrl(anchor.link, iframeHosts, id) ?? translations[0]?.iframe;
+	const episodes = [...seasons].sort(([left], [right]) => left - right).flatMap(([seasonNumber, numbers]) => {
+		const list = [...numbers].sort((left, right) => left - right);
+		record.seasons.push({ seasonNumber, title: `Сезон ${seasonNumber}`, episodeCount: list.length, episodes: list.map(episodeNumber => ({ episodeNumber, title: `Эпизод ${episodeNumber}` })) });
+		return list.map(episodeNumber => ({ seasonNumber, episodeNumber }));
+	});
+	if (iframe) record.players.push({ source: 'kodik', externalId: record.ref.externalId, iframeUrl: iframe, translations, quality: text(anchor.quality, 64), episodes });
+	record.warnings = [...new Set(record.warnings)];
+	record.complete = record.warnings.length === 0;
+	return record;
+}
+
 function retryAfter(value: string | null): number | undefined {
 	if (value == null) return undefined;
 	const seconds = /^\d+$/.test(value) ? Number(value) : (Date.parse(value) - Date.now()) / 1000;
@@ -634,6 +785,7 @@ export function createImportRequest(source: ImportSource, credential: string | u
 		if (source === 'alloha') headers.Authorization = `Bearer ${credential.trim()}`;
 		if (source === 'tmdb') url.searchParams.set('api_key', credential.trim());
 		if (source === 'collaps') url.searchParams.set('token', credential.trim());
+		if (source === 'kodik') url.searchParams.set('token', credential.trim());
 		try {
 			return await transport(url.toString(), headers);
 		} catch (error) {
@@ -662,6 +814,35 @@ function configuredIframeHosts(values: readonly string[] | undefined, fallback: 
 	return hosts != null && hosts.length > 0 ? hosts : [fallback];
 }
 
+function kodikRows(value: unknown): JsonObject[] {
+	const response = object(value);
+	if (!Array.isArray(response.results) || response.results.length > MAX_RESULTS) throw new ImportProviderError('malformed-response');
+	return response.results.map(object);
+}
+
+function kodikGrouping(identities: ExternalIdentity[], mediaType: ImportMediaType): { provider: string; externalId: string; parameter: string } | null {
+	for (const [provider, parameter] of [['shikimori', 'shikimori_id'], ['kinopoisk', 'kinopoisk_id'], ['imdb', 'imdb_id']] as const) {
+		const id = keyFor(identities, provider, mediaType);
+		if (id) return { provider, externalId: id, parameter };
+	}
+	return null;
+}
+
+function matchingKodikRows(rows: JsonObject[], identities: ExternalIdentity[], mediaType: ImportMediaType): JsonObject[] {
+	const grouping = kodikGrouping(identities, mediaType);
+	if (!grouping) return [];
+	const results = rows.filter(row => {
+		if (kodikMediaType(row) !== mediaType) return false;
+		const actual = kodikIdentities(row, mediaType);
+		if (!actual.some(value => value.provider === grouping.provider && value.externalId === grouping.externalId)) return false;
+		if (identities.some(expected => expected.entityType === mediaType && actual.some(value => value.provider === expected.provider && value.externalId !== expected.externalId))) throw new ImportProviderError('malformed-response');
+		return true;
+	});
+	// One KP catalogue ID can cover different anime cours. Never guess which Shikimori work was intended.
+	if (new Set(results.map(row => externalId(row.shikimori_id)).filter(Boolean)).size > 1) throw new ImportProviderError('malformed-response');
+	return results;
+}
+
 /** Creates adapters with process-wide pacing. Persistence, daily budgets and durable retries belong to the runner. */
 export function createImportProviders(config: ImportProviderConfig, transport: ImportTransport = defaultImportTransport): Record<ImportSource, ImportProvider> {
 	const pacedTransport = pacedImportTransport(transport);
@@ -670,10 +851,13 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 	const kpRequest = createImportRequest('kinopoisk', config.kinopoiskApiKey, pacedTransport, addresses.kinopoisk);
 	const allohaRequest = createImportRequest('alloha', config.allohaApiToken, pacedTransport, addresses.alloha);
 	const collapsRequest = createImportRequest('collaps', config.collapsApiToken, pacedTransport, addresses.collaps);
+	const kodikRequest = createImportRequest('kodik', config.kodikApiToken, pacedTransport, addresses.kodik);
 	const allohaHosts = configuredIframeHosts(config.allohaIframeHosts, 'ascorbic-as.stravers.live');
 	const collapsHosts = configuredIframeHosts(config.collapsIframeHosts, 'api.nextembed.ws');
+	const kodikHosts = configuredIframeHosts(config.kodikIframeHosts, 'kodikplayer.com');
 	if (config.allohaPlayerOrigin) allohaHosts.push(new URL(normalizeImportApiOrigin(config.allohaPlayerOrigin)).hostname);
 	if (config.collapsPlayerOrigin) collapsHosts.push(new URL(normalizeImportApiOrigin(config.collapsPlayerOrigin)).hostname);
+	if (config.kodikPlayerOrigin) kodikHosts.push(new URL(normalizeImportApiOrigin(config.kodikPlayerOrigin)).hostname);
 	const tmdb: ImportProvider = {
 		status: () => status('tmdb', config.tmdbApiKey, true, true, false),
 		async check() {
@@ -936,5 +1120,61 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 			return { items, page, hasMore };
 		},
 	};
-	return { tmdb, kinopoisk, alloha, collaps };
+	const kodik: ImportProvider = {
+		status: () => status('kodik', config.kodikApiToken, true, false, false),
+		async check() {
+			kodikRows(await kodikRequest('/list', { limit: '1' }));
+		},
+		async search(query, page = 1, mediaType) {
+			const keyword = text(query);
+			if (!keyword || (mediaType !== undefined && !['movie', 'tv'].includes(mediaType))) throw new ImportProviderError('invalid-ref');
+			// Kodik exposes opaque next_page URLs. This first-stage adapter never follows
+			// credential-bearing URLs or pretends an integer is a provider cursor.
+			if (page !== 1) throw new ImportProviderError('unsupported');
+			const response = await kodikRequest('/search', { title: keyword, limit: '100', with_material_data: 'true' });
+			const rows = kodikRows(response).filter(row => mediaType === undefined || kodikMediaType(row) === mediaType);
+			const pageResult = searchPage(rows, 1, false, value => normalizeKodikRecord(value, [], kodikHosts));
+			pageResult.items = pageResult.items.filter((value, index, all) => all.findIndex(other => other.ref.externalId === value.ref.externalId && other.ref.mediaType === value.ref.mediaType) === index);
+			return pageResult;
+		},
+		async fetch(ref, fields) {
+			if (ref.source !== 'kodik' || !validImportRef(ref)) throw new ImportProviderError('invalid-ref');
+			const wantsEpisodes = !fields || fields.includes('players') || fields.includes('seasons');
+			const parameters = { with_material_data: 'true', ...(wantsEpisodes ? { with_seasons: 'true', with_episodes: 'true' } : {}), limit: '100' };
+			const canonical = /^(shikimori|kinopoisk)-([1-9][0-9]{0,15})$|^(imdb)-(tt[0-9]{5,12})$/u.exec(ref.externalId);
+			const authoritative = canonical ? { provider: canonical[1] ?? canonical[3], externalId: canonical[2] ?? canonical[4], entityType: ref.mediaType } : null;
+			const response: unknown = await kodikRequest('/search', { ...parameters, ...(authoritative ? { [`${authoritative.provider}_id`]: authoritative.externalId } : { id: ref.externalId }) });
+			const exactRows = kodikRows(response);
+			const anchors = authoritative ? matchingKodikRows(exactRows, [authoritative], ref.mediaType).sort((left, right) => String(left.id).localeCompare(String(right.id))) : exactRows.filter(row => row.id === ref.externalId && kodikMediaType(row) === ref.mediaType);
+			if (!anchors.length) throw new ImportProviderError('not-found');
+			if (!authoritative && anchors.length !== 1) throw new ImportProviderError('malformed-response');
+			if (authoritative && (new Set(anchors.map(value => canonicalKodikRef(value).externalId)).size > 1 || (authoritative.provider !== 'shikimori' && object(response).next_page))) throw new ImportProviderError('malformed-response');
+			const anchor = anchors[0];
+			const canonicalRef = canonicalKodikRef(anchor);
+			// Preview and the queued canonical ref must pick the same edition's artwork,
+			// not silently substitute screenshots when a different voice was the raw input.
+			if (canonicalRef.externalId !== ref.externalId) return kodik.fetch(canonicalRef, fields);
+			const result = normalizeKodikRecord(anchor, authoritative ? anchors : [], kodikHosts);
+			if (object(response).next_page) { result.warnings.push('kodik-voice-limit'); result.complete = false; }
+			for (const player of result.players) {
+				player.iframeUrl = rewriteImportPlayerOrigin(player.iframeUrl, config.kodikPlayerOrigin);
+				for (const translation of player.translations) if (translation.iframe) translation.iframe = rewriteImportPlayerOrigin(translation.iframe, config.kodikPlayerOrigin);
+			}
+			return result;
+		},
+		async lookup(identities, mediaType, fields) {
+			if (!['movie', 'tv'].includes(mediaType)) throw new ImportProviderError('invalid-ref');
+			const own = identities.find(value => value.provider === 'kodik' && value.entityType === mediaType)?.externalId;
+			if (own) return kodik.fetch({ source: 'kodik', externalId: own, mediaType }, fields);
+			const grouping = kodikGrouping(identities, mediaType);
+			if (!grouping) return null;
+			const response = await kodikRequest('/search', { [grouping.parameter]: grouping.externalId, limit: '100', with_material_data: 'true' });
+			// An incomplete first page cannot establish an unambiguous identity.
+			if (object(response).next_page) throw new ImportProviderError('malformed-response');
+			const rows = matchingKodikRows(kodikRows(response), identities, mediaType).sort((left, right) => String(left.id).localeCompare(String(right.id)));
+			if (!rows.length) return null;
+			return kodik.fetch(canonicalKodikRef(rows[0]), fields);
+		},
+	};
+	return { tmdb, kinopoisk, alloha, collaps, kodik };
 }

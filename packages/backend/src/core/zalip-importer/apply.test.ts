@@ -319,6 +319,71 @@ describe('Zalip imported seasons and playback', () => {
 		const applied = await applyImportRecord(context.db, context.idService, record({ players: [collaps], complete: false }), {});
 		expect((applied.work.importData.values as Row).players).toEqual([alloha, collaps]);
 	});
+
+	test('complete Kodik-only imports add their own slot without erasing Alloha, Collaps or editorial metadata', async () => {
+		const context = fixture();
+		const alloha = { source: 'alloha' as const, externalId: 'a', iframeUrl: 'https://player.example.org/a', translations: [], quality: null, episodes: [] };
+		const collaps = { ...alloha, source: 'collaps' as const, externalId: 'c', iframeUrl: 'https://player.example.org/c' };
+		await applyImportRecord(context.db, context.idService, record({ players: [alloha, collaps] }), {});
+		const kodik = { ...alloha, source: 'kodik' as const, externalId: 'movie-123', iframeUrl: 'https://kodikplayer.com/video/123/hash/720p', translations: [{ id: 'movie-123', name: 'Voice', iframe: 'https://kodikplayer.com/video/123/hash/720p', episodes: [{ seasonNumber: 1, episodeNumber: 1 }] }] };
+		const incoming = record({ ref: { source: 'kodik', externalId: 'movie-123', mediaType: 'movie' }, players: [kodik], description: 'Excluded Kodik text', complete: true });
+		const applied = await applyImportRecord(context.db, context.idService, incoming, {}, { options: { sources: [], fields: ['players'] } });
+		expect((applied.work.importData.values as Row).players).toEqual([alloha, collaps, kodik]);
+		expect(applied.work.description).toBe('Description');
+		expect(applied.work.publicationState).toBe('draft');
+		const updated = { ...kodik, quality: 'HD' };
+		const again = await applyImportRecord(context.db, context.idService, { ...incoming, players: [updated] }, {}, { options: { fields: ['players'] } });
+		expect((again.work.importData.values as Row).players).toEqual([alloha, collaps, updated]);
+		await applyImportRecord(context.db, context.idService, { ...incoming, players: [] }, {}, { lockedFields: ['players'] });
+		const locked = await applyImportRecord(context.db, context.idService, { ...incoming, players: [{ ...updated, quality: 'Blocked' }] }, {});
+		expect((locked.work.importData.values as Row).players).toEqual([alloha, collaps, updated]);
+	});
+});
+
+describe('Kodik season-scoped canonical identity', () => {
+	function seasonRecord(shikimori: string, voiceId: string): ImportRecord {
+		const canonical = `shikimori-${shikimori}`;
+		return record({ ref: { source: 'kodik', externalId: canonical, mediaType: 'tv' }, identities: [{ provider: 'kodik', externalId: canonical, entityType: 'tv' }, { provider: 'shikimori', externalId: shikimori, entityType: 'tv' }], kind: 'anime', title: `Anime ${shikimori}`, ratings: [{ source: 'kinopoisk', value: 8, votes: 100 }], seasons: [{ seasonNumber: 1, title: 'Сезон 1', episodes: [{ episodeNumber: 1, title: 'Эпизод 1' }] }], players: [{ source: 'kodik', externalId: canonical, iframeUrl: `https://kodikplayer.com/serial/${voiceId}/hash/720p`, translations: [{ id: `serial-${voiceId}`, name: 'Voice', type: 'voice', iframe: `https://kodikplayer.com/serial/${voiceId}/hash/720p`, episodes: [{ seasonNumber: 1, episodeNumber: 1 }] }], quality: null, episodes: [{ seasonNumber: 1, episodeNumber: 1 }] }] });
+	}
+
+	test('separate Shikimori seasons remain separate drafts without binding a shared KP whole-series work', async () => {
+		const legacy = work({ kind: 'series', tmdbMediaType: 'tv' });
+		const context = fixture({ works: [legacy], identities: [{ id: 'kp', workId: legacy.id, provider: 'kinopoisk', entityType: 'tv', externalId: '4786341' }] });
+		const first = await applyImportRecord(context.db, context.idService, seasonRecord('46569', '49752'), {});
+		const second = await applyImportRecord(context.db, context.idService, seasonRecord('55825', '90000'), {});
+		expect(first.work.id).not.toBe(second.work.id);
+		expect(first.work.id).not.toBe(legacy.id);
+		expect(second.work.id).not.toBe(legacy.id);
+		expect(context.works()).toHaveLength(3);
+		expect(context.works().find(value => value.id === legacy.id)).toEqual(legacy);
+		expect(context.seasons().map(value => value.workId).sort()).toEqual([first.work.id, second.work.id].sort());
+		expect(context.episodes().map(value => value.seasonId).sort()).toEqual(context.seasons().map(value => value.id).sort());
+		expect(context.identities().filter(value => value.provider === 'kinopoisk')).toHaveLength(1);
+		expect(first.work.publicationState).toBe('draft');
+		expect(second.work.publicationState).toBe('draft');
+	});
+
+	test('alternate voice editions update one canonical work and player slot', async () => {
+		const context = fixture();
+		const first = await applyImportRecord(context.db, context.idService, seasonRecord('46569', '49752'), {});
+		const alternate = await applyImportRecord(context.db, context.idService, seasonRecord('46569', '49750'), {});
+		expect(alternate.work.id).toBe(first.work.id);
+		expect(context.works()).toHaveLength(1);
+		expect(context.identities().filter(value => value.provider === 'kodik').map(value => value.externalId)).toEqual(['shikimori-46569']);
+		expect((alternate.work.importData.values as Row).players).toEqual(seasonRecord('46569', '49750').players);
+	});
+
+	test('weak KP matches and explicit work IDs cannot attach an unrelated anime season even if merged kind changes', async () => {
+		const legacy = work({ kind: 'series', tmdbMediaType: 'tv' });
+		const context = fixture({ works: [legacy], identities: [{ id: 'kp', workId: legacy.id, provider: 'kinopoisk', entityType: 'tv', externalId: '4786341' }] });
+		const scoped = seasonRecord('55825', '90000');
+		const weak = { ...scoped, kind: 'series' as const, identities: [...scoped.identities, { provider: 'kinopoisk', externalId: '4786341', entityType: 'tv' as const }] };
+		await expect(applyImportRecord(context.db, context.idService, weak, {})).rejects.toThrow('IMPORT_IDENTITY_CONFLICT');
+		await expect(applyImportRecord(context.db, context.idService, scoped, {}, { workId: legacy.id })).rejects.toThrow('IMPORT_IDENTITY_CONFLICT');
+		expect(context.works()).toEqual([legacy]);
+		expect(context.seasons()).toEqual([]);
+		expect(context.episodes()).toEqual([]);
+	});
 });
 
 describe('Zalip artwork commit compare-and-swap', () => {

@@ -47,6 +47,25 @@ describe('importer presentation helpers', () => {
 		expect(formatImporterValue(['Драма', 'Комедия'])).toBe('Драма, Комедия');
 		expect(formatImporterValue('<script>')).toBe('<script>');
 	});
+	it('accepts only canonical Kodik resource IDs and normalizes numeric UI input by media type', () => {
+		expect(importerReference('kodik', 'movie', ' serial-123 ')).toEqual({ source: 'kodik', mediaType: 'tv', externalId: 'serial-123' });
+		expect(importerReference('kodik', 'tv', 'movie-456')).toEqual({ source: 'kodik', mediaType: 'movie', externalId: 'movie-456' });
+		expect(importerReference('kodik', 'tv', '123')).toEqual({ source: 'kodik', mediaType: 'tv', externalId: 'serial-123' });
+		expect(importerReference('kodik', 'movie', '456')).toEqual({ source: 'kodik', mediaType: 'movie', externalId: 'movie-456' });
+		for (const value of ['0', '-1', 'serial-0', 'serial-012', 'serial--1', 'serial-1-extra', 'movie-1?token=fixture', '1'.repeat(17), 'https://kodik.example/serial/123/hash/720p', 'https://kodik.example/video/456/hash/720p', 'tt1234567', 'imdb:tt1234567', 'tmdb:tv:123', 'https://www.imdb.com/title/tt1234567/']) expect(importerReference('kodik', 'tv', value)).toBeNull();
+		expect(importerReference('tmdb', 'tv', 'serial-123')).toBeNull();
+	});
+	it('retains canonical Kodik identity references returned by search without deriving movie or TV from a shared ID', () => {
+		for (const mediaType of ['movie', 'tv'] as const) {
+			for (const externalId of ['shikimori-123', 'kinopoisk-456', 'imdb-tt12345', 'imdb-tt123456789012']) {
+				const ref = { source: 'kodik' as const, mediaType, externalId };
+				expect(importerReference('kodik', mediaType, ` ${externalId} `)).toEqual(ref);
+				expect(importerReferenceKey(importerReference('kodik', mediaType, externalId)!)).toBe(importerReferenceKey(ref));
+			}
+		}
+		for (const externalId of ['shikimori-0', 'shikimori-012', 'shikimori--1', 'shikimori-12345678901234567', 'kinopoisk-0', 'kinopoisk-123?token=fixture', 'imdb-tt1234', 'imdb-tt1234567890123', 'imdb-12345', 'imdb-tt12345/episode/1', 'https://kodik.example/serial/123/hash/720p', 'https://shikimori.one/animes/123', 'https://www.kinopoisk.ru/series/456/']) expect(importerReference('kodik', 'tv', externalId)).toBeNull();
+		expect(importerReference('tmdb', 'tv', 'shikimori-123')).toBeNull();
+	});
 	it('bounds progress for incomplete and interrupted jobs', () => {
 		expect(importerProgress(2, 4)).toBe(50);
 		expect(importerProgress(8, 4)).toBe(100);
@@ -66,6 +85,14 @@ describe('importer presentation helpers', () => {
 		expect(importerWarningLabel('tmdb-season-12-unavailable')).toBe(i18n.tsx.zalip._importer.warningSeasonUnavailable({ number: '12' }));
 		expect(importerWarningLabel('collaps-metadata-partial')).toBe(i18n.tsx.zalip._importer.warningMetadataPartial({ source: 'Collaps' }));
 		expect(importerWarningLabel('alloha-player-url-rejected')).toBe(i18n.tsx.zalip._importer.warningPlayerRejected({ source: 'Alloha' }));
+		expect(importerWarningLabel('kodik-player-url-rejected')).toBe(i18n.tsx.zalip._importer.warningPlayerRejected({ source: 'Kodik' }));
+		expect(importerWarningLabel('kodik:malformed-response')).toBe(i18n.tsx.zalip._importer.warningSource({ source: 'Kodik', reason: i18n.ts.zalip._importer.warningSourceUnavailable }));
+		expect(importerWarningLabel('kodik-episode-data-rejected')).toBe(i18n.ts.zalip._importer.warningKodikEpisodes);
+		expect(importerWarningLabel('kodik-people-without-identities')).toBe(i18n.ts.zalip._importer.warningKodikPeople);
+		expect(importerWarningLabel('kodik-studios-without-identities')).toBe(i18n.ts.zalip._importer.warningKodikStudios);
+		expect(importerWarningLabel('kodik-voice-limit')).toBe(i18n.ts.zalip._importer.warningKodikVoices);
+		expect(importerWarningLabel('kodik-anime-identity-partial')).toBe(i18n.ts.zalip._importer.warningKodikAnimeIdentity);
+		expect(importerWarningLabel('kodik-anime-scope-unmapped')).toBe(i18n.ts.zalip._importer.warningKodikAnimeScope);
 		expect(importerWarningLabel('kinopoisk:quota-exceeded')).toBe(i18n.tsx.zalip._importer.warningSource({ source: i18n.ts.zalip._importer.sourceKinopoisk, reason: i18n.ts.zalip._importer.errorQuota }));
 		for (const code of ['artwork-local-unavailable:token', 'tmdb:upstream-failure https://example.org/?token=private', 'tmdb-season-10000-unavailable', '<script>private</script>']) expect(importerWarningLabel(code)).toBe(i18n.ts.zalip._importer.warningGeneric);
 		expect(importerWarningLabel({ token: 'private' })).toBe(i18n.ts.zalip._importer.warningGeneric);
@@ -74,7 +101,8 @@ describe('importer presentation helpers', () => {
 	it('keeps explicit empty options empty and snapshots grouped form values', () => {
 		const defaults = importerSelection();
 		expect(defaults.fields).toEqual([...importerFields]);
-		expect(defaults.sources).toEqual(['tmdb', 'kinopoisk', 'alloha', 'collaps']);
+		expect(defaults.sources).toEqual(['tmdb', 'kinopoisk', 'alloha', 'collaps', 'kodik']);
+		expect(importerSelection({ sources: ['tmdb', 'collaps'] }).sources).toEqual(['tmdb', 'collaps']);
 		const selection = importerSelection({ sources: [], fields: [], fieldSources: { title: 'tmdb' } });
 		const options = importerOptions(selection);
 		expect(options).toEqual({ sources: [], fields: [], fieldSources: { title: 'tmdb' }, artwork: 'remote' });
@@ -131,12 +159,23 @@ describe('importer presentation helpers', () => {
 	it('snapshots global player labels without changing provider identities', () => {
 		const providers: ImportPlaybackProvider[] = [{ source: 'collaps', label: ' Cinema ', enabled: false, position: 1 }, { source: 'alloha', label: 'Alloha', enabled: true, position: 0 }];
 		const result = importerPlaybackSettings(providers);
-		expect(result?.providers).toEqual([{ source: 'alloha', label: 'Alloha', enabled: true, position: 0 }, { source: 'collaps', label: 'Cinema', enabled: false, position: 1 }]);
+		expect(result?.providers).toEqual([{ source: 'alloha', label: 'Alloha', enabled: true, position: 0 }, { source: 'collaps', label: 'Cinema', enabled: false, position: 1 }, { source: 'kodik', label: 'Kodik', enabled: true, position: 2 }]);
+		expect(providers).toHaveLength(2);
 		providers[0].label = 'Changed'; expect(result?.providers[1].label).toBe('Cinema');
 		expect(importerPlaybackSettings([providers[0]])).toBeNull();
 		expect(importerPlaybackSettings([providers[0], { ...providers[1], source: 'collaps' }])).toBeNull();
 		expect(importerPlaybackSettings([providers[0], { ...providers[1], position: 1 }])).toBeNull();
 		for (const label of ['', ' '.repeat(2), 'x'.repeat(41), 'private\nvalue', 'private\u0085value']) expect(importerPlaybackSettings([{ ...providers[0], label }, providers[1]])).toBeNull();
+	});
+	it('snapshots and orders all three providers without accepting malformed or partial rosters', () => {
+		const providers: ImportPlaybackProvider[] = [{ source: 'kodik', label: ' Anime ', enabled: false, position: 0 }, { source: 'collaps', label: 'Collaps', enabled: true, position: 2 }, { source: 'alloha', label: 'Alloha', enabled: false, position: 1 }];
+		const result = importerPlaybackSettings(providers);
+		expect(result?.providers).toEqual([{ source: 'kodik', label: 'Anime', enabled: false, position: 0 }, { source: 'alloha', label: 'Alloha', enabled: false, position: 1 }, { source: 'collaps', label: 'Collaps', enabled: true, position: 2 }]);
+		expect(providers[0].label).toBe(' Anime ');
+		providers[0].label = 'Changed'; expect(result?.providers[0].label).toBe('Anime');
+		const invalidProviders: ImportPlaybackProvider[][] = [[], [providers[0], providers[1]], [...providers, providers[0]], [providers[0], providers[1], { ...providers[2], source: 'kodik' }], [providers[0], providers[1], { ...providers[2], position: 2 }]];
+		for (const invalid of invalidProviders) expect(importerPlaybackSettings(invalid)).toBeNull();
+		expect(importerPlaybackSettings([{ source: 'collaps', label: 'C', enabled: false, position: 0 }, { source: 'alloha', label: 'A', enabled: true, position: 1 }])?.providers).toEqual([{ source: 'collaps', label: 'C', enabled: false, position: 0 }, { source: 'alloha', label: 'A', enabled: true, position: 1 }, { source: 'kodik', label: 'Kodik', enabled: true, position: 2 }]);
 	});
 	it('adds effective work pages without losing earlier cards or distinct roles', () => {
 		const make = (id: string, role: string | null): TaxonomyWork => ({ id, slug: id, title: id, releaseYear: null, posterPath: null, kind: 'movie', role });
@@ -315,5 +354,22 @@ describe('importer presentation helpers', () => {
 		expect(importerServiceRequest(settings, form)?.apiToken).toHaveLength(4096);
 		form.apiToken = ''; form.playerOrigin = 'https://ignored.service.org'; form.playerToken = 'ignored-player'; form.clearPlayerToken = true;
 		expect(importerServiceRequest(settings, form)).toEqual({ source: 'tmdb', apiOrigin: settings.apiOrigin });
+	});
+	it('keeps the optional Kodik mirror and API credential independent from Alloha public tokens', () => {
+		const settings: ImportServiceSettings = { source: 'kodik', apiOrigin: 'https://kodikapi.org', playerOrigin: null, apiToken: 'fixture-api', apiTokenSet: true, apiTokenOrigin: 'environment', playerToken: null, playerTokenSet: false, playerTokenOrigin: 'none', updatedAt: null };
+		const form = importerServiceForm(settings);
+		expect(importerServiceRequest(settings, form)).toEqual({ source: 'kodik', apiOrigin: settings.apiOrigin });
+		form.playerToken = 'ignored-player'; form.clearPlayerToken = true;
+		expect(importerServiceRequest(settings, form)).toEqual({ source: 'kodik', apiOrigin: settings.apiOrigin });
+		form.playerOrigin = ' https://mirror.service.org/ ';
+		expect(importerServiceRequest(settings, form)).toEqual({ source: 'kodik', apiOrigin: settings.apiOrigin, playerOrigin: 'https://mirror.service.org' });
+		form.apiToken = 'fixture-new';
+		expect(importerServiceRequest(settings, form)?.apiToken).toBe('fixture-new');
+		for (const playerOrigin of ['http://mirror.service.org', 'https://mirror.service.org/player', 'https://token@mirror.service.org', 'not-an-origin']) { form.playerOrigin = playerOrigin; expect(importerServiceRequest(settings, form)).toBeNull(); }
+		const saved = { ...settings, playerOrigin: 'https://mirror.service.org' };
+		const clearing = importerServiceForm(saved); clearing.playerOrigin = ' ';
+		expect(importerServiceRequest(saved, clearing)).toEqual({ source: 'kodik', apiOrigin: settings.apiOrigin, playerOrigin: null });
+		expect(saved.playerOrigin).toBe('https://mirror.service.org');
+		expect(settings.apiTokenOrigin).toBe('environment');
 	});
 });

@@ -30,12 +30,14 @@ const serial = { id: 'work', slug: 'serial', kind: 'series', title: 'Series', or
 const testEpisodes = [1, 2, 3].map(number => ({ id: `episode${number}`, episodeNumber: number, title: `Episode ${number}`, stillPath: null, description: `Description ${number}`, airDate: null, runtimeMinutes: 40, discussionNoteId: null }));
 const alloha: PlaybackSource = { source: 'alloha', label: 'Alloha Cinema', iframe: 'https://alloha.example/?token_movie=fixture&token=public-fixture', quality: 'HD', translations: [{ id: '246', name: 'First Studio', iframe: 'https://alloha.example/?token_movie=fixture&token=public-fixture&translation=246', quality: 'HD' }, { id: '247', name: 'Second Studio', iframe: 'https://alloha.example/?token_movie=fixture&token=public-fixture&translation=247', quality: 'Full HD' }], episodes: [] };
 const collaps: PlaybackSource = { source: 'collaps', label: 'Collaps Cinema', iframe: 'https://collaps.example/embed/fixture', quality: null, translations: [{ id: 'studio-one', name: 'Collaps One', iframe: 'https://collaps.example/embed/fixture?oneSound=Collaps%20One' }, { id: 'studio-two', name: 'Collaps Two', iframe: 'https://collaps.example/embed/fixture?oneSound=Collaps%20Two' }], episodes: [] };
+const kodik: PlaybackSource = { source: 'kodik', label: 'Kodik Cinema', iframe: 'https://kodik.example/serial/123/default/720p', quality: 'HD', translations: [{ id: 'serial-123', name: 'Kodik One', iframe: 'https://kodik.example/serial/123/voice-one/720p', episodes: [{ seasonNumber: 2, episodeNumber: 1 }] }, { id: 'serial-456', name: 'Kodik Two', iframe: 'https://kodik.example/serial/456/voice-two/720p', episodes: [{ seasonNumber: 2, episodeNumber: 1 }, { seasonNumber: 2, episodeNumber: 3 }] }], episodes: [{ seasonNumber: 2, episodeNumber: 1 }, { seasonNumber: 2, episodeNumber: 3 }] };
 const legacy: LegacyAllohaPlayback = { available: true, label: 'Legacy Alloha', iframe: 'https://legacy.example/?token_movie=fixture', translations: [{ id: 246, name: 'Legacy First', iframe: 'https://legacy.example/?token_movie=fixture&translation=246', quality: null, resolutions: [] }, { id: 247, name: 'Legacy Second', iframe: 'https://legacy.example/?token_movie=fixture&translation=247', quality: null, resolutions: [] }], lastCheckedAt: null };
 let sources: PlaybackSource[];
 let legacyPlayback: LegacyAllohaPlayback;
 let providers: PlaybackProviderSetting[] | undefined;
 let failLegacy: boolean;
 let failSources: boolean;
+let workData: typeof serial;
 
 function setup() {
 	return render(Work, { props: { slug: serial.slug }, global: { stubs: {
@@ -76,10 +78,11 @@ beforeEach(() => {
 	providers = undefined;
 	failLegacy = false;
 	failSources = false;
+	workData = structuredClone(serial);
 	HTMLElement.prototype.scrollTo = vi.fn();
 	HTMLElement.prototype.scrollIntoView = vi.fn();
 	vi.mocked(misskeyApiZalip).mockImplementation(async endpoint => {
-		if (endpoint === 'zalip/works/show') return serial;
+		if (endpoint === 'zalip/works/show') return workData;
 		if (endpoint === 'zalip/seasons/episodes') return testEpisodes;
 		if (endpoint === 'zalip/discussions/show') return { noteId: null };
 		if (endpoint === 'zalip/library/list') return [];
@@ -125,6 +128,109 @@ describe('Zalip work playback selection', () => {
 		expect(url.searchParams.get('oneSound')).toBe('Collaps Two');
 		expect(url.searchParams.has('translation')).toBe(false);
 		expect(url.searchParams.get('episode')).toBe('1');
+	});
+	it('switches Kodik voice editions without inventing translation parameters or resetting the episode', async () => {
+		sources = [structuredClone(kodik)];
+		const view = setup();
+		await play(view);
+		expect(new URL(iframe(view).src).pathname).toBe('/serial/123/voice-one/720p');
+		await chooseEpisode(view, 3);
+		expect(iframe(view)).toBeNull();
+		expect(player(view).getByRole('status').textContent).toContain(i18n.ts.zalip.playerEpisodeUnavailable);
+		expect(player(view).queryByRole('button', { name: i18n.ts.zalip.watchTitle })).toBeNull();
+		await fireEvent.click((await openVoices(view, 'Kodik One')).getByRole('button', { name: 'Kodik Two' }));
+		const url = new URL(iframe(view).src);
+		expect(url.pathname).toBe('/serial/456/voice-two/720p');
+		expect(url.searchParams.get('season')).toBe('2');
+		expect(url.searchParams.get('episode')).toBe('3');
+		expect(url.searchParams.has('translation')).toBe(false);
+		expect(url.searchParams.has('oneSound')).toBe(false);
+		expect(player(view).queryByText(i18n.ts.zalip.playerEpisodeUnavailable)).toBeNull();
+	});
+	it('keeps another provider selectable when the selected Kodik voice has no matching episode', async () => {
+		sources = structuredClone([alloha, collaps, kodik]);
+		const view = setup();
+		await play(view);
+		await chooseEpisode(view, 3);
+		const sourceTabs = within(player(view).getByRole('group', { name: i18n.ts.zalip._importer.workSources }));
+		await fireEvent.click(sourceTabs.getByRole('button', { name: 'Kodik Cinema' }));
+		expect(iframe(view)).toBeNull();
+		expect(player(view).getByText(i18n.ts.zalip.playerEpisodeUnavailable)).toBeTruthy();
+		await fireEvent.click(sourceTabs.getByRole('button', { name: 'Collaps Cinema' }));
+		expect(new URL(iframe(view).src).hostname).toBe('collaps.example');
+		expect(new URL(iframe(view).src).searchParams.get('episode')).toBe('3');
+		await fireEvent.click(sourceTabs.getByRole('button', { name: 'Alloha Cinema' }));
+		expect(new URL(iframe(view).src).searchParams.get('translation')).toBe('246');
+		expect(new URL(iframe(view).src).searchParams.get('episode')).toBe('3');
+	});
+	it('does not offer play for known empty Kodik coverage but retains working voice choices', async () => {
+		sources = [{ ...structuredClone(kodik), translations: [{ ...kodik.translations[0], episodes: [] }, kodik.translations[1]] }];
+		const view = setup();
+		await view.findByRole('heading', { name: serial.title, level: 1 });
+		expect(player(view).getByText(i18n.ts.zalip.playerEpisodeUnavailable)).toBeTruthy();
+		expect(player(view).queryByRole('button', { name: i18n.ts.zalip.watchTitle })).toBeNull();
+		await fireEvent.click((await openVoices(view, 'Kodik One')).getByRole('button', { name: 'Kodik Two' }));
+		await fireEvent.click(player(view).getByRole('button', { name: i18n.ts.zalip.watchTitle }));
+		expect(new URL(iframe(view).src).pathname).toBe('/serial/456/voice-two/720p');
+		expect(new URL(iframe(view).src).searchParams.get('episode')).toBe('1');
+	});
+	it('distinguishes Kodik subtitles from voices without altering the edition ID or iframe', async () => {
+		sources = [{ ...structuredClone(kodik), translations: [{ ...kodik.translations[0], type: 'subtitles' }, { ...kodik.translations[1], type: 'voice' }] }];
+		const view = setup();
+		await play(view);
+		const label = `Kodik One · ${i18n.ts.zalip.playerSubtitles}`;
+		const voices = await openVoices(view, label);
+		expect(voices.getByRole('button', { name: label, pressed: true })).toBeTruthy();
+		await fireEvent.update(voices.getByRole('searchbox', { name: i18n.ts.zalip.playerVoiceSearch }), i18n.ts.zalip.playerSubtitles);
+		expect(voices.queryByRole('button', { name: 'Kodik Two' })).toBeNull();
+		await fireEvent.update(voices.getByRole('searchbox', { name: i18n.ts.zalip.playerVoiceSearch }), '');
+		await fireEvent.click(voices.getByRole('button', { name: 'Kodik Two' }));
+		expect(new URL(iframe(view).src).pathname).toBe('/serial/456/voice-two/720p');
+		expect(player(view).getByRole('button', { name: `${i18n.ts.zalip.playerVoices}: Kodik Two` })).toBeTruthy();
+	});
+	it('does not open the Kodik default episode while another canonical season is loading', async () => {
+		sources = [{ ...structuredClone(kodik), translations: [{ ...kodik.translations[0], episodes: [{ seasonNumber: 2, episodeNumber: 1 }, { seasonNumber: 3, episodeNumber: 1 }] }] }];
+		workData.seasons.push({ id: 'season3', seasonNumber: 3, title: 'Season 3', episodeCount: 3 });
+		const view = setup();
+		await play(view);
+		let releaseEpisodes: (episodes: typeof testEpisodes) => void = () => { throw new Error('Episode request has not started'); };
+		const pendingEpisodes = new Promise<typeof testEpisodes>(resolve => { releaseEpisodes = resolve; });
+		const previousApi = vi.mocked(misskeyApiZalip).getMockImplementation()!;
+		vi.mocked(misskeyApiZalip).mockImplementation((endpoint, params) => endpoint === 'zalip/seasons/episodes' ? pendingEpisodes : previousApi(endpoint, params));
+		await fireEvent.click(player(view).getByRole('button', { name: '3', pressed: false }));
+		expect(iframe(view)).toBeNull();
+		expect(player(view).getByRole('status').textContent).toContain(i18n.ts.zalip.playerEpisodesLoading);
+		expect(player(view).queryByRole('button', { name: i18n.ts.zalip.watchTitle })).toBeNull();
+		releaseEpisodes(testEpisodes.map(episode => ({ ...episode, id: `season3-${episode.id}` })));
+		await waitFor(() => expect(iframe(view)).not.toBeNull());
+		expect(new URL(iframe(view).src).searchParams.get('season')).toBe('3');
+		expect(new URL(iframe(view).src).searchParams.get('episode')).toBe('1');
+	});
+	it('keeps Kodik blocked after canonical episode loading fails and permits a successful retry', async () => {
+		sources = [structuredClone(kodik)];
+		workData.seasons.push({ id: 'season3', seasonNumber: 3, title: 'Season 3', episodeCount: 3 });
+		const view = setup();
+		await play(view);
+		const previousApi = vi.mocked(misskeyApiZalip).getMockImplementation()!;
+		vi.mocked(misskeyApiZalip).mockImplementation((endpoint, params) => endpoint === 'zalip/seasons/episodes' ? Promise.reject(new Error('Episode request failed')) : previousApi(endpoint, params));
+		await fireEvent.click(player(view).getByRole('button', { name: '3', pressed: false }));
+		await waitFor(() => expect(player(view).getByRole('status').textContent).toContain(i18n.ts.zalip.playerEpisodeUnavailable));
+		expect(iframe(view)).toBeNull();
+		expect(player(view).queryByRole('button', { name: i18n.ts.zalip.watchTitle })).toBeNull();
+		vi.mocked(misskeyApiZalip).mockImplementation(previousApi);
+		await fireEvent.click(player(view).getByRole('button', { name: '2', pressed: false }));
+		await waitFor(() => expect(iframe(view)).not.toBeNull());
+		expect(new URL(iframe(view).src).searchParams.get('season')).toBe('2');
+		expect(new URL(iframe(view).src).searchParams.get('episode')).toBe('1');
+	});
+	it('keeps native-selector Kodik series without canonical seasons playable', async () => {
+		sources = [structuredClone(kodik)];
+		workData.seasons = [];
+		const view = setup();
+		await play(view);
+		expect(new URL(iframe(view).src).pathname).toBe('/serial/123/voice-one/720p');
+		expect(new URL(iframe(view).src).searchParams.has('episode')).toBe(false);
+		expect(player(view).queryByText(i18n.ts.zalip.playerEpisodeUnavailable)).toBeNull();
 	});
 
 	it('changes the playing provider immediately and remembers voices without resetting the episode', async () => {

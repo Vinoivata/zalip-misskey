@@ -4,11 +4,12 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { selectablePlaybackTranslations, workPlaybackIframe, workPlaybackSources } from '@/utility/zalip-playback.js';
+import { playbackEpisodeAvailable, playbackTranslationLabel, selectablePlaybackTranslations, workPlaybackIframe, workPlaybackSources } from '@/utility/zalip-playback.js';
 import type { LegacyAllohaPlayback, PlaybackSource } from '@/utility/zalip-playback.js';
 
 const alloha: PlaybackSource = { source: 'alloha', label: 'Alloha', iframe: 'https://alloha.example/?token_movie=fixture&token=public-fixture', quality: null, translations: [{ id: '246', name: 'Studio', iframe: 'https://alloha.example/?token_movie=fixture&token=public-fixture&translation=246' }], episodes: [] };
 const legacy: LegacyAllohaPlayback = { available: true, label: 'Legacy', iframe: 'https://legacy.example/?token_movie=fixture', translations: [{ id: 246, name: 'Legacy Studio', iframe: 'https://legacy.example/?translation=246', quality: 'HD', resolutions: ['1080p'] }], lastCheckedAt: null };
+const kodik: PlaybackSource = { source: 'kodik', label: 'Kodik', iframe: 'https://kodik.example/serial/123/default/720p', quality: 'HD', translations: [{ id: 'serial-123', name: 'Studio One', iframe: 'https://kodik.example/serial/123/voice-one/720p?min_age=12', episodes: [{ seasonNumber: 0, episodeNumber: 1 }, { seasonNumber: 2, episodeNumber: 3 }] }, { id: 'serial-456', name: 'Studio Two', iframe: 'https://kodik.example/serial/456/voice-two/720p', episodes: [{ seasonNumber: 2, episodeNumber: 1 }] }], episodes: [{ seasonNumber: 0, episodeNumber: 1 }, { seasonNumber: 2, episodeNumber: 1 }, { seasonNumber: 2, episodeNumber: 3 }] };
 
 describe('work playback helpers', () => {
 	it('normalizes legacy numeric IDs without mutating input snapshots', () => {
@@ -39,6 +40,14 @@ describe('work playback helpers', () => {
 		expect(selectablePlaybackTranslations({ ...alloha, translations: [{ id: 'metadata', name: 'Native' }, ...alloha.translations] })).toEqual(alloha.translations);
 		expect(selectablePlaybackTranslations(null)).toEqual([]);
 	});
+	it('labels explicit subtitle editions without changing source names or duplicating existing markers', () => {
+		const translation = { id: 'serial-123', name: 'Studio', type: 'subtitles' as const };
+		expect(playbackTranslationLabel(translation, 'Субтитры')).toBe('Studio · Субтитры');
+		expect(translation.name).toBe('Studio');
+		for (const name of ['Рус. Субтитры', 'English subtitles', 'English Subtitle']) expect(playbackTranslationLabel({ ...translation, name }, 'Субтитры')).toBe(name);
+		expect(playbackTranslationLabel({ ...translation, type: 'voice' }, 'Субтитры')).toBe('Studio');
+		expect(playbackTranslationLabel({ id: '246', name: 'Legacy' }, 'Субтитры')).toBe('Legacy');
+	});
 
 	it('preserves server-provided voice selectors and credentials while updating only the episode', () => {
 		const url = new URL(workPlaybackIframe(alloha, '246', 2, 3)!);
@@ -55,6 +64,40 @@ describe('work playback helpers', () => {
 		expect(workPlaybackIframe(alloha, 'missing', null, 3)).toBe(alloha.iframe);
 		expect(workPlaybackIframe(alloha, null, 2, null)).toBe(alloha.iframe);
 		expect(workPlaybackIframe(null, null, null, null)).toBeNull();
+	});
+	it('preserves Kodik edition paths without adding another provider voice selector', () => {
+		const url = new URL(workPlaybackIframe(kodik, 'serial-123', 2, 3)!);
+		expect(url.pathname).toBe('/serial/123/voice-one/720p');
+		expect(url.searchParams.get('min_age')).toBe('12');
+		expect(url.searchParams.get('season')).toBe('2');
+		expect(url.searchParams.get('episode')).toBe('3');
+		expect(url.searchParams.has('translation')).toBe(false);
+		expect(url.searchParams.has('oneSound')).toBe(false);
+		expect(new URL(workPlaybackIframe(kodik, 'serial-456', 2, 1)!).pathname).toBe('/serial/456/voice-two/720p');
+		expect(kodik.translations[0].iframe).not.toContain('season=');
+	});
+	it('respects known per-voice episode coverage, including specials, without remapping episodes', () => {
+		expect(playbackEpisodeAvailable(kodik, 'serial-123', 0, 1)).toBe(true);
+		expect(playbackEpisodeAvailable(kodik, 'serial-123', 2, 3)).toBe(true);
+		expect(playbackEpisodeAvailable(kodik, 'serial-456', 2, 3)).toBe(false);
+		expect(workPlaybackIframe(kodik, 'serial-456', 2, 3)).toBeNull();
+		const knownEmpty = { ...kodik, translations: [{ ...kodik.translations[0], episodes: [] }] };
+		expect(workPlaybackIframe(knownEmpty, 'serial-123', 2, 1)).toBeNull();
+		expect(workPlaybackIframe(knownEmpty, 'serial-123', null, null)).not.toBeNull();
+		const unknown = { ...kodik, translations: [{ ...kodik.translations[0], episodes: undefined }] };
+		expect(workPlaybackIframe(unknown, 'serial-123', 2, 1)).not.toBeNull();
+		expect(workPlaybackIframe({ ...alloha, translations: [{ ...alloha.translations[0], episodes: [] }] }, '246', 2, 3)).not.toBeNull();
+		expect(playbackEpisodeAvailable(null, null, 2, 3)).toBe(false);
+	});
+	it('keeps all three providers isolated and ordered while retaining legacy Alloha support', () => {
+		const collaps: PlaybackSource = { ...alloha, source: 'collaps', iframe: 'https://collaps.example/embed/fixture', translations: [] };
+		const settings = [{ source: 'kodik' as const, label: 'Kodik', enabled: true, position: 0 }, { source: 'collaps' as const, label: 'Collaps', enabled: true, position: 1 }, { source: 'alloha' as const, label: 'Alloha', enabled: true, position: 2 }];
+		const result = workPlaybackSources([collaps, kodik], legacy, settings);
+		expect(result.map(source => source.source)).toEqual(['kodik', 'collaps', 'alloha']);
+		expect(result[0].translations).toEqual(kodik.translations);
+		expect(result[1].translations).toEqual([]);
+		settings[0].enabled = false;
+		expect(workPlaybackSources([collaps, kodik], legacy, settings).map(source => source.source)).toEqual(['collaps', 'alloha']);
 	});
 
 	it.each(['javascript:alert(1)', 'http://player.example/embed', 'https://secret@player.example/embed', 'invalid'])('does not bind malformed or unsafe iframe URL: %s', iframe => {

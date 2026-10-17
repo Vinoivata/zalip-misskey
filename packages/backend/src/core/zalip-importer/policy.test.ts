@@ -70,7 +70,7 @@ describe('Zalip import ownership', () => {
 	});
 
 	test('primary is mandatory while an empty enrichment selection means primary only', () => {
-		expect(selectedImportSources('kinopoisk', {})).toEqual(['tmdb', 'kinopoisk', 'alloha', 'collaps']);
+		expect(selectedImportSources('kinopoisk', {})).toEqual(['tmdb', 'kinopoisk', 'alloha', 'collaps', 'kodik']);
 		expect(selectedImportSources('kinopoisk', { sources: [] })).toEqual(['kinopoisk']);
 		expect(selectedImportSources('kinopoisk', { sources: ['collaps'] })).toEqual(['kinopoisk', 'collaps']);
 		expect(importFieldSelected('description', { fields: [] })).toBe(false);
@@ -85,6 +85,20 @@ describe('Zalip import ownership', () => {
 		expect(preferred.record).toMatchObject({ description: 'TMDB text', posterUrl: 'kp-poster', logoUrl: null });
 		expect(mergeImportRecords(records, { fieldSources: { description: 'alloha' } }).record.description).toBe('KP text');
 		expect(mergeImportRecords([record('tmdb', { description: null }), records[0]], { fieldSources: { description: 'tmdb' } }).record.description).toBe('KP text');
+	});
+
+	test('Kodik metadata is fallback-only unless explicitly selected, with all player providers retained', () => {
+		const kodik = record('kodik', { description: 'Kodik text', posterUrl: 'kodik-poster', ratings: [{ source: 'kinopoisk', value: 6, votes: 5 }], players: [{ source: 'kodik', externalId: 'movie-1', iframeUrl: 'https://kodikplayer.com/video/1/hash/720p', translations: [], quality: null, episodes: [] }] });
+		const kp = record('kinopoisk', { description: 'KP text', ratings: [{ source: 'kinopoisk', value: 8, votes: 500 }] });
+		const tmdb = record('tmdb', { posterUrl: 'tmdb-poster', players: [{ source: 'collaps', externalId: '2', iframeUrl: 'https://api.nextembed.ws/embed/2', translations: [], quality: null, episodes: [] }] });
+		const merged = mergeImportRecords([kodik, kp, tmdb]);
+		expect(merged.record).toMatchObject({ title: 'kinopoisk', description: 'KP text', posterUrl: 'tmdb-poster', ratings: [{ source: 'kinopoisk', value: 8, votes: 500 }] });
+		expect(merged.record.players.map(value => value.source)).toEqual(['kodik', 'collaps']);
+		expect(mergeImportRecords([kp, tmdb, kodik], { fieldSources: { description: 'kodik', ratings: 'kodik' } }).record).toMatchObject({ description: 'Kodik text', ratings: [{ source: 'kinopoisk', value: 6, votes: 5 }] });
+		const ref = { source: 'kodik', externalId: 'serial-123', mediaType: 'tv' } as const;
+		expect(normalizeImportOptions({ artworkSelections: [{ ref, choices: { posterUrl: 'a'.repeat(64) } }] }).artworkSelections?.[0].ref).toEqual(ref);
+		for (const externalId of ['shikimori-46569', 'kinopoisk-123', 'imdb-tt1234567']) expect(normalizeImportOptions({ artworkSelections: [{ ref: { ...ref, externalId }, choices: { posterUrl: 'a'.repeat(64) } }] }).artworkSelections?.[0].ref.externalId).toBe(externalId);
+		for (const invalid of [{ ...ref, externalId: '123' }, { ...ref, externalId: 'movie-123' }, { ...ref, source: 'tmdb' }]) expect(() => normalizeImportOptions({ artworkSelections: [{ ref: invalid as never, choices: { posterUrl: 'a'.repeat(64) } }] })).toThrow('INVALID_IMPORT_OPTIONS');
 	});
 
 	test('authoritative KP ratings beat a cached Collaps copy regardless of record order', () => {

@@ -6,9 +6,9 @@
 import { i18n } from '@/i18n.js';
 import { importerArtworkSettings, importerArtworkSettingsValid } from '@/utility/zalip-importer-artwork.js';
 
-export type ImportSource = 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
-export type ImportPlayerSource = 'alloha' | 'collaps';
-export type ImportPlaybackProvider = { source: ImportPlayerSource; label: string; enabled: boolean; position: 0 | 1 };
+export type ImportSource = 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
+export type ImportPlayerSource = 'alloha' | 'collaps' | 'kodik';
+export type ImportPlaybackProvider = { source: ImportPlayerSource; label: string; enabled: boolean; position: 0 | 1 | 2 };
 export type ImportMediaType = 'movie' | 'tv';
 export type ImportRef = { source: ImportSource; externalId: string; mediaType: ImportMediaType };
 export type ImportArtworkField = 'posterUrl' | 'backdropUrl' | 'logoUrl' | 'galleryUrls';
@@ -24,7 +24,7 @@ export type ImportCredentialOrigin = 'environment' | 'database' | 'none';
 export type ImportServiceSettings = { source: ImportSource; apiOrigin: string; playerOrigin: string | null; apiToken: string | null; apiTokenSet: boolean; apiTokenOrigin: ImportCredentialOrigin; playerToken: string | null; playerTokenSet: boolean; playerTokenOrigin: ImportCredentialOrigin; updatedAt: string | null };
 export type ImportServiceSettingsResponse = { encryptionReady: boolean; sources: ImportServiceSettings[] };
 export type ImportServiceForm = { apiOrigin: string; playerOrigin: string; apiToken: string; playerToken: string; clearApiToken: boolean; clearPlayerToken: boolean };
-export type ImportServiceSave = { source: ImportSource; apiOrigin: string; playerOrigin?: string; apiToken?: string; playerToken?: string; clearApiToken?: boolean; clearPlayerToken?: boolean };
+export type ImportServiceSave = { source: ImportSource; apiOrigin: string; playerOrigin?: string | null; apiToken?: string; playerToken?: string; clearApiToken?: boolean; clearPlayerToken?: boolean };
 export type ImportRecord = {
 	ref: ImportRef;
 	identities: { provider: string; externalId: string; entityType: ImportMediaType }[];
@@ -48,7 +48,7 @@ export type ImportRecord = {
 	companies: { externalId: string | null; source: ImportSource; name: string; imageUrl: string | null }[];
 	collections: { externalId: string; source: ImportSource; name: string; description?: string | null; imageUrl?: string | null }[];
 	seasons: { seasonNumber: number; title: string; episodeCount?: number | null; episodes: { episodeNumber: number; title: string }[] }[];
-	players: { source: 'alloha' | 'collaps'; externalId: string; quality: string | null; translations: { id: string; name: string }[] }[];
+	players: { source: ImportPlayerSource; externalId: string; quality: string | null; translations: { id: string; name: string }[] }[];
 	complete: boolean;
 	warnings: string[];
 };
@@ -79,7 +79,7 @@ export type ImportMaintenanceCursor = { page: number; offset: number; activeEntr
 export type ImportMaintenanceRun = { id: string; kind: ImportMaintenanceKind; source: ImportMaintenanceSource; state: string; createdAt: string; updatedAt: string; finishedAt: string | null; profileId: string | null; options: ImportMaintenanceOptions; batchLimit: number; timeBudgetSeconds: number; cursor: ImportMaintenanceCursor; stats: { processed: number; created: number; updated: number; linked: number; skipped: number; failed: number }; error: string | null; warnings: string[]; retryAfter: string | null };
 export type ImportMaintenanceProfile = { id: string; name: string; kind: ImportMaintenanceKind; source: ImportMaintenanceSource; enabled: boolean; options: ImportMaintenanceOptions; intervalMinutes: number; batchLimit: number; timeBudgetSeconds: number; cursor: ImportMaintenanceCursor; lastRunAt: string | null; nextRunAt: string | null; lastError: string | null };
 
-export const importerSources: ImportSource[] = ['tmdb', 'kinopoisk', 'alloha', 'collaps'];
+export const importerSources: ImportSource[] = ['tmdb', 'kinopoisk', 'alloha', 'collaps', 'kodik'];
 export const importerFields = ['title', 'originalTitle', 'description', 'releaseYear', 'runtimeMinutes', 'kind', 'genres', 'countries', 'posterUrl', 'backdropUrl', 'logoUrl', 'galleryUrls', 'trailerYoutubeKey', 'ratings', 'ageRating', 'credits', 'companies', 'collections', 'seasons', 'players'] as const;
 export const taxonomyTypes: TaxonomyType[] = ['person', 'studio', 'genre', 'category', 'collection'];
 
@@ -176,8 +176,9 @@ export function importerServiceRequest(settings: ImportServiceSettings, form: Im
 	if (!importerSources.includes(settings.source)) return null;
 	const apiOrigin = importerServiceOrigin(form.apiOrigin);
 	const hasPlayer = settings.source === 'alloha' || settings.source === 'collaps';
-	const playerOrigin = hasPlayer ? importerServiceOrigin(form.playerOrigin) : null;
-	if (!apiOrigin || (hasPlayer && !playerOrigin)) return null;
+	const playerOriginInput = form.playerOrigin.trim();
+	const playerOrigin = hasPlayer || (settings.source === 'kodik' && playerOriginInput) ? importerServiceOrigin(playerOriginInput) : null;
+	if (!apiOrigin || ((hasPlayer || (settings.source === 'kodik' && playerOriginInput)) && !playerOrigin)) return null;
 	const apiToken = form.apiToken.trim();
 	const playerToken = form.playerToken.trim();
 	// eslint-disable-next-line no-control-regex
@@ -187,7 +188,7 @@ export function importerServiceRequest(settings: ImportServiceSettings, form: Im
 	if (settings.source === 'alloha' && playerToken && playerToken !== settings.playerToken && !/^[A-Za-z0-9_-]{8,512}$/u.test(playerToken)) return null;
 	return {
 		source: settings.source, apiOrigin,
-		...(playerOrigin ? { playerOrigin } : {}),
+		...(playerOrigin ? { playerOrigin } : settings.source === 'kodik' && settings.playerOrigin && !playerOriginInput ? { playerOrigin: null } : {}),
 		...(form.clearApiToken ? { clearApiToken: true } : apiToken && apiToken !== settings.apiToken ? { apiToken } : {}),
 		...(settings.source === 'alloha' ? form.clearPlayerToken ? { clearPlayerToken: true } : playerToken && playerToken !== settings.playerToken ? { playerToken } : {} : {}),
 	};
@@ -197,12 +198,15 @@ export function importerCredentialOriginLabel(origin: ImportCredentialOrigin): s
 
 /** Persist presentation settings, not provider IDs or iframe credentials. */
 export function importerPlaybackSettings(providers: ImportPlaybackProvider[]): { providers: ImportPlaybackProvider[] } | null {
-	if (providers.length !== 2 || new Set(providers.map(provider => provider.source)).size !== 2 || !providers.some(provider => provider.source === 'alloha') || !providers.some(provider => provider.source === 'collaps') || new Set(providers.map(provider => provider.position)).size !== 2) return null;
+	const legacy = providers.length === 2;
+	const sources: ImportPlayerSource[] = legacy ? ['alloha', 'collaps'] : ['alloha', 'collaps', 'kodik'];
+	if (providers.length !== sources.length || new Set(providers.map(provider => provider.source)).size !== sources.length || !sources.every(source => providers.some(provider => provider.source === source)) || new Set(providers.map(provider => provider.position)).size !== sources.length) return null;
 	const snapshot = providers.map(provider => ({ source: provider.source, label: provider.label.trim(), enabled: provider.enabled, position: provider.position }));
 	// Reject C0/C1 control characters, matching the server's display-label validation.
 	// eslint-disable-next-line no-control-regex
 	const controlCharacters = /[\u0000-\u001f\u007f-\u009f]/u;
-	if (snapshot.some(provider => !provider.label || provider.label.length > 40 || controlCharacters.test(provider.label) || typeof provider.enabled !== 'boolean' || ![0, 1].includes(provider.position))) return null;
+	if (snapshot.some(provider => !provider.label || provider.label.length > 40 || controlCharacters.test(provider.label) || typeof provider.enabled !== 'boolean' || !(legacy ? [0, 1] : [0, 1, 2]).includes(provider.position))) return null;
+	if (legacy) snapshot.push({ source: 'kodik', label: 'Kodik', enabled: true, position: 2 });
 	return { providers: snapshot.sort((a, b) => a.position - b.position) };
 }
 
@@ -298,7 +302,7 @@ export function taxonomyBaseChanges(form: { slug: string; description: string; i
 }
 
 export function importerSourceLabel(source: ImportSource): string {
-	return ({ tmdb: 'TMDB', kinopoisk: i18n.ts.zalip._importer.sourceKinopoisk, alloha: 'Alloha', collaps: 'Collaps' })[source];
+	return ({ tmdb: 'TMDB', kinopoisk: i18n.ts.zalip._importer.sourceKinopoisk, alloha: 'Alloha', collaps: 'Collaps', kodik: 'Kodik' })[source];
 }
 
 export function importerFieldLabel(field: string): string {
@@ -310,22 +314,24 @@ export function importerWarningLabel(value: unknown): string {
 	if (typeof value !== 'string') return i18n.ts.zalip._importer.warningGeneric;
 	const maintenance: Record<string, string> = { 'dictionary-pagination-uncertain': i18n.ts.zalip._importer.warningDictionaryPagination, 'collection-identity-conflict': i18n.ts.zalip._importer.warningCollectionConflict, 'collection-field-locked': i18n.ts.zalip._importer.warningCollectionLocked, 'person-id-missing': i18n.ts.zalip._importer.warningPersonIdMissing };
 	if (Object.hasOwn(maintenance, value)) return maintenance[value];
+	const kodik: Record<string, string> = { 'kodik-people-without-identities': i18n.ts.zalip._importer.warningKodikPeople, 'kodik-studios-without-identities': i18n.ts.zalip._importer.warningKodikStudios, 'kodik-voice-limit': i18n.ts.zalip._importer.warningKodikVoices, 'kodik-episode-data-rejected': i18n.ts.zalip._importer.warningKodikEpisodes, 'kodik-anime-identity-partial': i18n.ts.zalip._importer.warningKodikAnimeIdentity, 'kodik-anime-scope-unmapped': i18n.ts.zalip._importer.warningKodikAnimeScope };
+	if (Object.hasOwn(kodik, value)) return kodik[value];
 	const artwork = /^artwork-local-unavailable:(posterUrl|backdropUrl|logoUrl|galleryUrls)$/u.exec(value);
 	if (artwork) return i18n.tsx.zalip._importer.warningArtworkLocal({ field: importerFieldLabel(artwork[1]) });
-	const provider = /^(tmdb|kinopoisk|alloha|collaps):(not-configured|not-found|quota-exceeded|rate-limited|upstream-failure|invalid-ref|unsupported|malformed-response|NO_SUCH_WORK|IMPORT_IDENTITY_CONFLICT|IMPORT_INVALID_RECORD|ZALIP_CATALOG_ENTRY_NOT_FOUND|import-failed)$/u.exec(value);
+	const provider = /^(tmdb|kinopoisk|alloha|collaps|kodik):(not-configured|not-found|quota-exceeded|rate-limited|upstream-failure|invalid-ref|unsupported|malformed-response|NO_SUCH_WORK|IMPORT_IDENTITY_CONFLICT|IMPORT_INVALID_RECORD|ZALIP_CATALOG_ENTRY_NOT_FOUND|import-failed)$/u.exec(value);
 	if (provider) {
 		const reason = ({ 'not-configured': i18n.ts.zalip._importer.errorConfiguration, 'not-found': i18n.ts.zalip._importer.errorNotFound, 'quota-exceeded': i18n.ts.zalip._importer.errorQuota, 'rate-limited': i18n.ts.zalip._importer.errorQuota, 'IMPORT_IDENTITY_CONFLICT': i18n.ts.zalip._importer.errorConflict } as Record<string, string>)[provider[2]] ?? i18n.ts.zalip._importer.warningSourceUnavailable;
 		return i18n.tsx.zalip._importer.warningSource({ source: importerSourceLabel(provider[1] as ImportSource), reason });
 	}
-	const metadata = /^(tmdb|kinopoisk|collaps)-metadata-partial$/u.exec(value);
+	const metadata = /^(tmdb|kinopoisk|collaps|kodik)-metadata-partial$/u.exec(value);
 	if (metadata) return i18n.tsx.zalip._importer.warningMetadataPartial({ source: importerSourceLabel(metadata[1] as ImportSource) });
-	const limit = /^(tmdb|kinopoisk|collaps)-(season|episode)-limit$/u.exec(value);
+	const limit = /^(tmdb|kinopoisk|collaps|kodik)-(season|episode)-limit$/u.exec(value);
 	if (limit) return i18n.tsx.zalip._importer.warningEpisodeLimit({ source: importerSourceLabel(limit[1] as ImportSource) });
 	const season = /^tmdb-season-(\d{1,4})-unavailable$/u.exec(value);
 	if (season) return i18n.tsx.zalip._importer.warningSeasonUnavailable({ number: String(Number(season[1])) });
 	if (value === 'tmdb-seasons-unavailable') return i18n.ts.zalip._importer.warningSeasonsUnavailable;
 	if (value === 'kinopoisk-artwork-unavailable') return i18n.ts.zalip._importer.warningKinopoiskArtwork;
-	const player = /^(alloha|collaps)-player-url-rejected$/u.exec(value);
+	const player = /^(alloha|collaps|kodik)-player-url-rejected$/u.exec(value);
 	if (player) return i18n.tsx.zalip._importer.warningPlayerRejected({ source: importerSourceLabel(player[1] as ImportSource) });
 	return i18n.ts.zalip._importer.warningGeneric;
 }
@@ -362,6 +368,12 @@ export function importerImdbId(value: string): string | null {
 export function importerReference(source: ImportSource, mediaType: ImportMediaType, value: string): ImportRef | null {
 	const trimmed = value.trim();
 	if (!trimmed) return null;
+	if (source === 'kodik') {
+		const match = /^(serial|movie)-([1-9][0-9]{0,15})$/u.exec(trimmed);
+		if (match) return { source, mediaType: match[1] === 'serial' ? 'tv' : 'movie', externalId: trimmed };
+		if (/^(?:(?:shikimori|kinopoisk)-[1-9][0-9]{0,15}|imdb-tt[0-9]{5,12})$/u.test(trimmed)) return { source, mediaType, externalId: trimmed };
+		return /^[1-9][0-9]{0,15}$/u.test(trimmed) ? { source, mediaType, externalId: `${mediaType === 'tv' ? 'serial' : 'movie'}-${trimmed}` } : null;
+	}
 	const imdbId = importerImdbId(trimmed) ?? /^imdb:(tt[0-9]{5,12})$/u.exec(trimmed)?.[1];
 	if (imdbId) return source === 'alloha' ? null : { source, mediaType, externalId: `imdb:${imdbId}` };
 	if (!trimmed.includes('://')) {

@@ -4,7 +4,7 @@
  */
 
 import { ImportProviderError } from '@/core/zalip-importer/providers.js';
-import { importArtworkFields, importFields, importSources, type ImportArtworkField, type ImportField } from '@/core/zalip-importer/types.js';
+import { importArtworkFields, importFields, importRefIdPattern, importSources, type ImportArtworkField, type ImportField } from '@/core/zalip-importer/types.js';
 import type { RoleService } from '@/core/RoleService.js';
 import type { MiLocalUser } from '@/models/User.js';
 import { ApiError } from '@/server/api/error.js';
@@ -34,7 +34,7 @@ export const importerRefProperty = {
 	type: 'object', additionalProperties: false,
 	properties: {
 		source: importerSourceProperty,
-		externalId: { type: 'string', minLength: 1, maxLength: 64, pattern: '^(?:[1-9][0-9]{0,15}|tmdb:(?:movie|tv):[1-9][0-9]{0,15}|imdb:tt[0-9]{5,12})$' },
+		externalId: { type: 'string', minLength: 1, maxLength: 64, pattern: importRefIdPattern },
 		mediaType: importerMediaTypeProperty,
 	},
 	required: ['source', 'externalId', 'mediaType'],

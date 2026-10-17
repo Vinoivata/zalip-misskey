@@ -3,9 +3,10 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-export type PlaybackProvider = 'alloha' | 'collaps';
-export type PlaybackTranslation = { id: string; name: string; iframe?: string; quality?: string | null; resolutions?: string[] };
-export type PlaybackSource = { source: PlaybackProvider; label: string; iframe: string; quality: string | null; translations: PlaybackTranslation[]; episodes: { seasonNumber: number; episodeNumber: number }[] };
+export type PlaybackProvider = 'alloha' | 'collaps' | 'kodik';
+export type PlaybackEpisode = { seasonNumber: number; episodeNumber: number };
+export type PlaybackTranslation = { id: string; name: string; type?: 'voice' | 'subtitles'; iframe?: string; quality?: string | null; resolutions?: string[]; episodes?: PlaybackEpisode[] };
+export type PlaybackSource = { source: PlaybackProvider; label: string; iframe: string; quality: string | null; translations: PlaybackTranslation[]; episodes: PlaybackEpisode[] };
 export type PlaybackProviderSetting = { source: PlaybackProvider; label: string; enabled: boolean; position: number };
 export type LegacyAllohaPlayback = {
 	label?: string;
@@ -47,9 +48,22 @@ export function selectablePlaybackTranslations(source: PlaybackSource | null): P
 	return source?.translations.filter(translation => !!translation.iframe) ?? [];
 }
 
+/** The provider's edition name remains intact; label explicit subtitles without duplicating it. */
+export function playbackTranslationLabel(translation: PlaybackTranslation, subtitlesLabel: string): string {
+	return translation.type === 'subtitles' && !/субтитр|subtitles?/iu.test(translation.name) ? `${translation.name} · ${subtitlesLabel}` : translation.name;
+}
+
+/** Unknown legacy coverage stays playable; a known Kodik voice never silently opens another episode. */
+export function playbackEpisodeAvailable(source: PlaybackSource | null, translationId: string | null, seasonNumber: number | null, episodeNumber: number | null): boolean {
+	if (!source) return false;
+	if (source.source !== 'kodik' || seasonNumber == null || episodeNumber == null) return true;
+	const episodes = selectablePlaybackTranslations(source).find(translation => translation.id === translationId)?.episodes;
+	return episodes === undefined || episodes.some(episode => episode.seasonNumber === seasonNumber && episode.episodeNumber === episodeNumber);
+}
+
 /** Provider-specific voice selectors are supplied by the server; the page owns only season/episode. */
 export function workPlaybackIframe(source: PlaybackSource | null, translationId: string | null, seasonNumber: number | null, episodeNumber: number | null): string | null {
-	if (!source) return null;
+	if (!source || !playbackEpisodeAvailable(source, translationId, seasonNumber, episodeNumber)) return null;
 	const iframe = selectablePlaybackTranslations(source).find(translation => translation.id === translationId)?.iframe ?? source.iframe;
 	try {
 		const url = new URL(iframe);

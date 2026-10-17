@@ -204,6 +204,93 @@ function deferred<T>() {
 
 beforeEach(() => { vi.clearAllMocks(); });
 
+describe('Kodik importer service boundaries', () => {
+	const ref: ImportRef = { source: 'kodik', externalId: 'shikimori-46569', mediaType: 'tv' };
+	const seasonRecord = () => record({ ref, kind: 'anime', identities: [{ provider: 'kodik', externalId: ref.externalId, entityType: 'tv' }, { provider: 'shikimori', externalId: '46569', entityType: 'tv' }], description: 'One anime season', players: [{ source: 'kodik', externalId: ref.externalId, iframeUrl: 'https://kodikplayer.com/serial/49752/fixture/720p', quality: '720p', episodes: [], translations: [] }] });
+
+	test('queues canonical refs but rejects malformed provider refs before a durable write', async () => {
+		const context = fixture();
+		enable(context, 'kodik');
+		await expect(context.service.createRun({ mode: 'import', refs: [ref] })).resolves.toMatchObject({ state: 'queued' });
+		expect(context.items.rows[0]).toMatchObject({ ref, workId: null });
+		context.db.transaction.mockClear();
+		await expect(context.service.createRun({ mode: 'import', refs: [{ ...ref, externalId: 'movie-42' }] })).rejects.toThrow('invalid-ref');
+		expect(context.db.transaction).not.toHaveBeenCalled();
+	});
+
+	test('does not enrich an anime-season draft with whole-series metadata', async () => {
+		const context = fixture();
+		enable(context, 'kodik');
+		context.providers.kodik.fetch.mockResolvedValueOnce(seasonRecord());
+		context.providers.tmdb.lookup.mockResolvedValue(record({ ref: { source: 'tmdb', externalId: '100', mediaType: 'tv' }, identities: [{ provider: 'tmdb', externalId: '100', entityType: 'tv' }], description: 'Whole-series description' }));
+		const preview = await context.service.preview(ref, undefined, { sources: ['tmdb'] });
+		expect(preview.record.description).toBe('One anime season');
+		expect(preview.record.identities.map(identity => identity.provider)).not.toContain('tmdb');
+		expect(preview.warnings).toContain('kodik-anime-scope-unmapped');
+	});
+
+	test.each([false, true])('whole-series enrichment requires exact season proof (proven=%s)', async proven => {
+		const context = fixture();
+		enable(context, 'kodik');
+		const primary = record({ ref: { source: 'tmdb', externalId: '100', mediaType: 'tv' }, kind: 'series', identities: [{ provider: 'tmdb', externalId: '100', entityType: 'tv' }, ...(proven ? [{ provider: 'shikimori', externalId: '46569', entityType: 'tv' as const }] : [])] });
+		context.providers.tmdb.fetch.mockResolvedValueOnce(primary);
+		context.providers.kodik.lookup.mockResolvedValue(seasonRecord());
+		const preview = await context.service.preview(primary.ref, undefined, { sources: ['kodik'], fields: ['players'] });
+		expect(preview.record.players.some(player => player.source === 'kodik')).toBe(proven);
+		expect(preview.warnings.includes('kodik-anime-scope-unmapped')).toBe(!proven);
+	});
+
+	test('Kodik refresh profile resolves only an exact existing binding', async () => {
+		const context = fixture({ profiles: [profile({ source: 'kodik' })], works: [work()], identities: [{ id: 'kp', workId: 'canonical', provider: 'kinopoisk', externalId: '1', entityType: 'movie' }] });
+		enable(context, 'kodik');
+		const movieRef: ImportRef = { source: 'kodik', externalId: 'kinopoisk-1', mediaType: 'movie' };
+		context.providers.kodik.lookup.mockResolvedValueOnce(record({ ref: movieRef, identities: [{ provider: 'kodik', externalId: 'kinopoisk-1', entityType: 'movie' }, { provider: 'kinopoisk', externalId: '1', entityType: 'movie' }] }));
+		await context.service.runProfile('profile');
+		expect(context.providers.kodik.lookup).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ provider: 'kinopoisk', externalId: '1' })]), 'movie', ['players']);
+		expect(context.items.rows[0]).toMatchObject({ workId: 'canonical', ref: movieRef });
+	});
+
+	test.each(['quota-exceeded', 'rate-limited', 'upstream-failure', 'malformed-response'] as const)('profile lookup %s preserves the cursor and records a retryable failure', async code => {
+		const context = fixture({ profiles: [profile({ source: 'kodik', cursor: 100 })], works: [work()], identities: [{ id: 'kp', workId: 'canonical', provider: 'kinopoisk', externalId: '1', entityType: 'movie' }] });
+		enable(context, 'kodik');
+		context.works.find.mockResolvedValueOnce([work() as unknown as Row]);
+		context.providers.kodik.lookup.mockRejectedValueOnce(new ImportProviderError(code));
+		await expect(context.service.runProfile('profile')).rejects.toThrow(code);
+		expect(context.profiles.rows[0]).toMatchObject({ cursor: 100, lastError: code });
+		expect(context.runs.rows).toHaveLength(0);
+		expect(context.queue.add).not.toHaveBeenCalled();
+	});
+
+	test('weak anime-season lookup is skipped without attaching to a whole-series work', async () => {
+		const context = fixture({ profiles: [profile({ source: 'kodik' })], works: [work({ tmdbMediaType: 'tv' })], identities: [{ id: 'kp', workId: 'canonical', provider: 'kinopoisk', externalId: '4786341', entityType: 'tv' }] });
+		enable(context, 'kodik');
+		context.providers.kodik.lookup.mockResolvedValueOnce(seasonRecord());
+		await context.service.runProfile('profile');
+		expect(context.items.rows).toHaveLength(0);
+		expect(context.runs.rows[0].state).toBe('completed');
+	});
+
+	test('public voice projection keeps per-voice coverage and subtitles without API credentials or rejected URLs', async () => {
+		const player = seasonRecord().players[0];
+		player.translations = [
+			{ id: 'serial-49752', name: 'Studio', type: 'voice', iframe: player.iframeUrl, episodes: [{ seasonNumber: 1, episodeNumber: 1 }, { seasonNumber: 1, episodeNumber: 1 }, { seasonNumber: -1, episodeNumber: 2 }] },
+			{ id: 'serial-49750', name: 'Subtitles', type: 'subtitles', iframe: 'https://kodikplayer.com/serial/49750/subtitle/720p', episodes: [] },
+			{ id: 'serial-49999', name: 'Rejected', iframe: 'https://untrusted.example.org/embed?token=private-example' },
+			{ id: 'serial-40000', name: 'No own iframe' },
+		];
+		const context = fixture({ works: [work({ importData: { values: { players: [player] } } })] });
+		context.sourceSettings.getRuntime.mockResolvedValue({ apiOrigins: defaultImportApiOrigins, kodikApiToken: 'private-example' });
+		const playback = await context.service.playback('canonical');
+		expect(playback.sources[0].source).toBe('kodik');
+		expect(playback.sources[0].translations).toHaveLength(2);
+		expect(playback.sources[0].translations[0]).toMatchObject({ type: 'voice', episodes: [{ seasonNumber: 1, episodeNumber: 1 }] });
+		expect(playback.sources[0].translations[1]).toMatchObject({ type: 'subtitles', episodes: [] });
+		expect(JSON.stringify(playback)).not.toContain('private-example');
+		expect(context.works.save).not.toHaveBeenCalled();
+		expect(safeImportWarnings(['kodik-anime-identity-partial', 'kodik-anime-scope-unmapped', 'kodik:upstream-failure', 'kodik:https://private.test/?token=secret'])).toEqual(['kodik-anime-identity-partial', 'kodik-anime-scope-unmapped', 'kodik:upstream-failure']);
+	});
+});
+
 describe('bounded Collaps voice repair', () => {
 	const ref: ImportRef = { source: 'collaps', externalId: '555', mediaType: 'tv' };
 	const collaps = () => ({ source: 'collaps', externalId: '555', iframeUrl: 'https://api.nextembed.ws/embed/555?season=2&episode=3', translations: [], quality: '1080p', episodes: [{ seasonNumber: 2, episodeNumber: 3 }], preserved: { untouched: true } });

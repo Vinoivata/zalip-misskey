@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { importArtworkFields, importFields, importSources, type ImportArtworkSelection, type ImportArtworkSettings, type ImportArtworkSettingsInput, type ImportField, type ImportFilters, type ImportOptions, type ImportRecord, type ImportSource, type ImportWorkState } from './types.js';
+import { importArtworkFields, importFields, importSources, validImportRef, type ImportArtworkSelection, type ImportArtworkSettings, type ImportArtworkSettingsInput, type ImportField, type ImportFilters, type ImportOptions, type ImportRecord, type ImportSource, type ImportWorkState } from './types.js';
 
 /** Zero dimensions deliberately mean unbounded on that axis; the decoder still enforces its pixel limit. */
 export function normalizeImportArtworkSettings(input?: ImportArtworkSettingsInput, legacy = false): ImportArtworkSettings {
@@ -59,7 +59,7 @@ export function normalizeImportArtworkSelections(input: ImportArtworkSelection[]
 	return input.map(selection => {
 		if (!selection || typeof selection !== 'object' || Array.isArray(selection) || Object.keys(selection).some(key => !['ref', 'choices'].includes(key))) throw new Error('INVALID_IMPORT_OPTIONS');
 		const ref = selection.ref;
-		if (!ref || typeof ref !== 'object' || Array.isArray(ref) || Object.keys(ref).some(key => !['source', 'externalId', 'mediaType'].includes(key)) || !importSources.includes(ref.source) || !['movie', 'tv'].includes(ref.mediaType) || typeof ref.externalId !== 'string' || !/^(?:[1-9][0-9]{0,15}|tmdb:(?:movie|tv):[1-9][0-9]{0,15}|imdb:tt[0-9]{5,12})$/u.test(ref.externalId)) throw new Error('INVALID_IMPORT_OPTIONS');
+		if (!ref || typeof ref !== 'object' || Array.isArray(ref) || Object.keys(ref).some(key => !['source', 'externalId', 'mediaType'].includes(key)) || !validImportRef(ref)) throw new Error('INVALID_IMPORT_OPTIONS');
 		const referenceKey = `${ref.source}:${ref.mediaType}:${ref.externalId}`;
 		if (references.has(referenceKey)) throw new Error('INVALID_IMPORT_OPTIONS');
 		references.add(referenceKey);
@@ -203,7 +203,7 @@ export function mergeImportRecords(records: ImportRecord[], inputOptions?: Impor
 	const sources: Record<string, string> = {};
 	const artwork = new Set(['posterUrl', 'backdropUrl', 'logoUrl', 'galleryUrls', 'trailerYoutubeKey', 'seasons']);
 	for (const field of importFields) {
-		const defaults: ImportSource[] = artwork.has(field) ? ['tmdb', 'kinopoisk', 'collaps', 'alloha'] : ['kinopoisk', 'tmdb', 'collaps', 'alloha'];
+		const defaults: ImportSource[] = artwork.has(field) ? ['tmdb', 'kinopoisk', 'collaps', 'alloha', 'kodik'] : ['kinopoisk', 'tmdb', 'collaps', 'alloha', 'kodik'];
 		const preferred = options.fieldSources?.[field];
 		const priority = preferred ? [preferred, ...defaults.filter(source => source !== preferred)] : defaults;
 		const candidates = [...records].sort((left, right) => priority.indexOf(left.ref.source) - priority.indexOf(right.ref.source));
@@ -221,14 +221,14 @@ export function mergeImportRecords(records: ImportRecord[], inputOptions?: Impor
 	const prioritizedUnion = (field: 'players' | 'collections') => {
 		const preferred = options.fieldSources?.[field];
 		if (!preferred) return records; // Preserve the established default union order.
-		const order = [preferred, ...(['kinopoisk', 'tmdb', 'collaps', 'alloha'] as const).filter(source => source !== preferred)];
+		const order = [preferred, ...(['kinopoisk', 'tmdb', 'collaps', 'alloha', 'kodik'] as const).filter(source => source !== preferred)];
 		return [...records].sort((left, right) => order.indexOf(left.ref.source) - order.indexOf(right.ref.source));
 	};
 	const playerRecords = prioritizedUnion('players');
 	record.players = playerRecords.flatMap(item => item.players).filter((item, index, all) => all.findIndex(other => other.source === item.source && other.externalId === item.externalId) === index);
 	if (options.fieldSources?.players && record.players.length) sources.players = playerRecords.find(item => item.players.length > 0)!.ref.source;
 	// The authoritative metadata API wins over a player's cached copy, independent of import origin.
-	const ratingPriority: ImportSource[] = ['kinopoisk', 'tmdb', 'collaps', 'alloha'];
+	const ratingPriority: ImportSource[] = ['kinopoisk', 'tmdb', 'collaps', 'alloha', 'kodik'];
 	const ratingPreferred = options.fieldSources?.ratings;
 	const orderedRatings = [...records].sort((left, right) => {
 		const order = ratingPreferred ? [ratingPreferred, ...ratingPriority.filter(source => source !== ratingPreferred)] : ratingPriority;

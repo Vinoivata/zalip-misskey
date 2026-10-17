@@ -8,14 +8,17 @@ process.env.NODE_ENV = 'test';
 import * as assert from 'node:assert';
 import { beforeAll, describe, test } from 'vitest';
 import { MiZalipAllohaAvailabilityEvent } from '@/models/ZalipAllohaAvailabilityEvent.js';
+import { MiZalipImportRun } from '@/models/ZalipImportRun.js';
+import { MiZalipImporterSourceSetting } from '@/models/ZalipImporterSourceSetting.js';
+import { MiZalipPlaybackSettings } from '@/models/ZalipPlaybackSettings.js';
 import { MiZalipWork } from '@/models/ZalipWork.js';
-import { api, castAsError, createAppToken, initTestDb, signup } from '../utils.js';
+import { api, castAsError, createAppToken, initTestDb, sendEnvResetRequest, sendEnvUpdateRequest, signup } from '../utils.js';
 import type * as misskey from 'misskey-js';
 
 type ImporterTaxonomyEntry = { id: string; name: string; data: Record<string, unknown> };
 type ImporterTaxonomyShow = { entry: ImporterTaxonomyEntry; works: { id: string }[] };
 type ImporterTaxonomyLinks = { entries: { entry: ImporterTaxonomyEntry }[] };
-type ImporterProviderStatus = { source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps'; configured: boolean };
+type ImporterProviderStatus = { source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik'; configured: boolean };
 type ImporterAdminEndpoint = Extract<keyof misskey.Endpoints, `zalip/admin/importer/${string}`>;
 type ImporterPermissionCase = { [E in ImporterAdminEndpoint]: [E, misskey.Endpoints[E]['req']] }[ImporterAdminEndpoint];
 
@@ -191,6 +194,7 @@ describe('Zalip discussions', () => {
 
 	test('importer endpoints reject anonymous and non-administrator callers before provider access', async () => {
 		const ref = { source: 'tmdb', externalId: '123', mediaType: 'movie' } as const;
+		const kodikRef = { source: 'kodik', externalId: 'shikimori-123', mediaType: 'tv' } as const;
 		const cases: ImporterPermissionCase[] = [
 			['zalip/admin/importer/sources', {}],
 			['zalip/admin/importer/sources/check', { source: 'tmdb' }],
@@ -200,6 +204,11 @@ describe('Zalip discussions', () => {
 			['zalip/admin/importer/work-state/save', { workId: 'work01', lockedFields: [] }],
 			['zalip/admin/importer/search', { source: 'tmdb', query: 'offline permission test' }],
 			['zalip/admin/importer/preview', { ref }],
+			['zalip/admin/importer/search', { source: 'kodik', query: 'offline permission test' }],
+			['zalip/admin/importer/preview', { ref: kodikRef }],
+			['zalip/admin/importer/runs/create', { refs: [kodikRef], mode: 'import' }],
+			['zalip/admin/importer/playback-settings/show', {}],
+			['zalip/admin/importer/playback-settings/save', { providers: [{ source: 'alloha', label: 'Alloha', enabled: true, position: 0 }, { source: 'collaps', label: 'Collaps', enabled: true, position: 1 }, { source: 'kodik', label: 'Kodik', enabled: true, position: 2 }] }],
 			['zalip/admin/importer/artwork/inspect', { kind: 'work', limit: 1 }],
 			['zalip/admin/importer/artwork/step', { kind: 'work', id: 'work01', field: 'posterPath', expected: 'a'.repeat(64) }],
 			['zalip/admin/importer/runs/create', { refs: [ref], mode: 'import' }],
@@ -225,6 +234,99 @@ describe('Zalip discussions', () => {
 			const denied = await api(endpoint, params, viewer);
 			assert.strictEqual(denied.status, 403, endpoint);
 			assert.strictEqual(castAsError(denied.body as Record<string, unknown>).error.code, 'ZALIP_ADMIN_REQUIRED');
+		}
+	});
+
+	test('source credentials remain exclusive to native administrators, including Kodik settings', async () => {
+		const params = { source: 'kodik', apiOrigin: 'https://kodik-api.com', playerOrigin: null } as const;
+		const applicationToken = await createAppToken(admin, ['read:account', 'write:account']);
+		for (const [endpoint, input] of [['zalip/admin/importer/sources/settings/show', {}], ['zalip/admin/importer/sources/settings/save', params]] as const) {
+			const anonymous = await api(endpoint, input);
+			assert.strictEqual(anonymous.status, 400);
+			assert.strictEqual(castAsError(anonymous.body).error.code, 'ACCESS_DENIED');
+			const denied = await api(endpoint, input, viewer);
+			assert.strictEqual(denied.status, 403);
+			assert.strictEqual(castAsError(denied.body).error.code, 'ZALIP_ADMIN_REQUIRED');
+			const application = await api(endpoint, input, { token: applicationToken });
+			assert.strictEqual(application.status, 400);
+			assert.strictEqual(castAsError(application.body).error.code, 'ACCESS_DENIED');
+		}
+	});
+
+	test('playback settings upgrade legacy reads without writes and only accept complete three-provider saves', async () => {
+		const db = await initTestDb(true);
+		const repository = db.getRepository(MiZalipPlaybackSettings);
+		const previous = await repository.findOneBy({ id: 'default' });
+		const legacy = [{ source: 'collaps' as const, label: 'Custom backup', enabled: false, position: 0 }, { source: 'alloha' as const, label: 'Custom primary', enabled: false, position: 1 }];
+		try {
+			await repository.upsert({ id: 'default', providers: legacy, updatedAt: new Date('2026-10-17T00:00:00.000Z') }, ['id']);
+			const before = await repository.findOneByOrFail({ id: 'default' });
+			const upgraded = await api('zalip/admin/importer/playback-settings/show', {}, admin);
+			assert.strictEqual(upgraded.status, 200);
+			assert.deepStrictEqual(upgraded.body.providers, [...legacy, { source: 'kodik', label: 'KODIK', enabled: true, position: 2 }]);
+			assert.deepStrictEqual(await repository.findOneByOrFail({ id: 'default' }), before);
+			const providers = [{ source: 'kodik' as const, label: 'Anime', enabled: false, position: 0 }, { source: 'alloha' as const, label: 'Primary', enabled: true, position: 2 }, { source: 'collaps' as const, label: 'Backup', enabled: false, position: 1 }];
+			const saved = await api('zalip/admin/importer/playback-settings/save', { providers }, admin);
+			assert.strictEqual(saved.status, 200);
+			assert.deepStrictEqual(saved.body.providers, [...providers].sort((a, b) => a.position - b.position));
+			const persisted = await repository.findOneByOrFail({ id: 'default' });
+			for (const [invalid, code] of [[legacy, 'INVALID_PARAM'], [[...providers, providers[0]], 'INVALID_PARAM'], [providers.map(row => row.source === 'kodik' ? { ...row, position: 1 } : row), 'ZALIP_IMPORT_INVALID'], [providers.map(row => row.source === 'kodik' ? { ...row, source: 'collaps' } : row), 'ZALIP_IMPORT_INVALID']] as const) {
+				const rejected = await api('zalip/admin/importer/playback-settings/save', { providers: invalid } as never, admin);
+				assert.strictEqual(rejected.status, 400);
+				assert.strictEqual(castAsError(rejected.body).error.code, code);
+				assert.deepStrictEqual(await repository.findOneByOrFail({ id: 'default' }), persisted);
+			}
+		} finally {
+			if (previous) await repository.save(previous); else await repository.delete({ id: 'default' });
+			await db.destroy();
+		}
+	});
+
+	test('Kodik settings support null mirror, encrypted credentials and canonical refs without upstream calls or queued jobs', async () => {
+		const db = await initTestDb(true);
+		const repository = db.getRepository(MiZalipImporterSourceSetting);
+		// This isolated test database must not contain a developer's encrypted credentials.
+		assert.strictEqual(await repository.count(), 0);
+		const beforeRuns = await db.getRepository(MiZalipImportRun).count();
+		await sendEnvUpdateRequest({ key: 'ZALIP_IMPORTER_SETTINGS_KEY', value: Buffer.alloc(32, 17).toString('base64') });
+		try {
+			const saved = await api('zalip/admin/importer/sources/settings/save', { source: 'kodik', apiOrigin: 'https://kodik-api.com', apiToken: 'synthetic-offline-kodik-fixture', playerOrigin: 'https://mirror.provider.org' }, admin);
+			assert.strictEqual(saved.status, 200);
+			const settings = saved.body.sources.find(row => row.source === 'kodik');
+			assert.ok(settings);
+			assert.strictEqual(settings.apiToken, 'synthetic-offline-kodik-fixture');
+			assert.strictEqual(settings.playerToken, null);
+			assert.strictEqual(settings.playerOrigin, 'https://mirror.provider.org');
+			assert.strictEqual(JSON.stringify(await repository.find()).includes('synthetic-offline-kodik-fixture'), false);
+			const cleared = await api('zalip/admin/importer/sources/settings/save', { source: 'kodik', apiOrigin: 'https://kodik-api.com', playerOrigin: null, clearApiToken: true }, admin);
+			assert.strictEqual(cleared.status, 200);
+			assert.strictEqual(cleared.body.sources.find(row => row.source === 'kodik')?.playerOrigin, null);
+			assert.strictEqual(cleared.body.sources.find(row => row.source === 'kodik')?.apiTokenSet, false);
+			const status = await api('zalip/admin/importer/sources', {}, admin);
+			assert.strictEqual(status.status, 200);
+			assert.strictEqual((status.body.sources as ImporterProviderStatus[]).find(row => row.source === 'kodik')?.configured, false);
+			const snapshot = await repository.findOneByOrFail({ source: 'kodik' });
+			for (const [invalid, code] of [[{ playerToken: 'synthetic-public-token' }, 'ZALIP_IMPORT_INVALID'], [{ playerOrigin: 'http://mirror.provider.org' }, 'ZALIP_IMPORT_INVALID'], [{ playerOrigin: 'https://127.0.0.1' }, 'ZALIP_IMPORT_INVALID'], [{ playerOrigin: 'https://mirror.provider.org/path' }, 'ZALIP_IMPORT_INVALID'], [{ playerOrigin: 'https://mirror.provider.org?token=synthetic' }, 'ZALIP_IMPORT_INVALID'], [{ url: 'https://arbitrary.provider.org' }, 'INVALID_PARAM']] as const) {
+				const rejected = await api('zalip/admin/importer/sources/settings/save', { source: 'kodik', apiOrigin: 'https://kodik-api.com', ...invalid } as never, admin);
+				assert.strictEqual(rejected.status, 400);
+				assert.strictEqual(castAsError(rejected.body).error.code, code);
+				assert.deepStrictEqual(await repository.findOneByOrFail({ source: 'kodik' }), snapshot);
+			}
+			for (const [externalId, mediaType] of [['serial-123', 'tv'], ['movie-123', 'movie'], ['shikimori-123', 'tv'], ['kinopoisk-123', 'movie'], ['imdb-tt1234567', 'tv']] as const) {
+				const response = await api('zalip/admin/importer/runs/create', { refs: [{ source: 'kodik', externalId, mediaType }], mode: 'import' }, admin);
+				assert.strictEqual(response.status, 503);
+				assert.strictEqual(castAsError(response.body).error.code, 'ZALIP_IMPORT_NOT_CONFIGURED');
+			}
+			for (const [ref, code] of [[{ source: 'kodik', externalId: '123', mediaType: 'tv' }, 'ZALIP_IMPORT_INVALID'], [{ source: 'kodik', externalId: 'movie-123', mediaType: 'tv' }, 'ZALIP_IMPORT_INVALID'], [{ source: 'tmdb', externalId: 'serial-123', mediaType: 'tv' }, 'ZALIP_IMPORT_INVALID'], [{ source: 'kodik', externalId: 'serial-0', mediaType: 'tv' }, 'INVALID_PARAM'], [{ source: 'kodik', externalId: 'serial-123?token=synthetic', mediaType: 'tv' }, 'INVALID_PARAM'], [{ source: 'kodik', externalId: 'https://kodikplayer.com/serial/123/hash', mediaType: 'tv' }, 'INVALID_PARAM']] as const) {
+				const rejected = await api('zalip/admin/importer/runs/create', { refs: [ref], mode: 'import' } as never, admin);
+				assert.strictEqual(rejected.status, 400);
+				assert.strictEqual(castAsError(rejected.body).error.code, code);
+			}
+			assert.strictEqual(await db.getRepository(MiZalipImportRun).count(), beforeRuns);
+		} finally {
+			await repository.delete({ source: 'kodik' });
+			await sendEnvResetRequest();
+			await db.destroy();
 		}
 	});
 
@@ -341,7 +443,7 @@ describe('Zalip discussions', () => {
 		// CI has no provider credentials. Fail safely before queueing if a developer runs this with live keys.
 		assert.ok(unconfigured, 'This offline e2e case requires at least one unconfigured provider.');
 		const response = await api('zalip/admin/importer/runs/create', {
-			refs: [{ source: unconfigured.source, externalId: unconfigured.source === 'alloha' ? 'tmdb:movie:123' : '123', mediaType: 'movie' }], mode: 'import',
+			refs: [{ source: unconfigured.source, externalId: unconfigured.source === 'alloha' ? 'tmdb:movie:123' : unconfigured.source === 'kodik' ? 'movie-123' : '123', mediaType: 'movie' }], mode: 'import',
 		}, admin);
 		assert.strictEqual(response.status, 503);
 		assert.strictEqual(castAsError(response.body).error.code, 'ZALIP_IMPORT_NOT_CONFIGURED');

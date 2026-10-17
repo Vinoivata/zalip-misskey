@@ -11,7 +11,7 @@ import { defaultImportApiOrigins } from './zalip-importer/providers.js';
 const key = Buffer.alloc(32, 7);
 beforeEach(() => {
 	vi.stubEnv('ZALIP_IMPORTER_SETTINGS_KEY', key.toString('base64'));
-	for (const name of ['ZALIP_TMDB_API_KEY', 'ZALIP_KINOPOISK_API_KEY', 'ZALIP_ALLOHA_API_TOKEN', 'ZALIP_COLLAPS_API_TOKEN', 'ZALIP_ALLOHA_PLAYER_TOKEN', 'ZALIP_TMDB_API_ORIGIN', 'ZALIP_KINOPOISK_API_ORIGIN', 'ZALIP_ALLOHA_API_ORIGIN', 'ZALIP_COLLAPS_API_ORIGIN', 'ZALIP_ALLOHA_PLAYER_ORIGIN', 'ZALIP_COLLAPS_PLAYER_ORIGIN', 'ZALIP_ALLOHA_IFRAME_HOSTS', 'ZALIP_COLLAPS_IFRAME_HOSTS']) vi.stubEnv(name, undefined);
+	for (const name of ['ZALIP_TMDB_API_KEY', 'ZALIP_KINOPOISK_API_KEY', 'ZALIP_ALLOHA_API_TOKEN', 'ZALIP_COLLAPS_API_TOKEN', 'ZALIP_ALLOHA_PLAYER_TOKEN', 'ZALIP_TMDB_API_ORIGIN', 'ZALIP_KINOPOISK_API_ORIGIN', 'ZALIP_ALLOHA_API_ORIGIN', 'ZALIP_COLLAPS_API_ORIGIN', 'ZALIP_ALLOHA_PLAYER_ORIGIN', 'ZALIP_COLLAPS_PLAYER_ORIGIN', 'ZALIP_ALLOHA_IFRAME_HOSTS', 'ZALIP_COLLAPS_IFRAME_HOSTS', 'ZALIP_KODIK_API_TOKEN', 'ZALIP_KODIK_API_ORIGIN', 'ZALIP_KODIK_PLAYER_ORIGIN', 'ZALIP_KODIK_IFRAME_HOSTS']) vi.stubEnv(name, undefined);
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -81,6 +81,56 @@ describe('administrator source settings', () => {
 		expect((await context.service.getRuntime()).kinopoiskApiKey).toBe('fixture-first');
 		await context.service.save({ source: 'kinopoisk', apiOrigin: 'https://api.provider.org', apiToken: 'fixture-second' });
 		expect(await context.service.getRuntime()).toMatchObject({ kinopoiskApiKey: 'fixture-second', apiOrigins: { kinopoisk: 'https://api.provider.org' } });
+	});
+	test('Kodik defaults need no public player token or forced mirror', async () => {
+		const context = fixture();
+		expect((await context.service.show()).sources.find(row => row.source === 'kodik')).toMatchObject({ apiOrigin: 'https://kodik-api.com', playerOrigin: null, apiToken: null, playerToken: null, playerTokenSet: false, playerTokenOrigin: 'none' });
+		expect(await context.service.getRuntime()).toMatchObject({ apiOrigins: { kodik: 'https://kodik-api.com' }, kodikApiToken: undefined, kodikPlayerOrigin: undefined, kodikIframeHosts: ['kodikplayer.com'] });
+		expect(context.rows).toHaveLength(0);
+		vi.stubEnv('ZALIP_KODIK_IFRAME_HOSTS', ' ,  ');
+		expect((await context.service.getRuntime()).kodikIframeHosts).toEqual(['kodikplayer.com']);
+	});
+	test('Kodik environment credentials, API origin, optional mirror and iframe hosts stay separate', async () => {
+		vi.stubEnv('ZALIP_KODIK_API_TOKEN', 'fixture-kodik-environment');
+		vi.stubEnv('ZALIP_KODIK_API_ORIGIN', 'https://api.provider.org');
+		vi.stubEnv('ZALIP_KODIK_PLAYER_ORIGIN', 'https://player.provider.org');
+		vi.stubEnv('ZALIP_KODIK_IFRAME_HOSTS', ' kodikplayer.com, player.provider.org, ');
+		const context = fixture();
+		expect((await context.service.show()).sources.find(row => row.source === 'kodik')).toMatchObject({ apiOrigin: 'https://api.provider.org', playerOrigin: 'https://player.provider.org', apiToken: 'fixture-kodik-environment', apiTokenOrigin: 'environment', playerToken: null });
+		expect(await context.service.getRuntime()).toMatchObject({ kodikApiToken: 'fixture-kodik-environment', apiOrigins: { kodik: 'https://api.provider.org' }, kodikPlayerOrigin: 'https://player.provider.org', kodikIframeHosts: ['kodikplayer.com', 'player.provider.org'] });
+	});
+	test('Kodik database token is encrypted, visible to admin and can be rotated or explicitly cleared', async () => {
+		vi.stubEnv('ZALIP_KODIK_API_TOKEN', 'fixture-kodik-environment');
+		const context = fixture();
+		const show = await context.service.save({ source: 'kodik', apiOrigin: defaultImportApiOrigins.kodik, apiToken: 'fixture-kodik-first' });
+		expect(JSON.stringify(context.rows)).not.toContain('fixture-kodik-first');
+		expect(show.sources.find(row => row.source === 'kodik')).toMatchObject({ apiToken: 'fixture-kodik-first', apiTokenOrigin: 'database', playerToken: null });
+		expect(decryptImporterTokens('kodik', context.rows[0].encryptedTokens, key)).toEqual({ apiToken: 'fixture-kodik-first' });
+		expect(() => decryptImporterTokens('collaps', context.rows[0].encryptedTokens, key)).toThrow('upstream-failure');
+		await context.service.save({ source: 'kodik', apiOrigin: 'https://api.provider.org', apiToken: 'fixture-kodik-second', playerOrigin: 'https://player.provider.org' });
+		expect(await context.service.getRuntime()).toMatchObject({ kodikApiToken: 'fixture-kodik-second', apiOrigins: { kodik: 'https://api.provider.org' }, kodikPlayerOrigin: 'https://player.provider.org' });
+		await context.service.save({ source: 'kodik', apiOrigin: defaultImportApiOrigins.kodik, clearApiToken: true });
+		expect((await context.service.getRuntime()).kodikApiToken).toBeUndefined();
+	});
+	test('a Kodik mirror is retained on unrelated saves and explicit null clears it without restoring the environment', async () => {
+		vi.stubEnv('ZALIP_KODIK_PLAYER_ORIGIN', 'https://player.provider.org');
+		const context = fixture();
+		await context.service.save({ source: 'kodik', apiOrigin: defaultImportApiOrigins.kodik, apiToken: 'fixture-kodik' });
+		expect((await context.service.getRuntime()).kodikPlayerOrigin).toBe('https://player.provider.org');
+		await context.service.save({ source: 'kodik', apiOrigin: defaultImportApiOrigins.kodik, playerOrigin: null });
+		expect((await context.service.getRuntime()).kodikPlayerOrigin).toBeUndefined();
+		await context.service.save({ source: 'kodik', apiOrigin: defaultImportApiOrigins.kodik });
+		expect((await context.service.getRuntime()).kodikPlayerOrigin).toBeUndefined();
+		expect(context.rows[0].playerOrigin).toBeNull();
+	});
+	test('Kodik rejects public tokens and non-origin mirrors before writing', async () => {
+		const context = fixture();
+		for (const playerOrigin of ['http://player.provider.org', 'https://127.0.0.1', 'https://player.provider.org/path', 'https://player.provider.org?token=fixture', 'https://user@player.provider.org', 'https://player.provider.org:8443', 'https://player.provider.org#fragment']) {
+			await expect(context.service.save({ source: 'kodik', apiOrigin: defaultImportApiOrigins.kodik, playerOrigin })).rejects.toMatchObject({ code: 'invalid-ref' });
+		}
+		for (const input of [{ playerToken: 'fixture-public-token' }, { clearPlayerToken: true }, { clearPlayerToken: false }]) await expect(context.service.save({ source: 'kodik', apiOrigin: defaultImportApiOrigins.kodik, ...input })).rejects.toMatchObject({ code: 'invalid-ref' });
+		await expect(context.service.save({ source: 'alloha', apiOrigin: defaultImportApiOrigins.alloha, playerOrigin: null })).rejects.toMatchObject({ code: 'invalid-ref' });
+		expect(context.rows).toHaveLength(0);
 	});
 	test('invalid origin, secret parameters, token controls and unsupported player settings write nothing', async () => {
 		const context = fixture();

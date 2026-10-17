@@ -75,12 +75,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 					<section :class="$style.panel">
 						<h2>{{ i18n.ts.zalip._importer.byId }}</h2><p :class="$style.hint">{{ i18n.ts.zalip._importer.byIdHint }}</p>
-						<p :class="$style.hint">{{ i18n.ts.zalip._importer.imdbHint }}</p>
+						<p :class="$style.hint">{{ batch.source === 'kodik' ? i18n.ts.zalip._importer.kodikReferencesHint : i18n.ts.zalip._importer.imdbHint }}</p>
 						<p v-if="lockedFields.length" :class="$style.hint">{{ i18n.ts.zalip._importer.protectionScope }}</p>
 						<form :class="$style.form" @submit.prevent="queueBatch">
 							<label><span>{{ i18n.ts.zalip._importer.source }}</span><select v-model="batch.source" :disabled="busy"><option v-for="source in importerSources" :key="source" :value="source" :disabled="!sourceStatus(source)?.configured">{{ importerSourceLabel(source) }}</option></select></label>
 							<label><span>{{ i18n.ts.zalip._importer.idMediaType }}</span><select v-model="batch.mediaType" :disabled="busy"><option value="movie">{{ i18n.ts.zalip._importer.movie }}</option><option value="tv">{{ i18n.ts.zalip._importer.series }}</option></select></label>
-							<label :class="$style.wide"><span>{{ i18n.ts.zalip._importer.references }}</span><textarea v-model="batch.references" rows="4" maxlength="20000" placeholder="11&#10;https://www.themoviedb.org/movie/157336" :disabled="busy"></textarea></label>
+							<label :class="$style.wide"><span>{{ i18n.ts.zalip._importer.references }}</span><textarea v-model="batch.references" rows="4" maxlength="20000" :placeholder="batch.source === 'kodik' ? 'serial-123\nmovie-456' : '11\nhttps://www.themoviedb.org/movie/157336'" :disabled="busy"></textarea></label>
 							<label :class="$style.wide"><span>{{ i18n.ts.zalip._importer.importCategories }}</span><select v-model="categoryIds" multiple size="3" :disabled="busy"><option v-for="entry in categories" :key="entry.id" :value="entry.id">{{ entry.name }}</option></select></label>
 							<div :class="[$style.actions, $style.wide]"><button type="button" class="_button" :class="$style.button" :disabled="previewLoading || !batch.references.trim()" @click="previewBatch"><i class="ti ti-eye" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.previewFirst }}</button><button type="submit" class="_button" :class="$style.primary" :disabled="busy || !batch.references.trim() || !sourceStatus(batch.source)?.configured"><i class="ti ti-download" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.enqueue }}</button></div>
 						</form>
@@ -242,7 +242,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 								<summary>{{ importerSourceLabel(entry.source) }} · {{ entry.apiTokenSet ? i18n.ts.zalip._importer.configured : i18n.ts.zalip._importer.notConfigured }}</summary>
 								<form :class="$style.form" autocomplete="off" @submit.prevent="saveServiceSettings(entry.source)">
 									<label><span>{{ i18n.ts.zalip._importer.sourceApiOrigin }}</span><input v-model="serviceForms[entry.source].apiOrigin" type="url" required maxlength="1024" :disabled="busy || serviceSettingsLoading" :readonly="!serviceSettings.encryptionReady"></label>
-									<label v-if="entry.source === 'alloha' || entry.source === 'collaps'"><span>{{ i18n.ts.zalip._importer.sourcePlayerOrigin }}</span><input v-model="serviceForms[entry.source].playerOrigin" type="url" required maxlength="1024" :disabled="busy || serviceSettingsLoading" :readonly="!serviceSettings.encryptionReady"></label>
+									<label v-if="entry.source === 'alloha' || entry.source === 'collaps' || entry.source === 'kodik'"><span>{{ i18n.ts.zalip._importer.sourcePlayerOrigin }}</span><input v-model="serviceForms[entry.source].playerOrigin" type="url" :required="entry.source !== 'kodik'" maxlength="1024" :disabled="busy || serviceSettingsLoading" :readonly="!serviceSettings.encryptionReady"><small v-if="entry.source === 'kodik'">{{ i18n.ts.zalip._importer.kodikPlayerOriginHint }}</small></label>
 									<label :class="$style.wide"><span>{{ i18n.ts.zalip._importer.sourceApiToken }}</span><input v-model="serviceForms[entry.source].apiToken" type="text" maxlength="4096" autocomplete="off" autocapitalize="off" :spellcheck="false" :disabled="busy || serviceSettingsLoading || serviceForms[entry.source].clearApiToken" :readonly="!serviceSettings.encryptionReady"><small>{{ i18n.tsx.zalip._importer.credentialOrigin({ origin: importerCredentialOriginLabel(entry.apiTokenOrigin) }) }}</small></label>
 									<label :class="[$style.check, $style.wide]"><input v-model="serviceForms[entry.source].clearApiToken" type="checkbox" :disabled="busy || serviceSettingsLoading || !serviceSettings.encryptionReady" @change="clearServiceToken(entry.source, 'api')">{{ i18n.ts.zalip._importer.clearSourceApiToken }}</label>
 									<template v-if="entry.source === 'alloha'">
@@ -406,7 +406,7 @@ const profileCapabilityWarning = computed(() => {
 	const source = sourceStatus(profileForm.source);
 	if (!source?.configured) return i18n.ts.zalip._importer.sourceNotConfigured;
 	if (profileForm.mode === 'collection' && !source.capabilities.collections) return i18n.ts.zalip._importer.collectionsUnsupported;
-	if (profileForm.mode === 'availability' && !['alloha', 'collaps'].includes(profileForm.source)) return i18n.ts.zalip._importer.availabilityUnsupported;
+	if (profileForm.mode === 'availability' && !['alloha', 'collaps', 'kodik'].includes(profileForm.source)) return i18n.ts.zalip._importer.availabilityUnsupported;
 	if (profileForm.mode === 'discovery' && (profileForm.source !== 'collaps' || !source.capabilities.updates)) return i18n.ts.zalip._importer.discoveryUnsupported;
 	return '';
 });
@@ -912,7 +912,7 @@ function movePlayer(index: number, delta: -1 | 1): void {
 	if (index < 0 || index >= playbackProviders.value.length || target < 0 || target >= playbackProviders.value.length) return;
 	const providers = [...playbackProviders.value];
 	[providers[index], providers[target]] = [providers[target], providers[index]];
-	playbackProviders.value = providers.map((provider, position) => ({ ...provider, position: position as 0 | 1 }));
+	playbackProviders.value = providers.map((provider, position) => ({ ...provider, position: position as 0 | 1 | 2 }));
 }
 
 function playbackSettingsActionReady(params: { providers: ImportPlaybackProvider[] }): boolean { return !actionBusy() && !playbackSettingsLoading.value && JSON.stringify(params) === JSON.stringify(importerPlaybackSettings(playbackProviders.value)); }
@@ -1046,7 +1046,7 @@ definePage(() => ({ title: i18n.ts.zalip._importer.pageTitle, icon: 'ti ti-datab
 .heading { margin-bottom: 24px; }
 .heading p, .sectionHeading p { margin: 6px 0; color: var(--MI_THEME-fgTransparentWeak); line-height: 1.5; }
 .eyebrow { display: flex; gap: 6px; align-items: center; color: var(--MI_THEME-accent) !important; font-size: .72rem; font-weight: 700; letter-spacing: .1em; }
-.sources { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.sources { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
 .source { display: flex; flex-direction: column; gap: 8px; padding: 16px; border: 1px solid var(--MI_THEME-divider); border-radius: var(--MI-radius); background: var(--MI_THEME-panel); }
 .source span, .source small { color: var(--MI_THEME-fgTransparentWeak); font-size: .8rem; }
 .source .connected { color: var(--MI_THEME-accent); }

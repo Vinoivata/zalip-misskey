@@ -79,8 +79,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 								<div v-if="$i && playerOpen && activePlayerIframe" :class="$style.playerFrame"><iframe :key="activePlayerIframeKey" :src="activePlayerIframe" :title="i18n.ts.zalip.playerTab + ': ' + work.title" loading="lazy" referrerpolicy="origin" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>
 								<div v-else :class="$style.playerPreview">
 									<img v-if="selectedEpisode?.stillPath || work.backdropPath" :src="tmdbBackdrop(selectedEpisode?.stillPath || work.backdropPath!)" alt="" loading="lazy">
-									<button v-if="$i && activePlayback" type="button" class="_button" :class="$style.playOverlay" :aria-label="i18n.ts.zalip.watchTitle" @click="openSelectedPlayer"><i class="ti ti-player-play-filled" aria-hidden="true"></i></button>
+									<button v-if="$i && activePlayback && selectedEpisodeAvailable" type="button" class="_button" :class="$style.playOverlay" :aria-label="i18n.ts.zalip.watchTitle" @click="openSelectedPlayer"><i class="ti ti-player-play-filled" aria-hidden="true"></i></button>
 									<button v-else-if="!$i" type="button" class="_button" :class="$style.playerState" @click="signInForDiscussion"><i class="ti ti-login" aria-hidden="true"></i>{{ i18n.ts.zalip.playerSignIn }}</button>
+									<p v-else-if="kodikEpisodeContextBlocked && episodesPending" :class="$style.playerState" role="status"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i>{{ i18n.ts.zalip.playerEpisodesLoading }}</p>
+									<p v-else-if="activePlayback && !selectedEpisodeAvailable" :class="$style.playerState" role="status"><i class="ti ti-info-circle" aria-hidden="true"></i>{{ i18n.ts.zalip.playerEpisodeUnavailable }}</p>
 									<p v-else :class="$style.playerState"><i class="ti ti-clock" aria-hidden="true"></i>{{ i18n.ts.zalip.playerUnavailable }}</p>
 								</div>
 								<div :class="$style.playerToolbar">
@@ -198,7 +200,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<h3>{{ i18n.ts.zalip.playerVoices }}</h3>
 					<label :class="$style.menuSearch"><i class="ti ti-search" aria-hidden="true"></i><input v-model="voiceQuery" type="search" :placeholder="i18n.ts.zalip.playerVoiceSearch" :aria-label="i18n.ts.zalip.playerVoiceSearch" @keydown.esc.stop.prevent="voiceModal?.close()"></label>
 					<div :class="$style.voiceList">
-						<button v-for="translation in filteredTranslations" :key="translation.id" type="button" class="_button" :class="{ [$style.menuSelected]: selectedTranslationId === translation.id }" :aria-pressed="selectedTranslationId === translation.id" @click="selectTranslation(translation.id)"><span>{{ translation.name }}</span><small v-if="translation.quality">{{ translation.quality }}</small><i v-if="selectedTranslationId === translation.id" class="ti ti-check" aria-hidden="true"></i></button>
+						<button v-for="translation in filteredTranslations" :key="translation.id" type="button" class="_button" :class="{ [$style.menuSelected]: selectedTranslationId === translation.id }" :aria-pressed="selectedTranslationId === translation.id" @click="selectTranslation(translation.id)"><span>{{ playbackTranslationLabel(translation, i18n.ts.zalip.playerSubtitles) }}</span><small v-if="translation.quality">{{ translation.quality }}</small><i v-if="selectedTranslationId === translation.id" class="ti ti-check" aria-hidden="true"></i></button>
 						<p v-if="!filteredTranslations.length">{{ i18n.ts.zalip.searchNoResults }}</p>
 					</div>
 				</template>
@@ -228,7 +230,7 @@ import { useZalipHorizontalDrag } from '@/composables/use-zalip-horizontal-drag.
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { pleaseLogin } from '@/utility/please-login.js';
 import { importerImageUrl } from '@/utility/zalip-importer.js';
-import { selectablePlaybackTranslations, workPlaybackIframe, workPlaybackSources } from '@/utility/zalip-playback.js';
+import { playbackEpisodeAvailable, playbackTranslationLabel, selectablePlaybackTranslations, workPlaybackIframe, workPlaybackSources } from '@/utility/zalip-playback.js';
 import { zalipEpisodeQuery } from '@/utility/zalip-work-route.js';
 import { taxonomyCreditCaption, taxonomyLinkSections, taxonomyProfileLabel, taxonomySectionLabel, taxonomyTypeIcon } from '@/utility/zalip-taxonomy.js';
 
@@ -390,10 +392,10 @@ const activeTranslations = computed(() => selectablePlaybackTranslations(activeP
 const playerOpen = ref(false);
 const selectedTranslationId = ref<string | null>(null);
 const voiceQuery = ref('');
-const filteredTranslations = computed(() => activeTranslations.value.filter(translation => translation.name.toLocaleLowerCase('ru').includes(voiceQuery.value.trim().toLocaleLowerCase('ru'))));
+const filteredTranslations = computed(() => activeTranslations.value.filter(translation => playbackTranslationLabel(translation, i18n.ts.zalip.playerSubtitles).toLocaleLowerCase('ru').includes(voiceQuery.value.trim().toLocaleLowerCase('ru'))));
 const selectedVoiceLabel = computed(() => {
 	const translation = activeTranslations.value.find(item => item.id === selectedTranslationId.value);
-	return translation?.name ?? selectedProviderLabel.value;
+	return translation ? playbackTranslationLabel(translation, i18n.ts.zalip.playerSubtitles) : selectedProviderLabel.value;
 });
 const discussionNoteId = ref<string | null>(null);
 const discussionError = ref<string | null>(null);
@@ -428,7 +430,9 @@ const filteredEpisodes = computed(() => episodes.value.filter(episode => `${epis
 const selectedEpisodeProgress = computed(() => getEpisodeProgress(work.value?.seasons ?? [], selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null));
 const episodeWatched = computed(() => selectedEpisodeProgress.value != null && episodesWatched.value >= selectedEpisodeProgress.value);
 
-const activePlayerIframe = computed(() => workPlaybackIframe(activePlayback.value, selectedTranslationId.value, selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null));
+const kodikEpisodeContextBlocked = computed(() => activePlayback.value?.source === 'kodik' && (selectedSeasonNumber.value != null || !!work.value?.seasons.length) && (episodesPending.value || selectedEpisode.value == null));
+const selectedEpisodeAvailable = computed(() => !kodikEpisodeContextBlocked.value && playbackEpisodeAvailable(activePlayback.value, selectedTranslationId.value, selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null));
+const activePlayerIframe = computed(() => selectedEpisodeAvailable.value ? workPlaybackIframe(activePlayback.value, selectedTranslationId.value, selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null) : null);
 
 const activePlayerIframeKey = computed(() => [
 	selectedSeasonNumber.value ?? 'movie',
@@ -743,7 +747,7 @@ function closeWorkMenu(): void {
 }
 
 function openSelectedPlayer(): void {
-	if (activePlayback.value) playerOpen.value = true;
+	if (activePlayback.value && selectedEpisodeAvailable.value) playerOpen.value = true;
 }
 
 async function selectDiscussionScope(scope: 'work' | 'episode'): Promise<void> {

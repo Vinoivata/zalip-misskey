@@ -1803,7 +1803,7 @@ export interface Locale extends ILocale {
              */
             "collectionsUnsupported": string;
             /**
-             * Проверка доступности просмотра предназначена для Alloha и Collaps.
+             * Проверка доступности просмотра предназначена для Alloha, Collaps и Kodik.
              */
             "availabilityUnsupported": string;
             /**
@@ -2247,6 +2247,14 @@ export interface Locale extends ILocale {
              */
             "imdbHint": string;
             /**
+             * Kodik: serial-…, movie-…, shikimori-…, kinopoisk-… или imdb-tt…. Числовой ID дополняется по выбранному типу. Ссылки iframe не подходят.
+             */
+            "kodikReferencesHint": string;
+            /**
+             * Необязательное зеркало плеера. Без него используется адрес, полученный от Kodik. Очистите сохранённый адрес, чтобы отключить замену зеркала.
+             */
+            "kodikPlayerOriginHint": string;
+            /**
              * Сопоставляем ID…
              */
             "resolvingReferences": string;
@@ -2639,6 +2647,30 @@ export interface Locale extends ILocale {
              */
             "warningPlayerRejected": ParameterizedString<"source">;
             /**
+             * Kodik вернул создателей без подтверждённых ID. Связи с профилями не созданы; данные других источников сохранены.
+             */
+            "warningKodikPeople": string;
+            /**
+             * Kodik вернул студии без подтверждённых ID. Связи со студиями не созданы; данные других источников сохранены.
+             */
+            "warningKodikStudios": string;
+            /**
+             * Достигнут лимит озвучек Kodik для одного импорта.
+             */
+            "warningKodikVoices": string;
+            /**
+             * Часть данных серий Kodik отклонена: неподдерживаемые номера или небезопасные ссылки. Номера серий не переназначены.
+             */
+            "warningKodikEpisodes": string;
+            /**
+             * Kodik не вернул подтверждённый ID Shikimori для аниме. Автоматическое объединение с другими источниками отключено.
+             */
+            "warningKodikAnimeIdentity": string;
+            /**
+             * Для подключения озвучек Kodik к этому аниме нужна проверенная привязка конкретного сезона. Общий ID сериала не используется для автоматического объединения.
+             */
+            "warningKodikAnimeScope": string;
+            /**
              * Часть дополнительных данных недоступна. Проверьте сохранённый тайтл.
              */
             "warningGeneric": string;
@@ -2675,7 +2707,7 @@ export interface Locale extends ILocale {
              */
             "movePlayerDown": ParameterizedString<"name">;
             /**
-             * Укажите подписи обоих плееров длиной от 1 до 40 символов и уникальный порядок.
+             * Укажите подписи плееров длиной от 1 до 40 символов и уникальный порядок.
              */
             "invalidPlaybackSettings": string;
             /**
@@ -3252,6 +3284,10 @@ export interface Locale extends ILocale {
          */
         "playerVoices": string;
         /**
+         * Субтитры
+         */
+        "playerSubtitles": string;
+        /**
          * Оценить
          */
         "workRateAction": string;
@@ -3327,6 +3363,10 @@ export interface Locale extends ILocale {
          * Плеер пока недоступен. Попробуйте позже.
          */
         "playerUnavailable": string;
+        /**
+         * Этой серии нет в выбранной озвучке. Выберите другую озвучку или плеер.
+         */
+        "playerEpisodeUnavailable": string;
         /**
          * Загружаем эпизоды…
          */

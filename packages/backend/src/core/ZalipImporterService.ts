@@ -26,7 +26,7 @@ import { recordArtworkCandidates, sameImportRef, selectImportArtwork } from './z
 import { equivalentImportArtwork } from './zalip-importer/artwork.js';
 import { canUpdateField, importFieldSelected, matchesCreatePlayerFilter, matchesImportFilters, mergeImportRecords, nonEmpty, normalizeImportOptions, readImportState, sameValue, selectedImportSources } from './zalip-importer/policy.js';
 import { configuredImportPlayerUrl, createImportProviders, createConfiguredImportTransport, ImportProviderError, importPlayerTranslationUrl } from './zalip-importer/providers.js';
-import { importArtworkFields, importFields, importSources, type ExternalIdentity, type ImportArtworkExpected, type ImportArtworkField, type ImportField, type ImportMediaType, type ImportOptions, type ImportPlayer, type ImportPreview, type ImportProvider, type ImportRecord, type ImportRef, type ImportSource, type PreparedImportRecord } from './zalip-importer/types.js';
+import { importArtworkFields, importFields, importSources, validImportRef, type ExternalIdentity, type ImportArtworkExpected, type ImportArtworkField, type ImportField, type ImportMediaType, type ImportOptions, type ImportPlayer, type ImportPreview, type ImportProvider, type ImportRecord, type ImportRef, type ImportSource, type PreparedImportRecord } from './zalip-importer/types.js';
 
 export type CreateImportRun = {
 	refs?: ImportRef[];
@@ -51,6 +51,18 @@ export type SaveImportProfile = {
 };
 
 type VoiceRefreshStatus = 'updated' | 'already-current' | 'locked' | 'stale' | 'unsupported' | 'empty' | 'unavailable';
+
+/** An anime season must not inherit the identity/numbering of a whole-series KP/IMDb record. */
+function kodikAnimeSeason(record: ImportRecord): boolean {
+	return record.ref.source === 'kodik' && record.ref.mediaType === 'tv' && record.kind === 'anime';
+}
+
+function exactKodikSeasonBinding(record: ImportRecord, identities: ExternalIdentity[]): boolean {
+	return identities.some(identity => identity.entityType === 'tv' && (
+		(identity.provider === 'kodik' && identity.externalId === record.ref.externalId) ||
+		(identity.provider === 'shikimori' && record.identities.some(incoming => incoming.provider === 'shikimori' && incoming.entityType === 'tv' && incoming.externalId === identity.externalId))
+	));
+}
 
 /** Canonical JSON keys make the opaque revision independent of JSONB property order. */
 function playbackRevision(work: MiZalipWork, identities: ExternalIdentity[]): string {
@@ -85,8 +97,11 @@ const importWarningCodes = new Set([
 	'kinopoisk-metadata-partial', 'kinopoisk-artwork-unavailable', 'kinopoisk-season-limit', 'kinopoisk-episode-limit',
 	'collaps-metadata-partial', 'collaps-season-limit', 'collaps-episode-limit', 'collaps-player-url-rejected',
 	'alloha-player-url-rejected',
+	'kodik-people-without-identities', 'kodik-studios-without-identities', 'kodik-metadata-partial', 'kodik-voice-limit',
+	'kodik-player-url-rejected', 'kodik-season-limit', 'kodik-episode-data-rejected', 'kodik-episode-limit',
+	'kodik-anime-identity-partial', 'kodik-anime-scope-unmapped',
 ]);
-const sourceWarningPattern = /^(?:tmdb|kinopoisk|alloha|collaps):(?:not-configured|not-found|quota-exceeded|rate-limited|upstream-failure|invalid-ref|unsupported|malformed-response|import-failed|NO_SUCH_WORK|IMPORT_IDENTITY_CONFLICT|IMPORT_INVALID_RECORD|ZALIP_CATALOG_ENTRY_NOT_FOUND)$/u;
+const sourceWarningPattern = /^(?:tmdb|kinopoisk|alloha|collaps|kodik):(?:not-configured|not-found|quota-exceeded|rate-limited|upstream-failure|invalid-ref|unsupported|malformed-response|import-failed|NO_SUCH_WORK|IMPORT_IDENTITY_CONFLICT|IMPORT_INVALID_RECORD|ZALIP_CATALOG_ENTRY_NOT_FOUND)$/u;
 
 /** The durable journal accepts closed codes only, never provider text, URLs or credentials. */
 export function safeImportWarnings(value: unknown): string[] {
@@ -157,11 +172,12 @@ export class ZalipImporterService {
 			let fallback: ImportRecord | null = null;
 			for (const source of selectedSources) {
 				const provider = providers[source];
-				if (source === ref.source || !provider.status().configured || (availabilityOnly && source !== 'alloha' && source !== 'collaps')) continue;
+				if (source === ref.source || !provider.status().configured || (availabilityOnly && source !== 'alloha' && source !== 'collaps' && source !== 'kodik')) continue;
 				try {
 					const exact = identities.find(identity => identity.provider === source && identity.entityType === ref.mediaType);
 					const candidate = exact ? await provider.fetch({ source, externalId: exact.externalId, mediaType: ref.mediaType }, fields) : await provider.lookup?.(identities, ref.mediaType, fields);
 					if (!candidate) continue;
+					if (kodikAnimeSeason(candidate) && !exactKodikSeasonBinding(candidate, identities)) continue;
 					this.assertCompatibleIdentities(candidate, identities, ref.mediaType);
 					fallback = candidate;
 					break;
@@ -179,12 +195,19 @@ export class ZalipImporterService {
 		// A second pass permits TMDB discovery from IMDb obtained from Kinopoisk/Collaps.
 		for (let pass = 0; pass < 2; pass++) {
 			for (const source of selectedSources) {
-				if (visited.has(source) || !providers[source].status().configured || (availabilityOnly && source !== 'alloha' && source !== 'collaps')) continue;
+				if (visited.has(source) || !providers[source].status().configured || (availabilityOnly && source !== 'alloha' && source !== 'collaps' && source !== 'kodik')) continue;
 				const provider = providers[source];
 				try {
 					const identities = records.flatMap(record => record.identities);
 					const extra = await provider.lookup?.(identities, ref.mediaType, fields);
 					if (extra) {
+						const scoped = records.find(kodikAnimeSeason);
+						if ((kodikAnimeSeason(extra) && !exactKodikSeasonBinding(extra, identities)) || (scoped && !exactKodikSeasonBinding(scoped, extra.identities))) {
+							primary.warnings.push('kodik-anime-scope-unmapped');
+							primary.complete = false;
+							visited.add(source);
+							continue;
+						}
 						this.assertCompatibleIdentities(extra, identities, ref.mediaType);
 						records.push(extra);
 						visited.add(source);
@@ -231,13 +254,38 @@ export class ZalipImporterService {
 		const works = await this.db.getRepository(MiZalipWork).findBy({ id: In(workIds) });
 		if (works.length !== new Set(workIds).size) throw new Error('NO_SUCH_WORK');
 		const identities = await this.db.getRepository(MiZalipExternalIdentity).findBy({ workId: In(workIds) });
-		return works.map(work => {
+		const targets: { ref: ImportRef; workId: string }[] = [];
+		for (const work of works) {
 			const identity = identities.find(item => item.workId === work.id && importSources.includes(item.provider as ImportSource) && (!source || item.provider === source) && providers[item.provider as ImportSource].status().configured);
-			if (identity) return { workId: work.id, ref: { source: identity.provider as ImportSource, externalId: identity.externalId, mediaType: identity.entityType } };
-			if ((!source || source === 'tmdb') && work.tmdbId && work.tmdbMediaType) return { workId: work.id, ref: { source: 'tmdb' as const, externalId: String(work.tmdbId), mediaType: work.tmdbMediaType } };
-			if (source === 'alloha' && work.tmdbId && work.tmdbMediaType) return { workId: work.id, ref: { source: 'alloha' as const, externalId: `tmdb:${work.tmdbMediaType}:${work.tmdbId}`, mediaType: work.tmdbMediaType } };
+			if (identity) {
+				targets.push({ workId: work.id, ref: { source: identity.provider as ImportSource, externalId: identity.externalId, mediaType: identity.entityType } });
+				continue;
+			}
+			if ((!source || source === 'tmdb') && work.tmdbId && work.tmdbMediaType) {
+				targets.push({ workId: work.id, ref: { source: 'tmdb', externalId: String(work.tmdbId), mediaType: work.tmdbMediaType } });
+				continue;
+			}
+			if (source === 'alloha' && work.tmdbId && work.tmdbMediaType) {
+				targets.push({ workId: work.id, ref: { source: 'alloha', externalId: `tmdb:${work.tmdbMediaType}:${work.tmdbId}`, mediaType: work.tmdbMediaType } });
+				continue;
+			}
+			if (source === 'kodik' && providers.kodik.status().configured) {
+				const bindings = identities.filter(item => item.workId === work.id);
+				const mediaTypes = [...new Set(bindings.map(item => item.entityType))];
+				const mediaType = work.tmdbMediaType ?? (mediaTypes.length === 1 ? mediaTypes[0] : null);
+				if (mediaType === 'movie' || mediaType === 'tv') {
+					const record = await providers.kodik.lookup?.(bindings, mediaType, ['players']);
+					if (record) {
+						if (kodikAnimeSeason(record) && !exactKodikSeasonBinding(record, bindings)) throw new ImportProviderError('invalid-ref');
+						this.assertCompatibleIdentities(record, bindings, mediaType);
+						targets.push({ workId: work.id, ref: record.ref });
+						continue;
+					}
+				}
+			}
 			throw new ImportProviderError('invalid-ref');
-		});
+		}
+		return targets;
 	}
 
 	public async createRun(input: CreateImportRun, actorId?: string, boundTargets?: { ref: ImportRef; workId: string | null }[]) {
@@ -247,6 +295,7 @@ export class ZalipImporterService {
 		if ((input.refs?.length ?? 0) > 100 || (input.workIds?.length ?? 0) > 100 || (input.refs?.length && input.workIds?.length)) throw new ImportProviderError('invalid-ref');
 		const targets = boundTargets ?? (input.workIds?.length ? await this.refsForWorks(input.workIds) : (input.refs ?? []).map(ref => ({ ref, workId: null })));
 		if (targets.length > 100) throw new ImportProviderError('invalid-ref');
+		if (targets.some(target => !validImportRef(target.ref))) throw new ImportProviderError('invalid-ref');
 		if (targets.length === 0 && boundTargets === undefined) throw new ImportProviderError('invalid-ref');
 		if (targets.some(item => !providers[item.ref.source]?.status().configured)) throw new ImportProviderError('not-configured');
 		if (options.artworkSelections?.some(selection => !targets.some(target => sameImportRef(target.ref, selection.ref)))) throw new Error('INVALID_IMPORT_OPTIONS');
@@ -427,13 +476,21 @@ export class ZalipImporterService {
 					const voiceIframe = translation.iframe === undefined
 						? importPlayerTranslationUrl(iframe, player.source, { id, name })
 						: configuredImportPlayerUrl(translation.iframe, player.source, config);
+					// A Kodik voice has its own resource path; falling back to the parent would select another voice.
+					if (player.source === 'kodik' && !voiceIframe) return [];
 					const quality = translation.quality === null ? null : typeof translation.quality === 'string' ? translation.quality.trim().slice(0, 64) || null : undefined;
 					const resolutions = Array.isArray(translation.resolutions) ? [...new Set(translation.resolutions.filter((value): value is string => typeof value === 'string').map(value => value.trim().slice(0, 32)).filter(Boolean))].slice(0, 12) : undefined;
+					const episodes = Array.isArray(translation.episodes) ? [...new Map(translation.episodes.slice(0, 1000).flatMap(episode => {
+						if (!episode || typeof episode !== 'object' || !Number.isInteger(episode.seasonNumber) || episode.seasonNumber < 0 || episode.seasonNumber > 1000 || !Number.isInteger(episode.episodeNumber) || episode.episodeNumber < 0 || episode.episodeNumber > 100000) return [];
+						return [[`${episode.seasonNumber}:${episode.episodeNumber}`, { seasonNumber: episode.seasonNumber, episodeNumber: episode.episodeNumber }] as const];
+					})).values()] : undefined;
 					return [{
 						id, name,
 						...(voiceIframe == null ? {} : { iframe: voiceIframe }),
 						...(quality === undefined ? {} : { quality }),
 						...(resolutions === undefined ? {} : { resolutions }),
+						...(episodes === undefined ? {} : { episodes }),
+						...(translation.type === 'voice' || translation.type === 'subtitles' ? { type: translation.type } : {}),
 					}];
 				});
 				return [{ source: player.source, label: setting.label, iframe, translations, quality: player.quality, episodes: player.episodes }];
@@ -639,7 +696,12 @@ export class ZalipImporterService {
 				const works = await this.db.getRepository(MiZalipWork).find({ order: { id: 'ASC' }, skip: profile.cursor, take: 100 });
 				targets = [];
 				for (const work of works) {
-					try { targets.push(...await this.refsForWorks([work.id], profile.source)); } catch { /* Unmapped manual titles are intentionally skipped. */ }
+					try {
+						targets.push(...await this.refsForWorks([work.id], profile.source));
+					} catch (error) {
+						// Local unmapped titles are skipped; API failures must not advance the profile cursor.
+						if (!(error instanceof ImportProviderError) || !['invalid-ref', 'not-found'].includes(error.code)) throw error;
+					}
 				}
 				profile.cursor = works.length === 100 ? profile.cursor + 100 : 0;
 			}

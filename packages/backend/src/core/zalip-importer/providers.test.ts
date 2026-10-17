@@ -308,9 +308,9 @@ describe('importer adapter contracts', () => {
 				default: return { results: [] };
 			}
 		});
-		const providers = createImportProviders({ tmdbApiKey: 'fixture', kinopoiskApiKey: 'fixture', allohaApiToken: 'fixture', collapsApiToken: 'fixture' }, transport);
+		const providers = createImportProviders({ tmdbApiKey: 'fixture', kinopoiskApiKey: 'fixture', allohaApiToken: 'fixture', collapsApiToken: 'fixture', kodikApiToken: 'fixture' }, transport);
 		for (const provider of Object.values(providers)) await expect(provider.check?.()).resolves.toBeUndefined();
-		expect(transport.mock.calls).toHaveLength(4);
+		expect(transport.mock.calls).toHaveLength(5);
 	});
 
 	test.each([

@@ -15,13 +15,13 @@ export const paramDef = {
 	type: 'object', additionalProperties: false,
 	properties: {
 		...importerAuthProperties,
-		providers: { type: 'array', minItems: 2, maxItems: 2, items: {
+		providers: { type: 'array', minItems: 3, maxItems: 3, items: {
 			type: 'object', additionalProperties: false,
 			properties: {
-				source: { type: 'string', enum: ['alloha', 'collaps'] },
+				source: { type: 'string', enum: ['alloha', 'collaps', 'kodik'] },
 				label: { type: 'string', minLength: 1, maxLength: 40 },
 				enabled: { type: 'boolean' },
-				position: { type: 'integer', minimum: 0, maximum: 1 },
+				position: { type: 'integer', minimum: 0, maximum: 2 },
 			}, required: ['source', 'label', 'enabled', 'position'],
 		} },
 	}, required: ['providers'],

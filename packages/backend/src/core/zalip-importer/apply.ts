@@ -77,6 +77,9 @@ export async function findImportWork(db: ImportDataSource, record: ImportRecord,
 	if (!work) throw new Error('NO_SUCH_WORK');
 	if (tmdb && work.tmdbId !== null && (work.tmdbId !== tmdb.tmdbId || work.tmdbMediaType !== tmdb.tmdbMediaType)) throw new Error('IMPORT_IDENTITY_CONFLICT');
 	const currentBindings = await bindings.findBy({ workId });
+	const kodik = identities.find(value => value.provider === 'kodik' && value.entityType === 'tv');
+	const shikimori = identities.find(value => value.provider === 'shikimori' && value.entityType === 'tv');
+	if (kodik && (shikimori || record.kind === 'anime') && !currentBindings.some(value => value.entityType === 'tv' && ((value.provider === 'kodik' && value.externalId === kodik.externalId) || (value.provider === 'shikimori' && value.externalId === shikimori?.externalId)))) throw new Error('IMPORT_IDENTITY_CONFLICT');
 	if (currentBindings.some(current => identities.some(incoming => current.provider === incoming.provider && current.entityType === incoming.entityType && current.externalId !== incoming.externalId))) throw new Error('IMPORT_IDENTITY_CONFLICT');
 	return work;
 }
@@ -126,9 +129,11 @@ function playerTranslationSnapshot(player: ImportPlayer, translation: ImportPlay
 	}
 	return {
 		id: translation.id.slice(0, 100), name: translation.name.slice(0, 256),
+		...(translation.type === 'voice' || translation.type === 'subtitles' ? { type: translation.type } : {}),
 		...(iframe == null ? {} : { iframe }),
 		...(translation.quality === undefined ? {} : { quality: boundedText(translation.quality, 64) }),
 		...(Array.isArray(translation.resolutions) ? { resolutions: [...new Set(translation.resolutions.map(value => boundedText(value, 32)).filter((value): value is string => value != null))].slice(0, 12) } : {}),
+		...(Array.isArray(translation.episodes) ? { episodes: translation.episodes.slice(0, 1000).filter(episode => episode != null && Number.isInteger(episode.seasonNumber) && episode.seasonNumber >= 0 && episode.seasonNumber <= 1000 && Number.isInteger(episode.episodeNumber) && episode.episodeNumber >= 0 && episode.episodeNumber <= 100000).map(({ seasonNumber, episodeNumber }) => ({ seasonNumber, episodeNumber })) } : {}),
 	};
 }
 
@@ -184,7 +189,8 @@ function changedSinceImport(current: unknown, previous: unknown): boolean {
 	return previous !== undefined && !sameValue(current, previous);
 }
 
-function mergePartialPlayers(current: unknown, incoming: ImportRecord['players']): ImportRecord['players'] {
+/** An importer refresh owns its returned provider slots, never the absence of another provider. */
+function mergeImportedPlayers(current: unknown, incoming: ImportRecord['players']): ImportRecord['players'] {
 	const previous = Array.isArray(current) ? current as ImportRecord['players'] : [];
 	const players = new Map<string, ImportRecord['players'][number]>();
 	for (const player of [...previous, ...incoming]) players.set(`${player.source}:${player.externalId}`, player);
@@ -308,7 +314,7 @@ export async function applyImportRecord(
 				continue;
 			}
 			let incoming: unknown = normalized[field];
-			if (field === 'players' && !normalized.complete) incoming = mergePartialPlayers(current.players, normalized.players);
+			if (field === 'players') incoming = mergeImportedPlayers(current.players, normalized.players);
 			const expectedArtwork = options.artworkExpected;
 			const hasArtworkExpected = expectedArtwork !== undefined && Object.hasOwn(expectedArtwork, field);
 			const artworkCAS = hasArtworkExpected && sameValue(current[field], expectedArtwork[field as ImportArtworkField]);

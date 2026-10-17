@@ -17,7 +17,7 @@ export const paramDef = {
 		...importerAuthProperties,
 		source: importerSourceProperty,
 		apiOrigin: { type: 'string', minLength: 1, maxLength: 1024 },
-		playerOrigin: { type: 'string', minLength: 1, maxLength: 1024 },
+		playerOrigin: { type: 'string', nullable: true, minLength: 1, maxLength: 1024 },
 		apiToken: { type: 'string', maxLength: 4096 },
 		clearApiToken: { type: 'boolean' },
 		playerToken: { type: 'string', maxLength: 4096 },

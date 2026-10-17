@@ -39239,7 +39239,7 @@ export interface operations {
                     i?: string;
                     providers: {
                         /** @enum {string} */
-                        source: 'alloha' | 'collaps';
+                        source: 'alloha' | 'collaps' | 'kodik';
                         label: string;
                         enabled: boolean;
                         position: number;
@@ -39257,7 +39257,7 @@ export interface operations {
                     'application/json': {
                         providers: {
                             /** @enum {string} */
-                            source: 'alloha' | 'collaps';
+                            source: 'alloha' | 'collaps' | 'kodik';
                             label: string;
                             enabled: boolean;
                             position: number;
@@ -39339,7 +39339,7 @@ export interface operations {
                     'application/json': {
                         providers: {
                             /** @enum {string} */
-                            source: 'alloha' | 'collaps';
+                            source: 'alloha' | 'collaps' | 'kodik';
                             label: string;
                             enabled: boolean;
                             position: number;
@@ -39401,7 +39401,7 @@ export interface operations {
                     i?: string;
                     ref: {
                         /** @enum {string} */
-                        source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                        source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                         externalId: string;
                         /** @enum {string} */
                         mediaType: 'movie' | 'tv';
@@ -39447,7 +39447,7 @@ export interface operations {
                         artworkSelections?: {
                             ref: {
                                 /** @enum {string} */
-                                source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                                source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                                 externalId: string;
                                 /** @enum {string} */
                                 mediaType: 'movie' | 'tv';
@@ -39459,49 +39459,49 @@ export interface operations {
                                 galleryUrls?: string[];
                             };
                         }[];
-                        sources?: ('tmdb' | 'kinopoisk' | 'alloha' | 'collaps')[];
+                        sources?: ('tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik')[];
                         fields?: ('title' | 'originalTitle' | 'description' | 'releaseYear' | 'runtimeMinutes' | 'kind' | 'genres' | 'countries' | 'posterUrl' | 'backdropUrl' | 'logoUrl' | 'galleryUrls' | 'trailerYoutubeKey' | 'ratings' | 'ageRating' | 'credits' | 'companies' | 'collections' | 'seasons' | 'players')[];
                         fieldSources?: {
                             /** @enum {string} */
-                            title?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            title?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            originalTitle?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            originalTitle?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            description?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            description?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            releaseYear?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            releaseYear?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            runtimeMinutes?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            runtimeMinutes?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            kind?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            kind?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            genres?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            genres?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            countries?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            countries?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            posterUrl?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            posterUrl?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            backdropUrl?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            backdropUrl?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            logoUrl?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            logoUrl?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            galleryUrls?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            galleryUrls?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            trailerYoutubeKey?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            trailerYoutubeKey?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            ratings?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            ratings?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            ageRating?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            ageRating?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            credits?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            credits?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            companies?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            companies?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            collections?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            collections?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            seasons?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            seasons?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            players?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            players?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                         };
                         filters?: {
                             mediaTypes?: ('movie' | 'tv')[];
@@ -39591,7 +39591,7 @@ export interface operations {
                 'application/json': {
                     i?: string;
                     /** @enum {string} */
-                    source: 'tmdb' | 'kinopoisk' | 'collaps';
+                    source: 'tmdb' | 'kinopoisk' | 'collaps' | 'kodik';
                     imdbId: string;
                     /** @enum {string} */
                     mediaType: 'movie' | 'tv';
@@ -39753,7 +39753,7 @@ export interface operations {
                     i?: string;
                     refs?: {
                         /** @enum {string} */
-                        source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                        source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                         externalId: string;
                         /** @enum {string} */
                         mediaType: 'movie' | 'tv';
@@ -39804,7 +39804,7 @@ export interface operations {
                         artworkSelections?: {
                             ref: {
                                 /** @enum {string} */
-                                source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                                source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                                 externalId: string;
                                 /** @enum {string} */
                                 mediaType: 'movie' | 'tv';
@@ -39816,49 +39816,49 @@ export interface operations {
                                 galleryUrls?: string[];
                             };
                         }[];
-                        sources?: ('tmdb' | 'kinopoisk' | 'alloha' | 'collaps')[];
+                        sources?: ('tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik')[];
                         fields?: ('title' | 'originalTitle' | 'description' | 'releaseYear' | 'runtimeMinutes' | 'kind' | 'genres' | 'countries' | 'posterUrl' | 'backdropUrl' | 'logoUrl' | 'galleryUrls' | 'trailerYoutubeKey' | 'ratings' | 'ageRating' | 'credits' | 'companies' | 'collections' | 'seasons' | 'players')[];
                         fieldSources?: {
                             /** @enum {string} */
-                            title?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            title?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            originalTitle?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            originalTitle?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            description?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            description?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            releaseYear?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            releaseYear?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            runtimeMinutes?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            runtimeMinutes?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            kind?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            kind?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            genres?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            genres?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            countries?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            countries?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            posterUrl?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            posterUrl?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            backdropUrl?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            backdropUrl?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            logoUrl?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            logoUrl?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            galleryUrls?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            galleryUrls?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            trailerYoutubeKey?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            trailerYoutubeKey?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            ratings?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            ratings?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            ageRating?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            ageRating?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            credits?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            credits?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            companies?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            companies?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            collections?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            collections?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            seasons?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            seasons?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            players?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            players?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                         };
                         filters?: {
                             mediaTypes?: ('movie' | 'tv')[];
@@ -40313,7 +40313,7 @@ export interface operations {
                     name: string;
                     enabled: boolean;
                     /** @enum {string} */
-                    source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                    source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                     /** @enum {string} */
                     mode: 'metadata' | 'availability' | 'collection' | 'discovery';
                     intervalMinutes: number;
@@ -40359,7 +40359,7 @@ export interface operations {
                         artworkSelections?: {
                             ref: {
                                 /** @enum {string} */
-                                source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                                source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                                 externalId: string;
                                 /** @enum {string} */
                                 mediaType: 'movie' | 'tv';
@@ -40371,49 +40371,49 @@ export interface operations {
                                 galleryUrls?: string[];
                             };
                         }[];
-                        sources?: ('tmdb' | 'kinopoisk' | 'alloha' | 'collaps')[];
+                        sources?: ('tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik')[];
                         fields?: ('title' | 'originalTitle' | 'description' | 'releaseYear' | 'runtimeMinutes' | 'kind' | 'genres' | 'countries' | 'posterUrl' | 'backdropUrl' | 'logoUrl' | 'galleryUrls' | 'trailerYoutubeKey' | 'ratings' | 'ageRating' | 'credits' | 'companies' | 'collections' | 'seasons' | 'players')[];
                         fieldSources?: {
                             /** @enum {string} */
-                            title?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            title?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            originalTitle?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            originalTitle?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            description?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            description?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            releaseYear?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            releaseYear?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            runtimeMinutes?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            runtimeMinutes?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            kind?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            kind?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            genres?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            genres?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            countries?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            countries?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            posterUrl?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            posterUrl?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            backdropUrl?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            backdropUrl?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            logoUrl?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            logoUrl?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            galleryUrls?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            galleryUrls?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            trailerYoutubeKey?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            trailerYoutubeKey?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            ratings?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            ratings?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            ageRating?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            ageRating?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            credits?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            credits?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            companies?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            companies?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            collections?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            collections?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            seasons?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            seasons?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             /** @enum {string} */
-                            players?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            players?: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                         };
                         filters?: {
                             mediaTypes?: ('movie' | 'tv')[];
@@ -40503,7 +40503,7 @@ export interface operations {
                 'application/json': {
                     i?: string;
                     /** @enum {string} */
-                    source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                    source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                     query: string;
                     /** @default 1 */
                     page?: number;
@@ -40653,7 +40653,7 @@ export interface operations {
                 'application/json': {
                     i?: string;
                     /** @enum {string} */
-                    source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                    source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                 };
             };
         };
@@ -40731,9 +40731,9 @@ export interface operations {
                 'application/json': {
                     i?: string;
                     /** @enum {string} */
-                    source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                    source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                     apiOrigin: string;
-                    playerOrigin?: string;
+                    playerOrigin?: string | null;
                     apiToken?: string;
                     clearApiToken?: boolean;
                     playerToken?: string;
@@ -40752,7 +40752,7 @@ export interface operations {
                         encryptionReady: boolean;
                         sources: {
                             /** @enum {string} */
-                            source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             apiOrigin: string;
                             playerOrigin: string | null;
                             apiToken: string | null;
@@ -40843,7 +40843,7 @@ export interface operations {
                         encryptionReady: boolean;
                         sources: {
                             /** @enum {string} */
-                            source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps';
+                            source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik';
                             apiOrigin: string;
                             playerOrigin: string | null;
                             apiToken: string | null;

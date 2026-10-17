@@ -12,7 +12,7 @@ import type { ImportArtworkField, ImportArtworkSettingsInput } from './types.js'
 import type { Agent } from 'node:https';
 import type { Readable } from 'node:stream';
 
-const artworkHosts = ['image.tmdb.org', 'st.kp.yandex.net', 'avatars.mds.yandex.net', 'kinopoiskapiunofficial.tech'];
+const artworkHosts = ['image.tmdb.org', 'st.kp.yandex.net', 'avatars.mds.yandex.net', 'kinopoiskapiunofficial.tech', 'shikimori.io', 'i.kodikres.com'];
 export type { ImportArtworkField } from './types.js';
 
 export const importArtworkLimits = Object.freeze({ inputBytes: 8 * 1024 * 1024, outputBytes: 24 * 1024 * 1024, pixels: 32000000, requestTimeoutMs: 12000, processingTimeoutSeconds: 10, batchTimeoutMs: 60000, batchBytes: 96 * 1024 * 1024 });
@@ -40,6 +40,8 @@ export function importArtworkUrl(value: string): URL | null {
 	if (!safe) return null;
 	const url = new URL(safe);
 	if (url.hostname === 'kinopoiskapiunofficial.tech' && !url.pathname.startsWith('/images/')) return null;
+	if (url.hostname === 'shikimori.io' && (url.search || !/^\/(?:uploads\/poster\/animes|system\/screenshots\/original|system\/animes)\/[A-Za-z0-9._/-]+$/u.test(url.pathname))) return null;
+	if (url.hostname === 'i.kodikres.com' && (url.search || !/^\/screenshots\/(?:seria|video)\/[1-9][0-9]*\/[A-Za-z0-9._/-]+$/u.test(url.pathname))) return null;
 	return url;
 }
 
