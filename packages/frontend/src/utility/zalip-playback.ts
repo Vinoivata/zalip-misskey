@@ -5,7 +5,7 @@
 
 export type PlaybackProvider = 'alloha' | 'collaps' | 'kodik';
 export type PlaybackEpisode = { seasonNumber: number; episodeNumber: number };
-export type PlaybackTranslation = { id: string; name: string; type?: 'voice' | 'subtitles'; iframe?: string; quality?: string | null; resolutions?: string[]; episodes?: PlaybackEpisode[] };
+export type PlaybackTranslation = { id: string; name: string; type?: 'voice' | 'subtitles'; providerTranslationId?: string; iframe?: string; quality?: string | null; resolutions?: string[]; episodes?: PlaybackEpisode[] };
 export type PlaybackSource = { source: PlaybackProvider; label: string; iframe: string; quality: string | null; translations: PlaybackTranslation[]; episodes: PlaybackEpisode[] };
 export type PlaybackProviderSetting = { source: PlaybackProvider; label: string; enabled: boolean; position: number };
 export type LegacyAllohaPlayback = {
@@ -71,6 +71,8 @@ export function workPlaybackIframe(source: PlaybackSource | null, translationId:
 		if (seasonNumber != null && episodeNumber != null) {
 			url.searchParams.set('season', String(seasonNumber));
 			url.searchParams.set('episode', String(episodeNumber));
+			// A concrete episode disables internal selectors/auto-next, keeping JSAPI time bound to our canonical ID.
+			if (source.source === 'kodik') url.searchParams.set('only_episode', 'true');
 		}
 		return url.toString();
 	} catch {

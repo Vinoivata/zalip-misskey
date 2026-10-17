@@ -20,6 +20,7 @@ export function misskeyApi<
 	data: P & { i?: string | null; } = {} as any,
 	token?: string | null | undefined,
 	signal?: AbortSignal,
+	transport?: { keepalive?: boolean },
 ): Promise<_ResT> {
 	if (endpoint.includes('://')) throw new Error('invalid endpoint');
 	pendingApiRequestsCount.value++;
@@ -43,6 +44,7 @@ export function misskeyApi<
 				'Content-Type': 'application/json',
 			},
 			signal,
+			keepalive: transport?.keepalive,
 		}).then(async (res) => {
 			const body = res.status === 204 ? null : await res.json();
 
@@ -111,6 +113,7 @@ export function misskeyApiGet<
 export function misskeyApiZalip<ResT>(
 	endpoint: `zalip/${string}`,
 	data: Record<string, unknown> = {},
+	transport?: { keepalive?: boolean },
 ): Promise<ResT> {
-	return misskeyApi<ResT>(endpoint as never, data as never) as Promise<ResT>;
+	return misskeyApi<ResT>(endpoint as never, data as never, undefined, undefined, transport) as Promise<ResT>;
 }

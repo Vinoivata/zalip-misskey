@@ -273,8 +273,8 @@ describe('Kodik importer service boundaries', () => {
 	test('public voice projection keeps per-voice coverage and subtitles without API credentials or rejected URLs', async () => {
 		const player = seasonRecord().players[0];
 		player.translations = [
-			{ id: 'serial-49752', name: 'Studio', type: 'voice', iframe: player.iframeUrl, episodes: [{ seasonNumber: 1, episodeNumber: 1 }, { seasonNumber: 1, episodeNumber: 1 }, { seasonNumber: -1, episodeNumber: 2 }] },
-			{ id: 'serial-49750', name: 'Subtitles', type: 'subtitles', iframe: 'https://kodikplayer.com/serial/49750/subtitle/720p', episodes: [] },
+			{ id: 'serial-49752', name: 'Studio', providerTranslationId: '923', type: 'voice', iframe: player.iframeUrl, episodes: [{ seasonNumber: 1, episodeNumber: 1 }, { seasonNumber: 1, episodeNumber: 1 }, { seasonNumber: -1, episodeNumber: 2 }] },
+			{ id: 'serial-49750', name: 'Subtitles', providerTranslationId: 'bad-input', type: 'subtitles', iframe: 'https://kodikplayer.com/serial/49750/subtitle/720p', episodes: [] },
 			{ id: 'serial-49999', name: 'Rejected', iframe: 'https://untrusted.example.org/embed?token=private-example' },
 			{ id: 'serial-40000', name: 'No own iframe' },
 		];
@@ -283,8 +283,9 @@ describe('Kodik importer service boundaries', () => {
 		const playback = await context.service.playback('canonical');
 		expect(playback.sources[0].source).toBe('kodik');
 		expect(playback.sources[0].translations).toHaveLength(2);
-		expect(playback.sources[0].translations[0]).toMatchObject({ type: 'voice', episodes: [{ seasonNumber: 1, episodeNumber: 1 }] });
+		expect(playback.sources[0].translations[0]).toMatchObject({ providerTranslationId: '923', type: 'voice', episodes: [{ seasonNumber: 1, episodeNumber: 1 }] });
 		expect(playback.sources[0].translations[1]).toMatchObject({ type: 'subtitles', episodes: [] });
+		expect(playback.sources[0].translations[1]).not.toHaveProperty('providerTranslationId');
 		expect(JSON.stringify(playback)).not.toContain('private-example');
 		expect(context.works.save).not.toHaveBeenCalled();
 		expect(safeImportWarnings(['kodik-anime-identity-partial', 'kodik-anime-scope-unmapped', 'kodik:upstream-failure', 'kodik:https://private.test/?token=secret'])).toEqual(['kodik-anime-identity-partial', 'kodik-anime-scope-unmapped', 'kodik:upstream-failure']);

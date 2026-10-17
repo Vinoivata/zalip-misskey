@@ -67,6 +67,7 @@ describe('work playback helpers', () => {
 	});
 	it('preserves Kodik edition paths without adding another provider voice selector', () => {
 		const url = new URL(workPlaybackIframe(kodik, 'serial-123', 2, 3)!);
+		expect(url.searchParams.get('only_episode')).toBe('true');
 		expect(url.pathname).toBe('/serial/123/voice-one/720p');
 		expect(url.searchParams.get('min_age')).toBe('12');
 		expect(url.searchParams.get('season')).toBe('2');
@@ -75,6 +76,7 @@ describe('work playback helpers', () => {
 		expect(url.searchParams.has('oneSound')).toBe(false);
 		expect(new URL(workPlaybackIframe(kodik, 'serial-456', 2, 1)!).pathname).toBe('/serial/456/voice-two/720p');
 		expect(kodik.translations[0].iframe).not.toContain('season=');
+		expect(new URL(workPlaybackIframe(kodik, 'serial-123', null, null)!).searchParams.has('only_episode')).toBe(false);
 	});
 	it('respects known per-voice episode coverage, including specials, without remapping episodes', () => {
 		expect(playbackEpisodeAvailable(kodik, 'serial-123', 0, 1)).toBe(true);

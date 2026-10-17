@@ -44,6 +44,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</div>
 			</section>
 
+			<ZalipContinueRail ref="continueRail"/>
 			<section v-if="showcaseItems.length" :class="$style.releases">
 				<div :class="$style.sectionHeader">
 					<div><p :class="$style.eyebrow">{{ showcaseEyebrow }}</p><h2>{{ showcaseTitle }}</h2></div>
@@ -82,6 +83,7 @@ import MkZalipFeed from '@/components/MkZalipFeed.vue';
 import MkZalipIcon from '@/components/MkZalipIcon.vue';
 import MkPullToRefresh from '@/components/MkPullToRefresh.vue';
 import { prefer } from '@/preferences.js';
+import ZalipContinueRail from '@/pages/zalip/continue-rail.vue';
 
 type ZalipWork = {
 	id: string;
@@ -186,6 +188,7 @@ const onboardingFallbackSlides: ZalipHeroSlide[] = [
 
 const works = ref<ZalipWork[]>([]);
 const feed = useTemplateRef('feed');
+const continueRail = useTemplateRef('continueRail');
 const releaseEvents = ref<ZalipReleaseEvent[]>([]);
 const releaseEventsLoaded = ref(false);
 const activeOnboardingIndex = ref(1);
@@ -296,7 +299,7 @@ async function loadHome(reportFailure = false): Promise<void> {
 }
 
 async function refreshHome(): Promise<void> {
-	await Promise.all([loadHome(true), feed.value?.refresh()]);
+	await Promise.all([loadHome(true), feed.value?.refresh(), continueRail.value?.refresh()]);
 }
 
 function scrollToOnboarding(index: number, animate = true): void {

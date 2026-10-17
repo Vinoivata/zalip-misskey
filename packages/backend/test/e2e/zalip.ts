@@ -6,12 +6,17 @@
 process.env.NODE_ENV = 'test';
 
 import * as assert from 'node:assert';
+import { createHash } from 'node:crypto';
 import { beforeAll, describe, test } from 'vitest';
 import { MiZalipAllohaAvailabilityEvent } from '@/models/ZalipAllohaAvailabilityEvent.js';
 import { MiZalipImportRun } from '@/models/ZalipImportRun.js';
 import { MiZalipImporterSourceSetting } from '@/models/ZalipImporterSourceSetting.js';
 import { MiZalipPlaybackSettings } from '@/models/ZalipPlaybackSettings.js';
 import { MiZalipWork } from '@/models/ZalipWork.js';
+import { MiZalipSeason } from '@/models/ZalipSeason.js';
+import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
+import { MiZalipLibraryEntry } from '@/models/ZalipLibraryEntry.js';
+import { MiZalipWatchProgress } from '@/models/ZalipWatchProgress.js';
 import { api, castAsError, createAppToken, initTestDb, sendEnvResetRequest, sendEnvUpdateRequest, signup } from '../utils.js';
 import type * as misskey from 'misskey-js';
 
@@ -447,5 +452,105 @@ describe('Zalip discussions', () => {
 		}, admin);
 		assert.strictEqual(response.status, 503);
 		assert.strictEqual(castAsError(response.body).error.code, 'ZALIP_IMPORT_NOT_CONFIGURED');
+	});
+});
+
+describe('Zalip private continue watching', () => {
+	let owner: misskey.entities.SignupResponse;
+	let other: misskey.entities.SignupResponse;
+	let db: Awaited<ReturnType<typeof initTestDb>>;
+	const movieId = 'watchprogressmovie';
+	const seriesId = 'watchprogressseries';
+	const draftId = 'watchprogressdraft';
+	const extraId = 'watchprogressextra';
+	const episodeId = 'watchprogressepisode';
+	const episode2Id = 'watchprogressepisode2';
+	const film = { workId: movieId, episodeId: null, provider: 'kodik', translationId: 'movie-7', expectedResourceFingerprint: createHash('sha256').update(JSON.stringify(['movie-7', '/video/7/fixture/720p', '12'])).digest('hex') } as const;
+	const serial = { workId: seriesId, episodeId, provider: 'kodik', translationId: 'serial-8', expectedResourceFingerprint: createHash('sha256').update(JSON.stringify(['serial-8', '/serial/8/fixture/720p', '12'])).digest('hex') } as const;
+	const player = (movie: boolean) => ({
+		source: 'kodik', externalId: movie ? 'kinopoisk-7' : 'shikimori-8', iframeUrl: `https://kodikplayer.com/${movie ? 'video/7' : 'serial/8'}/fixture/720p`, quality: null,
+		translations: [{ id: movie ? 'movie-7' : 'serial-8', providerTranslationId: '12', name: 'Fixture', iframe: `https://kodikplayer.com/${movie ? 'video/7' : 'serial/8'}/fixture/720p`, episodes: movie ? [] : [{ seasonNumber: 0, episodeNumber: 0 }, { seasonNumber: 0, episodeNumber: 1 }] }], episodes: [],
+	});
+
+	beforeAll(async () => {
+		owner = await signup({ username: 'watchprogressowner' }); other = await signup({ username: 'watchprogressother' });
+		db = await initTestDb(true);
+		const now = new Date();
+		await db.getRepository(MiZalipWork).insert([movieId, seriesId, draftId, extraId].map(id => ({
+			id, slug: id, title: id, kind: id === seriesId ? 'series' as const : 'movie' as const,
+			tmdbMediaType: id === seriesId ? 'tv' as const : 'movie' as const,
+			publicationState: id === draftId ? 'draft' as const : 'published' as const,
+			createdAt: now, updatedAt: now, publishedAt: id === draftId ? null : now,
+			importData: { values: { players: [player(id !== seriesId)] }, locks: ['players'], privateFixture: 'private-progress-importer-baseline' },
+		})));
+		await db.getRepository(MiZalipSeason).insert({ id: 'watchprogressseason', workId: seriesId, seasonNumber: 0, title: 'Specials', createdAt: now, updatedAt: now });
+		await db.getRepository(MiZalipEpisode).insert([episodeId, episode2Id].map((id, index) => ({ id, seasonId: 'watchprogressseason', episodeNumber: index, title: `Special ${index}`, createdAt: now, updatedAt: now })));
+		await api('zalip/library/update', { workId: movieId, status: 'planned', personalRating: 7, isFavorite: true, isReleaseSubscribed: true }, owner);
+	}, 120000);
+
+	test('requires credentials and exact read/write scopes, with no caller-selected owner', async () => {
+		const anonymous = await api('zalip/progress/show', { workId: movieId });
+		assert.strictEqual(anonymous.status, 401); assert.strictEqual(castAsError(anonymous.body).error.code, 'CREDENTIAL_REQUIRED');
+		const readToken = await createAppToken(owner, ['read:account']);
+		assert.strictEqual((await api('zalip/progress/show', { workId: movieId }, { token: readToken })).status, 200);
+		const forbidden = await api('zalip/progress/start', film, { token: readToken });
+		assert.strictEqual(forbidden.status, 403); assert.strictEqual(castAsError(forbidden.body).error.code, 'PERMISSION_DENIED');
+	});
+
+	test('persists exact seconds, permits seek backwards and never edits personal library/importer state', async () => {
+		const beforeWork = await db.getRepository(MiZalipWork).findOneByOrFail({ id: movieId });
+		const beforeLibrary = await db.getRepository(MiZalipLibraryEntry).findOneByOrFail({ userId: owner.id, workId: movieId });
+		const started = await api('zalip/progress/start', film, owner); assert.strictEqual(started.status, 200);
+		assert.strictEqual(started.body.progress.mode, 'time'); assert.strictEqual(started.body.progress.positionSeconds, null);
+		const saved = await api('zalip/progress/update', { workId: movieId, sessionId: started.body.sessionId, sequence: 2, positionSeconds: 600.25, durationSeconds: 1000 }, owner);
+		assert.strictEqual(saved.status, 200); assert.strictEqual(saved.body.accepted, true);
+		const backwards = await api('zalip/progress/update', { workId: movieId, sessionId: started.body.sessionId, sequence: 3, positionSeconds: 90 }, owner);
+		assert.strictEqual(backwards.body.progress?.positionSeconds, 90);
+		const stale = await api('zalip/progress/update', { workId: movieId, sessionId: started.body.sessionId, sequence: 1, positionSeconds: 700 }, owner);
+		assert.strictEqual(stale.body.accepted, false); assert.strictEqual(stale.body.progress?.positionSeconds, 90);
+		assert.deepStrictEqual(await db.getRepository(MiZalipLibraryEntry).findOneByOrFail({ userId: owner.id, workId: movieId }), beforeLibrary);
+		assert.deepStrictEqual(await db.getRepository(MiZalipWork).findOneByOrFail({ id: movieId }), beforeWork);
+		const otherView = await api('zalip/progress/show', { workId: movieId }, other); assert.strictEqual(otherView.body.progress, null);
+		const otherWrite = await api('zalip/progress/update', { workId: movieId, sessionId: started.body.sessionId, sequence: 99 }, other); assert.strictEqual(otherWrite.body.accepted, false);
+		const publicWork = await api('zalip/works/show', { slug: movieId });
+		for (const key of ['positionSeconds', 'durationSeconds', 'sessionId', 'private-progress-importer-baseline']) assert.strictEqual(JSON.stringify(publicWork.body).includes(key), false);
+	});
+
+	test('canonical specials are valid and a new episode/session defeats delayed saves', async () => {
+		const first = await api('zalip/progress/start', serial, owner); assert.strictEqual(first.status, 200);
+		assert.strictEqual(first.body.progress.seasonNumber, 0); assert.strictEqual(first.body.progress.episodeNumber, 0);
+		const second = await api('zalip/progress/start', { ...serial, episodeId: episode2Id }, owner); assert.strictEqual(second.status, 200);
+		assert.notStrictEqual(first.body.sessionId, second.body.sessionId);
+		const stale = await api('zalip/progress/update', { workId: seriesId, sessionId: first.body.sessionId, sequence: 100, positionSeconds: 100, durationSeconds: 300 }, owner);
+		assert.strictEqual(stale.body.accepted, false); assert.strictEqual(stale.body.progress?.episodeId, episode2Id);
+		const row = await db.getRepository(MiZalipWatchProgress).findOneByOrFail({ userId: owner.id, workId: seriesId }); assert.strictEqual(row.sessionId, second.body.sessionId);
+		const wrongWork = await api('zalip/progress/start', { ...film, episodeId }, owner); assert.strictEqual(wrongWork.status, 400); assert.strictEqual(castAsError(wrongWork.body).error.code, 'INVALID_ZALIP_PROGRESS_TARGET');
+	});
+
+	test('drafts remain unavailable and cannot enter private continue results', async () => {
+		for (const endpoint of ['zalip/progress/show', 'zalip/progress/start'] as const) {
+			const result = endpoint === 'zalip/progress/show' ? await api(endpoint, { workId: draftId }, owner) : await api(endpoint, { ...film, workId: draftId }, owner);
+			assert.strictEqual(result.status, 404); assert.strictEqual(castAsError(result.body).error.code, 'NO_SUCH_ZALIP_WORK');
+		}
+	});
+
+	test('continue pages only owner rows, reset clears position and a delayed save cannot resurrect it', async () => {
+		const start = await api('zalip/progress/start', film, owner); assert.strictEqual(start.status, 200);
+		await api('zalip/progress/start', { ...film, workId: extraId }, other);
+		const first = await api('zalip/progress/continue', { limit: 1 }, owner); assert.strictEqual(first.status, 200); assert.strictEqual(first.body.items.length, 1); assert.ok(first.body.nextCursor);
+		const second = await api('zalip/progress/continue', { limit: 1, cursor: first.body.nextCursor! }, owner); assert.strictEqual(second.status, 200);
+		const ids = [...first.body.items, ...second.body.items].map(item => item.workId); assert.strictEqual(new Set(ids).size, 2); assert.strictEqual(ids.includes(extraId), false); assert.strictEqual(ids.includes(draftId), false);
+		for (const key of ['sessionId', 'resourceId', 'private-progress-importer-baseline']) assert.strictEqual(JSON.stringify(first.body).includes(key), false);
+		assert.strictEqual((await api('zalip/progress/reset', { workId: movieId }, owner)).status, 200);
+		assert.strictEqual((await api('zalip/progress/show', { workId: movieId }, owner)).body.progress, null);
+		const late = await api('zalip/progress/update', { workId: movieId, sessionId: start.body.sessionId, sequence: 100, positionSeconds: 30, durationSeconds: 100 }, owner); assert.strictEqual(late.body.accepted, false);
+		const after = await api('zalip/progress/continue', {}, owner); assert.strictEqual(after.body.items.some(item => item.workId === movieId), false);
+	});
+
+	test('deleting a canonical episode removes its target, never converts it into a film', async () => {
+		const started = await api('zalip/progress/start', { ...serial, episodeId: episode2Id }, owner); assert.strictEqual(started.status, 200);
+		await db.getRepository(MiZalipEpisode).delete({ id: episode2Id });
+		assert.strictEqual(await db.getRepository(MiZalipWatchProgress).countBy({ userId: owner.id, workId: seriesId }), 0);
+		assert.strictEqual((await api('zalip/progress/show', { workId: seriesId }, owner)).body.progress, null);
 	});
 });

@@ -462,6 +462,11 @@ export * as 'zalip/discussions/ensure' from './endpoints/zalip/discussions/ensur
 export * as 'zalip/episodes/discussions/ensure' from './endpoints/zalip/episodes/discussions/ensure.js';
 export * as 'zalip/library/list' from './endpoints/zalip/library/list.js';
 export * as 'zalip/library/update' from './endpoints/zalip/library/update.js';
+export * as 'zalip/progress/show' from './endpoints/zalip/progress/show.js';
+export * as 'zalip/progress/start' from './endpoints/zalip/progress/start.js';
+export * as 'zalip/progress/update' from './endpoints/zalip/progress/update.js';
+export * as 'zalip/progress/reset' from './endpoints/zalip/progress/reset.js';
+export * as 'zalip/progress/continue' from './endpoints/zalip/progress/continue.js';
 export * as 'zalip/shares/create' from './endpoints/zalip/shares/create.js';
 export * as 'zalip/admin/works/create' from './endpoints/zalip/admin/works/create.js';
 export * as 'zalip/admin/works/import-tmdb' from './endpoints/zalip/admin/works/import-tmdb.js';

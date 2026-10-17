@@ -491,6 +491,7 @@ export class ZalipImporterService {
 						...(resolutions === undefined ? {} : { resolutions }),
 						...(episodes === undefined ? {} : { episodes }),
 						...(translation.type === 'voice' || translation.type === 'subtitles' ? { type: translation.type } : {}),
+						...(player.source === 'kodik' && typeof translation.providerTranslationId === 'string' && /^[1-9][0-9]{0,15}$/u.test(translation.providerTranslationId) ? { providerTranslationId: translation.providerTranslationId } : {}),
 					}];
 				});
 				return [{ source: player.source, label: setting.label, iframe, translations, quality: player.quality, episodes: player.episodes }];

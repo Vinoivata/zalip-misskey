@@ -22,7 +22,7 @@ export type ImportCompany = { externalId: string | null; source: ImportSource; n
 export type ImportCollection = { externalId: string; source: ImportSource; name: string; description?: string | null; imageUrl?: string | null };
 export type ImportEpisode = { episodeNumber: number; title: string; originalTitle?: string | null; description?: string | null; airDate?: string | null; stillUrl?: string | null; runtimeMinutes?: number | null; tmdbEpisodeId?: number | null };
 export type ImportSeason = { seasonNumber: number; title: string; description?: string | null; posterUrl?: string | null; airDate?: string | null; episodeCount?: number | null; episodes: ImportEpisode[] };
-export type ImportPlayer = { source: 'alloha' | 'collaps' | 'kodik'; externalId: string; iframeUrl: string; translations: { id: string; name: string; type?: 'voice' | 'subtitles'; iframe?: string; quality?: string | null; resolutions?: string[]; episodes?: { seasonNumber: number; episodeNumber: number }[] }[]; quality: string | null; episodes: { seasonNumber: number; episodeNumber: number }[] };
+export type ImportPlayer = { source: 'alloha' | 'collaps' | 'kodik'; externalId: string; iframeUrl: string; translations: { id: string; name: string; providerTranslationId?: string; type?: 'voice' | 'subtitles'; iframe?: string; quality?: string | null; resolutions?: string[]; episodes?: { seasonNumber: number; episodeNumber: number }[] }[]; quality: string | null; episodes: { seasonNumber: number; episodeNumber: number }[] };
 export type ImportRecord = {
 	ref: ImportRef;
 	identities: ExternalIdentity[];

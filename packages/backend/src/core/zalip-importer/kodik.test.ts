@@ -33,6 +33,7 @@ describe('Kodik importer boundaries', () => {
 		expect(result.players[0].translations.map(value => ({ id: value.id, name: value.name, episodes: value.episodes }))).toEqual([{ id: 'serial-49752', name: 'AnimeVost', episodes: [{ seasonNumber: 1, episodeNumber: 1 }, { seasonNumber: 1, episodeNumber: 2 }] }, { id: 'serial-49750', name: 'Crunchyroll.Subtitles', episodes: [{ seasonNumber: 1, episodeNumber: 1 }] }]);
 		expect(result.players[0].translations[1].iframe).toBe('https://kodikplayer.com/serial/49750/other/720p');
 		expect(result.players[0].translations.map(value => value.type)).toEqual(['voice', 'subtitles']);
+		expect(result.players[0].translations.map(value => value.providerTranslationId)).toEqual(['12', '4']);
 		expect(JSON.stringify(result)).not.toContain('fixture-private');
 	});
 

@@ -11,10 +11,148 @@ const mockedFetch = vi.hoisted(() => vi.fn());
 vi.mock('node-fetch', () => ({ default: mockedFetch }));
 afterEach(() => mockedFetch.mockReset());
 
+const redirectModes = ['original', 'transformed'] as const;
+
+function downloadForMode(mode: typeof redirectModes[number], url: URL, agent?: Parameters<typeof downloadImportArtwork>[2], deadlineAt?: number) {
+	return mode === 'original' ? downloadOriginalImportArtwork(url, agent, deadlineAt) : downloadImportArtwork(url, 'galleryUrls', agent, undefined, true, deadlineAt);
+}
+
 describe('bounded local importer artwork', () => {
 	test('Kodik artwork admits only verified public screenshot and Shikimori image families', () => {
 		for (const value of ['https://i.kodikres.com/screenshots/seria/123/hash/1.jpg', 'https://i.kodikres.com/screenshots/video/123/hash/2.jpg', 'https://shikimori.io/uploads/poster/animes/123/hash.jpg', 'https://shikimori.io/system/screenshots/original/123.jpg', 'https://shikimori.io/system/animes/original/123.jpg']) expect(importArtworkUrl(value)?.href).toBe(value);
 		for (const value of ['https://i.kodikres.com/private/file.jpg', 'https://i.kodikres.com/screenshots/seria/0/hash/1.jpg', 'https://i.kodikres.com/screenshots/season/123/hash/1.jpg', 'https://i.kodikres.com.evil.org/screenshots/seria/123/hash/1.jpg', 'https://cdn.kodikres.com/screenshots/seria/123/hash/1.jpg', 'https://i.kodikres.com/screenshots/seria/123/hash/1.jpg?cache=1', 'https://shikimori.io/api/animes/123', 'https://shikimori.io/uploads/poster/animes/123/hash.jpg?cache=1', 'https://shikimori.io/uploads/poster/animes/../../secret.jpg', 'https://shikimori.io/system/animes/%2fprivate.jpg', 'http://shikimori.io/system/animes/original/123.jpg']) expect(importArtworkUrl(value)).toBeNull();
+	});
+	test.each(redirectModes)('supports the verified Kinopoisk poster image-family hop in %s mode', async mode => {
+		const original = await sharp({ create: { width: 80, height: 120, channels: 3, background: '#789abc' } }).jpeg().toBuffer();
+		const destination = 'https://avatars.mds.yandex.net/get-kinopoisk-image/123/fixture-chosen/x1000';
+		mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: destination }), body: { destroy: vi.fn() } });
+		mockedFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers({ 'content-type': 'image/jpeg' }), arrayBuffer: async () => original });
+		const result = await downloadForMode(mode, new URL('https://st.kp.yandex.net/images/film_big/123.jpg'));
+		expect(result).toMatchObject({ original, originalExtension: 'jpg', width: 80, height: 120 });
+		if ('processed' in result && Buffer.isBuffer(result.processed)) expect(await sharp(result.processed).metadata()).toMatchObject({ format: 'webp', width: 80, height: 120 });
+		expect(mockedFetch.mock.calls[1][1].redirect).toBe('error');
+	});
+
+	test.each(redirectModes)('follows one verified redirect-only Kodik screenshot CDN hop in %s mode', async mode => {
+		const original = await sharp({ create: { width: 80, height: 45, channels: 3, background: '#789abc' } }).jpeg().toBuffer();
+		const destination = 'https://cloud.solodcdn.com/0123456789abcdef0123456789abcdef:2026101803/useruploads/747f3071-354a-471d-b4c1-38dcd651e5d4/thumb001.jpg';
+		const source = new URL('https://i.kodikres.com/screenshots/video/103120/1.jpg');
+		const agent = {} as never;
+		for (const location of [destination, destination.replace('https:', '')]) {
+			mockedFetch.mockReset();
+			const destroy = vi.fn();
+			mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location }), body: { destroy } });
+			mockedFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers({ 'content-type': 'image/jpeg', 'content-length': String(original.length) }), arrayBuffer: async () => original });
+			expect(await downloadForMode(mode, source, agent)).toMatchObject({ original, originalExtension: 'jpg', width: 80, height: 45 });
+			expect(destroy).toHaveBeenCalledOnce();
+			expect(mockedFetch.mock.calls[0]).toEqual([source.href, expect.objectContaining({ redirect: 'manual', agent, size: importArtworkLimits.inputBytes })]);
+			expect(mockedFetch.mock.calls[1]).toEqual([destination, expect.objectContaining({ redirect: 'error', agent, size: importArtworkLimits.inputBytes })]);
+			expect(mockedFetch.mock.calls[0][1].signal).toBe(mockedFetch.mock.calls[1][1].signal);
+		}
+		mockedFetch.mockReset();
+		mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: destination }), body: { destroy: vi.fn() } });
+		mockedFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers({ 'content-type': 'image/jpeg' }), arrayBuffer: async () => original });
+		expect(await downloadForMode(mode, new URL('https://i.kodikres.com/screenshots/seria/103120/1.jpg'), agent)).toMatchObject({ original, width: 80, height: 45 });
+		expect(importArtworkUrl(destination)).toBeNull();
+		mockedFetch.mockClear();
+		await expect(downloadForMode(mode, new URL(destination))).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+		expect(mockedFetch).not.toHaveBeenCalled();
+	});
+
+	test.each(redirectModes)('Kodik screenshot requests share one timeout and never refresh an expired deadline in %s mode', async mode => {
+		const source = new URL('https://i.kodikres.com/screenshots/video/103120/1.jpg');
+		const location = '//cloud.solodcdn.com/0123456789abcdef0123456789abcdef:2026101803/useruploads/747f3071-354a-471d-b4c1-38dcd651e5d4/thumb001.jpg';
+		const redirect = { ok: false, status: 302, headers: new Headers({ location }), body: { destroy: vi.fn() } };
+		vi.useFakeTimers();
+		mockedFetch.mockImplementationOnce(async () => await new Promise(resolve => setTimeout(() => resolve(redirect), 7000)));
+		mockedFetch.mockImplementationOnce(async (_url, options: { signal: AbortSignal }) => await new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => reject(new Error('fixture-aborted')), { once: true })));
+		try {
+			const rejected = expect(downloadForMode(mode, source)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+			await vi.advanceTimersByTimeAsync(7000);
+			expect(mockedFetch).toHaveBeenCalledTimes(2);
+			const signal = mockedFetch.mock.calls[1][1].signal as AbortSignal;
+			await vi.advanceTimersByTimeAsync(4999);
+			expect(signal.aborted).toBe(false);
+			await vi.advanceTimersByTimeAsync(1);
+			await rejected;
+			expect(signal.aborted).toBe(true);
+		} finally { vi.useRealTimers(); }
+		mockedFetch.mockReset();
+		const clock = vi.spyOn(Date, 'now').mockReturnValue(1000);
+		mockedFetch.mockImplementationOnce(async () => { clock.mockReturnValue(2001); return redirect; });
+		try {
+			await expect(downloadForMode(mode, source, undefined, 2000)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+			expect(mockedFetch).toHaveBeenCalledOnce();
+		} finally { clock.mockRestore(); }
+	});
+
+	test.each(redirectModes)('rejects all unapproved Kodik image destinations before another request in %s mode', async mode => {
+		const approved = 'https://cloud.solodcdn.com/0123456789abcdef0123456789abcdef:2026101803/useruploads/747f3071-354a-471d-b4c1-38dcd651e5d4/thumb001.jpg';
+		const invalid = [
+			approved.replace('https:', 'http:'), approved.replace('cloud.solodcdn.com', '127.0.0.1'),
+			approved.replace('cloud.solodcdn.com', 'cloud.solodcdn.com.evil.example.org'), approved.replace('cloud.solodcdn.com', 'sub.cloud.solodcdn.com'),
+			approved.replace('cloud.solodcdn.com', 'user:private@cloud.solodcdn.com'), approved.replace('cloud.solodcdn.com', 'cloud.solodcdn.com:443'), approved.replace('cloud.solodcdn.com', 'cloud.solodcdn.com:8443'),
+			`${approved}?token=fixture`, `${approved}?`, `${approved}#fragment`, `${approved}#`,
+			approved.replace('0123456789abcdef0123456789abcdef:', 'unsigned:'), approved.replace(':2026101803/', ':2026101803000/'),
+			approved.replace('/useruploads/', '/uploads/'), approved.replace('747f3071-354a-471d-b4c1-38dcd651e5d4', 'arbitrary-upload'),
+			approved.replace('thumb001.jpg', 'original.jpg'), approved.replace('thumb001.jpg', 'thumb1.jpg'), approved.replace('thumb001.jpg', 'thumb001.png'),
+			approved.replace('/useruploads/', '/%75seruploads/'), approved.replace('/thumb001.jpg', '/%2fthumb001.jpg'), approved.replace('/thumb001.jpg', '/../thumb001.jpg'),
+			'/useruploads/747f3071-354a-471d-b4c1-38dcd651e5d4/thumb001.jpg',
+			'https://avatars.mds.yandex.net/get-kinopoisk-image/123/chosen/orig',
+		];
+		for (const location of invalid) {
+			mockedFetch.mockReset();
+			const destroy = vi.fn();
+			mockedFetch.mockResolvedValue({ ok: false, status: 302, headers: new Headers({ location }), body: { destroy } });
+			await expect(downloadForMode(mode, new URL('https://i.kodikres.com/screenshots/video/103120/1.jpg'))).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+			expect(mockedFetch).toHaveBeenCalledOnce();
+			expect(destroy).toHaveBeenCalledOnce();
+		}
+	});
+
+	test.each(redirectModes)('does not allow Kodik CDN redirects from unverified source paths or non-302 statuses in %s mode', async mode => {
+		const destination = 'https://cloud.solodcdn.com/0123456789abcdef0123456789abcdef:2026101803/useruploads/747f3071-354a-471d-b4c1-38dcd651e5d4/thumb001.jpg';
+		for (const source of ['https://image.tmdb.org/photo.jpg', 'https://st.kp.yandex.net/images/film_big/123.jpg', 'https://i.kodikres.com/screenshots/video/103120/hash/1.jpg', 'https://i.kodikres.com/screenshots/video/103120/thumb001.jpg', 'https://i.kodikres.com/screenshots/video/103120/0.jpg', 'https://i.kodikres.com/screenshots/video/103120/1.jpg?', 'https://i.kodikres.com/screenshots/video/103120/1.jpg#']) {
+			mockedFetch.mockReset();
+			mockedFetch.mockResolvedValue({ ok: false, status: 302, headers: new Headers({ location: destination }), body: { destroy: vi.fn() } });
+			await expect(downloadForMode(mode, new URL(source))).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+			expect(mockedFetch).toHaveBeenCalledOnce();
+		}
+		for (const status of [301, 303, 307, 308]) {
+			mockedFetch.mockReset();
+			mockedFetch.mockResolvedValue({ ok: false, status, headers: new Headers({ location: destination }), body: { destroy: vi.fn() } });
+			await expect(downloadForMode(mode, new URL('https://i.kodikres.com/screenshots/video/103120/1.jpg'))).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+			expect(mockedFetch).toHaveBeenCalledOnce();
+		}
+	});
+
+	test.each(redirectModes)('Kodik screenshot hop retains MIME, byte, decoder and one-hop bounds in %s mode', async mode => {
+		const source = new URL('https://i.kodikres.com/screenshots/video/103120/1.jpg');
+		const destination = 'https://cloud.solodcdn.com/0123456789abcdef0123456789abcdef:2026101803/useruploads/747f3071-354a-471d-b4c1-38dcd651e5d4/thumb001.jpg';
+		const redirect = { ok: false, status: 302, headers: new Headers({ location: destination }), body: { destroy: vi.fn() } };
+		for (const location of [source.href, destination, 'https://evil.example.org/image.jpg']) {
+			mockedFetch.mockReset();
+			mockedFetch.mockResolvedValueOnce(redirect);
+			mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location }), body: { destroy: vi.fn() } });
+			await expect(downloadForMode(mode, source)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+			expect(mockedFetch).toHaveBeenCalledTimes(2);
+			expect(mockedFetch.mock.calls[1][1].redirect).toBe('error');
+		}
+		for (const headers of [{ 'content-type': 'image/svg+xml' }, { 'content-type': 'image/gif' }, { 'content-type': 'image/jpeg', 'content-length': String(importArtworkLimits.inputBytes + 1) }]) {
+			mockedFetch.mockReset();
+			const body = vi.fn();
+			mockedFetch.mockResolvedValueOnce(redirect);
+			mockedFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers(headers), arrayBuffer: body });
+			await expect(downloadForMode(mode, source)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+			expect(body).not.toHaveBeenCalled();
+		}
+		const bomb = await sharp({ create: { width: 6000, height: 6000, channels: 3, background: '#ffffff' } }).png().toBuffer();
+		for (const original of [Buffer.alloc(0), Buffer.alloc(importArtworkLimits.inputBytes + 1), Buffer.from('not-image-pixels'), bomb]) {
+			mockedFetch.mockReset();
+			mockedFetch.mockResolvedValueOnce(redirect);
+			mockedFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers({ 'content-type': 'image/png' }), arrayBuffer: async () => original });
+			await expect(downloadForMode(mode, source)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+		}
 	});
 
 	test('localizes a Kodik screenshot with the same protected request and conversion bounds', async () => {
@@ -102,7 +240,7 @@ describe('bounded local importer artwork', () => {
 		expect(mockedFetch).toHaveBeenCalledOnce();
 	});
 
-	test('image-family hop cannot redirect back, chain onward, use the GIF MIME exception or enter the conversion pipeline', async () => {
+	test('image-family hop cannot redirect back, chain onward or use the placeholder GIF MIME exception', async () => {
 		const destination = 'https://avatars.mds.yandex.net/get-kinopoisk-image/123/chosen/orig';
 		const source = new URL('https://st.kp.yandex.net/images/person.jpg');
 		for (const next of [source.href, 'https://avatars.mds.yandex.net/get-kinopoisk-image/456/other/orig']) {
@@ -119,11 +257,6 @@ describe('bounded local importer artwork', () => {
 		mockedFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers({ 'content-type': 'image/gif' }), arrayBuffer: body });
 		await expect(downloadOriginalImportArtwork(source)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
 		expect(body).not.toHaveBeenCalled();
-		mockedFetch.mockReset();
-		mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: destination }), body: { destroy: vi.fn() } });
-		await expect(downloadImportArtwork(source, 'posterUrl')).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
-		expect(mockedFetch).toHaveBeenCalledOnce();
-		expect(mockedFetch.mock.calls[0][1].redirect).toBe('error');
 	});
 
 	test('image-family hop retains the original byte cap', async () => {
@@ -147,7 +280,7 @@ describe('bounded local importer artwork', () => {
 		expect(mockedFetch.mock.calls[0][1].redirect).toBe('error');
 	});
 
-	test('rejects second-hop redirects, loops and all redirects in the conversion pipeline', async () => {
+	test('rejects second-hop redirects, loops and the placeholder hop in the conversion pipeline', async () => {
 		const redirect = { ok: false, status: 302, headers: new Headers({ location: '/images/no-poster.gif' }), body: { destroy: vi.fn() } };
 		mockedFetch.mockResolvedValue(redirect);
 		const source = new URL('https://st.kp.yandex.net/images/person.jpg');
@@ -160,7 +293,7 @@ describe('bounded local importer artwork', () => {
 		mockedFetch.mockClear();
 		await expect(downloadImportArtwork(source, 'posterUrl')).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
 		expect(mockedFetch).toHaveBeenCalledOnce();
-		expect(mockedFetch.mock.calls[0][1].redirect).toBe('error');
+		expect(mockedFetch.mock.calls[0][1].redirect).toBe('manual');
 	});
 
 	test('MIME exception never admits actual GIF pixels or GIF-labelled PNG at another URL', async () => {

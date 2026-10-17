@@ -64,6 +64,7 @@
 - Fix: Reload cached library pages, isolate optional title loading failures, preserve exact episode links and paginate the complete catalogue.
 - Enhance: Separate illustrated cast, creator, studio, category and collection sections, with dedicated catalogue profiles and deduplicated filmographies.
 - Feat: Add Kodik import settings and playback with separate voice/subtitle editions and episode availability.
+- Feat: Add private continue-watching rails, canonical episode/voice restoration and verified Kodik time-based resume without changing library statuses.
 
 ### Server
 - Fix: Retain existing Kinopoisk photos through one validated image-CDN redirect during original-only artwork localization without enabling redirect chains or broadening image limits.
@@ -93,6 +94,8 @@
 - Fix: Preserve and safely rotate imported voice iframe URLs, and restore voice selection for existing Alloha and Collaps playback records.
 - Fix: Read Collaps string-form voice names and repair only empty existing voice lists through a native-admin, revision-checked path without changing other player or catalogue data.
 - Feat: Add bounded Kodik metadata, artwork and player imports with stable identities, isolated anime seasons and exact-ID refreshes without replacing existing players.
+- Fix: Localize verified Kinopoisk and Kodik image-CDN redirects through one bounded, validated hop without allowing arbitrary redirect destinations.
+- Feat: Add owner-only playback progress with published canonical targets, ordered private continuation, resource fingerprints and session/sequence protection against stale saves.
 
 ## 2026.7.0
 

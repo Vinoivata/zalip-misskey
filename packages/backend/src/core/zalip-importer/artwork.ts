@@ -59,25 +59,46 @@ export function artworkOriginalCacheUri(url: URL): string {
 
 const kinopoiskPlaceholder = 'https://st.kp.yandex.net/images/no-poster.gif';
 
+function artworkRedirectSource(url: URL): 'kinopoisk' | 'kodik' | null {
+	if (url.username || url.password || url.port || url.href.includes('#') || url.href.includes('?')) return null;
+	if (url.origin === 'https://st.kp.yandex.net' && url.pathname.startsWith('/images/') && url.href !== kinopoiskPlaceholder) return 'kinopoisk';
+	if (url.origin === 'https://i.kodikres.com' && /^\/screenshots\/(?:video|seria)\/[1-9][0-9]{0,15}\/[1-9][0-9]{0,5}\.jpg$/u.test(url.pathname)) return 'kodik';
+	return null;
+}
+
+/** Redirect-only destinations never become accepted provider/client image inputs. */
+function artworkRedirectUrl(source: URL, location: string, originalOnly: boolean): URL | null {
+	if (!location || location.length > 2048) return null;
+	const destination = new URL(location, source);
+	if (artworkRedirectSource(source) === 'kodik') {
+		// The verified screenshot CDN uses one signed, bounded image path. Never
+		// allow arbitrary uploads, query credentials, encoded paths or extra hops.
+		return /^(?:https:)?\/\/cloud\.solodcdn\.com\/[a-f0-9]{32}:[0-9]{10}\/useruploads\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/thumb[0-9]{3}\.jpg$/u.test(location)
+			&& destination.origin === 'https://cloud.solodcdn.com' ? destination : null;
+	}
+	if (artworkRedirectSource(source) !== 'kinopoisk') return null;
+	const knownImageFamily = /^(?:https:)?\/\/avatars\.mds\.yandex\.net\/get-kinopoisk-image\/[A-Za-z0-9._/-]+$/u.test(location)
+		&& destination.origin === 'https://avatars.mds.yandex.net' && destination.pathname.startsWith('/get-kinopoisk-image/')
+		&& !location.split('/').some(segment => segment === '.' || segment === '..');
+	return importArtworkUrl(destination.href) && ((originalOnly && destination.href === kinopoiskPlaceholder) || knownImageFamily) ? destination : null;
+}
+
 async function readImportArtwork(url: URL, agent: Agent | undefined, deadlineAt: number, originalOnly = false) {
 	if (!importArtworkUrl(url.href)) throw new Error('IMPORT_ARTWORK_REJECTED');
 	const controller = new AbortController();
 	if (Date.now() >= deadlineAt) throw new Error('IMPORT_ARTWORK_UNAVAILABLE');
 	const timer = setTimeout(() => controller.abort(), Math.max(1, Math.min(importArtworkLimits.requestTimeoutMs, deadlineAt - Date.now())));
 	try {
-		const mayFollowKinopoiskImage = originalOnly && url.origin === 'https://st.kp.yandex.net' && !url.username && !url.password && !url.port && !url.hash && !url.href.includes('?') && url.pathname.startsWith('/images/') && url.href !== kinopoiskPlaceholder;
+		const mayFollowImage = artworkRedirectSource(url) !== null;
 		let imageUrl = url;
-		let response = await fetch(url.href, { redirect: mayFollowKinopoiskImage ? 'manual' : 'error', size: importArtworkLimits.inputBytes, signal: controller.signal, agent });
-		if (mayFollowKinopoiskImage && response.status === 302) {
+		let response = await fetch(url.href, { redirect: mayFollowImage ? 'manual' : 'error', size: importArtworkLimits.inputBytes, signal: controller.signal, agent });
+		if (mayFollowImage && response.status === 302) {
 			const location = response.headers.get('location');
 			(response.body as Readable | null)?.destroy();
-			if (!location || location.length > 2048) throw new Error('IMPORT_ARTWORK_REJECTED');
-			const destination = new URL(location, url);
-			// Exactly one known image-family or static-placeholder hop, not a general
-			// CDN redirect policy. The same protected agent, byte cap and deadline apply.
-			const knownImageFamily = /^(?:https:)?\/\/avatars\.mds\.yandex\.net\/get-kinopoisk-image\/[A-Za-z0-9._/-]+$/u.test(location)
-				&& destination.origin === 'https://avatars.mds.yandex.net' && destination.pathname.startsWith('/get-kinopoisk-image/');
-			if (!importArtworkUrl(destination.href) || (destination.href !== kinopoiskPlaceholder && !knownImageFamily) || Date.now() >= deadlineAt) throw new Error('IMPORT_ARTWORK_REJECTED');
+			const destination = location ? artworkRedirectUrl(url, location, originalOnly) : null;
+			// Exactly one known image-family hop. Preserve the same protected agent,
+			// byte cap, abort signal and deadline; the second request cannot redirect.
+			if (!destination || Date.now() >= deadlineAt) throw new Error('IMPORT_ARTWORK_REJECTED');
 			imageUrl = destination;
 			response = await fetch(destination.href, { redirect: 'error', size: importArtworkLimits.inputBytes, signal: controller.signal, agent });
 		}
@@ -118,7 +139,7 @@ export async function downloadOriginalImportArtwork(url: URL, agent?: Agent, dea
 	}
 }
 
-/** Size/timeout, no redirects, MIME plus decoder checks; no upstream errors leave this boundary. */
+/** Bounded known-CDN hops, MIME plus decoder checks; no upstream errors leave this boundary. */
 export async function downloadImportArtwork(url: URL, field: ImportArtworkField, agent?: Agent, input?: ImportArtworkSettingsInput, legacy = true, deadlineAt = Date.now() + importArtworkLimits.requestTimeoutMs + importArtworkLimits.processingTimeoutSeconds * 1000): Promise<ImportArtworkDownload> {
 	try {
 		const { original, image, metadata, originalFormat } = await readImportArtwork(url, agent, deadlineAt);

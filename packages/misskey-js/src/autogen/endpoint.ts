@@ -777,6 +777,16 @@ import type {
 	ZalipPlaybackAllohaShowResponse,
 	ZalipPlaybackSourcesRequest,
 	ZalipPlaybackSourcesResponse,
+	ZalipProgressContinueRequest,
+	ZalipProgressContinueResponse,
+	ZalipProgressResetRequest,
+	ZalipProgressResetResponse,
+	ZalipProgressShowRequest,
+	ZalipProgressShowResponse,
+	ZalipProgressStartRequest,
+	ZalipProgressStartResponse,
+	ZalipProgressUpdateRequest,
+	ZalipProgressUpdateResponse,
 	ZalipReleasesListRequest,
 	ZalipReleasesListResponse,
 	ZalipReleasesSubscribedRequest,
@@ -1296,6 +1306,11 @@ export type Endpoints = {
 	'zalip/library/update': { req: ZalipLibraryUpdateRequest; res: ZalipLibraryUpdateResponse };
 	'zalip/playback/alloha/show': { req: ZalipPlaybackAllohaShowRequest; res: ZalipPlaybackAllohaShowResponse };
 	'zalip/playback/sources': { req: ZalipPlaybackSourcesRequest; res: ZalipPlaybackSourcesResponse };
+	'zalip/progress/continue': { req: ZalipProgressContinueRequest; res: ZalipProgressContinueResponse };
+	'zalip/progress/reset': { req: ZalipProgressResetRequest; res: ZalipProgressResetResponse };
+	'zalip/progress/show': { req: ZalipProgressShowRequest; res: ZalipProgressShowResponse };
+	'zalip/progress/start': { req: ZalipProgressStartRequest; res: ZalipProgressStartResponse };
+	'zalip/progress/update': { req: ZalipProgressUpdateRequest; res: ZalipProgressUpdateResponse };
 	'zalip/releases/list': { req: ZalipReleasesListRequest; res: ZalipReleasesListResponse };
 	'zalip/releases/subscribed': { req: ZalipReleasesSubscribedRequest; res: ZalipReleasesSubscribedResponse };
 	'zalip/seasons/episodes': { req: ZalipSeasonsEpisodesRequest; res: ZalipSeasonsEpisodesResponse };

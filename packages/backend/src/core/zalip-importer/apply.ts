@@ -130,6 +130,7 @@ function playerTranslationSnapshot(player: ImportPlayer, translation: ImportPlay
 	return {
 		id: translation.id.slice(0, 100), name: translation.name.slice(0, 256),
 		...(translation.type === 'voice' || translation.type === 'subtitles' ? { type: translation.type } : {}),
+		...(player.source === 'kodik' && typeof translation.providerTranslationId === 'string' && /^[1-9][0-9]{0,15}$/u.test(translation.providerTranslationId) ? { providerTranslationId: translation.providerTranslationId } : {}),
 		...(iframe == null ? {} : { iframe }),
 		...(translation.quality === undefined ? {} : { quality: boundedText(translation.quality, 64) }),
 		...(Array.isArray(translation.resolutions) ? { resolutions: [...new Set(translation.resolutions.map(value => boundedText(value, 32)).filter((value): value is string => value != null))].slice(0, 12) } : {}),

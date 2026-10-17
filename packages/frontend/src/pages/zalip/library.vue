@@ -5,11 +5,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <PageWithHeader hideHeader>
-	<component :is="prefer.s.enablePullToRefresh ? MkPullToRefresh : 'div'" :refresher="loadLibrary">
+	<component :is="prefer.s.enablePullToRefresh ? MkPullToRefresh : 'div'" :refresher="refreshLibrary">
 		<MkZalipSectionHeader :title="props.filter === 'favorites' ? i18n.ts.zalip.bookmarksHeading : i18n.ts.zalip.libraryHeading" :description="props.filter === 'favorites' ? i18n.ts.zalip.bookmarksDescription : i18n.ts.zalip.libraryDescription"/>
 		<MkZalipBookmarkTabs active="content"/>
 		<div class="_spacer" style="--MI_SPACER-w: 980px;">
 			<div :class="$style.page">
+				<ZalipContinueRail v-show="activeFilter === 'all' && !searchQuery" ref="continueRail"/>
 				<div v-if="pending" :class="$style.empty"><i class="ti ti-loader-2 ti-spin"></i> {{ i18n.ts.zalip.libraryLoading }}</div>
 				<div v-else-if="loadError"><p role="alert">{{ i18n.ts.zalip.libraryLoadFailed }}</p><MkError @retry="loadLibrary"/></div>
 				<div v-else-if="entries.length === 0" :class="$style.empty">
@@ -24,16 +25,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<div :class="$style.stat"><i class="ti ti-player-play"></i><strong>{{ statusCounts.watching }}</strong><span>{{ i18n.ts.zalip.libraryWatching }}</span></div>
 						<button type="button" class="_button" :class="$style.stat" @click="activeFilter = 'favorites'"><i class="ti ti-bookmark"></i><strong>{{ favoriteCount }}</strong><span>{{ i18n.ts.zalip.contentBookmarks }}</span></button>
 						<div :class="$style.stat"><i class="ti ti-chart-bar"></i><strong>{{ averageRating == null ? '—' : averageRating.toFixed(1) }}</strong><span>{{ i18n.ts.zalip.libraryAverageRating }}</span></div>
-					</section>
-					<section v-if="continueEntries.length && activeFilter === 'all' && !searchQuery" :class="$style.continueSection">
-						<div :class="$style.sectionHeading"><h2>{{ i18n.ts.zalip.libraryContinue }}</h2><span>{{ continueEntries.length }}</span></div>
-						<div :class="$style.continueRail">
-							<MkA v-for="entry in continueEntries" :key="entry.work.id" :to="`/zalip/${entry.work.slug}`" :class="$style.continueCard">
-								<img v-if="entry.work.posterPath" :src="tmdbImage(entry.work.posterPath)" :alt="entry.work.title" loading="lazy">
-								<i v-else class="ti ti-movie"></i>
-								<span>{{ entry.work.title }}</span><small v-if="entry.episodesWatched">{{ i18n.tsx.zalip.libraryEpisodesWatched({ count: entry.episodesWatched.toString() }) }}</small>
-							</MkA>
-						</div>
 					</section>
 					<div :class="$style.controls">
 						<label :class="$style.search"><i class="ti ti-search" aria-hidden="true"></i><input v-model.trim="searchQuery" class="_input" type="search" :placeholder="i18n.ts.zalip.librarySearch" :aria-label="i18n.ts.zalip.librarySearch"></label>
@@ -67,7 +58,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, ref, watch } from 'vue';
+import { computed, ref, useTemplateRef, watch } from 'vue';
 import { useZalipPageReload } from '@/composables/use-zalip-page-reload.js';
 import MkPullToRefresh from '@/components/MkPullToRefresh.vue';
 import MkZalipSectionHeader from '@/components/MkZalipSectionHeader.vue';
@@ -78,6 +69,7 @@ import { definePage } from '@/page.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { importerImageUrl } from '@/utility/zalip-importer.js';
 import { i18n } from '@/i18n.js';
+import ZalipContinueRail from '@/pages/zalip/continue-rail.vue';
 
 type WorkKind = 'movie' | 'series' | 'anime' | 'animation';
 type LibraryStatus = 'watching' | 'planned' | 'completed' | 'on_hold' | 'dropped';
@@ -102,6 +94,7 @@ type LibraryEntry = {
 };
 
 const props = defineProps<{ filter?: string }>();
+const continueRail = useTemplateRef('continueRail');
 const entries = ref<LibraryEntry[]>([]);
 const pending = ref(true);
 const loadError = ref(false);
@@ -142,7 +135,6 @@ const filteredEntries = computed(() => {
 	if (sortOrder.value === 'rating') return [...filtered].sort((left, right) => (right.personalRating ?? -1) - (left.personalRating ?? -1));
 	return filtered;
 });
-const continueEntries = computed(() => entries.value.filter(entry => entry.status === 'watching').slice(0, 8));
 const favoriteCount = computed(() => entries.value.filter(entry => entry.isFavorite).length);
 const ratedEntries = computed(() => entries.value.filter((entry): entry is LibraryEntry & { personalRating: number } => entry.personalRating != null));
 const averageRating = computed(() => ratedEntries.value.length === 0 ? null : ratedEntries.value.reduce((sum, entry) => sum + entry.personalRating, 0) / ratedEntries.value.length);
@@ -180,6 +172,8 @@ async function loadLibrary(): Promise<void> {
 		if (request === latestRequest) pending.value = false;
 	}
 }
+
+async function refreshLibrary(): Promise<void> { await Promise.all([loadLibrary(), continueRail.value?.refresh()]); }
 
 useZalipPageReload(loadLibrary);
 
@@ -249,74 +243,6 @@ definePage(() => ({
 .body .synopsis { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; margin-top: 10px; font-size: 13px; line-height: 1.6; }
 .statusBadge { position: absolute; bottom: 7px; left: 5px; right: 5px; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 4px 3px; box-sizing: border-box; border-radius: 99px; background: color-mix(in srgb, var(--MI_THEME-accent) 88%, transparent); color: var(--MI_THEME-fgOnAccent); font-size: 10px; line-height: 1.25; font-weight: 650; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
 .statusBadge i::before { font-size: 1em; }
-
-.continueSection {
-	margin: 0 0 22px;
-}
-
-.sectionHeading {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	margin-bottom: 10px;
-}
-
-.sectionHeading h2 {
-	margin: 0;
-	font-size: 1.05rem;
-}
-
-.sectionHeading span {
-	display: grid;
-	place-items: center;
-	min-width: 24px;
-	height: 24px;
-	border-radius: 999px;
-	background: var(--MI_THEME-panelHighlight);
-	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 0.73rem;
-	font-weight: 750;
-}
-
-.continueRail {
-	display: flex;
-	gap: 10px;
-	overflow-x: auto;
-	padding: 2px;
-	scrollbar-width: none;
-}
-
-.continueRail::-webkit-scrollbar { display: none; }
-
-.continueCard {
-	position: relative;
-	display: grid;
-	grid-template-columns: 46px minmax(126px, 1fr);
-	grid-template-rows: min-content min-content;
-	gap: 3px 10px;
-	flex: 0 0 210px;
-	overflow: hidden;
-	min-height: 66px;
-	padding: 9px;
-	border: 1px solid var(--MI_THEME-divider);
-	border-radius: var(--zalip-radius);
-	background: var(--MI_THEME-panel);
-	color: var(--MI_THEME-fg);
-	text-decoration: none;
-}
-
-.continueCard img, .continueCard > i {
-	grid-row: span 2;
-	width: 46px;
-	height: 62px;
-	border-radius: 8px;
-	object-fit: cover;
-	background: var(--MI_THEME-panelHighlight);
-}
-
-.continueCard > i { display: grid; place-items: center; color: var(--MI_THEME-accent); }
-.continueCard span { align-self: end; overflow: hidden; font-size: 0.82rem; font-weight: 750; line-height: 1.22; text-overflow: ellipsis; white-space: nowrap; }
-.continueCard small { color: var(--MI_THEME-fgTransparentWeak); font-size: 0.72rem; }
 
 .controls {
 	display: flex;

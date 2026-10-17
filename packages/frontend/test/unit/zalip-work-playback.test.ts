@@ -4,13 +4,15 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { webcrypto } from 'node:crypto';
 import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/vue';
-import { defineComponent, h } from 'vue';
+import { defineComponent, h, nextTick } from 'vue';
 import type { Window as HappyWindow } from 'happy-dom';
 import Work from '@/pages/zalip/work.vue';
 import { i18n } from '@/i18n.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import type { LegacyAllohaPlayback, PlaybackProviderSetting, PlaybackSource } from '@/utility/zalip-playback.js';
+import type { WatchProgress } from '@/utility/zalip-watch-progress.js';
 
 vi.mock('@/i.js', () => ({ $i: { id: 'viewer' } }));
 vi.mock('@/page.js', () => ({ definePage: vi.fn() }));
@@ -38,6 +40,7 @@ let providers: PlaybackProviderSetting[] | undefined;
 let failLegacy: boolean;
 let failSources: boolean;
 let workData: typeof serial;
+let savedProgress: WatchProgress | null;
 
 function setup() {
 	return render(Work, { props: { slug: serial.slug }, global: { stubs: {
@@ -72,6 +75,7 @@ async function openVoices(view: ReturnType<typeof setup>, label: string) {
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	Object.defineProperty(window.crypto, 'subtle', { configurable: true, value: webcrypto.subtle });
 	(window as unknown as HappyWindow).happyDOM.settings.navigation.disableChildFrameNavigation = true;
 	sources = structuredClone([alloha, collaps]);
 	legacyPlayback = { ...legacy, available: false, iframe: null, translations: [] };
@@ -79,14 +83,19 @@ beforeEach(() => {
 	failLegacy = false;
 	failSources = false;
 	workData = structuredClone(serial);
+	savedProgress = null;
 	HTMLElement.prototype.scrollTo = vi.fn();
 	HTMLElement.prototype.scrollIntoView = vi.fn();
-	vi.mocked(misskeyApiZalip).mockImplementation(async endpoint => {
+	vi.mocked(misskeyApiZalip).mockImplementation(async (endpoint, params) => {
 		if (endpoint === 'zalip/works/show') return workData;
 		if (endpoint === 'zalip/seasons/episodes') return testEpisodes;
 		if (endpoint === 'zalip/discussions/show') return { noteId: null };
 		if (endpoint === 'zalip/library/list') return [];
 		if (endpoint === 'zalip/taxonomy/show') return { entries: [] };
+		if (endpoint === 'zalip/progress/show') return { progress: savedProgress };
+		if (endpoint === 'zalip/progress/start') return { sessionId: 'session', sequence: 0, progress: { ...savedProgress, ...params, completed: false } };
+		if (endpoint === 'zalip/progress/update') return { accepted: true, progress: { ...savedProgress, ...params } };
+		if (endpoint === 'zalip/progress/reset') return { cleared: true };
 		if (endpoint === 'zalip/playback/alloha/show') {
 			if (failLegacy) throw new Error('Legacy unavailable');
 			return legacyPlayback;
@@ -101,6 +110,41 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('Zalip work playback selection', () => {
+	it('offers real saved playback without autoplay and restores the exact available episode and edition only on a resume click', async () => {
+		sources = [structuredClone(kodik)];
+		sources[0].translations[1].providerTranslationId = '719';
+		savedProgress = { workId: 'work', episodeId: 'episode3', seasonNumber: 2, episodeNumber: 3, provider: 'kodik', translationId: 'serial-456', mode: 'time', positionSeconds: 600, durationSeconds: 2400, completed: false, lastPlayedAt: '2026-10-17T10:00:00Z' };
+		const view = setup();
+		await view.findByRole('button', { name: i18n.tsx.zalip._progress.resumeAt({ time: '10:00' }) });
+		expect(iframe(view)).toBeNull();
+		expect(vi.mocked(misskeyApiZalip).mock.calls.some(call => call[0] === 'zalip/progress/start')).toBe(false);
+		await fireEvent.click(view.getByRole('button', { name: i18n.tsx.zalip._progress.resumeAt({ time: '10:00' }) }));
+		await waitFor(() => expect(iframe(view)).not.toBeNull());
+		expect(new URL(iframe(view).src).pathname).toBe('/serial/456/voice-two/720p');
+		expect(new URL(iframe(view).src).searchParams.get('episode')).toBe('3');
+		expect(new URL(iframe(view).src).searchParams.get('only_episode')).toBe('true');
+		const post = vi.spyOn(iframe(view).contentWindow!, 'postMessage').mockImplementation(() => {});
+		const message = (key: string, value: unknown) => window.dispatchEvent(new MessageEvent('message', { source: iframe(view).contentWindow, origin: 'https://kodik.example', data: { key, value } }));
+		await waitFor(() => expect(misskeyApiZalip).toHaveBeenCalledWith('zalip/progress/start', expect.objectContaining({ workId: 'work', episodeId: 'episode3', provider: 'kodik', translationId: 'serial-456', expectedResourceFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/u) })));
+		message('kodik_player_current_episode', { season: null, episode: null, translation: { id: 719 } });
+		message('kodik_player_duration_update', 2400);
+		expect(post).toHaveBeenCalledWith({ key: 'kodik_player_api', value: { method: 'seek', seconds: 600 } }, 'https://kodik.example');
+		await fireEvent.click(view.container.querySelector('[data-episode-id="episode1"]')!);
+		await nextTick();
+		const nextPost = vi.spyOn(iframe(view).contentWindow!, 'postMessage').mockImplementation(() => {});
+		message('kodik_player_current_episode', { season: null, episode: null, translation: { id: 719 } });
+		message('kodik_player_duration_update', 2400);
+		expect(nextPost.mock.calls.some(call => (call[0] as { value: { method: string } }).value.method === 'seek')).toBe(false);
+		expect(vi.mocked(misskeyApiZalip).mock.calls.some(call => call[0] === 'zalip/library/update')).toBe(false);
+	});
+	it('does not transfer a saved timestamp to another unavailable provider or voice', async () => {
+		savedProgress = { workId: 'work', episodeId: 'episode1', seasonNumber: 2, episodeNumber: 1, provider: 'kodik', translationId: 'serial-missing', mode: 'time', positionSeconds: 600, durationSeconds: 2400, completed: false, lastPlayedAt: '2026-10-17T10:00:00Z' };
+		const view = setup();
+		await fireEvent.click(await view.findByRole('button', { name: i18n.tsx.zalip._progress.resumeAt({ time: '10:00' }) }));
+		await view.findByText(i18n.ts.zalip._progress.resumeUnavailable);
+		expect(iframe(view)).toBeNull();
+		expect(vi.mocked(misskeyApiZalip).mock.calls.some(call => call[0] === 'zalip/progress/start')).toBe(false);
+	});
 	it('switches modern Alloha voice iframe and retains the current season and episode', async () => {
 		const view = setup();
 		await play(view);

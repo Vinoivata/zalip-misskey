@@ -2312,6 +2312,16 @@ declare namespace entities {
         ZalipPlaybackAllohaShowResponse,
         ZalipPlaybackSourcesRequest,
         ZalipPlaybackSourcesResponse,
+        ZalipProgressContinueRequest,
+        ZalipProgressContinueResponse,
+        ZalipProgressResetRequest,
+        ZalipProgressResetResponse,
+        ZalipProgressShowRequest,
+        ZalipProgressShowResponse,
+        ZalipProgressStartRequest,
+        ZalipProgressStartResponse,
+        ZalipProgressUpdateRequest,
+        ZalipProgressUpdateResponse,
         ZalipReleasesListRequest,
         ZalipReleasesListResponse,
         ZalipReleasesSubscribedRequest,
@@ -4236,6 +4246,36 @@ type ZalipPlaybackSourcesRequest = operations['zalip___playback___sources']['req
 
 // @public (undocumented)
 type ZalipPlaybackSourcesResponse = operations['zalip___playback___sources']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipProgressContinueRequest = operations['zalip___progress___continue']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipProgressContinueResponse = operations['zalip___progress___continue']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipProgressResetRequest = operations['zalip___progress___reset']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipProgressResetResponse = operations['zalip___progress___reset']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipProgressShowRequest = operations['zalip___progress___show']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipProgressShowResponse = operations['zalip___progress___show']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipProgressStartRequest = operations['zalip___progress___start']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipProgressStartResponse = operations['zalip___progress___start']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipProgressUpdateRequest = operations['zalip___progress___update']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipProgressUpdateResponse = operations['zalip___progress___update']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
 type ZalipReleasesListRequest = operations['zalip___releases___list']['requestBody']['content']['application/json'];

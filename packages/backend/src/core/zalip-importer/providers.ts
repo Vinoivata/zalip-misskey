@@ -673,6 +673,7 @@ export function normalizeKodikRecord(value: unknown, variants: unknown[] = [], i
 		const iframe = kodikPlayerUrl(edition.link, iframeHosts, editionId);
 		const voice = object(edition.translation);
 		const name = text(voice.title);
+		const providerTranslationId = externalId(voice.id);
 		const voiceEpisodes: ImportPlayer['episodes'] = [];
 		if (edition.link != null && !iframe) record.warnings.push('kodik-player-url-rejected');
 		const seasonRows = Object.entries(object(edition.seasons));
@@ -695,7 +696,7 @@ export function normalizeKodikRecord(value: unknown, variants: unknown[] = [], i
 				remaining--;
 			}
 		}
-		if (iframe && name) translations.push({ id: editionId, name, iframe, ...(voice.type === 'voice' || voice.type === 'subtitles' ? { type: voice.type } : {}), quality: text(edition.quality, 64), ...(edition.seasons != null && typeof edition.seasons === 'object' && !Array.isArray(edition.seasons) ? { episodes: voiceEpisodes.sort((left, right) => left.seasonNumber - right.seasonNumber || left.episodeNumber - right.episodeNumber) } : {}) });
+		if (iframe && name) translations.push({ id: editionId, name, iframe, ...(providerTranslationId ? { providerTranslationId } : {}), ...(voice.type === 'voice' || voice.type === 'subtitles' ? { type: voice.type } : {}), quality: text(edition.quality, 64), ...(edition.seasons != null && typeof edition.seasons === 'object' && !Array.isArray(edition.seasons) ? { episodes: voiceEpisodes.sort((left, right) => left.seasonNumber - right.seasonNumber || left.episodeNumber - right.episodeNumber) } : {}) });
 	}
 	const iframe = kodikPlayerUrl(anchor.link, iframeHosts, id) ?? translations[0]?.iframe;
 	const episodes = [...seasons].sort(([left], [right]) => left - right).flatMap(([seasonNumber, numbers]) => {
