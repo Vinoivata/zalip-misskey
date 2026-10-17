@@ -96,6 +96,7 @@
 - Feat: Add bounded Kodik metadata, artwork and player imports with stable identities, isolated anime seasons and exact-ID refreshes without replacing existing players.
 - Fix: Localize verified Kinopoisk and Kodik image-CDN redirects through one bounded, validated hop without allowing arbitrary redirect destinations.
 - Feat: Add owner-only playback progress with published canonical targets, ordered private continuation, resource fingerprints and session/sequence protection against stale saves.
+- Fix: Import Kodik gallery images through its bounded two-hop same-image CDN chain while retaining protected network, decoder and timeout limits.
 
 ## 2026.7.0
 

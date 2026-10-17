@@ -46,7 +46,7 @@ describe('bounded local importer artwork', () => {
 			expect(await downloadForMode(mode, source, agent)).toMatchObject({ original, originalExtension: 'jpg', width: 80, height: 45 });
 			expect(destroy).toHaveBeenCalledOnce();
 			expect(mockedFetch.mock.calls[0]).toEqual([source.href, expect.objectContaining({ redirect: 'manual', agent, size: importArtworkLimits.inputBytes })]);
-			expect(mockedFetch.mock.calls[1]).toEqual([destination, expect.objectContaining({ redirect: 'error', agent, size: importArtworkLimits.inputBytes })]);
+			expect(mockedFetch.mock.calls[1]).toEqual([destination, expect.objectContaining({ redirect: 'manual', agent, size: importArtworkLimits.inputBytes })]);
 			expect(mockedFetch.mock.calls[0][1].signal).toBe(mockedFetch.mock.calls[1][1].signal);
 		}
 		mockedFetch.mockReset();
@@ -57,6 +57,135 @@ describe('bounded local importer artwork', () => {
 		mockedFetch.mockClear();
 		await expect(downloadForMode(mode, new URL(destination))).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
 		expect(mockedFetch).not.toHaveBeenCalled();
+	});
+
+	test.each(redirectModes)('follows only one bounded Kodik edge for the exact signed image in %s mode', async mode => {
+		const original = await sharp({ create: { width: 80, height: 45, channels: 3, background: '#789abc' } }).jpeg().toBuffer();
+		const agent = {} as never;
+		for (const [index, label] of ['nirvana', 'limbo', 'radium', 'monoceros', 'a', 'a'.repeat(63)].entries()) {
+			mockedFetch.mockReset();
+			const suffix = `/useruploads/747f3071-354a-471d-b4c1-38dcd651e5d4/thumb00${index + 1}.jpg`;
+			const destination = `https://cloud.solodcdn.com/0123456789abcdef0123456789abcdef:2026101803${suffix}`;
+			const edge = `https://${label}.cloud.solodcdn.com/fedcba9876543210fedcba9876543210:2026101804${suffix}`;
+			const firstDestroy = vi.fn(); const secondDestroy = vi.fn();
+			mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: destination.replace('https:', '') }), body: { destroy: firstDestroy } });
+			mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: index % 2 ? edge.replace('https:', '') : edge }), body: { destroy: secondDestroy } });
+			mockedFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers({ 'content-type': 'image/jpeg', 'content-length': String(original.length) }), arrayBuffer: async () => original });
+			const result = await downloadForMode(mode, new URL(`https://i.kodikres.com/screenshots/${index % 2 ? 'seria' : 'video'}/103120/${index + 1}.jpg`), agent);
+			expect(result).toMatchObject({ original, originalExtension: 'jpg', width: 80, height: 45 });
+			if ('processed' in result && Buffer.isBuffer(result.processed)) expect(await sharp(result.processed).metadata()).toMatchObject({ format: 'webp', width: 80, height: 45 });
+			expect(firstDestroy).toHaveBeenCalledOnce(); expect(secondDestroy).toHaveBeenCalledOnce();
+			expect(mockedFetch).toHaveBeenCalledTimes(3);
+			expect(mockedFetch.mock.calls[1]).toEqual([destination, expect.objectContaining({ redirect: 'manual', agent, size: importArtworkLimits.inputBytes })]);
+			expect(mockedFetch.mock.calls[2]).toEqual([edge, expect.objectContaining({ redirect: 'error', agent, size: importArtworkLimits.inputBytes })]);
+			const signal = mockedFetch.mock.calls[0][1].signal as AbortSignal;
+			expect(mockedFetch.mock.calls[1][1].signal).toBe(signal); expect(mockedFetch.mock.calls[2][1].signal).toBe(signal);
+			expect(signal.aborted).toBe(true);
+			expect(importArtworkUrl(edge)).toBeNull();
+			mockedFetch.mockClear();
+			await expect(downloadForMode(mode, new URL(edge))).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+			expect(mockedFetch).not.toHaveBeenCalled();
+		}
+	});
+
+	test.each(redirectModes)('rejects unapproved, changed-image and noncanonical Kodik edge destinations in %s mode', async mode => {
+		const source = new URL('https://i.kodikres.com/screenshots/video/103120/1.jpg');
+		const destination = 'https://cloud.solodcdn.com/0123456789abcdef0123456789abcdef:2026101803/useruploads/747f3071-354a-471d-b4c1-38dcd651e5d4/thumb001.jpg';
+		const approved = destination.replace('cloud.solodcdn.com', 'nirvana.cloud.solodcdn.com');
+		const invalid = [
+			approved.replace('https:', 'http:'), approved.replace('nirvana.cloud.solodcdn.com', '127.0.0.1'), destination,
+			approved.replace('nirvana.cloud.solodcdn.com', 'nirvana.cloud.solodcdn.com.evil.example.org'), approved.replace('nirvana.cloud.solodcdn.com', 'nested.nirvana.cloud.solodcdn.com'),
+			approved.replace('nirvana', '-nirvana'), approved.replace('nirvana', 'nirvana-'), approved.replace('nirvana', 'bad_label'), approved.replace('nirvana', 'a'.repeat(64)),
+			approved.replace('nirvana.cloud.solodcdn.com', 'user:private@nirvana.cloud.solodcdn.com'), approved.replace('nirvana.cloud.solodcdn.com', 'nirvana.cloud.solodcdn.com:443'), approved.replace('nirvana.cloud.solodcdn.com', 'nirvana.cloud.solodcdn.com:8443'),
+			`${approved}?token=fixture`, `${approved}?`, `${approved}#fragment`, `${approved}#`,
+			approved.replace('0123456789abcdef0123456789abcdef:', 'unsigned:'), approved.replace(':2026101803/', ':2026101803000/'),
+			approved.replace('747f3071-354a-471d-b4c1-38dcd651e5d4', '847f3071-354a-471d-b4c1-38dcd651e5d4'), approved.replace('thumb001.jpg', 'thumb002.jpg'),
+			approved.replace('thumb001.jpg', 'thumb1.jpg'), approved.replace('thumb001.jpg', 'thumb001.png'), approved.replace('/useruploads/', '/%75seruploads/'),
+			approved.replace('/thumb001.jpg', '/%2fthumb001.jpg'), approved.replace('/thumb001.jpg', '/../thumb001.jpg'), approved.replace('/useruploads/', '/./useruploads/'),
+			approved.replace('nirvana.cloud.solodcdn.com', 'nirvana\\.cloud.solodcdn.com'), `/useruploads/747f3071-354a-471d-b4c1-38dcd651e5d4/thumb001.jpg`,
+			'https://avatars.mds.yandex.net/get-kinopoisk-image/123/chosen/orig', `${approved}/`,
+		];
+		for (const location of invalid) {
+			mockedFetch.mockReset();
+			const destroy = vi.fn();
+			mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: destination }), body: { destroy: vi.fn() } });
+			mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location }), body: { destroy } });
+			await expect(downloadForMode(mode, source)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+			expect(mockedFetch).toHaveBeenCalledTimes(2); expect(destroy).toHaveBeenCalledOnce();
+		}
+	});
+
+	test.each(redirectModes)('never follows a third Kodik hop or extends Kinopoisk redirect permissions in %s mode', async mode => {
+		const destination = 'https://cloud.solodcdn.com/0123456789abcdef0123456789abcdef:2026101803/useruploads/747f3071-354a-471d-b4c1-38dcd651e5d4/thumb001.jpg';
+		const edge = destination.replace('cloud.solodcdn.com', 'nirvana.cloud.solodcdn.com');
+		for (const status of [301, 303, 307, 308]) {
+			mockedFetch.mockReset();
+			mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: destination }), body: { destroy: vi.fn() } });
+			mockedFetch.mockResolvedValueOnce({ ok: false, status, headers: new Headers({ location: edge }), body: { destroy: vi.fn() } });
+			await expect(downloadForMode(mode, new URL('https://i.kodikres.com/screenshots/video/103120/1.jpg'))).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+			expect(mockedFetch).toHaveBeenCalledTimes(2);
+		}
+		mockedFetch.mockReset();
+		mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: destination }), body: { destroy: vi.fn() } });
+		mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: edge }), body: { destroy: vi.fn() } });
+		mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: edge.replace('nirvana', 'limbo') }), body: { destroy: vi.fn() } });
+		await expect(downloadForMode(mode, new URL('https://i.kodikres.com/screenshots/video/103120/1.jpg'))).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+		expect(mockedFetch).toHaveBeenCalledTimes(3); expect(mockedFetch.mock.calls[2][1].redirect).toBe('error');
+		mockedFetch.mockReset();
+		mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: 'https://avatars.mds.yandex.net/get-kinopoisk-image/123/chosen/orig' }), body: { destroy: vi.fn() } });
+		mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: edge }), body: { destroy: vi.fn() } });
+		await expect(downloadForMode(mode, new URL('https://st.kp.yandex.net/images/film_big/123.jpg'))).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+		expect(mockedFetch).toHaveBeenCalledTimes(2); expect(mockedFetch.mock.calls[1][1].redirect).toBe('error');
+	});
+
+	test.each(redirectModes)('all three Kodik requests share the same deadline and abort clock in %s mode', async mode => {
+		const source = new URL('https://i.kodikres.com/screenshots/video/103120/1.jpg');
+		const destination = 'https://cloud.solodcdn.com/0123456789abcdef0123456789abcdef:2026101803/useruploads/747f3071-354a-471d-b4c1-38dcd651e5d4/thumb001.jpg';
+		const edge = destination.replace('cloud.solodcdn.com', 'nirvana.cloud.solodcdn.com');
+		const first = { ok: false, status: 302, headers: new Headers({ location: destination }), body: { destroy: vi.fn() } };
+		const second = { ok: false, status: 302, headers: new Headers({ location: edge }), body: { destroy: vi.fn() } };
+		vi.useFakeTimers();
+		mockedFetch.mockImplementationOnce(async () => await new Promise(resolve => setTimeout(() => resolve(first), 4000)));
+		mockedFetch.mockImplementationOnce(async () => await new Promise(resolve => setTimeout(() => resolve(second), 4000)));
+		mockedFetch.mockImplementationOnce(async (_url, options: { signal: AbortSignal }) => await new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => reject(new Error('fixture-aborted')), { once: true })));
+		try {
+			const rejected = expect(downloadForMode(mode, source)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+			await vi.advanceTimersByTimeAsync(8000);
+			expect(mockedFetch).toHaveBeenCalledTimes(3);
+			const signal = mockedFetch.mock.calls[2][1].signal as AbortSignal;
+			expect(signal).toBe(mockedFetch.mock.calls[0][1].signal);
+			await vi.advanceTimersByTimeAsync(3999); expect(signal.aborted).toBe(false);
+			await vi.advanceTimersByTimeAsync(1); await rejected; expect(signal.aborted).toBe(true);
+		} finally { vi.useRealTimers(); }
+		mockedFetch.mockReset();
+		const clock = vi.spyOn(Date, 'now').mockReturnValue(1000);
+		mockedFetch.mockResolvedValueOnce(first);
+		mockedFetch.mockImplementationOnce(async () => { clock.mockReturnValue(2001); return second; });
+		try {
+			await expect(downloadForMode(mode, source, undefined, 2000)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+			expect(mockedFetch).toHaveBeenCalledTimes(2);
+		} finally { clock.mockRestore(); }
+	});
+
+	test.each(redirectModes)('validates final Kodik edge MIME, bytes and pixels without widening limits in %s mode', async mode => {
+		const source = new URL('https://i.kodikres.com/screenshots/video/103120/1.jpg');
+		const destination = 'https://cloud.solodcdn.com/0123456789abcdef0123456789abcdef:2026101803/useruploads/747f3071-354a-471d-b4c1-38dcd651e5d4/thumb001.jpg';
+		const enqueueRedirects = () => {
+			mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: destination }), body: { destroy: vi.fn() } });
+			mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: destination.replace('cloud.solodcdn.com', 'nirvana.cloud.solodcdn.com') }), body: { destroy: vi.fn() } });
+		};
+		for (const headers of [{ 'content-type': 'image/svg+xml' }, { 'content-type': 'image/gif' }, { 'content-type': 'image/jpeg', 'content-length': String(importArtworkLimits.inputBytes + 1) }]) {
+			mockedFetch.mockReset(); enqueueRedirects();
+			const body = vi.fn();
+			mockedFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers(headers), arrayBuffer: body });
+			await expect(downloadForMode(mode, source)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE'); expect(body).not.toHaveBeenCalled();
+		}
+		const bomb = await sharp({ create: { width: 6000, height: 6000, channels: 3, background: '#ffffff' } }).png().toBuffer();
+		for (const original of [Buffer.alloc(0), Buffer.alloc(importArtworkLimits.inputBytes + 1), Buffer.from('not-image-pixels'), bomb]) {
+			mockedFetch.mockReset(); enqueueRedirects();
+			mockedFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers({ 'content-type': 'image/png' }), arrayBuffer: async () => original });
+			await expect(downloadForMode(mode, source)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+		}
 	});
 
 	test.each(redirectModes)('Kodik screenshot requests share one timeout and never refresh an expired deadline in %s mode', async mode => {
@@ -126,7 +255,7 @@ describe('bounded local importer artwork', () => {
 		}
 	});
 
-	test.each(redirectModes)('Kodik screenshot hop retains MIME, byte, decoder and one-hop bounds in %s mode', async mode => {
+	test.each(redirectModes)('Kodik screenshot hop retains MIME, byte, decoder and approved-hop bounds in %s mode', async mode => {
 		const source = new URL('https://i.kodikres.com/screenshots/video/103120/1.jpg');
 		const destination = 'https://cloud.solodcdn.com/0123456789abcdef0123456789abcdef:2026101803/useruploads/747f3071-354a-471d-b4c1-38dcd651e5d4/thumb001.jpg';
 		const redirect = { ok: false, status: 302, headers: new Headers({ location: destination }), body: { destroy: vi.fn() } };
@@ -136,7 +265,7 @@ describe('bounded local importer artwork', () => {
 			mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location }), body: { destroy: vi.fn() } });
 			await expect(downloadForMode(mode, source)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
 			expect(mockedFetch).toHaveBeenCalledTimes(2);
-			expect(mockedFetch.mock.calls[1][1].redirect).toBe('error');
+			expect(mockedFetch.mock.calls[1][1].redirect).toBe('manual');
 		}
 		for (const headers of [{ 'content-type': 'image/svg+xml' }, { 'content-type': 'image/gif' }, { 'content-type': 'image/jpeg', 'content-length': String(importArtworkLimits.inputBytes + 1) }]) {
 			mockedFetch.mockReset();

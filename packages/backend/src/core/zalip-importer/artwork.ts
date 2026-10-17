@@ -72,7 +72,7 @@ function artworkRedirectUrl(source: URL, location: string, originalOnly: boolean
 	const destination = new URL(location, source);
 	if (artworkRedirectSource(source) === 'kodik') {
 		// The verified screenshot CDN uses one signed, bounded image path. Never
-		// allow arbitrary uploads, query credentials, encoded paths or extra hops.
+		// allow arbitrary uploads, query credentials or encoded paths.
 		return /^(?:https:)?\/\/cloud\.solodcdn\.com\/[a-f0-9]{32}:[0-9]{10}\/useruploads\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/thumb[0-9]{3}\.jpg$/u.test(location)
 			&& destination.origin === 'https://cloud.solodcdn.com' ? destination : null;
 	}
@@ -83,24 +83,45 @@ function artworkRedirectUrl(source: URL, location: string, originalOnly: boolean
 	return importArtworkUrl(destination.href) && ((originalOnly && destination.href === kinopoiskPlaceholder) || knownImageFamily) ? destination : null;
 }
 
+/** Only a verified Kodik CDN response may select one edge for the same image. */
+function kodikArtworkEdgeUrl(source: URL, location: string): URL | null {
+	if (!location || location.length > 2048 || source.origin !== 'https://cloud.solodcdn.com' || source.username || source.password || source.port || source.href.includes('?') || source.href.includes('#')) return null;
+	const signedPath = /^\/[a-f0-9]{32}:[0-9]{10}(\/useruploads\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/thumb[0-9]{3}\.jpg)$/u;
+	const sourceImage = signedPath.exec(source.pathname)?.[1];
+	// Validate the raw authority/path before URL normalization can hide ports,
+	// credentials, dot segments, encoding, empty queries or extra DNS labels.
+	if (!sourceImage || !/^(?:https:)?\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloud\.solodcdn\.com\/[a-f0-9]{32}:[0-9]{10}\/useruploads\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/thumb[0-9]{3}\.jpg$/u.test(location)) return null;
+	const destination = new URL(location, source);
+	return destination.protocol === 'https:' && signedPath.exec(destination.pathname)?.[1] === sourceImage ? destination : null;
+}
+
 async function readImportArtwork(url: URL, agent: Agent | undefined, deadlineAt: number, originalOnly = false) {
 	if (!importArtworkUrl(url.href)) throw new Error('IMPORT_ARTWORK_REJECTED');
 	const controller = new AbortController();
 	if (Date.now() >= deadlineAt) throw new Error('IMPORT_ARTWORK_UNAVAILABLE');
 	const timer = setTimeout(() => controller.abort(), Math.max(1, Math.min(importArtworkLimits.requestTimeoutMs, deadlineAt - Date.now())));
 	try {
-		const mayFollowImage = artworkRedirectSource(url) !== null;
+		const redirectSource = artworkRedirectSource(url);
+		const mayFollowImage = redirectSource !== null;
 		let imageUrl = url;
 		let response = await fetch(url.href, { redirect: mayFollowImage ? 'manual' : 'error', size: importArtworkLimits.inputBytes, signal: controller.signal, agent });
 		if (mayFollowImage && response.status === 302) {
 			const location = response.headers.get('location');
 			(response.body as Readable | null)?.destroy();
 			const destination = location ? artworkRedirectUrl(url, location, originalOnly) : null;
-			// Exactly one known image-family hop. Preserve the same protected agent,
-			// byte cap, abort signal and deadline; the second request cannot redirect.
+			// Kinopoisk permits one hop; Kodik may additionally select one verified
+			// edge for this exact image. All hops retain the original request budget.
 			if (!destination || Date.now() >= deadlineAt) throw new Error('IMPORT_ARTWORK_REJECTED');
 			imageUrl = destination;
-			response = await fetch(destination.href, { redirect: 'error', size: importArtworkLimits.inputBytes, signal: controller.signal, agent });
+			response = await fetch(destination.href, { redirect: redirectSource === 'kodik' ? 'manual' : 'error', size: importArtworkLimits.inputBytes, signal: controller.signal, agent });
+			if (redirectSource === 'kodik' && response.status === 302) {
+				const edgeLocation = response.headers.get('location');
+				(response.body as Readable | null)?.destroy();
+				const edge = edgeLocation ? kodikArtworkEdgeUrl(destination, edgeLocation) : null;
+				if (!edge || Date.now() >= deadlineAt) throw new Error('IMPORT_ARTWORK_REJECTED');
+				imageUrl = edge;
+				response = await fetch(edge.href, { redirect: 'error', size: importArtworkLimits.inputBytes, signal: controller.signal, agent });
+			}
 		}
 		const mime = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
 		const placeholderMime = originalOnly && imageUrl.href === kinopoiskPlaceholder && mime === 'image/gif';
