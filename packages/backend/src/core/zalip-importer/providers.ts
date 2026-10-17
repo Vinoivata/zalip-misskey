@@ -4,6 +4,7 @@
  */
 
 import fetch from 'node-fetch';
+import { createHash } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { Agent as HttpsAgent } from 'node:https';
 import { isIP } from 'node:net';
@@ -200,6 +201,13 @@ export function configuredImportPlayerUrl(value: unknown, source: 'alloha' | 'co
 	return safe ? rewriteImportPlayerOrigin(safe, origin) : null;
 }
 
+function collapsTranslationName(value: unknown): string | null {
+	if (typeof value !== 'string') return null;
+	// oneSound matches the provider's full name: do not rewrite its case or inner spacing.
+	const name = value.trim();
+	return !name || name.length > 256 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/u.test(name) ? null : name;
+}
+
 /** The caller supplies an already validated iframe, never a direct media URL. */
 export function importPlayerTranslationUrl(iframe: string, source: ImportPlayer['source'], translation: Pick<ImportPlayer['translations'][number], 'id' | 'name'>): string | null {
 	try {
@@ -210,7 +218,7 @@ export function importPlayerTranslationUrl(iframe: string, source: ImportPlayer[
 			url.searchParams.set('translation', translation.id);
 		} else {
 			// Collaps documents oneSound as the full voice name, not its catalogue ID.
-			const name = text(translation.name, 256);
+			const name = collapsTranslationName(translation.name);
 			if (name == null) return null;
 			url.searchParams.set('oneSound', name);
 		}
@@ -447,6 +455,23 @@ function maintenanceLimit(limit: number): void {
 	if (!Number.isInteger(limit) || limit < 20 || limit > 50) throw new ImportProviderError('invalid-ref');
 }
 
+/** Collaps detail responses use full voice-name strings; older adapters can also return ID/name objects. */
+function collapsTranslations(value: unknown, iframeUrl: string | null): ImportPlayer['translations'] {
+	const names = new Set<string>();
+	const ids = new Set<string>();
+	return array(value).flatMap(raw => {
+		const voice = object(raw);
+		const name = collapsTranslationName(typeof raw === 'string' ? raw : voice.name);
+		if (name == null) return [];
+		const id = externalId(voice.id) ?? `name:${createHash('sha256').update(name).digest('hex')}`;
+		if (names.has(name) || ids.has(id)) return [];
+		names.add(name);
+		ids.add(id);
+		const iframe = iframeUrl == null ? null : importPlayerTranslationUrl(iframeUrl, 'collaps', { id, name });
+		return [{ id, name, ...(iframe == null ? {} : { iframe }) }];
+	});
+}
+
 export function normalizeCollapsRecord(value: unknown, iframeHosts: readonly string[] = ['api.nextembed.ws']): ImportRecord {
 	const payload = object(value);
 	const item = object(payload.result ?? payload.data ?? value);
@@ -499,13 +524,7 @@ export function normalizeCollapsRecord(value: unknown, iframeHosts: readonly str
 		record.seasons.push({ seasonNumber, title: text(season.name) ?? `Сезон ${seasonNumber}`, posterUrl: safeImportUrl(season.poster), episodeCount: normalizedEpisodes.length, episodes: normalizedEpisodes.sort((a, b) => a.episodeNumber - b.episodeNumber) });
 	}
 	const iframeUrl = safeImportUrl(item.iframe_url, iframeHosts);
-	const translations = array(item.voiceActing ?? item.voice_acting).map(object).flatMap(voice => {
-		const name = text(voice.name, 256);
-		if (name == null) return [];
-		const translation = { id: externalId(voice.id) ?? name, name };
-		const iframe = iframeUrl == null ? null : importPlayerTranslationUrl(iframeUrl, 'collaps', translation);
-		return [{ ...translation, ...(iframe == null ? {} : { iframe }) }];
-	});
+	const translations = collapsTranslations(item.voiceActing ?? item.voice_acting, iframeUrl);
 	if (iframeUrl != null) record.players.push({ source: 'collaps', externalId: id, iframeUrl, quality: text(item.quality, 64) ?? (integer(item.quality, 0, 4) == null ? null : String(item.quality)), translations, episodes });
 	if (item.iframe_url != null && iframeUrl == null) record.warnings.push('collaps-player-url-rejected');
 	record.complete = record.warnings.length === 0;

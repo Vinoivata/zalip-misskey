@@ -57,7 +57,15 @@ export type ImportFilters = { mediaTypes?: ImportMediaType[]; kinds?: ('movie' |
 export type ImportOptions = { sources?: ImportSource[]; fields?: ImportField[]; fieldSources?: Partial<Record<ImportField, ImportSource>>; filters?: ImportFilters; artwork?: 'remote' | 'local-webp' | 'local'; artworkSettings?: ImportArtworkSettings; artworkSelections?: ImportArtworkSelection[] };
 export type ImportSelection = { sources: ImportSource[]; fields: ImportField[]; fieldSources: Partial<Record<ImportField, ImportSource | ''>>; artwork: 'remote' | 'local-webp' | 'local'; artworkSettings: ImportArtworkSettings; filters: { mediaTypes: ImportMediaType[]; kinds: NonNullable<ImportFilters['kinds']>; yearFrom: string; yearTo: string; genres: string; countries: string; ratingMin: string; requirePlayer: boolean } };
 export type ImportPreview = { record: ImportRecord; workId: string | null; changes: { field: string; before: unknown; after: unknown; protected: boolean; selected?: boolean }[]; warnings: string[]; locks?: string[]; options?: ImportOptions; matchesFilters?: boolean };
-export type ImportWorkState = { workId: string; title: string; locks: string[]; fields: { field: string; source: string | null; editorial: boolean }[] };
+export type ImportWorkState = { workId: string; title: string; locks: string[]; playbackRevision?: string; fields: { field: string; source: string | null; editorial: boolean }[] };
+export type ImportVoiceRepair = { workId: string; status: 'updated' | 'already-current' | 'locked' | 'stale' | 'unsupported' | 'empty' | 'unavailable'; translations: number; playbackRevision: string };
+
+/** A repair must use the displayed server revision and never silently save pending locks. */
+export function importerVoiceRepairReady(state: ImportWorkState | null, workId: string, locks: readonly string[]): boolean {
+	if (!state || state.workId !== workId || !/^[a-f0-9]{64}$/u.test(state.playbackRevision ?? '') || state.locks.includes('players')) return false;
+	const pending = new Set(locks);
+	return pending.size === state.locks.length && state.locks.every(field => pending.has(field));
+}
 export type ImportRun = { id: string; state: string; mode: 'import' | 'sync' | 'availability'; createdAt: string; updatedAt: string; total: number; completed: number; failed: number; error: string | null; profileId: string | null; options?: ImportOptions };
 export type ImportRunItem = { id: string; position: number; state: string; ref: ImportRef; workId: string | null; error: string | null; warnings: string[] };
 export type TaxonomyType = 'person' | 'studio' | 'genre' | 'category' | 'collection';

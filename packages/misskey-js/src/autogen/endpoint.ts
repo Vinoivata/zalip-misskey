@@ -740,6 +740,8 @@ import type {
 	ZalipAdminImporterTaxonomySaveResponse,
 	ZalipAdminImporterTaxonomyShowRequest,
 	ZalipAdminImporterTaxonomyShowResponse,
+	ZalipAdminImporterWorkStateRefreshVoicesRequest,
+	ZalipAdminImporterWorkStateRefreshVoicesResponse,
 	ZalipAdminImporterWorkStateSaveRequest,
 	ZalipAdminImporterWorkStateSaveResponse,
 	ZalipAdminImporterWorkStateShowRequest,
@@ -1274,6 +1276,7 @@ export type Endpoints = {
 	'zalip/admin/importer/taxonomy/recalculate': { req: ZalipAdminImporterTaxonomyRecalculateRequest; res: ZalipAdminImporterTaxonomyRecalculateResponse };
 	'zalip/admin/importer/taxonomy/save': { req: ZalipAdminImporterTaxonomySaveRequest; res: ZalipAdminImporterTaxonomySaveResponse };
 	'zalip/admin/importer/taxonomy/show': { req: ZalipAdminImporterTaxonomyShowRequest; res: ZalipAdminImporterTaxonomyShowResponse };
+	'zalip/admin/importer/work-state/refresh-voices': { req: ZalipAdminImporterWorkStateRefreshVoicesRequest; res: ZalipAdminImporterWorkStateRefreshVoicesResponse };
 	'zalip/admin/importer/work-state/save': { req: ZalipAdminImporterWorkStateSaveRequest; res: ZalipAdminImporterWorkStateSaveResponse };
 	'zalip/admin/importer/work-state/show': { req: ZalipAdminImporterWorkStateShowRequest; res: ZalipAdminImporterWorkStateShowResponse };
 	'zalip/admin/seasons/create': { req: ZalipAdminSeasonsCreateRequest; res: ZalipAdminSeasonsCreateResponse };

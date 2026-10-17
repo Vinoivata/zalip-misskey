@@ -204,6 +204,157 @@ function deferred<T>() {
 
 beforeEach(() => { vi.clearAllMocks(); });
 
+describe('bounded Collaps voice repair', () => {
+	const ref: ImportRef = { source: 'collaps', externalId: '555', mediaType: 'tv' };
+	const collaps = () => ({ source: 'collaps', externalId: '555', iframeUrl: 'https://api.nextembed.ws/embed/555?season=2&episode=3', translations: [], quality: '1080p', episodes: [{ seasonNumber: 2, episodeNumber: 3 }], preserved: { untouched: true } });
+	const alloha = () => ({ source: 'alloha', externalId: 'tmdb:tv:100', iframeUrl: 'https://ascorbic-as.stravers.live/?token_movie=chosen&token=preserved-embed', translations: [{ id: '7', name: 'Existing voice', iframe: 'https://ascorbic-as.stravers.live/?token_movie=chosen&token=preserved-embed&translation=7' }], quality: 'HD', episodes: [{ seasonNumber: 1, episodeNumber: 1 }] });
+	const voices = [{ id: 'name:fixture', name: '  Studio  Full & Name  ', iframe: 'https://evil.example.org/never-use', quality: 'HD', resolutions: ['720p'] }];
+
+	function setup() {
+		const context = fixture({
+			works: [work({ kind: 'anime', tmdbMediaType: 'tv', importData: { locks: ['posterUrl'], values: { players: [alloha(), collaps()], description: 'Owned description' }, sources: { players: 'alloha', description: 'kinopoisk' }, localArtwork: { posterUrl: '/files/retained.png' }, availability: { last: 'unchanged' } } })],
+			identities: [{ id: 'collapsbinding', workId: 'canonical', provider: 'collaps', externalId: '555', entityType: 'tv', snapshot: record(), updatedAt: new Date('2026-01-01') }, { id: 'tmdbbinding', workId: 'canonical', provider: 'tmdb', externalId: '100', entityType: 'tv' }],
+		});
+		enable(context, 'collaps');
+		context.sourceSettings.getRuntime.mockResolvedValue({ apiOrigins: defaultImportApiOrigins, allohaPlayerToken: 'preserved-embed' });
+		context.providers.collaps.fetch.mockResolvedValue(record({ ref, identities: [{ provider: 'collaps', externalId: '555', entityType: 'tv' }], players: [{ ...collaps(), source: 'collaps', iframeUrl: 'https://api.nextembed.ws/embed/replacement-not-used', translations: voices }], title: 'Do not overwrite', description: 'Do not overwrite', complete: false }));
+		return context;
+	}
+
+	const storedPlayers = (context: ReturnType<typeof fixture>) => ((context.works.rows[0].importData as Row).values as Row).players as Row[];
+
+	test('updates only existing empty translations, retains parent/Alloha and yields public oneSound choices', async () => {
+		const context = setup();
+		const before = structuredClone(context.works.rows[0]);
+		const identityBefore = structuredClone(context.identities.rows);
+		const state = await context.service.showWorkState('canonical');
+		expect(state.playbackRevision).toMatch(/^[a-f0-9]{64}$/u);
+		expect(JSON.stringify(state)).not.toContain('preserved-embed');
+		const result = await context.service.refreshCollapsVoices('canonical', state.playbackRevision);
+		expect(result).toMatchObject({ status: 'updated', translations: 1 });
+		expect(result.playbackRevision).not.toBe(state.playbackRevision);
+		expect(context.providers.collaps.fetch).toHaveBeenCalledExactlyOnceWith(ref, ['players']);
+		const expected = structuredClone(before);
+		const expectedPlayers = ((expected.importData as Row).values as Row).players as Row[];
+		expectedPlayers[1].translations = [{ id: 'name:fixture', name: 'Studio  Full & Name', iframe: 'https://api.nextembed.ws/embed/555?season=2&episode=3&oneSound=Studio++Full+%26+Name', quality: 'HD', resolutions: ['720p'] }];
+		expect(context.works.rows[0]).toEqual(expected);
+		expect(context.identities.rows).toEqual(identityBefore);
+		expect(context.works.update).toHaveBeenCalledExactlyOnceWith('canonical', { importData: expected.importData });
+		expect(context.works.save).not.toHaveBeenCalled();
+		expect(context.db.query).toHaveBeenCalledWith('SELECT pg_advisory_xact_lock(hashtext($1))', ['zalip-import-identities']);
+		expect(context.works.findOne).toHaveBeenCalledWith({ where: { id: 'canonical' }, lock: { mode: 'pessimistic_write' } });
+		expect(context.db.query.mock.invocationCallOrder[0]).toBeLessThan(context.works.findOne.mock.invocationCallOrder[0]);
+		expect(context.providers.collaps.fetch.mock.invocationCallOrder[0]).toBeLessThan(context.db.transaction.mock.invocationCallOrder[0]);
+		const playback = await context.service.playback('canonical');
+		expect(playback.sources.find(player => player.source === 'collaps')?.translations).toEqual(expectedPlayers[1].translations);
+		expect(playback.sources.find(player => player.source === 'alloha')?.translations[0].name).toBe('Existing voice');
+		expect(context.queue.add).not.toHaveBeenCalled();
+		expect(isolated.apply).not.toHaveBeenCalled();
+		expect(context.taxonomy.syncImportedWork).not.toHaveBeenCalled();
+		expect(context.catalogue.recordAllohaAvailability).not.toHaveBeenCalled();
+		expect(context.artwork.prepare).not.toHaveBeenCalled();
+		context.providers.collaps.fetch.mockClear();
+		expect((await context.service.refreshCollapsVoices('canonical', state.playbackRevision)).status).toBe('stale');
+		expect((await context.service.refreshCollapsVoices('canonical', result.playbackRevision)).status).toBe('already-current');
+		expect(context.providers.collaps.fetch).not.toHaveBeenCalled();
+		expect(context.works.update).toHaveBeenCalledOnce();
+	});
+
+	test('revisions include complete player payloads, locks and exact binding/media, not snapshot secrets or unrelated metadata', async () => {
+		const context = setup();
+		const baseline = (await context.service.showWorkState('canonical')).playbackRevision;
+		context.works.rows[0].title = 'Unrelated edit';
+		context.identities.rows[0].snapshot = { private: 'do-not-expose' };
+		expect((await context.service.showWorkState('canonical')).playbackRevision).toBe(baseline);
+		const original = structuredClone(context.works.rows[0]);
+		for (const mutate of [
+			() => { storedPlayers(context)[0].iframeUrl = 'https://ascorbic-as.stravers.live/?token=other'; },
+			() => { (context.works.rows[0].importData as Row).locks = ['players']; },
+			() => { context.works.rows[0].tmdbMediaType = 'movie'; },
+		]) {
+			mutate();
+			expect((await context.service.showWorkState('canonical')).playbackRevision).not.toBe(baseline);
+			context.works.rows[0] = structuredClone(original);
+		}
+		context.identities.rows[0].externalId = '556';
+		expect((await context.service.showWorkState('canonical')).playbackRevision).not.toBe(baseline);
+		context.identities.rows[0].externalId = '555';
+		context.identities.rows[0].entityType = 'movie';
+		expect((await context.service.showWorkState('canonical')).playbackRevision).not.toBe(baseline);
+	});
+
+	test.each(['locked', 'missing-binding', 'wrong-id', 'wrong-media', 'ambiguous-slots', 'ambiguous-bindings', 'invalid-parent', 'already-current'])('does not fetch or write when target is %s', async condition => {
+		const context = setup();
+		if (condition === 'locked') (context.works.rows[0].importData as Row).locks = ['players'];
+		if (condition === 'missing-binding') context.identities.rows.splice(0, 1);
+		if (condition === 'wrong-id') context.identities.rows[0].externalId = '999';
+		if (condition === 'wrong-media') context.identities.rows[0].entityType = 'movie';
+		if (condition === 'ambiguous-slots') storedPlayers(context).push(collaps());
+		if (condition === 'ambiguous-bindings') context.identities.rows.push({ provider: 'collaps', externalId: '555', entityType: 'movie', workId: 'canonical' });
+		if (condition === 'invalid-parent') storedPlayers(context)[1].iframeUrl = 'https://evil.example.org/embed/555';
+		if (condition === 'already-current') storedPlayers(context)[1].translations = [{ id: '7', name: 'Retained' }];
+		const before = structuredClone(context.works.rows);
+		const revision = (await context.service.showWorkState('canonical')).playbackRevision;
+		const result = await context.service.refreshCollapsVoices('canonical', revision);
+		expect(result.status).toBe(condition === 'locked' || condition === 'already-current' ? condition : 'unsupported');
+		expect(context.providers.collaps.fetch).not.toHaveBeenCalled();
+		expect(context.works.update).not.toHaveBeenCalled();
+		expect(context.works.rows).toEqual(before);
+	});
+
+	test.each(['empty', 'wrong-ref', 'wrong-media', 'wrong-slot', 'malformed-voices', 'upstream-error'])('retains the exact work and binding on %s responses', async condition => {
+		const context = setup();
+		const incoming = record({ ref: { ...ref }, identities: [{ provider: 'collaps', externalId: '555', entityType: 'tv' }], players: [{ ...collaps(), source: 'collaps', translations: [] }] });
+		if (condition === 'wrong-ref') incoming.ref.externalId = '556';
+		if (condition === 'wrong-media') incoming.ref.mediaType = 'movie';
+		if (condition === 'wrong-slot') incoming.players[0].externalId = '556';
+		if (condition === 'malformed-voices') incoming.players[0].translations = [{ id: 'x', name: 'Invalid\u0000Name' }];
+		if (condition === 'upstream-error') context.providers.collaps.fetch.mockRejectedValue(new Error('private-provider-url-token'));
+		else context.providers.collaps.fetch.mockResolvedValue(incoming);
+		const before = structuredClone(context.works.rows);
+		const bindings = structuredClone(context.identities.rows);
+		const result = await context.service.refreshCollapsVoices('canonical', (await context.service.showWorkState('canonical')).playbackRevision);
+		expect(result.status).toBe(condition === 'empty' ? 'empty' : condition === 'malformed-voices' || condition === 'upstream-error' ? 'unavailable' : 'unsupported');
+		expect(JSON.stringify(result)).not.toContain('private-provider');
+		expect(context.works.rows).toEqual(before);
+		expect(context.identities.rows).toEqual(bindings);
+		expect(context.db.transaction).not.toHaveBeenCalled();
+		expect(context.works.update).not.toHaveBeenCalled();
+	});
+
+	test.each(['players', 'lock', 'identity', 'media'])('CAS rejects concurrent %s changes after HTTP without overwriting them', async changed => {
+		const context = setup();
+		const pending = deferred<ImportRecord>();
+		context.providers.collaps.fetch.mockReturnValueOnce(pending.promise);
+		const revision = (await context.service.showWorkState('canonical')).playbackRevision;
+		const operation = context.service.refreshCollapsVoices('canonical', revision);
+		await vi.waitFor(() => expect(context.providers.collaps.fetch).toHaveBeenCalledOnce());
+		if (changed === 'players') storedPlayers(context)[1].iframeUrl = 'https://api.nextembed.ws/embed/editorial';
+		if (changed === 'lock') (context.works.rows[0].importData as Row).locks = ['players'];
+		if (changed === 'identity') context.identities.rows[0].externalId = '556';
+		if (changed === 'media') context.identities.rows[0].entityType = 'movie';
+		const before = structuredClone(context.works.rows);
+		pending.resolve(record({ ref, identities: [{ provider: 'collaps', externalId: '555', entityType: 'tv' }], players: [{ ...collaps(), source: 'collaps', translations: voices }] }));
+		expect((await operation).status).toBe('stale');
+		expect(context.works.rows).toEqual(before);
+		expect(context.works.update).not.toHaveBeenCalled();
+	});
+
+	test('retains unrelated concurrent edits by merging only into the reread work', async () => {
+		const context = setup();
+		const pending = deferred<ImportRecord>();
+		context.providers.collaps.fetch.mockReturnValueOnce(pending.promise);
+		const operation = context.service.refreshCollapsVoices('canonical', (await context.service.showWorkState('canonical')).playbackRevision);
+		await vi.waitFor(() => expect(context.providers.collaps.fetch).toHaveBeenCalledOnce());
+		context.works.rows[0].title = 'Concurrent title';
+		(context.works.rows[0].importData as Row).localArtwork = { posterUrl: '/files/concurrent.png' };
+		pending.resolve(record({ ref, identities: [{ provider: 'collaps', externalId: '555', entityType: 'tv' }], players: [{ ...collaps(), source: 'collaps', translations: voices }] }));
+		expect((await operation).status).toBe('updated');
+		expect(context.works.rows[0].title).toBe('Concurrent title');
+		expect((context.works.rows[0].importData as Row).localArtwork).toEqual({ posterUrl: '/files/concurrent.png' });
+	});
+});
+
 describe('Zalip importer image choices', () => {
 	const picture = () => artworkCandidate({ source: 'tmdb', field: 'posterUrl', url: 'https://image.tmdb.org/t/p/original/chosen.jpg', previewUrl: 'https://image.tmdb.org/t/p/w300/chosen.jpg', width: 600, height: 900, language: 'ru' });
 

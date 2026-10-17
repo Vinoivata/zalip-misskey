@@ -7,8 +7,18 @@ import { describe, expect, it } from 'vitest';
 import { i18n } from '../../src/i18n.js';
 import { formatImporterValue, importerCollectionIds, importerFieldGroups, importerFields, importerFiltersValid, importerImageUrl, importerImdbId, importerMaintenanceRequest, importerOptions, importerPlaybackSettings, importerProgress, importerReference, importerReferenceKey, importerRefreshSequence, importerRequestCurrent, importerRequestFinish, importerRequestInvalidate, importerRequestStart, importerRequestState, importerSelection, importerServiceForm, importerServiceOrigin, importerServiceRequest, importerServiceSettingsUpdate, importerWarningLabel, importerWarningLabels, importerWorkIds, splitImporterReferenceLines, taxonomyAppendWorks, taxonomyBaseChanges, taxonomyCollectionChanges, taxonomyFacts, taxonomyPersonChanges } from '../../src/utility/zalip-importer.js';
 import type { ImportPlaybackProvider, ImportServiceSettings, TaxonomyWork } from '../../src/utility/zalip-importer.js';
+import { importerVoiceRepairReady } from '../../src/utility/zalip-importer.js';
 
 describe('importer presentation helpers', () => {
+	it('repairs only the displayed player revision with unchanged saved locks', () => {
+		const state = { workId: 'work1', title: 'Fixture', playbackRevision: 'a'.repeat(64), locks: ['title', 'posterUrl'], fields: [] };
+		expect(importerVoiceRepairReady(state, 'work1', ['posterUrl', 'title'])).toBe(true);
+		for (const locks of [[], ['title'], ['title', 'posterUrl', 'players']]) expect(importerVoiceRepairReady(state, 'work1', locks)).toBe(false);
+		expect(importerVoiceRepairReady(state, 'work2', state.locks)).toBe(false);
+		expect(importerVoiceRepairReady(null, 'work1', [])).toBe(false);
+		expect(importerVoiceRepairReady({ ...state, locks: ['players'] }, 'work1', ['players'])).toBe(false);
+		for (const playbackRevision of [undefined, '', 'a'.repeat(63), 'A'.repeat(64), 'g'.repeat(64)]) expect(importerVoiceRepairReady({ ...state, playbackRevision }, 'work1', state.locks)).toBe(false);
+	});
 	it('trims and deduplicates references without splitting provider URLs', () => {
 		expect(splitImporterReferenceLines('  movie:11\r\n\nmovie:11\nhttps://provider.example/a,b  ')).toEqual(['movie:11', 'https://provider.example/a,b']);
 	});

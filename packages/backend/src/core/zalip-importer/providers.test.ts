@@ -132,6 +132,57 @@ describe('importer normalizers', () => {
 		expect(iframe.href).not.toContain(' ');
 	});
 
+	test('Collaps accepts real string voices with stable IDs and full encoded oneSound names', () => {
+		const voiceActing = ['Творческая студия МИР', 'Дубляж & оригинал'];
+		const input = { id: 50, name: 'Сериал', type: 'serials', iframe_url: 'https://api.nextembed.ws/embed/movie/50?season=2&episode=3', voiceActing };
+		const voices = normalizeCollapsRecord(input).players[0].translations;
+		expect(voices.map(voice => voice.name)).toEqual(voiceActing);
+		for (const voice of voices) {
+			expect(voice.id).toMatch(/^name:[a-f0-9]{64}$/u);
+			const url = new URL(voice.iframe!);
+			expect(url.searchParams.get('oneSound')).toBe(voice.name);
+			expect(url.searchParams.get('season')).toBe('2');
+			expect(url.searchParams.get('episode')).toBe('3');
+			expect(url.searchParams.has('translation')).toBe(false);
+		}
+		const reversed = normalizeCollapsRecord({ ...input, voiceActing: [...voiceActing].reverse() }).players[0].translations;
+		expect(reversed.map(voice => voice.id)).toEqual(voices.map(voice => voice.id).reverse());
+		expect(input.voiceActing).toEqual(voiceActing);
+	});
+
+	test('Collaps trims mixed objects without duplicate voice names or IDs and preserves exact inner spacing', () => {
+		const input = { id: 50, name: 'Сериал', iframe_url: 'https://api.nextembed.ws/embed/movie/50', voice_acting: [
+			'  Studio One  ', { id: 5, name: 'Studio One' },
+			{ id: 6, name: ' Второй голос ' }, 'Второй голос',
+			{ id: 6, name: 'Conflicting provider ID' }, { id: '7', name: 'Original' },
+			{ name: 'Without ID' }, { name: 'Without ID' }, ' Студия\t \nМИР ', '<Studio>',
+		] };
+		const voices = normalizeCollapsRecord(input).players[0].translations;
+		expect(voices.map(voice => voice.name)).toEqual(['Studio One', 'Второй голос', 'Original', 'Without ID', 'Студия\t \nМИР', '<Studio>']);
+		expect(voices.map(voice => voice.id)).toEqual([expect.stringMatching(/^name:[a-f0-9]{64}$/u), '6', '7', expect.stringMatching(/^name:[a-f0-9]{64}$/u), expect.stringMatching(/^name:[a-f0-9]{64}$/u), expect.stringMatching(/^name:[a-f0-9]{64}$/u)]);
+		for (const voice of voices) expect(new URL(voice.iframe!).searchParams.get('oneSound')).toBe(voice.name);
+		const equivalent = normalizeCollapsRecord({ ...input, voice_acting: ['Studio One'] }).players[0].translations[0];
+		expect(voices[0].id).toBe(equivalent.id);
+	});
+
+	test('Collaps bounds voice lists and names, rejects malformed labels and avoids prefix-ID collisions', () => {
+		const prefix = 'А'.repeat(255);
+		const input = { id: 50, name: 'Film', iframe_url: 'https://api.nextembed.ws/embed/movie/50', voiceActing: [
+			null, 5, true, ['not a voice'], {}, { id: 10 }, '', '   ', 'Bad\u0000name',
+			'A'.repeat(257), `${prefix}1`, `${prefix}2`,
+		] };
+		const voices = normalizeCollapsRecord(input).players[0].translations;
+		expect(voices.map(voice => voice.name)).toEqual([`${prefix}1`, `${prefix}2`]);
+		expect(voices[0].id).not.toBe(voices[1].id);
+		expect(voices.every(voice => voice.id.length <= 100)).toBe(true);
+		const bounded = normalizeCollapsRecord({ ...input, voiceActing: Array.from({ length: 101 }, (_, index) => `Voice ${index}`) }).players[0].translations;
+		expect(bounded).toHaveLength(100);
+		expect(bounded.at(-1)?.name).toBe('Voice 99');
+		const rejected = normalizeCollapsRecord({ ...input, iframe_url: 'https://untrusted.example.org/embed/50', voiceActing: ['Studio'] });
+		expect(rejected.players).toEqual([]);
+		expect(rejected.warnings).toContain('collaps-player-url-rejected');
+	});
+
 	test('episode limits are explicit rather than silently claiming complete coverage', () => {
 		const episodes = Array.from({ length: 1001 }, (_, index) => ({ episode: index + 1, name: `Episode ${index + 1}` }));
 		const result = normalizeCollapsRecord({ id: 1, name: 'Long show', type: 'serials', seasons: [{ season: 1, episodes }] });
@@ -148,6 +199,15 @@ describe('importer normalizers', () => {
 });
 
 describe('importer adapter contracts', () => {
+	test('Collaps string voices use the existing detail request without an additional dictionary lookup', async () => {
+		const transport = vi.fn<ImportTransport>().mockResolvedValue({ id: 50, name: 'Film', type: 'films', genre: [], iframe_url: 'https://api.nextembed.ws/embed/movie/50', voiceActing: ['Первый голос', 'Original'] });
+		const record = await createImportProviders({ collapsApiToken: 'fixture' }, transport).collaps.fetch({ source: 'collaps', externalId: '50', mediaType: 'movie' }, ['players']);
+		expect(record.players[0].translations.map(voice => voice.name)).toEqual(['Первый голос', 'Original']);
+		expect(record.players[0].translations.every(voice => new URL(voice.iframe!).searchParams.get('oneSound') === voice.name)).toBe(true);
+		expect(transport).toHaveBeenCalledOnce();
+		expect(new URL(transport.mock.calls[0][0]).pathname).toBe('/franchise/details');
+	});
+
 	test('Collaps dictionary is a typed paginated resource and discards token-bearing next URLs', async () => {
 		const transport = vi.fn<ImportTransport>().mockResolvedValue({ results: [{ id: 12, name: 'Подборка', token: 'fixture-never-store' }], next_page: 'https://evil.example/?token=fixture-never-store' });
 		const provider = createImportProviders({ collapsApiToken: 'fixture' }, transport).collaps;

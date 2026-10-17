@@ -2918,6 +2918,126 @@ export interface Locale extends ILocale {
              * Сбросить изменения формы
              */
             "resetSourceChanges": string;
+            /**
+             * Восстановить озвучки Collaps
+             */
+            "repairCollapsVoices": string;
+            /**
+             * Восстанавливаются только отсутствующие озвучки. Alloha, изображения, метаданные и блокировки не меняются.
+             */
+            "repairCollapsVoicesHint": string;
+            /**
+             * Озвучки Collaps восстановлены: {count}.
+             */
+            "repairVoicesUpdated": ParameterizedString<"count">;
+            /**
+             * Озвучки Collaps уже заполнены.
+             */
+            "repairVoicesAlready": string;
+            /**
+             * Поле плееров защищено от изменений.
+             */
+            "repairVoicesLocked": string;
+            /**
+             * Данные плеера изменились. Загрузите состояние тайтла заново.
+             */
+            "repairVoicesStale": string;
+            /**
+             * У тайтла нет однозначной сохранённой привязки Collaps.
+             */
+            "repairVoicesUnsupported": string;
+            /**
+             * Collaps не вернул доступных озвучек. Данные не изменены.
+             */
+            "repairVoicesEmpty": string;
+            /**
+             * Не удалось получить озвучки Collaps. Данные не изменены.
+             */
+            "repairVoicesUnavailable": string;
+            /**
+             * Сначала сохраните изменения блокировок или загрузите состояние заново.
+             */
+            "repairVoicesUnsavedLocks": string;
+        };
+        "_taxonomy": {
+            /**
+             * В ролях
+             */
+            "cast": string;
+            /**
+             * Обзор
+             */
+            "overview": string;
+            /**
+             * Показать все ({count})
+             */
+            "showAll": ParameterizedString<"count">;
+            /**
+             * Свернуть
+             */
+            "showLess": string;
+            /**
+             * Персона
+             */
+            "person": string;
+            /**
+             * Студия
+             */
+            "studio": string;
+            /**
+             * Жанр
+             */
+            "genre": string;
+            /**
+             * Категория
+             */
+            "category": string;
+            /**
+             * Подборка
+             */
+            "collection": string;
+            "_roles": {
+                /**
+                 * Актёр
+                 */
+                "actor": string;
+                /**
+                 * Режиссёр
+                 */
+                "director": string;
+                /**
+                 * Сценарист
+                 */
+                "writer": string;
+                /**
+                 * Продюсер
+                 */
+                "producer": string;
+                /**
+                 * Композитор
+                 */
+                "composer": string;
+                /**
+                 * Оператор
+                 */
+                "cinematographer": string;
+                /**
+                 * Монтажёр
+                 */
+                "editor": string;
+                /**
+                 * Художник
+                 */
+                "designer": string;
+                /**
+                 * Автор
+                 */
+                "creator": string;
+                /**
+                 * Участник
+                 */
+                "participant": string;
+            };
         };
         /**
          * Добавить контент

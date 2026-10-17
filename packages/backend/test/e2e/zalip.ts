@@ -9,7 +9,7 @@ import * as assert from 'node:assert';
 import { beforeAll, describe, test } from 'vitest';
 import { MiZalipAllohaAvailabilityEvent } from '@/models/ZalipAllohaAvailabilityEvent.js';
 import { MiZalipWork } from '@/models/ZalipWork.js';
-import { api, castAsError, initTestDb, signup } from '../utils.js';
+import { api, castAsError, createAppToken, initTestDb, signup } from '../utils.js';
 import type * as misskey from 'misskey-js';
 
 type ImporterTaxonomyEntry = { id: string; name: string; data: Record<string, unknown> };
@@ -220,7 +220,8 @@ describe('Zalip discussions', () => {
 		];
 		for (const [endpoint, params] of cases) {
 			const anonymous = await api(endpoint, params);
-			assert.strictEqual(anonymous.status, 401, endpoint);
+			const nativeOnly = endpoint === 'zalip/admin/importer/artwork/inspect' || endpoint === 'zalip/admin/importer/artwork/step';
+			assert.strictEqual(anonymous.status, nativeOnly ? 403 : 401, endpoint);
 			const denied = await api(endpoint, params, viewer);
 			assert.strictEqual(denied.status, 403, endpoint);
 			assert.strictEqual(castAsError(denied.body as Record<string, unknown>).error.code, 'ZALIP_ADMIN_REQUIRED');
@@ -241,6 +242,37 @@ describe('Zalip discussions', () => {
 		assert.strictEqual(castAsError(injection.body).error.code, 'INVALID_PARAM');
 		const after = await api('zalip/works/show', { slug: 'zalip-discussion-test' }, viewer);
 		assert.deepStrictEqual(after.body, before.body);
+	});
+
+	test('Collaps voice repair admits only native administrators and keeps offline/stale targets untouched', async () => {
+		const endpoint = 'zalip/admin/importer/work-state/refresh-voices' as const;
+		const input = { workId, expected: 'a'.repeat(64) };
+		const anonymous = await api(endpoint, input);
+		assert.strictEqual(anonymous.status, 403);
+		assert.strictEqual(castAsError(anonymous.body).error.code, 'ACCESS_DENIED');
+		const denied = await api(endpoint, input, viewer);
+		assert.strictEqual(denied.status, 403);
+		assert.strictEqual(castAsError(denied.body).error.code, 'ZALIP_ADMIN_REQUIRED');
+		// Generated only by the isolated local test server, never by a live deployment.
+		const appToken = await createAppToken(admin, ['write:account']);
+		const application = await api(endpoint, input, { token: appToken });
+		assert.strictEqual(application.status, 403);
+		assert.strictEqual(castAsError(application.body).error.code, 'ACCESS_DENIED');
+		const db = await initTestDb(true);
+		const before = await db.getRepository(MiZalipWork).findOneByOrFail({ id: workId });
+		const state = await api('zalip/admin/importer/work-state/show', { workId }, admin);
+		assert.strictEqual(state.status, 200);
+		assert.match(state.body.playbackRevision as string, /^[a-f0-9]{64}$/u);
+		const unsupported = await api(endpoint, { workId, expected: state.body.playbackRevision as string }, admin);
+		assert.strictEqual(unsupported.status, 200);
+		assert.strictEqual(unsupported.body.status, 'unsupported');
+		const stale = await api(endpoint, input, admin);
+		assert.strictEqual(stale.status, 200);
+		assert.strictEqual(stale.body.status, 'stale');
+		const injection = await api(endpoint, { ...input, iframe: 'https://arbitrary.example.org/embed' } as never, admin);
+		assert.strictEqual(injection.status, 400);
+		assert.strictEqual(castAsError(injection.body).error.code, 'INVALID_PARAM');
+		assert.deepStrictEqual(await db.getRepository(MiZalipWork).findOneByOrFail({ id: workId }), before);
 	});
 
 	test('taxonomy editorial entries and draft membership stay private until a work is published', async () => {

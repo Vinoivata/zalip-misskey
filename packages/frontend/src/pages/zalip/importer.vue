@@ -89,7 +89,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<summary>{{ i18n.ts.zalip._importer.persistedProtection }}</summary><p :class="$style.hint">{{ i18n.ts.zalip._importer.persistedProtectionHint }}</p>
 						<form :class="$style.searchForm" @submit.prevent="loadWorkState"><label :class="$style.grow"><span>{{ i18n.ts.zalip._importer.workId }}</span><input v-model.trim="workStateId" required maxlength="32" pattern="[A-Za-z0-9]+" :disabled="busy || workStateLoading"></label><button type="submit" class="_button" :class="$style.button" :disabled="busy || workStateLoading || !workStateId">{{ i18n.ts.zalip._importer.loadWorkState }}</button></form>
 						<p v-if="workStateLoading" :class="$style.hint" role="status">{{ i18n.ts.zalip._importer.loading }}</p><p v-if="workStateError" :class="$style.error" role="alert">{{ workStateError }}</p>
-						<template v-if="workState"><h3 :class="$style.optionsHeading">{{ workState.title }}</h3><fieldset v-for="group in importerFieldGroups" :key="group.id" :class="[$style.locks, $style.lockGroup]"><legend>{{ importerGroupLabel(group.id) }}</legend><label v-for="field in group.fields" :key="field"><input v-model="persistedLocks" type="checkbox" :value="field" :disabled="busy || workStateLoading">{{ importerFieldLabel(field) }}<small v-if="workOrigin(field)"> · {{ workOrigin(field) }}</small><small v-if="workState.fields.find(item => item.field === field)?.editorial"> · {{ i18n.ts.zalip._importer.editorialProtection }}</small></label></fieldset><button type="button" class="_button" :class="$style.primary" :disabled="busy || workStateLoading || workState.workId !== workStateId" @click="saveWorkLocks">{{ i18n.ts.zalip._importer.saveLocks }}</button></template>
+						<template v-if="workState">
+							<h3 :class="$style.optionsHeading">{{ workState.title }}</h3><fieldset v-for="group in importerFieldGroups" :key="group.id" :class="[$style.locks, $style.lockGroup]"><legend>{{ importerGroupLabel(group.id) }}</legend><label v-for="field in group.fields" :key="field"><input v-model="persistedLocks" type="checkbox" :value="field" :disabled="busy || workStateLoading">{{ importerFieldLabel(field) }}<small v-if="workOrigin(field)"> · {{ workOrigin(field) }}</small><small v-if="workState.fields.find(item => item.field === field)?.editorial"> · {{ i18n.ts.zalip._importer.editorialProtection }}</small></label></fieldset><button type="button" class="_button" :class="$style.primary" :disabled="busy || workStateLoading || workState.workId !== workStateId" @click="saveWorkLocks">{{ i18n.ts.zalip._importer.saveLocks }}</button>
+							<p :class="$style.hint">{{ i18n.ts.zalip._importer.repairCollapsVoicesHint }}</p>
+							<p v-if="workState.locks.includes('players')" :class="$style.hint">{{ i18n.ts.zalip._importer.repairVoicesLocked }}</p>
+							<p v-else-if="workLocksChanged" :class="$style.hint">{{ i18n.ts.zalip._importer.repairVoicesUnsavedLocks }}</p>
+							<button type="button" class="_button" :class="$style.button" :disabled="busy || workStateLoading || !importerVoiceRepairReady(workState, workStateId, persistedLocks)" @click="repairCollapsVoices"><i class="ti ti-volume" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.repairCollapsVoices }}</button>
+						</template>
 					</details>
 
 					<section v-if="previewLoading || preview || previewError" ref="previewPanel" :class="$style.panel" aria-live="polite">
@@ -166,7 +172,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<p v-if="profilesError" :class="$style.error" role="alert">{{ profilesError }}</p><p :class="$style.hint">{{ i18n.ts.zalip._importer.activeProfileHint }}</p>
 						<div :class="$style.rows"><article v-for="profile in profiles" :key="profile.id" :class="$style.itemRow"><div :class="$style.grow"><strong>{{ profile.name }}</strong><small>{{ importerSourceLabel(profile.source) }} · {{ profileModeLabel(profile.mode) }} · {{ profile.enabled ? i18n.ts.zalip._importer.enabled : i18n.ts.zalip._importer.disabled }} · {{ i18n.tsx.zalip._importer.intervalSummary({ count: String(profile.intervalMinutes) }) }}</small><small>{{ i18n.tsx.zalip._importer.scheduleDates({ last: dateLabel(profile.lastRunAt), next: dateLabel(profile.nextRunAt) }) }}</small><p v-if="profile.lastError" :class="$style.error">{{ profile.lastError }}</p></div><div :class="$style.actions"><button type="button" class="_button" :class="$style.button" :disabled="busy" @click="editProfile(profile)">{{ i18n.ts.zalip._importer.edit }}</button><button type="button" class="_button" :class="$style.button" :disabled="busy || profileActive(profile.id)" @click="runProfile(profile)"><i class="ti ti-player-play" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.run }}</button><button type="button" class="_button" :class="$style.button" :disabled="busy" @click="profileAction(profile, profile.enabled ? 'disable' : 'enable')">{{ profile.enabled ? i18n.ts.zalip._importer.disableProfile : i18n.ts.zalip._importer.enableProfile }}</button><button type="button" class="_button" :class="$style.button" :disabled="busy || profileActive(profile.id)" @click="profileAction(profile, 'reset-cursor')">{{ i18n.ts.zalip._importer.resetCursor }}</button><button type="button" class="_button" :class="$style.danger" :disabled="busy || profileActive(profile.id)" @click="profileAction(profile, 'delete')"><i class="ti ti-trash" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.deleteSchedule }}</button></div></article></div><p v-if="!profiles.length && !profilesError" :class="$style.hint">{{ i18n.ts.zalip._importer.noSchedules }}</p>
 					</section>
-					<section :class="$style.panel"><h2>{{ profileForm.id ? i18n.ts.zalip._importer.editSchedule : i18n.ts.zalip._importer.newSchedule }}</h2>
+					<section :class="$style.panel">
+						<h2>{{ profileForm.id ? i18n.ts.zalip._importer.editSchedule : i18n.ts.zalip._importer.newSchedule }}</h2>
 						<form :class="$style.form" @submit.prevent="saveProfile"><label><span>{{ i18n.ts.zalip._importer.name }}</span><input v-model.trim="profileForm.name" required maxlength="120" :disabled="busy"></label><label><span>{{ i18n.ts.zalip._importer.source }}</span><select v-model="profileForm.source" :disabled="busy || profileOptionsLocked"><option v-for="source in importerSources" :key="source" :value="source" :disabled="!sourceStatus(source)?.configured">{{ importerSourceLabel(source) }}</option></select></label><label><span>{{ i18n.ts.zalip._importer.task }}</span><select v-model="profileForm.mode" :disabled="busy || profileOptionsLocked"><option value="metadata">{{ i18n.ts.zalip._importer.metadataMode }}</option><option value="availability">{{ i18n.ts.zalip._importer.availabilityMode }}</option><option value="collection">{{ i18n.ts.zalip._importer.collectionMode }}</option><option value="discovery" :disabled="profileForm.source !== 'collaps' || !sourceStatus('collaps')?.capabilities.updates">{{ i18n.ts.zalip._importer.discoveryMode }}</option></select></label><label><span>{{ i18n.ts.zalip._importer.interval }}</span><input v-model.number="profileForm.intervalMinutes" type="number" required min="15" max="43200" :disabled="busy"></label><label v-if="profileForm.mode === 'collection'" :class="$style.wide"><span>{{ i18n.ts.zalip._importer.collectionId }}</span><input v-model.trim="profileForm.collectionId" required maxlength="100" pattern="[A-Za-z0-9_-]+" :disabled="busy || profileOptionsLocked"></label><label :class="$style.wide"><span>{{ i18n.ts.zalip._importer.categories }}</span><select v-model="profileForm.categoryIds" multiple size="3" :disabled="busy"><option v-for="entry in categories" :key="entry.id" :value="entry.id">{{ entry.name }}</option></select></label><details :class="[$style.fieldGroup, $style.wide]"><summary>{{ i18n.ts.zalip._importer.lockedFields }}</summary><fieldset v-for="group in importerFieldGroups" :key="group.id" :class="[$style.locks, $style.lockGroup]"><legend>{{ importerGroupLabel(group.id) }}</legend><label v-for="field in group.fields" :key="field"><input v-model="profileForm.lockedFields" type="checkbox" :value="field" :disabled="busy">{{ importerFieldLabel(field) }}</label></fieldset></details><label :class="[$style.check, $style.wide]"><input v-model="profileForm.enabled" type="checkbox" :disabled="busy">{{ i18n.ts.zalip._importer.enableSchedule }}</label><p v-if="profileCapabilityWarning" :class="[$style.hint, $style.wide]">{{ profileCapabilityWarning }}</p><button type="submit" class="_button" :class="$style.primary" :disabled="busy || !profileForm.name || !!profileCapabilityWarning"><i class="ti ti-device-floppy" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.saveSchedule }}</button></form>
 					</section>
 				</template>
@@ -257,7 +264,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script lang="ts" setup>
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, useTemplateRef, watch } from 'vue';
-import type { ImportArtworkChoices, ImportField, ImportMaintenanceKind, ImportMaintenanceProfile, ImportMaintenanceRun, ImportMaintenanceSource, ImportMediaType, ImportPlaybackProvider, ImportPreview, ImportProfile, ImportRef, ImportRun, ImportRunItem, ImportSearchItem, ImportServiceForm, ImportServiceSave, ImportServiceSettingsResponse, ImportSource, ImportSourceCheck, ImportSourceStatus, ImportWorkState, TaxonomyEntry, TaxonomyType, TaxonomyWork } from '@/utility/zalip-importer.js';
+import type { ImportArtworkChoices, ImportField, ImportMaintenanceKind, ImportMaintenanceProfile, ImportMaintenanceRun, ImportMaintenanceSource, ImportMediaType, ImportPlaybackProvider, ImportPreview, ImportProfile, ImportRef, ImportRun, ImportRunItem, ImportSearchItem, ImportServiceForm, ImportServiceSave, ImportServiceSettingsResponse, ImportSource, ImportSourceCheck, ImportSourceStatus, ImportVoiceRepair, ImportWorkState, TaxonomyEntry, TaxonomyType, TaxonomyWork } from '@/utility/zalip-importer.js';
 import ImporterArtworkSettings from '@/pages/zalip/importer-artwork-settings.vue';
 import ImporterArtworkPicker from '@/pages/zalip/importer-artwork-picker.vue';
 import { importerArtworkCurrentChoices, importerArtworkFieldLocked, importerArtworkFields, importerArtworkLimitChoices, importerArtworkOptions, importerArtworkPreview, importerArtworkSameRef, importerArtworkSelectionStale } from '@/utility/zalip-importer-artwork.js';
@@ -267,6 +274,7 @@ import { iAmAdmin } from '@/i.js';
 import { definePage } from '@/page.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import * as os from '@/os.js';
+import { importerVoiceRepairReady } from '@/utility/zalip-importer.js';
 
 type Tab = 'import' | 'runs' | 'taxonomy' | 'schedules' | 'maintenance' | 'sources';
 const props = withDefaults(defineProps<{ source?: string; mediaType?: string; externalId?: string; imagesOnly?: string; workId?: string }>(), { source: '', mediaType: '', externalId: '', imagesOnly: '', workId: '' });
@@ -306,6 +314,7 @@ const workState = ref<ImportWorkState | null>(null);
 const persistedLocks = ref<string[]>([]);
 const workStateLoading = ref(false);
 const workStateError = ref('');
+const workLocksChanged = computed(() => !!workState.value && (new Set(persistedLocks.value).size !== workState.value.locks.length || workState.value.locks.some(field => !persistedLocks.value.includes(field))));
 const previewBase = ref<ImportPreview | null>(null);
 const artworkChoices = ref<ImportArtworkChoices>({});
 const preview = computed(() => previewBase.value ? importerArtworkPreview(previewBase.value, artworkChoices.value, lockedFields.value, artworkGalleryLimit.value) : null);
@@ -523,6 +532,41 @@ async function saveWorkLocks(): Promise<void> {
 	busy.value = true;
 	workStateError.value = '';
 	try { const result = await misskeyApiZalip<ImportWorkState>('zalip/admin/importer/work-state/save', { workId, lockedFields: locks }); if (workId === workStateId.value) { workState.value = result; persistedLocks.value = [...result.locks]; } if (preview.value?.workId === workId) { previewOptionsKey.value = ''; } message.value = i18n.ts.zalip._importer.locksSaved; } catch (error) { workStateError.value = errorMessage(error); } finally { busy.value = false; }
+}
+
+async function repairCollapsVoices(): Promise<void> {
+	if (busy.value || workStateLoading.value || !importerVoiceRepairReady(workState.value, workStateId.value, persistedLocks.value)) return;
+	const state = workState.value!;
+	const workId = state.workId;
+	const revision = workStateRevision;
+	busy.value = true;
+	workStateError.value = '';
+	message.value = '';
+	try {
+		const result = await misskeyApiZalip<ImportVoiceRepair>('zalip/admin/importer/work-state/refresh-voices', { workId, expected: state.playbackRevision });
+		if (revision !== workStateRevision || workId !== workStateId.value || result.workId !== workId) return;
+		if (result.status === 'stale') {
+			workState.value = null;
+			persistedLocks.value = [];
+			workStateError.value = i18n.ts.zalip._importer.repairVoicesStale;
+			return;
+		}
+		workState.value = { ...state, playbackRevision: result.playbackRevision };
+		if (result.status === 'updated') {
+			if (preview.value?.workId === workId) previewOptionsKey.value = '';
+			message.value = i18n.tsx.zalip._importer.repairVoicesUpdated({ count: result.translations });
+		} else {
+			message.value = ({
+				'already-current': i18n.ts.zalip._importer.repairVoicesAlready,
+				locked: i18n.ts.zalip._importer.repairVoicesLocked,
+				unsupported: i18n.ts.zalip._importer.repairVoicesUnsupported,
+				empty: i18n.ts.zalip._importer.repairVoicesEmpty,
+				unavailable: i18n.ts.zalip._importer.repairVoicesUnavailable,
+			})[result.status] ?? i18n.ts.zalip._importer.errorGeneric;
+		}
+	} catch (error) {
+		if (revision === workStateRevision && workId === workStateId.value) workStateError.value = errorMessage(error);
+	} finally { busy.value = false; }
 }
 
 function runModeLabel(mode: ImportRun['mode']): string { return ({ import: i18n.ts.zalip._importer.import, sync: i18n.ts.zalip._importer.update, availability: i18n.ts.zalip._importer.availabilityMode })[mode]; }

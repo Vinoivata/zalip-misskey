@@ -12,6 +12,7 @@ import { i18n } from '@/i18n.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import * as os from '@/os.js';
 import type { MenuItem, MenuSwitch } from '@/types/menu.js';
+import type { TaxonomyLink } from '@/utility/zalip-taxonomy.js';
 
 vi.mock('@/i.js', () => ({ $i: { id: 'viewer' } }));
 vi.mock('@/page.js', () => ({ definePage: vi.fn() }));
@@ -91,6 +92,47 @@ beforeEach(() => {
 	});
 });
 afterEach(cleanup);
+
+describe('Zalip title taxonomy cards', () => {
+	function withTaxonomy(links: TaxonomyLink[]): void {
+		const fallback = vi.mocked(misskeyApiZalip).getMockImplementation()!;
+		vi.mocked(misskeyApiZalip).mockImplementation(async (endpoint, data) => endpoint === 'zalip/taxonomy/show' ? { entries: links } : fallback(endpoint, data));
+	}
+
+	function link(id: string, type: TaxonomyLink['entry']['type'], role = ''): TaxonomyLink {
+		return { entry: { id, type, slug: id, name: `Name ${id}`, description: null, imageUrl: null, parentId: null }, role, character: null, position: 0 };
+	}
+
+	it('shows separate image sections and expands all people rather than a dead-end button', async () => {
+		const links = Array.from({ length: 18 }, (_, index) => link(`actor${index}`, 'person', 'actor'));
+		links.push(link('actor0', 'person', 'actor'), link('creator', 'person', 'director'), link('creator', 'person', 'writer'), link('studio', 'studio'), link('category', 'category'), link('collection', 'collection'), link('genre', 'genre'));
+		withTaxonomy(links);
+		const view = setup();
+		const cast = within(await view.findByRole('region', { name: i18n.ts.zalip._taxonomy.cast }));
+		expect(cast.getAllByRole('link')).toHaveLength(16);
+		await fireEvent.click(cast.getByRole('button', { name: i18n.tsx.zalip._taxonomy.showAll({ count: '18' }), expanded: false }));
+		expect(cast.getAllByRole('link')).toHaveLength(18);
+		await fireEvent.click(cast.getByRole('button', { name: i18n.ts.zalip._taxonomy.showLess, expanded: true }));
+		expect(cast.getAllByRole('link')).toHaveLength(16);
+		const creators = within(view.getByRole('region', { name: i18n.ts.zalip._importer.people }));
+		expect(creators.getAllByRole('link')).toHaveLength(1);
+		expect(creators.getByText(`${i18n.ts.zalip._taxonomy._roles.director} / ${i18n.ts.zalip._taxonomy._roles.writer}`)).toBeTruthy();
+		for (const name of [i18n.ts.zalip._importer.studios, i18n.ts.zalip._importer.categories, i18n.ts.zalip._importer.collections]) expect(view.getByRole('region', { name })).toBeTruthy();
+		expect(view.container.querySelector('a[href="/zalip/taxonomy/genre/genre"]')).toBeNull();
+	});
+
+	it('falls back to a person icon when their native image cannot load', async () => {
+		const actor = link('actor', 'person', 'actor');
+		actor.entry.imageUrl = 'https://social.example/files/photo.webp';
+		withTaxonomy([actor]);
+		const view = setup();
+		const cast = within(await view.findByRole('region', { name: i18n.ts.zalip._taxonomy.cast }));
+		const card = cast.getByRole('link');
+		await fireEvent.error(card.querySelector('img')!);
+		expect(card.querySelector('img')).toBeNull();
+		expect(card.querySelector('.ti-user')).toBeTruthy();
+	});
+});
 
 describe('Zalip work actions', () => {
 	function deferred<T>() {

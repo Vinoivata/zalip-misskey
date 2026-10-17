@@ -125,7 +125,24 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<a v-for="path in work.galleryPaths" :key="path" :href="tmdbBackdrop(path)" target="_blank" rel="noopener noreferrer" :aria-label="`Открыть кадр из ${work.title}`"><img :src="tmdbGalleryImage(path)" alt="" loading="lazy"></a>
 						</div>
 					</section>
-					<section v-if="catalogueLinks.length" :class="$style.gallery"><h2>{{ i18n.ts.zalip._importer.workCredits }}</h2><div :class="$style.genres"><MkA v-for="link in catalogueLinks" :key="`${link.entry.id}:${link.role}`" :to="`/zalip/taxonomy/${link.entry.type}/${link.entry.slug}`">{{ link.entry.name }}<small v-if="link.role"> · {{ link.role }}</small></MkA></div></section>
+					<section v-for="section in catalogueSections" :key="section.id" :class="$style.catalogueSection" :aria-labelledby="`${work.id}-taxonomy-${section.id}`">
+						<header :class="$style.catalogueHeading">
+							<h2 :id="`${work.id}-taxonomy-${section.id}`">{{ taxonomySectionLabel(section.id) }}</h2>
+							<button v-if="section.entries.length > catalogueLimit(section.id)" type="button" class="_button" :class="$style.catalogueExpand" :aria-expanded="expandedCatalogue.includes(section.id)" :aria-controls="`${work.id}-taxonomy-cards-${section.id}`" @click="toggleCatalogueSection(section.id)">{{ expandedCatalogue.includes(section.id) ? i18n.ts.zalip._taxonomy.showLess : i18n.tsx.zalip._taxonomy.showAll({ count: String(section.entries.length) }) }}</button>
+						</header>
+						<div :id="`${work.id}-taxonomy-cards-${section.id}`" :class="[$style.catalogueRail, { [$style.catalogueExpanded]: expandedCatalogue.includes(section.id), [$style.catalogueLandscapes]: section.id === 'categories' || section.id === 'collections' }]" @pointerdown="catalogueDrag.onPointerDown" @pointermove="catalogueDrag.onPointerMove" @pointerup="catalogueDrag.onPointerUp" @pointercancel="catalogueDrag.onPointerCancel" @click.capture="catalogueDrag.onClickCapture">
+							<MkA v-for="card in expandedCatalogue.includes(section.id) ? section.entries : section.entries.slice(0, catalogueLimit(section.id))" :key="card.entry.id" :to="`/zalip/taxonomy/${card.entry.type}/${card.entry.slug}`" :class="[$style.catalogueCard, { [$style.cataloguePerson]: card.entry.type === 'person', [$style.catalogueStudio]: card.entry.type === 'studio' }]">
+								<div :class="$style.catalogueArtwork">
+									<img v-if="catalogueImage(card.entry.imageUrl)" :src="catalogueImage(card.entry.imageUrl)!" alt="" loading="lazy" decoding="async" draggable="false" :width="card.entry.type === 'person' ? 256 : 480" :height="card.entry.type === 'person' ? 384 : card.entry.type === 'studio' ? 480 : 270" @error="catalogueImageFailed(card.entry.imageUrl)">
+									<i v-else :class="taxonomyTypeIcon(card.entry.type)" aria-hidden="true"></i>
+								</div>
+								<h3>{{ card.entry.name }}</h3>
+								<p v-if="card.credits.length" :class="$style.catalogueCaption">{{ taxonomyCreditCaption(card.credits) }}</p>
+								<p v-else-if="card.entry.description" :class="$style.catalogueCaption">{{ card.entry.description }}</p>
+								<p v-else :class="$style.catalogueCaption">{{ taxonomyProfileLabel(card.entry.type) }}</p>
+							</MkA>
+						</div>
+					</section>
 					<section ref="discussionSection" :class="$style.discussionArea">
 						<div v-if="work.seasons.length" :class="$style.discussionScope" role="group" :aria-label="i18n.ts.zalip.discussionContext">
 							<button type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionScope === 'work' }]" :aria-pressed="discussionScope === 'work'" @click="selectDiscussionScope('work')"><i class="ti ti-movie" aria-hidden="true"></i> {{ i18n.ts.zalip.workDiscussionScope }}</button>
@@ -195,7 +212,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script lang="ts" setup>
 import { computed, nextTick, onBeforeUnmount, onDeactivated, ref, useTemplateRef, watch } from 'vue';
 import type { RatedLibraryEntry } from '@/components/ZalipRatingDialog.vue';
-import type { TaxonomyEntry } from '@/utility/zalip-importer.js';
+import type { TaxonomyLink as CatalogLink, TaxonomySectionId } from '@/utility/zalip-taxonomy.js';
 import type { LegacyAllohaPlayback, PlaybackProvider, PlaybackProviderSetting, PlaybackSource } from '@/utility/zalip-playback.js';
 import MkModal from '@/components/MkModal.vue';
 import MkPullToRefresh from '@/components/MkPullToRefresh.vue';
@@ -213,6 +230,7 @@ import { pleaseLogin } from '@/utility/please-login.js';
 import { importerImageUrl } from '@/utility/zalip-importer.js';
 import { selectablePlaybackTranslations, workPlaybackIframe, workPlaybackSources } from '@/utility/zalip-playback.js';
 import { zalipEpisodeQuery } from '@/utility/zalip-work-route.js';
+import { taxonomyCreditCaption, taxonomyLinkSections, taxonomyProfileLabel, taxonomySectionLabel, taxonomyTypeIcon } from '@/utility/zalip-taxonomy.js';
 
 type ZalipWork = {
 	id: string;
@@ -273,12 +291,33 @@ type LibraryEntry = {
 
 type LibraryUpdate = Pick<LibraryEntry, 'status' | 'episodesWatched' | 'personalRating' | 'isFavorite' | 'isReleaseSubscribed'>;
 
-type CatalogLink = { entry: TaxonomyEntry; role: string; character: string | null; position: number };
 const playbackSources = ref<PlaybackSource[]>([]);
 const playbackProviders = ref<PlaybackProviderSetting[]>();
 const selectedProvider = ref<PlaybackProvider>('alloha');
 const selectedProviderVoices = ref<Partial<Record<PlaybackProvider, string>>>({});
 const catalogueLinks = ref<CatalogLink[]>([]);
+const catalogueSections = computed(() => taxonomyLinkSections(catalogueLinks.value));
+const expandedCatalogue = ref<TaxonomySectionId[]>([]);
+const catalogueBrokenImages = ref(new Set<string>());
+const catalogueDrag = useZalipHorizontalDrag();
+
+function catalogueLimit(section: TaxonomySectionId): number { return section === 'cast' || section === 'creators' ? 16 : 12; }
+
+function toggleCatalogueSection(section: TaxonomySectionId): void {
+	expandedCatalogue.value = expandedCatalogue.value.includes(section) ? expandedCatalogue.value.filter(value => value !== section) : [...expandedCatalogue.value, section];
+}
+
+function catalogueImage(value: string | null): string | null {
+	const url = importerImageUrl(value);
+	return url && !catalogueBrokenImages.value.has(url) ? url : null;
+}
+
+function catalogueImageFailed(value: string | null): void {
+	const url = importerImageUrl(value);
+	if (url) catalogueBrokenImages.value = new Set([...catalogueBrokenImages.value, url]);
+}
+
+watch(catalogueLinks, () => { expandedCatalogue.value = []; catalogueBrokenImages.value = new Set(); });
 
 function selectProvider(source: PlaybackProvider): void {
 	if (!availablePlaybackSources.value.some(candidate => candidate.source === source)) return;
@@ -1059,6 +1098,34 @@ definePage(() => ({
 .galleryGrid { display: flex; gap: 10px; overflow-x: auto; }
 .galleryGrid a { flex: 0 0 180px; }
 .galleryGrid img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 12px; }
+.catalogueSection { min-width: 0; margin: 34px 0; }
+.catalogueHeading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 16px; }
+.catalogueHeading h2 { margin: 0; font-size: 18px; }
+.catalogueExpand { min-height: 36px; padding: 6px 10px; border-radius: var(--MI-radius); color: var(--MI_THEME-accent); font-size: 12px; font-weight: 600; }
+.catalogueRail { display: flex; min-width: 0; gap: 16px; overflow-x: auto; padding: 3px 3px 10px; cursor: grab; scrollbar-width: thin; scrollbar-color: var(--MI_THEME-divider) transparent; }
+.catalogueRail[data-dragging='true'] { cursor: grabbing; user-select: none; }
+.catalogueCard { display: block; flex: 0 0 144px; min-width: 0; text-decoration: none; color: var(--MI_THEME-fg); }
+.catalogueCard h3 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin: 10px 0 5px; font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
+.catalogueArtwork { display: grid; place-items: center; aspect-ratio: 16 / 9; border: 1px solid var(--MI_THEME-divider); border-radius: var(--MI-radius); overflow: clip; background: var(--MI_THEME-panelHighlight); }
+.catalogueArtwork img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.catalogueArtwork > i { color: var(--MI_THEME-accent); font-size: 34px; }
+.cataloguePerson { flex-basis: 128px; }
+.cataloguePerson .catalogueArtwork { aspect-ratio: 2 / 3; }
+.catalogueStudio .catalogueArtwork { aspect-ratio: 1; }
+.catalogueStudio .catalogueArtwork img { box-sizing: border-box; padding: 16px; object-fit: contain; }
+.catalogueCaption { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; margin: 0; color: var(--MI_THEME-fgTransparentWeak); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.catalogueLandscapes .catalogueCard { flex-basis: 260px; }
+.catalogueExpanded { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); overflow: visible; cursor: auto; }
+.catalogueExpanded.catalogueLandscapes { grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr)); }
+.catalogueCard:focus-visible, .catalogueExpand:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; }
+@container (max-width: 600px) {
+	.catalogueRail { gap: 12px; }
+	.catalogueCard { flex-basis: 128px; }
+	.cataloguePerson { flex-basis: 104px; }
+	.catalogueLandscapes .catalogueCard { flex-basis: 220px; }
+	.catalogueCard h3 { font-size: 13px; }
+	.catalogueExpanded { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+}
 .discussionArea { margin-top: 30px; scroll-margin-top: 20px; }
 .discussionScope { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 16px; }
 .scopeButton { flex: 0 0 auto; padding: 10px 13px; border-radius: 99px; background: var(--zalip-social-raised); color: var(--zalip-social-muted); font-size: 12px; }

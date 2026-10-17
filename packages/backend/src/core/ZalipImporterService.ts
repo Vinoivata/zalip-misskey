@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { DataSource, In, IsNull, LessThanOrEqual } from 'typeorm';
+import { DataSource, In, IsNull, LessThanOrEqual, type EntityManager } from 'typeorm';
 import type * as Redis from 'ioredis';
 import { DI } from '@/di-symbols.js';
 import { IdService } from '@/core/IdService.js';
@@ -25,7 +26,7 @@ import { recordArtworkCandidates, sameImportRef, selectImportArtwork } from './z
 import { equivalentImportArtwork } from './zalip-importer/artwork.js';
 import { canUpdateField, importFieldSelected, matchesCreatePlayerFilter, matchesImportFilters, mergeImportRecords, nonEmpty, normalizeImportOptions, readImportState, sameValue, selectedImportSources } from './zalip-importer/policy.js';
 import { configuredImportPlayerUrl, createImportProviders, createConfiguredImportTransport, ImportProviderError, importPlayerTranslationUrl } from './zalip-importer/providers.js';
-import { importArtworkFields, importFields, importSources, type ExternalIdentity, type ImportArtworkExpected, type ImportArtworkField, type ImportField, type ImportMediaType, type ImportOptions, type ImportPreview, type ImportProvider, type ImportRecord, type ImportRef, type ImportSource, type PreparedImportRecord } from './zalip-importer/types.js';
+import { importArtworkFields, importFields, importSources, type ExternalIdentity, type ImportArtworkExpected, type ImportArtworkField, type ImportField, type ImportMediaType, type ImportOptions, type ImportPlayer, type ImportPreview, type ImportProvider, type ImportRecord, type ImportRef, type ImportSource, type PreparedImportRecord } from './zalip-importer/types.js';
 
 export type CreateImportRun = {
 	refs?: ImportRef[];
@@ -48,6 +49,30 @@ export type SaveImportProfile = {
 	categoryIds?: string[];
 	options?: ImportOptions;
 };
+
+type VoiceRefreshStatus = 'updated' | 'already-current' | 'locked' | 'stale' | 'unsupported' | 'empty' | 'unavailable';
+
+/** Canonical JSON keys make the opaque revision independent of JSONB property order. */
+function playbackRevision(work: MiZalipWork, identities: ExternalIdentity[]): string {
+	const stable = (value: unknown): unknown => Array.isArray(value) ? value.map(stable) : value && typeof value === 'object'
+		? Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right)).map(([key, item]) => [key, stable(item)]))
+		: value;
+	const bindings = identities.map(({ provider, entityType, externalId }) => ({ provider, entityType, externalId })).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+	return createHash('sha256').update(JSON.stringify(stable({ version: 1, workId: work.id, players: readImportState(work.importData).values.players ?? null, locks: readImportState(work.importData).locks, tmdbId: work.tmdbId, tmdbMediaType: work.tmdbMediaType, identities: bindings }))).digest('hex');
+}
+
+/** A repair never guesses an ID/media type, creates a slot, or overwrites an existing voice list. */
+function collapsVoiceTarget(work: MiZalipWork, identities: ExternalIdentity[]) {
+	const raw = readImportState(work.importData).values.players;
+	if (!Array.isArray(raw) || raw.length > 20) return null;
+	const slots = raw.flatMap((value, index) => value && typeof value === 'object' && !Array.isArray(value) && value.source === 'collaps' ? [{ index, player: value as ImportPlayer }] : []);
+	const bindings = identities.filter(identity => identity.provider === 'collaps');
+	if (slots.length !== 1 || bindings.length !== 1) return null;
+	const { index, player } = slots[0];
+	const binding = bindings[0];
+	if (typeof player.externalId !== 'string' || !/^[1-9][0-9]{0,15}$/u.test(player.externalId) || player.externalId !== binding.externalId || !['movie', 'tv'].includes(binding.entityType) || (work.tmdbMediaType && work.tmdbMediaType !== binding.entityType) || typeof player.iframeUrl !== 'string' || !Array.isArray(player.translations)) return null;
+	return { index, player, ref: { source: 'collaps', externalId: binding.externalId, mediaType: binding.entityType } as ImportRef };
+}
 
 export function safeImportError(error: unknown): string {
 	if (error instanceof ImportProviderError) return error.code;
@@ -416,11 +441,12 @@ export class ZalipImporterService {
 		};
 	}
 
-	private packWorkState(work: MiZalipWork) {
+	private async packWorkState(work: MiZalipWork, manager: DataSource | EntityManager = this.db) {
 		const state = readImportState(work.importData);
 		const current = currentImportFields(work);
+		const identities = await manager.getRepository(MiZalipExternalIdentity).findBy({ workId: work.id });
 		return {
-			workId: work.id, title: work.title, locks: state.locks.filter(field => importFields.includes(field as ImportField)),
+			workId: work.id, title: work.title, playbackRevision: playbackRevision(work, identities), locks: state.locks.filter(field => importFields.includes(field as ImportField)),
 			fields: importFields.map(field => ({ field, source: importSources.includes(state.sources[field] as ImportSource) ? state.sources[field] : null, editorial: state.values[field] === undefined ? nonEmpty(current[field]) : !sameValue(current[field], state.values[field]) })),
 		};
 	}
@@ -441,7 +467,68 @@ export class ZalipImporterService {
 			work.importData = { ...work.importData, locks };
 			work.updatedAt = new Date();
 			await repository.save(work);
-			return this.packWorkState(work);
+			return this.packWorkState(work, manager);
+		});
+	}
+
+	/** Repair only empty voices in one existing Collaps slot; no metadata/import side effects. */
+	public async refreshCollapsVoices(workId: string, expected: string) {
+		if (!/^[a-f0-9]{64}$/u.test(expected)) throw new ImportProviderError('invalid-ref');
+		const before = await this.db.getRepository(MiZalipWork).findOneBy({ id: workId });
+		if (!before) throw new Error('NO_SUCH_WORK');
+		const identities = await this.db.getRepository(MiZalipExternalIdentity).findBy({ workId });
+		const reply = (work: MiZalipWork, bindings: ExternalIdentity[], status: VoiceRefreshStatus, translations = 0) => ({ workId, status, translations, playbackRevision: playbackRevision(work, bindings) });
+		if (playbackRevision(before, identities) !== expected) return reply(before, identities, 'stale');
+		if (readImportState(before.importData).locks.includes('players')) return reply(before, identities, 'locked');
+		const target = collapsVoiceTarget(before, identities);
+		if (!target) return reply(before, identities, 'unsupported');
+		if (target.player.translations.length) return reply(before, identities, 'already-current', target.player.translations.length);
+		let translations: ImportPlayer['translations'];
+		try {
+			const config = await this.sourceSettings.getRuntime();
+			// Validate against approved provider hosts, but retain the exact stored parent URL.
+			if (!configuredImportPlayerUrl(target.player.iframeUrl, 'collaps', config)) return reply(before, identities, 'unsupported');
+			const provider = (await this.getProviders()).collaps;
+			if (!provider.status().configured) return reply(before, identities, 'unavailable');
+			const record = await provider.fetch(target.ref, ['players']);
+			if (!sameImportRef(record.ref, target.ref)) return reply(before, identities, 'unsupported');
+			this.assertCompatibleIdentities(record, identities, target.ref.mediaType);
+			const players = record.players.filter(player => player.source === 'collaps');
+			if (players.length !== 1 || players[0].externalId !== target.ref.externalId || !Array.isArray(players[0].translations) || players[0].translations.length > 100) return reply(before, identities, 'unsupported');
+			if (!players[0].translations.length) return reply(before, identities, 'empty');
+			const ids = new Set<string>();
+			const names = new Set<string>();
+			translations = players[0].translations.map(translation => {
+				if (typeof translation.id !== 'string' || !translation.id || translation.id.length > 100 || typeof translation.name !== 'string') throw new ImportProviderError('malformed-response');
+				const name = translation.name.trim();
+				const iframe = importPlayerTranslationUrl(target.player.iframeUrl, 'collaps', { id: translation.id, name });
+				if (!iframe || ids.has(translation.id) || names.has(name)) throw new ImportProviderError('malformed-response');
+				ids.add(translation.id);
+				names.add(name);
+				return { id: translation.id, name, iframe, ...(translation.quality === undefined ? {} : { quality: translation.quality }), ...(translation.resolutions === undefined ? {} : { resolutions: structuredClone(translation.resolutions) }) };
+			});
+		} catch {
+			return reply(before, identities, 'unavailable');
+		}
+		return this.db.transaction(async manager => {
+			// Match import's identity -> work lock ordering; never hold a connection over HTTP.
+			await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['zalip-import-identities']);
+			const repository = manager.getRepository(MiZalipWork);
+			const current = await repository.findOne({ where: { id: workId }, lock: { mode: 'pessimistic_write' } });
+			if (!current) throw new Error('NO_SUCH_WORK');
+			const bindings = await manager.getRepository(MiZalipExternalIdentity).findBy({ workId });
+			if (playbackRevision(current, bindings) !== expected) return reply(current, bindings, 'stale');
+			if (readImportState(current.importData).locks.includes('players')) return reply(current, bindings, 'locked');
+			const fresh = collapsVoiceTarget(current, bindings);
+			if (!fresh || !sameImportRef(fresh.ref, target.ref) || fresh.index !== target.index) return reply(current, bindings, 'stale');
+			if (fresh.player.translations.length) return reply(current, bindings, 'already-current', fresh.player.translations.length);
+			const state = readImportState(current.importData);
+			const players = structuredClone(state.values.players) as ImportPlayer[];
+			players[fresh.index] = { ...players[fresh.index], translations };
+			current.importData = { ...current.importData, values: { ...state.values, players } };
+			// JSONB is replaced atomically; TypeORM's recursive partial type cannot represent unknown JSON values.
+			await repository.update(workId, { importData: current.importData } as unknown as Parameters<typeof repository.update>[1]);
+			return reply(current, bindings, 'updated', translations.length);
 		});
 	}
 
