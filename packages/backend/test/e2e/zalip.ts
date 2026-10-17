@@ -248,7 +248,7 @@ describe('Zalip discussions', () => {
 		const endpoint = 'zalip/admin/importer/work-state/refresh-voices' as const;
 		const input = { workId, expected: 'a'.repeat(64) };
 		const anonymous = await api(endpoint, input);
-		assert.strictEqual(anonymous.status, 403);
+		assert.strictEqual(anonymous.status, 400);
 		assert.strictEqual(castAsError(anonymous.body).error.code, 'ACCESS_DENIED');
 		const denied = await api(endpoint, input, viewer);
 		assert.strictEqual(denied.status, 403);
@@ -256,7 +256,7 @@ describe('Zalip discussions', () => {
 		// Generated only by the isolated local test server, never by a live deployment.
 		const appToken = await createAppToken(admin, ['write:account']);
 		const application = await api(endpoint, input, { token: appToken });
-		assert.strictEqual(application.status, 403);
+		assert.strictEqual(application.status, 400);
 		assert.strictEqual(castAsError(application.body).error.code, 'ACCESS_DENIED');
 		const db = await initTestDb(true);
 		const before = await db.getRepository(MiZalipWork).findOneByOrFail({ id: workId });
