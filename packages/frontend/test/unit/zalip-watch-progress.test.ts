@@ -115,6 +115,17 @@ describe('continue watching presentation', () => {
 		expect(await balancerResourceFingerprint('collaps', 'voice-one', url, 0, 1.5, subtle)).toBeNull();
 		expect(await balancerResourceFingerprint('collaps', 'voice-two', url, 0, 1, subtle)).not.toBe(await balancerResourceFingerprint('collaps', 'voice-one', url, 0, 1, subtle));
 	});
+	it('binds a locked Collaps movie with null coordinates to its voice and media path, not its resume offset', async () => {
+		const subtle = webcrypto.subtle as unknown as SubtleCrypto;
+		const url = new URL('https://collaps.example/embed/movie/50?oneSound=Studio&showMenu=false&showPreNext=false');
+		const actual = await balancerResourceFingerprint('collaps', 'voice-one', url.toString(), null, null, subtle);
+		expect(actual).toBe(createHash('sha256').update(JSON.stringify(['collaps', 'v1', 'voice-one', '/embed/movie/50', null, 'Studio', null, null])).digest('hex'));
+		url.hostname = 'mirror.example'; url.searchParams.set('token', 'public-fixture'); url.searchParams.set('time', '120');
+		expect(await balancerResourceFingerprint('collaps', 'voice-one', url.toString(), null, null, subtle)).toBe(actual);
+		expect(await balancerResourceFingerprint('collaps', null, url.toString(), null, null, subtle)).toBeNull();
+		url.searchParams.set('season', '2'); url.searchParams.set('episode', '1');
+		expect(await balancerResourceFingerprint('collaps', 'voice-one', url.toString(), 2, 1, subtle)).not.toBe(actual);
+	});
 	it('binds the mounted edition path to the server digest without including mirrors or public URL tokens', async () => {
 		const subtle = webcrypto.subtle as unknown as SubtleCrypto;
 		const actual = await kodikResourceFingerprint('serial-123', 'https://kodik.example/serial/123/cut-one/720p?token=public-fixture&season=2', '718', subtle);

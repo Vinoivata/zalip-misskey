@@ -14,42 +14,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<MkA to="/zalip/editor" :class="$style.button"><i class="ti ti-pencil" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.editor }}</MkA>
 				</header>
 
-				<section :class="$style.sources" :aria-label="i18n.ts.zalip._importer.sources">
-					<article v-for="source in importerSources" :key="source" :class="$style.source">
-						<strong>{{ importerSourceLabel(source) }}</strong><span :class="{ [$style.connected]: sourceStatus(source)?.configured }">{{ sourcesLoading ? i18n.ts.zalip._importer.checkingSettings : sourcesError ? i18n.ts.zalip._importer.configurationUnknown : sourceStatus(source)?.configured ? i18n.ts.zalip._importer.configured : i18n.ts.zalip._importer.notConfigured }}</span>
-						<small v-if="sourceStatus(source)?.dailyLimit">{{ i18n.tsx.zalip._importer.dailyLimit({ count: String(sourceStatus(source)?.dailyLimit) }) }}</small>
-						<button type="button" class="_button" :class="$style.button" :disabled="busy || sourceChecking[source] || !sourceStatus(source)?.configured" @click="checkSource(source)"><i :class="sourceChecking[source] ? 'ti ti-loader-2 ti-spin' : 'ti ti-plug-connected'" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.checkSource }}</button>
-						<template v-if="sourceChecks[source]"><small :class="{ [$style.error]: !sourceChecks[source]!.ok }" role="status">{{ sourceChecks[source]!.ok ? i18n.ts.zalip._importer.sourceHealthy : i18n.ts.zalip._importer.sourceCheckFailed }}</small><small>{{ i18n.tsx.zalip._importer.sourceChecked({ date: dateLabel(sourceChecks[source]!.checkedAt), latency: String(sourceChecks[source]!.latencyMs) }) }}<span v-if="sourceChecks[source]!.cached"> · {{ i18n.ts.zalip._importer.cachedCheck }}</span></small></template>
-						<small v-if="sourceCheckErrors[source]" :class="$style.error" role="alert">{{ sourceCheckErrors[source] }}</small>
-					</article>
-				</section>
-				<p v-if="sourcesError" :class="$style.error" role="alert">{{ sourcesError }} <button type="button" class="_textButton" @click="loadSources">{{ i18n.ts.zalip._importer.retry }}</button></p>
-				<p :class="$style.hint">{{ i18n.ts.zalip._importer.configurationHint }}</p>
-
 				<nav :class="$style.tabs" :aria-label="i18n.ts.zalip._importer.sections">
 					<button v-for="item in tabs" :key="item.id" type="button" class="_button" :class="{ [$style.active]: tab === item.id }" :aria-pressed="tab === item.id" @click="tab = item.id"><i :class="item.icon" aria-hidden="true"></i>{{ item.title }}</button>
 				</nav>
 				<p v-if="message" :class="$style.message" role="status">{{ message }}</p>
 				<p v-if="actionError" :class="$style.error" role="alert">{{ actionError }}</p>
-
-				<details v-if="tab === 'import' || tab === 'schedules'" :open="props.imagesOnly === '1' && tab === 'import'" :class="[$style.panel, $style.details]">
-					<summary>{{ i18n.ts.zalip._importer.importOptions }}</summary>
-					<p :class="$style.hint">{{ i18n.ts.zalip._importer.optionsHint }}</p>
-					<ImporterArtworkSettings v-model:mode="currentSelection.artwork" v-model:settings="currentSelection.artworkSettings" :disabled="busy || profileOptionsLocked"/>
-					<label :class="$style.check"><input v-model="currentSelection.filters.requirePlayer" type="checkbox" :disabled="busy || profileOptionsLocked">{{ i18n.ts.zalip._importer.requirePlayer }}</label><p :class="$style.hint">{{ i18n.ts.zalip._importer.requirePlayerHint }}</p>
-					<fieldset :class="$style.locks"><legend>{{ i18n.ts.zalip._importer.enrichmentSources }}</legend><label v-for="source in importerSources" :key="source"><input v-model="currentSelection.sources" type="checkbox" :value="source" :disabled="busy || profileOptionsLocked || !sourceStatus(source)?.configured">{{ importerSourceLabel(source) }}</label></fieldset>
-					<h3 :class="$style.optionsHeading">{{ i18n.ts.zalip._importer.selectedFields }}</h3>
-					<details v-for="group in importerFieldGroups" :key="group.id" :class="$style.fieldGroup">
-						<summary>{{ importerGroupLabel(group.id) }} <small>{{ group.fields.filter(field => currentSelection.fields.includes(field)).length }} / {{ group.fields.length }}</small></summary>
-						<label :class="$style.check"><input type="checkbox" :checked="group.fields.every(field => currentSelection.fields.includes(field))" :disabled="busy || profileOptionsLocked" @change="toggleFieldGroup(group.fields)">{{ i18n.ts.zalip._importer.selectGroup }}</label>
-						<div v-for="field in group.fields" :key="field" :class="$style.fieldRow"><label :class="$style.check"><input v-model="currentSelection.fields" type="checkbox" :value="field" :disabled="busy || profileOptionsLocked">{{ importerFieldLabel(field) }}</label><select v-model="currentSelection.fieldSources[field]" :aria-label="i18n.tsx.zalip._importer.fieldPreference({ field: importerFieldLabel(field) })" :disabled="busy || profileOptionsLocked || !currentSelection.fields.includes(field)"><option value="">{{ i18n.ts.zalip._importer.defaultSource }}</option><option v-for="source in importerSources" :key="source" :value="source" :disabled="!sourceStatus(source)?.configured || (!currentSelection.sources.includes(source) && !currentPrimarySources.includes(source))">{{ importerSourceLabel(source) }}</option></select></div>
-					</details>
-					<details :class="$style.fieldGroup"><summary>{{ i18n.ts.zalip._importer.importFilters }}</summary><p :class="$style.hint">{{ i18n.ts.zalip._importer.importFiltersHint }}</p><div :class="$style.form"><fieldset :class="[$style.locks, $style.wide]"><legend>{{ i18n.ts.zalip._importer.workType }}</legend><label v-for="kind in workKinds" :key="kind.value"><input v-model="currentSelection.filters.kinds" type="checkbox" :value="kind.value" :disabled="busy || profileOptionsLocked">{{ kind.title }}</label></fieldset><label><span>{{ i18n.ts.zalip._importer.yearFrom }}</span><input v-model="currentSelection.filters.yearFrom" type="number" min="1888" max="3000" :disabled="busy || profileOptionsLocked"></label><label><span>{{ i18n.ts.zalip._importer.yearTo }}</span><input v-model="currentSelection.filters.yearTo" type="number" min="1888" max="3000" :disabled="busy || profileOptionsLocked"></label><label><span>{{ i18n.ts.zalip._importer.ruleGenres }}</span><input v-model="currentSelection.filters.genres" maxlength="5050" :disabled="busy || profileOptionsLocked"></label><label><span>{{ i18n.ts.zalip._importer.ruleCountries }}</span><input v-model="currentSelection.filters.countries" maxlength="5050" :disabled="busy || profileOptionsLocked"></label><label><span>{{ i18n.ts.zalip._importer.ratingMin }}</span><input v-model="currentSelection.filters.ratingMin" type="number" min="0" max="10" step="0.1" :disabled="busy || profileOptionsLocked"></label></div></details>
-				</details>
+				<p v-if="sourcesError" :class="$style.error" role="alert">{{ sourcesError }} <button type="button" class="_textButton" @click="loadSources">{{ i18n.ts.zalip._importer.retry }}</button></p>
 
 				<template v-if="tab === 'import'">
 					<section :class="$style.panel">
-						<div :class="$style.sectionHeading"><div><h2>{{ i18n.ts.zalip._importer.searchHeading }}</h2><p>{{ i18n.ts.zalip._importer.searchHint }}</p></div></div>
+						<div :class="$style.sectionHeading"><div><p :class="$style.eyebrow">{{ i18n.ts.zalip._importer.findContent }}</p><h2>{{ i18n.ts.zalip._importer.searchHeading }}</h2><p>{{ i18n.ts.zalip._importer.searchHint }}</p></div></div>
 						<form :class="$style.searchForm" @submit.prevent="search(1)">
 							<label><span>{{ i18n.ts.zalip._importer.source }}</span><select v-model="searchForm.source" :disabled="busy" @change="clearSearch"><option v-for="source in searchableSources" :key="source.source" :value="source.source">{{ importerSourceLabel(source.source) }}</option></select></label>
 							<label><span>{{ i18n.ts.zalip._importer.type }}</span><select v-model="searchForm.mediaType" :disabled="busy" @change="clearSearch"><option value="movie">{{ i18n.ts.zalip._importer.movie }}</option><option value="tv">{{ i18n.ts.zalip._importer.series }}</option></select></label>
@@ -69,23 +43,71 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<p v-else-if="searched && !searching && !searchError" :class="$style.hint">{{ i18n.ts.zalip._importer.searchEmpty }}</p>
 						<div v-if="searched" :class="$style.toolbar">
 							<div :class="$style.actions"><button type="button" class="_button" :class="$style.button" :disabled="searching || searchPage <= 1" @click="search(searchPage - 1)"><i class="ti ti-chevron-left" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.previous }}</button><span>{{ i18n.tsx.zalip._importer.searchPage({ page: String(searchPage) }) }}</span><button type="button" class="_button" :class="$style.button" :disabled="searching || !searchHasMore" @click="search(searchPage + 1)">{{ i18n.ts.zalip._importer.next }}<i class="ti ti-chevron-right" aria-hidden="true"></i></button></div>
-							<div :class="$style.actions"><span>{{ i18n.tsx.zalip._importer.selectedCount({ count: String(selectedRefs.length) }) }}</span><button type="button" class="_button" :class="$style.primary" :disabled="busy || selectedRefs.length === 0" @click="queueReferences(selectedRefs)">{{ i18n.ts.zalip._importer.importSelected }}</button><button type="button" class="_textButton" :disabled="selectedRefs.length === 0" @click="selectedRefs = []">{{ i18n.ts.zalip._importer.clearSelection }}</button></div>
+							<details :class="$style.bulkSelection"><summary>{{ i18n.tsx.zalip._importer.selectedCount({ count: String(selectedRefs.length) }) }} · {{ i18n.ts.zalip._importer.bulkImport }}</summary><p :class="$style.hint">{{ i18n.ts.zalip._importer.bulkArtworkHint }}</p><p v-if="preview || previewLoading" :class="$style.hint">{{ i18n.ts.zalip._importer.previewSubmitHint }}</p><div :class="$style.actions"><button v-if="!preview && !previewLoading" type="button" class="_button" :class="$style.button" :disabled="busy || selectedRefs.length === 0" @click="queueReferences(selectedRefs)">{{ i18n.ts.zalip._importer.importSelected }}</button><button type="button" class="_textButton" :disabled="selectedRefs.length === 0" @click="selectedRefs = []">{{ i18n.ts.zalip._importer.clearSelection }}</button></div></details>
 						</div>
 					</section>
 
 					<section :class="$style.panel">
-						<h2>{{ i18n.ts.zalip._importer.byId }}</h2><p :class="$style.hint">{{ i18n.ts.zalip._importer.byIdHint }}</p>
+						<h2>{{ i18n.ts.zalip._importer.byId }}</h2><p :class="$style.hint">{{ i18n.ts.zalip._importer.singleReferenceHint }}</p>
 						<p :class="$style.hint">{{ batch.source === 'kodik' ? i18n.ts.zalip._importer.kodikReferencesHint : i18n.ts.zalip._importer.imdbHint }}</p>
-						<p v-if="lockedFields.length" :class="$style.hint">{{ i18n.ts.zalip._importer.protectionScope }}</p>
-						<form :class="$style.form" @submit.prevent="queueBatch">
+						<form :class="$style.form" @submit.prevent="previewBatch">
 							<label><span>{{ i18n.ts.zalip._importer.source }}</span><select v-model="batch.source" :disabled="busy"><option v-for="source in importerSources" :key="source" :value="source" :disabled="!sourceStatus(source)?.configured">{{ importerSourceLabel(source) }}</option></select></label>
 							<label><span>{{ i18n.ts.zalip._importer.idMediaType }}</span><select v-model="batch.mediaType" :disabled="busy"><option value="movie">{{ i18n.ts.zalip._importer.movie }}</option><option value="tv">{{ i18n.ts.zalip._importer.series }}</option></select></label>
-							<label :class="$style.wide"><span>{{ i18n.ts.zalip._importer.references }}</span><textarea v-model="batch.references" rows="4" maxlength="20000" :placeholder="batch.source === 'kodik' ? 'serial-123\nmovie-456' : '11\nhttps://www.themoviedb.org/movie/157336'" :disabled="busy"></textarea></label>
-							<label :class="$style.wide"><span>{{ i18n.ts.zalip._importer.importCategories }}</span><select v-model="categoryIds" multiple size="3" :disabled="busy"><option v-for="entry in categories" :key="entry.id" :value="entry.id">{{ entry.name }}</option></select></label>
-							<div :class="[$style.actions, $style.wide]"><button type="button" class="_button" :class="$style.button" :disabled="previewLoading || !batch.references.trim()" @click="previewBatch"><i class="ti ti-eye" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.previewFirst }}</button><button type="submit" class="_button" :class="$style.primary" :disabled="busy || !batch.references.trim() || !sourceStatus(batch.source)?.configured"><i class="ti ti-download" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.enqueue }}</button></div>
+							<label :class="$style.wide"><span>{{ i18n.ts.zalip._importer.references }}</span><textarea v-model="batch.references" rows="2" maxlength="20000" :placeholder="batch.source === 'kodik' ? 'serial-123\nmovie-456' : '11\nhttps://www.themoviedb.org/movie/157336'" :disabled="busy"></textarea></label>
+							<div :class="[$style.actions, $style.wide]"><button type="submit" class="_button" :class="$style.button" :disabled="busy || previewLoading || !batch.references.trim()"><i class="ti ti-eye" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.previewFirst }}</button><span :class="$style.hint">{{ i18n.ts.zalip._importer.noPublishing }}</span></div>
 						</form>
 					</section>
-					<details :class="[$style.panel, $style.details]">
+				</template>
+
+				<details v-if="tab === 'import' || tab === 'schedules'" ref="importOptionsPanel" :open="props.imagesOnly === '1' && tab === 'import'" :class="[$style.panel, $style.details]">
+					<summary>{{ i18n.ts.zalip._importer.importOptions }}</summary>
+					<p :class="$style.hint">{{ i18n.ts.zalip._importer.optionsHint }}</p>
+					<ImporterArtworkSettings v-model:mode="currentSelection.artwork" v-model:settings="currentSelection.artworkSettings" :disabled="busy || profileOptionsLocked"/>
+					<label :class="$style.check"><input v-model="currentSelection.filters.requirePlayer" type="checkbox" :disabled="busy || profileOptionsLocked">{{ i18n.ts.zalip._importer.requirePlayer }}</label><p :class="$style.hint">{{ i18n.ts.zalip._importer.requirePlayerHint }}</p>
+					<fieldset :class="$style.locks"><legend>{{ i18n.ts.zalip._importer.enrichmentSources }}</legend><label v-for="source in importerSources" :key="source"><input v-model="currentSelection.sources" type="checkbox" :value="source" :disabled="busy || profileOptionsLocked || !sourceStatus(source)?.configured">{{ importerSourceLabel(source) }}</label></fieldset>
+					<div v-if="tab === 'import'" :class="$style.form">
+						<label :class="$style.wide"><span>{{ i18n.ts.zalip._importer.importCategories }}</span><select v-model="categoryIds" multiple size="3" :disabled="busy"><option v-for="entry in categories" :key="entry.id" :value="entry.id">{{ entry.name }}</option></select></label>
+					</div>
+					<h3 :class="$style.optionsHeading">{{ i18n.ts.zalip._importer.selectedFields }}</h3>
+					<details v-for="group in importerFieldGroups" :key="group.id" :class="$style.fieldGroup">
+						<summary>{{ importerGroupLabel(group.id) }} <small>{{ group.fields.filter(field => currentSelection.fields.includes(field)).length }} / {{ group.fields.length }}</small></summary>
+						<label :class="$style.check"><input type="checkbox" :checked="group.fields.every(field => currentSelection.fields.includes(field))" :disabled="busy || profileOptionsLocked" @change="toggleFieldGroup(group.fields)">{{ i18n.ts.zalip._importer.selectGroup }}</label>
+						<div v-for="field in group.fields" :key="field" :class="$style.fieldRow"><label :class="$style.check"><input v-model="currentSelection.fields" type="checkbox" :value="field" :disabled="busy || profileOptionsLocked">{{ importerFieldLabel(field) }}</label><select v-model="currentSelection.fieldSources[field]" :aria-label="i18n.tsx.zalip._importer.fieldPreference({ field: importerFieldLabel(field) })" :disabled="busy || profileOptionsLocked || !currentSelection.fields.includes(field)"><option value="">{{ i18n.ts.zalip._importer.defaultSource }}</option><option v-for="source in importerSources" :key="source" :value="source" :disabled="!sourceStatus(source)?.configured || (!currentSelection.sources.includes(source) && !currentPrimarySources.includes(source))">{{ importerSourceLabel(source) }}</option></select></div>
+					</details>
+					<details :class="$style.fieldGroup"><summary>{{ i18n.ts.zalip._importer.importFilters }}</summary><p :class="$style.hint">{{ i18n.ts.zalip._importer.importFiltersHint }}</p><div :class="$style.form"><fieldset :class="[$style.locks, $style.wide]"><legend>{{ i18n.ts.zalip._importer.workType }}</legend><label v-for="kind in workKinds" :key="kind.value"><input v-model="currentSelection.filters.kinds" type="checkbox" :value="kind.value" :disabled="busy || profileOptionsLocked">{{ kind.title }}</label></fieldset><label><span>{{ i18n.ts.zalip._importer.yearFrom }}</span><input v-model="currentSelection.filters.yearFrom" type="number" min="1888" max="3000" :disabled="busy || profileOptionsLocked"></label><label><span>{{ i18n.ts.zalip._importer.yearTo }}</span><input v-model="currentSelection.filters.yearTo" type="number" min="1888" max="3000" :disabled="busy || profileOptionsLocked"></label><label><span>{{ i18n.ts.zalip._importer.ruleGenres }}</span><input v-model="currentSelection.filters.genres" maxlength="5050" :disabled="busy || profileOptionsLocked"></label><label><span>{{ i18n.ts.zalip._importer.ruleCountries }}</span><input v-model="currentSelection.filters.countries" maxlength="5050" :disabled="busy || profileOptionsLocked"></label><label><span>{{ i18n.ts.zalip._importer.ratingMin }}</span><input v-model="currentSelection.filters.ratingMin" type="number" min="0" max="10" step="0.1" :disabled="busy || profileOptionsLocked"></label></div></details>
+				</details>
+
+				<template v-if="tab === 'import'">
+					<section v-if="previewLoading || preview || previewError" ref="previewPanel" :class="[$style.panel, $style.previewPanel]" aria-live="polite">
+						<div :class="$style.sectionHeading"><h2>{{ i18n.ts.zalip._importer.previewHeading }}</h2><button type="button" class="_button" :class="$style.button" :disabled="previewLoading" :aria-label="i18n.ts.zalip._importer.closePreview" @click="previewBase = null; artworkChoices = {}; previewError = ''"><i class="ti ti-x" aria-hidden="true"></i></button></div>
+						<p v-if="previewLoading"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.previewLoading }}</p>
+						<p v-if="previewError" :class="$style.error" role="alert">{{ previewError }}</p>
+						<template v-if="preview && !previewLoading">
+							<p v-if="previewStale" :class="$style.hint" role="status">{{ i18n.ts.zalip._importer.optionsChangedPreview }} <button type="button" class="_textButton" :disabled="busy" @click="showPreview(preview.record.ref)">{{ i18n.ts.zalip._importer.refreshPreview }}</button></p>
+							<p v-if="preview.matchesFilters === false" :class="$style.hint" role="status">{{ i18n.ts.zalip._importer.previewFiltered }}</p>
+							<div :class="$style.previewHero"><div :class="$style.previewPoster"><img v-if="importerImageUrl(preview.record.posterUrl)" :src="importerImageUrl(preview.record.posterUrl)!" alt=""><i v-else class="ti ti-movie" aria-hidden="true"></i></div><div><span :class="$style.badge">{{ preview.workId ? i18n.ts.zalip._importer.existingWork : i18n.ts.zalip._importer.newDraft }}</span><h3>{{ preview.record.title }}</h3><p>{{ [preview.record.releaseYear, preview.record.originalTitle].filter(Boolean).join(' · ') }}</p><p>{{ preview.record.genres.join(' · ') }}</p><p>{{ preview.record.description }}</p><div :class="$style.chips"><span v-for="identity in preview.record.identities" :key="`${identity.provider}:${identity.entityType}:${identity.externalId}`">{{ identity.provider }} · {{ identity.entityType }} · {{ identity.externalId }}</span></div></div></div>
+							<div :class="$style.selectionSummary"><span><i class="ti ti-checklist" aria-hidden="true"></i>{{ i18n.tsx.zalip._importer.selectedFieldsSummary({ selected: String(importSelection.fields.length), total: String(importerFields.length) }) }}</span><button type="button" class="_textButton" @click="showImportOptions">{{ i18n.ts.zalip._importer.importOptions }}</button></div>
+							<ImporterArtworkPicker v-if="previewBase" :key="importerReferenceKey(previewBase.record.ref)" v-model="artworkChoices" :preview="previewBase" :lockedFields="lockedFields" :disabled="busy || previewStale" :galleryLimit="artworkGalleryLimit"/>
+							<ul v-if="previewWarnings.length" :class="$style.warnings" :aria-label="i18n.ts.zalip._importer.warningsTitle"><li v-for="warning in previewWarnings" :key="warning">{{ warning }}</li></ul>
+							<div :class="$style.chips"><span>{{ i18n.tsx.zalip._importer.peopleCount({ count: String(preview.record.credits.length) }) }}</span><span>{{ i18n.tsx.zalip._importer.studiosCount({ count: String(preview.record.companies.length) }) }}</span><span>{{ i18n.tsx.zalip._importer.collectionsCount({ count: String(preview.record.collections.length) }) }}</span><span>{{ i18n.tsx.zalip._importer.seasonsCount({ count: String(preview.record.seasons.length) }) }}</span><span>{{ i18n.tsx.zalip._importer.playersCount({ count: String(preview.record.players.length) }) }}</span></div>
+							<details :class="$style.details"><summary>{{ i18n.ts.zalip._importer.peopleAndCollections }}</summary><p v-if="preview.record.credits.length">{{ preview.record.credits.map(credit => `${credit.name} (${credit.role})`).join(' · ') }}</p><p v-if="preview.record.companies.length">{{ preview.record.companies.map(company => company.name).join(' · ') }}</p><p v-if="preview.record.collections.length">{{ preview.record.collections.map(collection => collection.name).join(' · ') }}</p></details>
+							<details :class="[$style.details, $style.diffDetails]">
+								<summary>{{ i18n.ts.zalip._importer.reviewChanges }} <span :class="$style.count">{{ preview.changes.length }}</span></summary><p :class="$style.hint">{{ i18n.ts.zalip._importer.fieldSelectionHint }}</p><p :class="$style.hint">{{ i18n.ts.zalip._importer.locksHint }}</p>
+								<div :class="$style.diffList"><article v-for="change in preview.changes" :key="change.field" :class="$style.diff"><label><input type="checkbox" :checked="previewLockChecked(change.field)" :disabled="previewLockDisabled(change.field)" :aria-label="i18n.tsx.zalip._importer.protectField({ field: importerFieldLabel(change.field) })" @change="toggleLock(change.field)"><span :class="$style.lockLabel"><i class="ti ti-lock" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.protect }}</span><strong>{{ importerFieldLabel(change.field) }}</strong><span v-if="change.protected || lockedFields.includes(change.field)" :class="$style.badge"><i class="ti ti-lock" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.protected }}</span><small v-if="change.selected === false">{{ i18n.ts.zalip._importer.skippedField }}</small></label><div :class="$style.diffValues"><div><small>{{ i18n.ts.zalip._importer.before }}</small><p>{{ formatImporterValue(change.before) }}</p></div><div><small>{{ i18n.ts.zalip._importer.after }}</small><p>{{ formatImporterValue(change.after) }}</p></div></div></article></div>
+								<p v-if="preview.changes.length === 0" :class="$style.hint">{{ i18n.ts.zalip._importer.noChanges }}</p>
+							</details>
+							<div :class="[$style.actions, $style.previewActions]"><button type="button" class="_button" :class="$style.primary" :disabled="busy || previewStale" @click="queueReferences([preview.record.ref], true)"><i class="ti ti-download" aria-hidden="true"></i>{{ preview.workId ? i18n.ts.zalip._importer.enqueueUpdate : i18n.ts.zalip._importer.enqueueDraft }}</button><span :class="$style.hint">{{ i18n.ts.zalip._importer.noPublishing }}</span></div>
+						</template>
+					</section>
+
+					<details :class="[$style.panel, $style.details, $style.bulkPanel]">
+						<summary><i class="ti ti-stack-2" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.bulkImport }} <span :class="$style.count">{{ batchReferenceCount }}</span></summary>
+						<p :class="$style.hint">{{ i18n.ts.zalip._importer.byIdHint }}</p><p :class="$style.hint">{{ i18n.ts.zalip._importer.bulkArtworkHint }}</p>
+						<p v-if="lockedFields.length" :class="$style.hint">{{ i18n.ts.zalip._importer.protectionScope }}</p>
+						<p v-if="preview || previewLoading" :class="$style.hint">{{ i18n.ts.zalip._importer.previewSubmitHint }}</p>
+						<div v-else :class="$style.actions"><button type="button" class="_button" :class="$style.button" :disabled="busy || !batch.references.trim() || !sourceStatus(batch.source)?.configured" @click="queueBatch"><i class="ti ti-download" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.enqueue }}</button></div>
+					</details>
+					<details ref="workProtectionPanel" :class="[$style.panel, $style.details]">
 						<summary>{{ i18n.ts.zalip._importer.persistedProtection }}</summary><p :class="$style.hint">{{ i18n.ts.zalip._importer.persistedProtectionHint }}</p>
 						<form :class="$style.searchForm" @submit.prevent="loadWorkState"><label :class="$style.grow"><span>{{ i18n.ts.zalip._importer.workId }}</span><input v-model.trim="workStateId" required maxlength="32" pattern="[A-Za-z0-9]+" :disabled="busy || workStateLoading"></label><button type="submit" class="_button" :class="$style.button" :disabled="busy || workStateLoading || !workStateId">{{ i18n.ts.zalip._importer.loadWorkState }}</button></form>
 						<p v-if="workStateLoading" :class="$style.hint" role="status">{{ i18n.ts.zalip._importer.loading }}</p><p v-if="workStateError" :class="$style.error" role="alert">{{ workStateError }}</p>
@@ -97,25 +119,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<button type="button" class="_button" :class="$style.button" :disabled="busy || workStateLoading || !importerVoiceRepairReady(workState, workStateId, persistedLocks)" @click="repairCollapsVoices"><i class="ti ti-volume" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.repairCollapsVoices }}</button>
 						</template>
 					</details>
-
-					<section v-if="previewLoading || preview || previewError" ref="previewPanel" :class="$style.panel" aria-live="polite">
-						<div :class="$style.sectionHeading"><h2>{{ i18n.ts.zalip._importer.previewHeading }}</h2><button type="button" class="_button" :class="$style.button" :disabled="previewLoading" :aria-label="i18n.ts.zalip._importer.closePreview" @click="previewBase = null; artworkChoices = {}; previewError = ''"><i class="ti ti-x" aria-hidden="true"></i></button></div>
-						<p v-if="previewLoading"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.previewLoading }}</p>
-						<p v-if="previewError" :class="$style.error" role="alert">{{ previewError }}</p>
-						<template v-if="preview && !previewLoading">
-							<p v-if="previewStale" :class="$style.hint" role="status">{{ i18n.ts.zalip._importer.optionsChangedPreview }} <button type="button" class="_textButton" :disabled="busy" @click="showPreview(preview.record.ref)">{{ i18n.ts.zalip._importer.refreshPreview }}</button></p>
-							<p v-if="preview.matchesFilters === false" :class="$style.hint" role="status">{{ i18n.ts.zalip._importer.previewFiltered }}</p>
-							<div :class="$style.previewHero"><div :class="$style.previewPoster"><img v-if="importerImageUrl(preview.record.posterUrl)" :src="importerImageUrl(preview.record.posterUrl)!" alt=""><i v-else class="ti ti-movie" aria-hidden="true"></i></div><div><span :class="$style.badge">{{ preview.workId ? i18n.ts.zalip._importer.existingWork : i18n.ts.zalip._importer.newDraft }}</span><h3>{{ preview.record.title }}</h3><p>{{ [preview.record.releaseYear, preview.record.originalTitle].filter(Boolean).join(' · ') }}</p><p>{{ preview.record.genres.join(' · ') }}</p><p>{{ preview.record.description }}</p><div :class="$style.chips"><span v-for="identity in preview.record.identities" :key="`${identity.provider}:${identity.entityType}:${identity.externalId}`">{{ identity.provider }} · {{ identity.entityType }} · {{ identity.externalId }}</span></div></div></div>
-							<ImporterArtworkPicker v-if="previewBase" :key="importerReferenceKey(previewBase.record.ref)" v-model="artworkChoices" :preview="previewBase" :lockedFields="lockedFields" :disabled="busy || previewStale" :galleryLimit="artworkGalleryLimit"/>
-							<ul v-if="previewWarnings.length" :class="$style.warnings" :aria-label="i18n.ts.zalip._importer.warningsTitle"><li v-for="warning in previewWarnings" :key="warning">{{ warning }}</li></ul>
-							<div :class="$style.chips"><span>{{ i18n.tsx.zalip._importer.peopleCount({ count: String(preview.record.credits.length) }) }}</span><span>{{ i18n.tsx.zalip._importer.studiosCount({ count: String(preview.record.companies.length) }) }}</span><span>{{ i18n.tsx.zalip._importer.collectionsCount({ count: String(preview.record.collections.length) }) }}</span><span>{{ i18n.tsx.zalip._importer.seasonsCount({ count: String(preview.record.seasons.length) }) }}</span><span>{{ i18n.tsx.zalip._importer.playersCount({ count: String(preview.record.players.length) }) }}</span></div>
-							<details :class="$style.details"><summary>{{ i18n.ts.zalip._importer.peopleAndCollections }}</summary><p v-if="preview.record.credits.length">{{ preview.record.credits.map(credit => `${credit.name} (${credit.role})`).join(' · ') }}</p><p v-if="preview.record.companies.length">{{ preview.record.companies.map(company => company.name).join(' · ') }}</p><p v-if="preview.record.collections.length">{{ preview.record.collections.map(collection => collection.name).join(' · ') }}</p></details>
-							<h3>{{ i18n.ts.zalip._importer.changes }}</h3><p :class="$style.hint">{{ i18n.ts.zalip._importer.locksHint }}</p>
-							<div :class="$style.diffList"><article v-for="change in preview.changes" :key="change.field" :class="$style.diff"><label><input type="checkbox" :checked="previewLockChecked(change.field)" :disabled="previewLockDisabled(change.field)" @change="toggleLock(change.field)"><strong>{{ importerFieldLabel(change.field) }}</strong><span v-if="change.protected || lockedFields.includes(change.field)" :class="$style.badge"><i class="ti ti-lock" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.protected }}</span><small v-if="change.selected === false">{{ i18n.ts.zalip._importer.skippedField }}</small></label><div :class="$style.diffValues"><div><small>{{ i18n.ts.zalip._importer.before }}</small><p>{{ formatImporterValue(change.before) }}</p></div><div><small>{{ i18n.ts.zalip._importer.after }}</small><p>{{ formatImporterValue(change.after) }}</p></div></div></article></div>
-							<p v-if="preview.changes.length === 0" :class="$style.hint">{{ i18n.ts.zalip._importer.noChanges }}</p>
-							<div :class="$style.actions"><button type="button" class="_button" :class="$style.primary" :disabled="busy || previewStale" @click="queueReferences([preview.record.ref], true)"><i class="ti ti-download" aria-hidden="true"></i>{{ preview.workId ? i18n.ts.zalip._importer.enqueueUpdate : i18n.ts.zalip._importer.enqueueDraft }}</button><span :class="$style.hint">{{ i18n.ts.zalip._importer.noPublishing }}</span></div>
-						</template>
-					</section>
 				</template>
 
 				<template v-else-if="tab === 'runs'">
@@ -129,7 +132,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<section v-if="selectedRun" :class="$style.panel">
 						<div :class="$style.sectionHeading"><div><h2>{{ importerStateLabel(selectedRun.state) }}</h2><p>{{ selectedRun.id }}</p></div><div :class="$style.actions"><button v-if="['queued', 'running'].includes(selectedRun.state)" type="button" class="_button" :class="$style.button" :disabled="busy" @click="runAction('pause')"><i class="ti ti-player-pause" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.pause }}</button><button v-if="selectedRun.state === 'paused'" type="button" class="_button" :class="$style.button" :disabled="busy" @click="runAction('resume')"><i class="ti ti-player-play" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.resume }}</button><button v-if="selectedRun.failed > 0 || selectedRun.state === 'failed'" type="button" class="_button" :class="$style.button" :disabled="busy || selectedRun.state === 'running'" @click="runAction('retry')"><i class="ti ti-refresh" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.retryFailed }}</button><button v-if="['queued', 'running', 'paused'].includes(selectedRun.state)" type="button" class="_button" :class="$style.danger" :disabled="busy" @click="runAction('cancel')">{{ i18n.ts.zalip._importer.cancel }}</button></div></div>
 						<p v-if="selectedRun.error" :class="$style.error" role="alert">{{ selectedRun.error }}</p>
-						<div :class="$style.rows"><article v-for="item in runItems" :key="item.id" :class="$style.itemRow"><div :class="$style.grow"><strong>{{ item.position + 1 }}. {{ importerSourceLabel(item.ref.source) }} · {{ item.ref.externalId }}</strong><small>{{ item.ref.mediaType }} · {{ importerStateLabel(item.state) }}</small><p v-if="item.error" :class="$style.error">{{ importerArtworkSelectionStale(item.error) ? i18n.ts.zalip._importer.artworkSelectionStale : item.error }}</p><button v-if="importerArtworkSelectionStale(item.error)" type="button" class="_textButton" :disabled="busy || previewLoading" @click="previewRunArtwork(item)">{{ i18n.ts.zalip._importer.refreshPreview }}</button><div v-if="runWarnings.get(item.id)?.length" :class="$style.itemWarnings"><p><i class="ti ti-alert-triangle" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.warningsTitle }}</p><ul :class="$style.warnings" :aria-label="i18n.ts.zalip._importer.warningsTitle"><li v-for="warning in runWarnings.get(item.id)" :key="warning">{{ warning }}</li></ul></div></div><span v-if="item.workId" :class="$style.hint">{{ i18n.tsx.zalip._importer.itemWorkId({ id: item.workId }) }}</span></article></div>
+						<div :class="$style.rows"><article v-for="item in runItems" :key="item.id" :class="$style.itemRow"><div :class="$style.grow"><strong>{{ item.position + 1 }}. {{ importerSourceLabel(item.ref.source) }} · {{ item.ref.externalId }}</strong><small>{{ item.ref.mediaType }} · {{ importerStateLabel(item.state) }}</small><p v-if="item.error" :class="$style.error">{{ importerArtworkSelectionStale(item.error) ? i18n.ts.zalip._importer.artworkSelectionStale : item.error }}</p><button v-if="importerArtworkSelectionStale(item.error)" type="button" class="_textButton" :disabled="busy || previewLoading" @click="previewRunArtwork(item)">{{ i18n.ts.zalip._importer.refreshPreview }}</button><div v-if="runWarnings.get(item.id)?.length" :class="$style.itemWarnings"><p><i class="ti ti-alert-triangle" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.warningsTitle }}</p><ul :class="$style.warnings" :aria-label="i18n.ts.zalip._importer.warningsTitle"><li v-for="warning in runWarnings.get(item.id)" :key="warning">{{ warning }}</li></ul></div></div><div v-if="item.workId" :class="$style.itemActions"><button type="button" class="_textButton" :disabled="busy || workStateLoading" @click="showImportedWork(item.workId)">{{ i18n.tsx.zalip._importer.itemWorkId({ id: item.workId }) }}<i class="ti ti-arrow-up-right" aria-hidden="true"></i></button><MkA to="/zalip/editor" :class="$style.button">{{ i18n.ts.zalip._importer.editor }}</MkA></div></article></div>
 					</section>
 				</template>
 
@@ -256,6 +259,19 @@ SPDX-License-Identifier: AGPL-3.0-only
 						</template>
 					</section>
 				</template>
+				<details :class="[$style.panel, $style.details, $style.sourceDetails]">
+					<summary><i class="ti ti-plug-connected" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.sources }}</summary>
+					<section :class="$style.sources" :aria-label="i18n.ts.zalip._importer.sources">
+						<article v-for="source in importerSources" :key="source" :class="$style.source">
+							<strong>{{ importerSourceLabel(source) }}</strong><span :class="{ [$style.connected]: sourceStatus(source)?.configured }">{{ sourcesLoading ? i18n.ts.zalip._importer.checkingSettings : sourcesError ? i18n.ts.zalip._importer.configurationUnknown : sourceStatus(source)?.configured ? i18n.ts.zalip._importer.configured : i18n.ts.zalip._importer.notConfigured }}</span>
+							<small v-if="sourceStatus(source)?.dailyLimit">{{ i18n.tsx.zalip._importer.dailyLimit({ count: String(sourceStatus(source)?.dailyLimit) }) }}</small>
+							<button type="button" class="_button" :class="$style.button" :disabled="busy || sourceChecking[source] || !sourceStatus(source)?.configured" @click="checkSource(source)"><i :class="sourceChecking[source] ? 'ti ti-loader-2 ti-spin' : 'ti ti-plug-connected'" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.checkSource }}</button>
+							<template v-if="sourceChecks[source]"><small :class="{ [$style.error]: !sourceChecks[source]!.ok }" role="status">{{ sourceChecks[source]!.ok ? i18n.ts.zalip._importer.sourceHealthy : i18n.ts.zalip._importer.sourceCheckFailed }}</small><small>{{ i18n.tsx.zalip._importer.sourceChecked({ date: dateLabel(sourceChecks[source]!.checkedAt), latency: String(sourceChecks[source]!.latencyMs) }) }}<span v-if="sourceChecks[source]!.cached"> · {{ i18n.ts.zalip._importer.cachedCheck }}</span></small></template>
+							<small v-if="sourceCheckErrors[source]" :class="$style.error" role="alert">{{ sourceCheckErrors[source] }}</small>
+						</article>
+					</section>
+					<p :class="$style.hint">{{ i18n.ts.zalip._importer.configurationHint }}</p>
+				</details>
 			</template>
 		</main>
 	</div>
@@ -269,7 +285,7 @@ import ImporterArtworkSettings from '@/pages/zalip/importer-artwork-settings.vue
 import ImporterArtworkPicker from '@/pages/zalip/importer-artwork-picker.vue';
 import { importerArtworkCurrentChoices, importerArtworkFieldLocked, importerArtworkFields, importerArtworkLimitChoices, importerArtworkOptions, importerArtworkPreview, importerArtworkSameRef, importerArtworkSelectionStale } from '@/utility/zalip-importer-artwork.js';
 import { i18n } from '@/i18n.js';
-import { formatImporterValue, importerCredentialOriginLabel, importerFieldGroups, importerFieldLabel, importerFiltersValid, importerGroupLabel, importerImageUrl, importerImdbId, importerMaintenanceLabel, importerMaintenanceRequest, importerOptions, importerPlaybackSettings, importerProgress, importerReference, importerReferenceKey, importerRefreshSequence, importerRequestCurrent, importerRequestFinish, importerRequestInvalidate, importerRequestStart, importerRequestState, importerSelection, importerServiceForm, importerServiceRequest, importerServiceSettingsUpdate, importerSourceLabel, importerSources, importerStateLabel, importerWarningLabels, importerWorkIds, splitImporterReferenceLines, taxonomyAppendWorks, taxonomyBaseChanges, taxonomyCollectionChanges, taxonomyFactLabel, taxonomyPersonChanges, taxonomyTypeLabel, taxonomyTypes } from '@/utility/zalip-importer.js';
+import { formatImporterValue, importerCredentialOriginLabel, importerFieldGroups, importerFieldLabel, importerFields, importerFiltersValid, importerGroupLabel, importerImageUrl, importerImdbId, importerMaintenanceLabel, importerMaintenanceRequest, importerOptions, importerPlaybackSettings, importerProgress, importerReference, importerReferenceKey, importerRefreshSequence, importerRequestCurrent, importerRequestFinish, importerRequestInvalidate, importerRequestStart, importerRequestState, importerSelection, importerServiceForm, importerServiceRequest, importerServiceSettingsUpdate, importerSourceLabel, importerSources, importerStateLabel, importerWarningLabels, importerWorkIds, splitImporterReferenceLines, taxonomyAppendWorks, taxonomyBaseChanges, taxonomyCollectionChanges, taxonomyFactLabel, taxonomyPersonChanges, taxonomyTypeLabel, taxonomyTypes } from '@/utility/zalip-importer.js';
 import { iAmAdmin } from '@/i.js';
 import { definePage } from '@/page.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
@@ -305,6 +321,7 @@ const searchError = ref('');
 const selectedRefs = ref<ImportRef[]>([]);
 const batch = reactive({ source: 'tmdb' as ImportSource, mediaType: 'movie' as ImportMediaType, references: '' });
 const categoryIds = ref<string[]>([]);
+const batchReferenceCount = computed(() => splitImporterReferenceLines(batch.references).length);
 const lockedFields = ref<string[]>([]);
 const importSelection = reactive(importerSelection({ artwork: 'local' }));
 const artworkGalleryLimit = computed(() => importSelection.artwork === 'local' ? importSelection.artworkSettings.galleryLimit : 18);
@@ -322,6 +339,8 @@ const previewLoading = ref(false);
 const previewError = ref('');
 const previewOptionsKey = ref('');
 const previewPanel = useTemplateRef('previewPanel');
+const importOptionsPanel = useTemplateRef('importOptionsPanel');
+const workProtectionPanel = useTemplateRef('workProtectionPanel');
 const runs = ref<ImportRun[]>([]);
 const runsLoading = ref(false);
 const runsError = ref('');
@@ -452,6 +471,26 @@ function toggleFieldGroup(fields: ImportField[]): void {
 	if (busy.value || profileOptionsLocked.value) return;
 	const selection = currentSelection.value;
 	selection.fields = fields.every(field => selection.fields.includes(field)) ? selection.fields.filter(field => !fields.includes(field)) : [...new Set([...selection.fields, ...fields])];
+}
+
+function showImportOptions(): void {
+	if (!importOptionsPanel.value) return;
+	importOptionsPanel.value.setAttribute('open', '');
+	importOptionsPanel.value.querySelector('summary')?.focus({ preventScroll: true });
+	importOptionsPanel.value.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function showImportedWork(workId: string): Promise<void> {
+	if (busy.value || workStateLoading.value) return;
+	tab.value = 'import';
+	workStateId.value = workId;
+	await nextTick();
+	if (workProtectionPanel.value) {
+		workProtectionPanel.value.setAttribute('open', '');
+		workProtectionPanel.value.querySelector('summary')?.focus({ preventScroll: true });
+		workProtectionPanel.value.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}
+	await loadWorkState();
 }
 
 async function checkSource(source: ImportSource): Promise<void> {
@@ -1082,6 +1121,25 @@ definePage(() => ({ title: i18n.ts.zalip._importer.pageTitle, icon: 'ti ti-datab
 .poster img, .previewPoster img { width: 100%; height: 100%; object-fit: cover; }
 .poster i { font-size: 1.6rem; color: var(--MI_THEME-fgTransparentWeak); }
 .toolbar { margin-top: 18px; font-size: .85rem; }
+.bulkSelection { width: 100%; border-top: 1px solid var(--MI_THEME-divider); padding-top: 12px; }
+.bulkSelection summary { cursor: pointer; color: var(--MI_THEME-fg); font-weight: 700; }
+.selectionSummary { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin: 16px 0; padding: 12px 14px; border-radius: var(--MI-radius); background: var(--MI_THEME-bg); font-size: .85rem; }
+.selectionSummary > span { display: inline-flex; align-items: center; gap: 8px; }
+.selectionSummary i { color: var(--MI_THEME-accent); }
+.previewPanel { border-color: color-mix(in srgb, var(--MI_THEME-accent) 45%, var(--MI_THEME-divider)); }
+.previewHero > div:last-child { min-width: 0; }
+.previewActions { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--MI_THEME-divider); }
+.previewActions > .primary { min-height: 46px; }
+.diffDetails { padding: 14px; border: 1px solid var(--MI_THEME-divider); border-radius: var(--MI-radius); }
+.diffDetails > summary { font-weight: 700; }
+.count { margin-left: 6px; color: var(--MI_THEME-fgTransparentWeak); font-weight: 400; }
+.lockLabel { display: inline-flex; align-items: center; gap: 5px; font-size: .75rem; }
+.sourceDetails > summary, .bulkPanel > summary { font-weight: 700; color: var(--MI_THEME-fg); }
+.sourceDetails > summary > i, .bulkPanel > summary > i { margin-right: 8px; color: var(--MI_THEME-accent); }
+.sourceDetails .sources { margin-top: 16px; }
+.bulkPanel .actions { margin-top: 16px; }
+.itemActions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.itemActions > button { display: inline-flex; align-items: center; gap: 5px; overflow-wrap: anywhere; }
 .previewHero { display: flex; align-items: start; gap: 18px; margin: 18px 0; }
 .previewHero h3 { margin-top: 12px; font-size: 1.35rem; }
 .previewHero p { line-height: 1.6; font-size: .9rem; }
@@ -1129,4 +1187,5 @@ definePage(() => ({ title: i18n.ts.zalip._importer.pageTitle, icon: 'ti ti-datab
 .empty i { font-size: 2rem; color: var(--MI_THEME-accent); }
 @media (max-width: 650px) { .page { padding-top: 12px; } .sources { grid-template-columns: repeat(2, minmax(0, 1fr)); } .source { padding: 12px; } .heading { align-items: start; } .heading h1 { font-size: 1.5rem; } .panel { padding: 16px; } .tabs button { padding: 11px 14px; } .tabs button i { display: none; } .searchForm { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } .searchForm label { min-width: 0; } .searchForm .grow { grid-column: 1 / -1; } .searchForm > button { width: fit-content; } .form, .diffValues { grid-template-columns: 1fr; } .wide { grid-column: auto; } .result { flex-wrap: wrap; gap: 10px; } .result .button { margin-left: auto; } .previewHero { gap: 12px; } .previewPoster { width: 90px; height: 135px; } .previewHero h3 { font-size: 1.1rem; } }
 @media (max-width: 650px) { .fieldRow { grid-template-columns: 1fr; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--MI_THEME-divider); } }
+@media (max-width: 650px) { .selectionSummary { align-items: start; flex-direction: column; } .previewActions { align-items: stretch; flex-direction: column; } .previewActions > .primary { width: 100%; } .itemActions { align-items: start; flex-direction: column; } .sourceDetails .sources { grid-template-columns: 1fr; } }
 </style>

@@ -66,6 +66,7 @@
 - Enhance: Separate illustrated cast, creator, studio, category and collection sections, with dedicated catalogue profiles and deduplicated filmographies.
 - Feat: Add Kodik import settings and playback with separate voice/subtitle editions and episode availability.
 - Feat: Add private continue-watching rails, canonical episode/voice restoration and verified Kodik time-based resume without changing library statuses.
+- Enhance: Simplify the Zalip importer around preview-first single-title imports, separate field protection from selection, and clarify provider-specific movie resume limits.
 
 ### Server
 - Fix: Retain existing Kinopoisk photos through one validated image-CDN redirect during original-only artwork localization without enabling redirect chains or broadening image limits.

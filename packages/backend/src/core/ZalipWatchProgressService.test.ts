@@ -344,6 +344,31 @@ describe('ZalipWatchProgressService private playback state', () => {
 		}
 	});
 
+	it('resumes a Collaps movie with null episode at the saved time only for the same exact voice without library writes', async () => {
+		const f = fixture(); f.work.kind = 'movie'; f.work.tmdbMediaType = 'movie';
+		const player = lockedPlayer('collaps'); player.episodes = []; delete player.translations[0].episodes;
+		const anotherVoice = new URL(player.iframeUrl); anotherVoice.searchParams.set('oneSound', 'Another Studio');
+		player.translations.push({ id: '247', name: 'Another Studio', iframe: anotherVoice.href });
+		f.work.importData = { ...f.work.importData, values: { players: [player] } };
+		const before = structuredClone(f.work);
+		const repositories = vi.spyOn(f.manager, 'getRepository');
+		const selection: ProgressTarget = { workId: 'work', episodeId: null, provider: 'collaps', translationId: '246', expectedResourceFingerprint: lockedFingerprint('collaps', '246', player.translations[0].iframe!, null, null) };
+		const first = await f.service.start(owner, selection);
+		expect(await f.service.update(owner, { workId: 'work', sessionId: first.sessionId, sequence: 1, positionSeconds: 120, durationSeconds: 7200 })).toMatchObject({ accepted: true, progress: { episodeId: null, seasonNumber: null, episodeNumber: null, mode: 'time', positionSeconds: 120, durationSeconds: 7200, completed: false } });
+		expect(await f.service.show(owner, 'work')).toMatchObject({ progress: { episodeId: null, translationId: '246', positionSeconds: 120, durationSeconds: 7200 } });
+		const resumed = await f.service.start(owner, selection);
+		expect(resumed.sessionId).not.toBe(first.sessionId);
+		expect(resumed).toMatchObject({ sequence: 0, progress: { episodeId: null, seasonNumber: null, episodeNumber: null, translationId: '246', mode: 'time', positionSeconds: 120, durationSeconds: 7200, completed: false } });
+		const otherSelection = { ...selection, translationId: '247', expectedResourceFingerprint: lockedFingerprint('collaps', '247', anotherVoice.href, null, null) };
+		const switched = await f.service.start(owner, otherSelection);
+		expect(switched.progress).toMatchObject({ episodeId: null, translationId: '247', mode: 'time', positionSeconds: null, durationSeconds: null });
+		expect(await f.service.update(owner, { workId: 'work', sessionId: resumed.sessionId, sequence: 999, positionSeconds: 121, durationSeconds: 7200 })).toMatchObject({ accepted: false, progress: { translationId: '247', positionSeconds: null } });
+		expect(f.work).toEqual(before);
+		const privateProgressDependencies = new Set<unknown>([MiZalipWork, MiZalipSeason, MiZalipExternalIdentity, MiZalipWatchProgress]);
+		expect(repositories.mock.calls.every(([model]) => privateProgressDependencies.has(model))).toBe(true);
+		expect(f.catalogue.packWork).not.toHaveBeenCalled();
+	});
+
 	it('Collaps movie seconds reject ambiguous case-insensitive substring voice matches', async () => {
 		const f = fixture(); f.work.kind = 'movie'; f.work.tmdbMediaType = 'movie'; const player = lockedPlayer('collaps');
 		const selection = { ...lockedTarget(player), episodeId: null, expectedResourceFingerprint: lockedFingerprint('collaps', '246', player.translations[0].iframe!, null, null) };

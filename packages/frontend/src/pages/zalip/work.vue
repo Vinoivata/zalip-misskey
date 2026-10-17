@@ -102,7 +102,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 									<span v-else-if="$i && activePlayback" :class="$style.voiceButton">{{ selectedProviderLabel }}</span>
 								</div>
 							</div>
-							<p v-if="$i && playerOpen && (watchTracker.mode.value === 'episode' || !watchPlayerContext)" :class="$style.availableNotice">{{ i18n.ts.zalip._progress.episodeHint }}</p>
+							<p v-if="$i && playerOpen && (watchTracker.mode.value === 'episode' || !watchPlayerContext)" :class="$style.availableNotice">{{ episodeOnlyProgressHint }}</p>
 							<div v-if="work.seasons.length" :class="$style.playerEpisodes">
 								<div v-if="work.seasons.length > 1" :class="$style.seasonPicker"><span>{{ i18n.ts.zalip.workSeason }}</span><div><button v-for="season in work.seasons" :key="season.id" type="button" class="_button" :class="{ [$style.selectedSeasonPill]: selectedSeasonNumber === season.seasonNumber }" :aria-pressed="selectedSeasonNumber === season.seasonNumber" @click="selectSeason(season)">{{ season.seasonNumber === 0 ? i18n.ts.zalip.releaseSpecial : season.seasonNumber }}</button></div></div>
 								<p v-if="episodesPending" :class="$style.episodeRailState"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i>{{ i18n.ts.zalip.playerEpisodesLoading }}</p>
@@ -474,6 +474,12 @@ const watchPlayerContext = computed(() => {
 });
 const watchTracker = useZalipWatchProgress(watchPlayerContext, playbackIframe, progress => { if (work.value?.id === progress.workId) { watchHistoryGeneration++; savedWatchProgress.value = progress; } }, async url => { resumeIframeUrl.value = url; resumeFrameRevision.value++; await nextTick(); });
 const watchProgressError = computed(() => watchActionError.value ?? ({ failed: i18n.ts.zalip._progress.saveFailed, conflict: i18n.ts.zalip._progress.sessionConflict, unmapped: i18n.ts.zalip._progress.contextUnmapped } as Partial<Record<string, string>>)[watchTracker.state.value] ?? null);
+const episodeOnlyProgressHint = computed(() => {
+	if (fixedPlayerClip.value && selectedEpisode.value == null) {
+		return selectedProvider.value === 'alloha' ? i18n.ts.zalip._progress.allohaMovieHint : i18n.ts.zalip._progress.movieHint;
+	}
+	return i18n.ts.zalip._progress.episodeHint;
+});
 const selectedEpisodeIndex = computed(() => selectedEpisode.value == null ? -1 : episodes.value.findIndex(episode => episode.id === selectedEpisode.value?.id));
 const previousEpisode = computed(() => selectedEpisodeIndex.value > 0 ? episodes.value[selectedEpisodeIndex.value - 1] ?? null : null);
 const nextEpisode = computed(() => selectedEpisodeIndex.value >= 0 ? episodes.value[selectedEpisodeIndex.value + 1] ?? null : null);
