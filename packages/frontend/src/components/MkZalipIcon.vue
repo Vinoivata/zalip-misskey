@@ -4,20 +4,17 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<svg :class="$style.icon" :viewBox="name === 'reply' ? '0 0 18 18' : '0 0 24 24'" :fill="filled && (name === 'heart' || name === 'bookmark') ? 'currentColor' : 'none'" stroke="currentColor" :stroke-width="name === 'reply' ? 1.25 : 1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<svg :class="$style.icon" :viewBox="name === 'reply' ? '0 0 18 18' : '0 0 24 24'" fill="none" stroke="currentColor" :stroke-width="name === 'reply' ? 1.25 : 1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
 	<path v-for="(path, index) in paths[name]" :key="index" :d="path"/>
 </svg>
 </template>
 
 <script lang="ts">
 export type ZalipIconName = 'home' | 'reels' | 'heart' | 'messages' | 'search' | 'plus' | 'sun' | 'moon' | 'back' | 'bookmark' | 'reply' | 'repeat' | 'sparkles' | 'person' | 'users' | 'mood' | 'movie' | 'settings' | 'more' | 'check' | 'play' | 'pause';
-</script>
-
-<script lang="ts" setup>
-defineProps<{ name: ZalipIconName; filled?: boolean }>();
 
 // Navigation outlines and reply/bookmark geometry match the supplied Notr reference.
-const paths: Record<ZalipIconName, string[]> = {
+// Keep the immutable registry shared by every icon, rather than allocating it per feed action.
+const paths = Object.freeze({
 	home: ['M15.0002 17C14.2007 17.6224 13.1505 18 12.0002 18C10.85 18 9.79977 17.6224 9.00024 17', 'M2.35164 13.2135C1.99862 10.9162 1.82211 9.76763 2.25641 8.74938C2.69071 7.73112 3.65427 7.03443 5.58138 5.64106L7.02123 4.6C9.41853 2.86667 10.6172 2 12.0002 2C13.3833 2 14.582 2.86667 16.9793 4.6L18.4191 5.64106C20.3462 7.03443 21.3098 7.73112 21.7441 8.74938C22.1784 9.76763 22.0019 10.9162 21.6489 13.2135L21.3478 15.1724C20.8474 18.4289 20.5972 20.0572 19.4292 21.0286C18.2613 22 16.5539 22 13.1391 22H10.8614C7.44658 22 5.73915 22 4.57124 21.0286C3.40333 20.0572 3.15311 18.4289 2.65267 15.1724L2.35164 13.2135Z'],
 	reels: ['M17.7 21.3351C16.528 21.4998 14.9996 21.4998 12.95 21.4998H11.05C7.01949 21.4998 5.00424 21.4998 3.75212 20.2476C2.5 18.9955 2.5 16.9803 2.5 12.9498V11.0498C2.5 7.01925 2.5 5.00399 3.75212 3.75187C5.00424 2.49976 7.01949 2.49976 11.05 2.49976H12.95C16.9805 2.49976 18.9958 2.49976 20.2479 3.75187C21.5 5.00399 21.5 7.01925 21.5 11.0498V12.9498C21.5 14.158 21.5 15.1851 21.4663 16.0648C21.4392 16.7699 21.4257 17.1224 21.1587 17.2541C20.8917 17.3859 20.5931 17.1746 19.9958 16.752L18.65 15.7998', 'M14.9453 12.3948C14.7686 13.0215 13.9333 13.4644 12.2629 14.3502C10.648 15.2064 9.8406 15.6346 9.18992 15.4625C8.9209 15.3913 8.6758 15.2562 8.47812 15.07C8 14.6198 8 13.7465 8 12C8 10.2535 8 9.38018 8.47812 8.92995C8.6758 8.74381 8.9209 8.60868 9.18992 8.53753C9.8406 8.36544 10.648 8.79357 12.2629 9.64983C13.9333 10.5356 14.7686 10.9785 14.9453 11.6052C15.0182 11.8639 15.0182 12.1361 14.9453 12.3948Z'],
 	heart: ['M19.4626 3.99415C16.7809 2.34923 14.4404 3.01211 13.0344 4.06801C12.4578 4.50096 12.1696 4.71743 12 4.71743C11.8304 4.71743 11.5422 4.50096 10.9656 4.06801C9.55962 3.01211 7.21909 2.34923 4.53744 3.99415C1.01807 6.15294 0.221721 13.2749 8.33953 19.2834C9.88572 20.4278 10.6588 21 12 21C13.3412 21 14.1143 20.4278 15.6605 19.2834C23.7783 13.2749 22.9819 6.15294 19.4626 3.99415Z'],
@@ -40,7 +37,18 @@ const paths: Record<ZalipIconName, string[]> = {
 	movie: ['M3 7h18M3 17h18M12 7v10M8 3v4M16 3v4M8 17v4M16 17v4', 'M12 2.5c-9.5 0-9.5 0-9.5 9.5s0 9.5 9.5 9.5 9.5 0 9.5-9.5 0-9.5-9.5-9.5Z'],
 	settings: ['M4 7h9M17 7h3M4 17h3M11 17h9M13 4v6M7 14v6'],
 	more: ['M4 12h.01M12 12h.01M20 12h.01'],
-};
+} as const satisfies Record<ZalipIconName, readonly string[]>);
+for (const iconPaths of Object.values(paths)) Object.freeze(iconPaths);
+
+export const zalipIconNames: readonly ZalipIconName[] = Object.freeze(Object.keys(paths) as ZalipIconName[]);
+</script>
+
+<script lang="ts" setup>
+defineProps<{
+	name: ZalipIconName;
+	/** Legacy compatibility only. Active state belongs to the caller's color and accessible state. */
+	filled?: boolean;
+}>();
 </script>
 
 <style lang="scss" module>

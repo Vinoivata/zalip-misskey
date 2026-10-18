@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div
-	:class="[$style.root]"
+	:class="[$style.root, { [$style.draghover]: draghover }]"
 	@dragover.stop="onDragover"
 	@dragenter="onDragenter"
 	@dragleave="onDragleave"
@@ -13,51 +13,50 @@ SPDX-License-Identifier: AGPL-3.0-only
 >
 	<header :class="$style.header">
 		<div :class="$style.headerLeft">
-			<button v-if="!fixed" :class="$style.cancel" class="_button" @click="cancel"><i class="ti ti-x"></i></button>
-			<button ref="accountMenuEl" v-click-anime v-tooltip="i18n.ts.account" class="_button" @click="openAccountMenu">
-				<img :class="$style.avatar" :src="(postAccount ?? $i).avatarUrl" style="border-radius: 100%;"/>
-			</button>
+			<button v-if="!fixed" type="button" :class="$style.cancel" class="_button" :aria-label="i18n.ts.cancel" @click="cancel">{{ i18n.ts.cancel }}</button>
 		</div>
+		<h2 :class="$style.heading">{{ replyTargetNote ? i18n.ts.reply : renoteTargetNote ? i18n.ts.quote : i18n.ts.zalip._postForm.newPost }}</h2>
 		<div :class="$style.headerRight">
+			<button ref="otherSettingsButton" v-tooltip="i18n.ts.other" type="button" class="_button" :class="$style.headerRightItem" :aria-label="i18n.ts.other" @click="showOtherSettings"><i class="ti ti-dots" aria-hidden="true"></i></button>
+		</div>
+	</header>
+	<div :class="$style.authorRow">
+		<button ref="accountMenuEl" v-tooltip="i18n.ts.account" type="button" class="_button" :class="$style.account" :aria-label="i18n.ts.account" @click="openAccountMenu">
+			<img :class="$style.avatar" :src="(postAccount ?? $i).avatarUrl ?? undefined" alt="" decoding="async" width="40" height="40"/>
+			<span :class="$style.accountName"><MkUserName :user="postAccount ?? $i"/></span>
+			<i class="ti ti-chevron-down" aria-hidden="true"></i>
+		</button>
+		<div :class="$style.audience">
 			<template v-if="!(targetChannel != null && fixed)">
-				<button v-if="targetChannel == null" ref="visibilityButton" v-tooltip="i18n.ts.visibility" :class="['_button', $style.headerRightItem, $style.visibility]" @click="setVisibility">
+				<button v-if="targetChannel == null" ref="visibilityButton" v-tooltip="i18n.ts.visibility" type="button" :class="['_button', $style.headerRightItem, $style.visibility]" :aria-label="`${i18n.ts.visibility}: ${i18n.ts._visibility[visibility]}`" @click="setVisibility">
 					<span v-if="visibility === 'public'"><i class="ti ti-world"></i></span>
 					<span v-if="visibility === 'home'"><i class="ti ti-home"></i></span>
 					<span v-if="visibility === 'followers'"><i class="ti ti-lock"></i></span>
 					<span v-if="visibility === 'specified'"><i class="ti ti-mail"></i></span>
 					<span :class="$style.headerRightButtonText">{{ i18n.ts._visibility[visibility] }}</span>
 				</button>
-				<button v-else class="_button" :class="[$style.headerRightItem, $style.visibility]" disabled>
+				<button v-else type="button" class="_button" :class="[$style.headerRightItem, $style.visibility]" :aria-label="targetChannel.name" disabled>
 					<span><i class="ti ti-device-tv"></i></span>
 					<span :class="$style.headerRightButtonText">{{ targetChannel.name }}</span>
 				</button>
 			</template>
-			<button v-if="visibility !== 'specified'" v-tooltip="i18n.ts._visibility.disableFederation" class="_button" :class="[$style.headerRightItem, { [$style.danger]: localOnly }]" :disabled="targetChannel != null" @click="toggleLocalOnly">
+			<button v-if="visibility !== 'specified'" v-tooltip="i18n.ts._visibility.disableFederation" type="button" class="_button" :class="[$style.headerRightItem, { [$style.danger]: localOnly }]" :aria-label="i18n.ts._visibility.disableFederation" :aria-pressed="localOnly" :disabled="targetChannel != null" @click="toggleLocalOnly">
 				<span v-if="!localOnly"><i class="ti ti-rocket"></i></span>
 				<span v-else><i class="ti ti-rocket-off"></i></span>
 			</button>
-			<button ref="otherSettingsButton" v-tooltip="i18n.ts.other" class="_button" :class="$style.headerRightItem" @click="showOtherSettings"><i class="ti ti-dots"></i></button>
-			<button ref="submitButtonEl" v-click-anime class="_button" :class="$style.submit" :disabled="!canPost" data-testid="post-form-submit" @click="post">
-				<div :class="$style.submitInner">
-					<template v-if="posted"></template>
-					<template v-else-if="posting"><MkEllipsis/></template>
-					<template v-else>{{ submitText }}</template>
-					<i style="margin-left: 6px;" :class="submitIcon"></i>
-				</div>
-			</button>
 		</div>
-	</header>
+	</div>
 	<MkNoteSimple v-if="replyTargetNote" :class="$style.targetNote" :note="replyTargetNote"/>
 	<MkNoteSimple v-if="renoteTargetNote" :class="$style.targetNote" :note="renoteTargetNote"/>
-	<div v-if="quoteId" :class="$style.withQuote"><i class="ti ti-quote"></i> {{ i18n.ts.quoteAttached }}<button @click="quoteId = null; renoteTargetNote = null;"><i class="ti ti-x"></i></button></div>
+	<div v-if="quoteId" :class="$style.withQuote"><i class="ti ti-quote" aria-hidden="true"></i> {{ i18n.ts.quoteAttached }}<button type="button" class="_button" :aria-label="i18n.ts.remove" @click="quoteId = null; renoteTargetNote = null;"><i class="ti ti-x" aria-hidden="true"></i></button></div>
 	<div v-if="visibility === 'specified'" :class="$style.toSpecified">
 		<span style="margin-right: 8px;">{{ i18n.ts.recipient }}</span>
 		<div :class="$style.visibleUsers">
 			<span v-for="u in visibleUsers" :key="u.id" :class="$style.visibleUser">
 				<MkAcct :user="u"/>
-				<button class="_button" style="padding: 4px 8px;" @click="removeVisibleUser(u.id)"><i class="ti ti-x"></i></button>
+				<button type="button" class="_button" style="padding: 4px 8px;" :aria-label="`${i18n.ts.remove} @${u.username}`" @click="removeVisibleUser(u.id)"><i class="ti ti-x" aria-hidden="true"></i></button>
 			</span>
-			<button class="_buttonPrimary" style="padding: 4px; border-radius: 8px;" @click="addVisibleUser"><i class="ti ti-plus ti-fw"></i></button>
+			<button type="button" class="_buttonPrimary" style="padding: 4px; border-radius: 8px;" :aria-label="i18n.ts.add" @click="addVisibleUser"><i class="ti ti-plus ti-fw" aria-hidden="true"></i></button>
 		</div>
 	</div>
 	<MkInfo v-if="!store.r.tips.value.postForm" :class="$style.showHowToUse" closable @close="closeTip('postForm')">
@@ -72,18 +71,18 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</MkInfo>
 	<MkInfo v-if="hasNotSpecifiedMentions" warn :class="$style.hasNotSpecifiedMentions">{{ i18n.ts.notSpecifiedMentionWarning }} - <button class="_textButton" @click="addMissingMention()">{{ i18n.ts.add }}</button></MkInfo>
 	<div v-show="useCw" :class="$style.cwOuter">
-		<input ref="cwInputEl" v-model="cw" :class="$style.cw" :placeholder="i18n.ts.annotation" @keydown="onKeydown" @keyup="onKeyup" @compositionend="onCompositionEnd">
+		<input ref="cwInputEl" v-model="cw" :class="$style.cw" :placeholder="i18n.ts.annotation" :aria-label="i18n.ts.annotation" @keydown="onKeydown" @keyup="onKeyup" @compositionend="onCompositionEnd">
 		<div v-if="maxCwTextLength - cwTextLength < 20" :class="['_acrylic', $style.cwTextCount, { [$style.cwTextOver]: cwTextLength > maxCwTextLength }]">{{ maxCwTextLength - cwTextLength }}</div>
 	</div>
 	<div :class="[$style.textOuter, { [$style.withCw]: useCw }]">
 		<div v-if="targetChannel" :class="$style.colorBar" :style="{ background: targetChannel.color }"></div>
-		<textarea ref="textareaEl" v-model="text" :class="[$style.text]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-testid="post-form-text" @keydown="onKeydown" @keyup="onKeyup" @paste="onPaste" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"></textarea>
+		<textarea ref="textareaEl" v-model="text" :class="[$style.text]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" :aria-label="i18n.ts.note" data-testid="post-form-text" @keydown="onKeydown" @keyup="onKeyup" @paste="onPaste" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"></textarea>
 		<div v-if="maxTextLength - textLength < 100" :class="['_acrylic', $style.textCount, { [$style.textOver]: textLength > maxTextLength }]">{{ maxTextLength - textLength }}</div>
 	</div>
-	<input v-show="withHashtags" ref="hashtagsInputEl" v-model="hashtags" :class="$style.hashtags" :placeholder="i18n.ts.hashtags" list="hashtags">
+	<input v-show="withHashtags" ref="hashtagsInputEl" v-model="hashtags" :class="$style.hashtags" :placeholder="i18n.ts.hashtags" :aria-label="i18n.ts.hashtags" list="hashtags">
 	<div v-if="selectedZalipWork" :class="$style.zalipShare">
 		<ZalipShareCard :share="selectedZalipWork" :preview="true"/>
-		<button v-tooltip="'Убрать тайтл'" class="_button" :class="$style.removeZalipShare" @click="removeZalipWork"><i class="ti ti-x"></i></button>
+		<button v-tooltip="i18n.ts.zalip._postForm.removeTitle" type="button" class="_button" :class="$style.removeZalipShare" :aria-label="i18n.ts.zalip._postForm.removeTitle" @click="removeZalipWork"><i class="ti ti-x" aria-hidden="true"></i></button>
 	</div>
 	<XPostFormAttaches v-if="!selectedZalipWork" v-model="files" @detach="detachFile" @changeSensitive="updateFileSensitive" @changeName="updateFileName"/>
 	<div v-if="!selectedZalipWork && uploader.items.value.length > 0" style="padding: 12px;">
@@ -98,20 +97,23 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</div>
 	<footer ref="footerEl" :class="$style.footer">
 		<div :class="$style.footerLeft">
-			<button v-tooltip="selectedZalipWork ? 'Заменить тайтл' : 'Прикрепить фильм, сериал или аниме'" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: selectedZalipWork }]" @click="chooseZalipWork"><i class="ti ti-movie"></i></button>
+			<button v-tooltip="selectedZalipWork ? i18n.ts.zalip._postForm.replaceTitle : i18n.ts.zalip._postForm.attachTitle" type="button" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: selectedZalipWork }]" :aria-label="selectedZalipWork ? i18n.ts.zalip._postForm.replaceTitle : i18n.ts.zalip._postForm.attachTitle" :aria-pressed="selectedZalipWork != null" @click="chooseZalipWork"><i class="ti ti-movie" aria-hidden="true"></i></button>
 			<template v-if="!selectedZalipWork">
-				<button v-tooltip="i18n.ts.attachFile + ' (' + i18n.ts.upload + ')'" class="_button" :class="$style.footerButton" @click="chooseFileFromPc"><i class="ti ti-photo-plus"></i></button>
-				<button v-tooltip="i18n.ts.attachFile + ' (' + i18n.ts.fromDrive + ')'" class="_button" :class="$style.footerButton" @click="chooseFileFromDrive"><i class="ti ti-cloud-download"></i></button>
-				<button v-tooltip="i18n.ts.poll" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: poll }]" @click="togglePoll"><i class="ti ti-chart-arrows"></i></button>
+				<button v-tooltip="i18n.ts.attachFile + ' (' + i18n.ts.upload + ')'" type="button" class="_button" :class="$style.footerButton" :aria-label="i18n.ts.attachFile + ' (' + i18n.ts.upload + ')'" @click="chooseFileFromPc"><i class="ti ti-photo-plus" aria-hidden="true"></i></button>
+				<button v-tooltip="i18n.ts.attachFile + ' (' + i18n.ts.fromDrive + ')'" type="button" class="_button" :class="$style.footerButton" :aria-label="i18n.ts.attachFile + ' (' + i18n.ts.fromDrive + ')'" @click="chooseFileFromDrive"><i class="ti ti-cloud-download" aria-hidden="true"></i></button>
+				<button v-tooltip="i18n.ts.poll" type="button" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: poll }]" :aria-label="i18n.ts.poll" :aria-pressed="poll != null" @click="togglePoll"><i class="ti ti-chart-arrows" aria-hidden="true"></i></button>
 			</template>
-			<button v-tooltip="i18n.ts.useCw" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: useCw }]" @click="useCw = !useCw"><i class="ti ti-eye-off"></i></button>
-			<button v-tooltip="i18n.ts.hashtags" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: withHashtags }]" @click="withHashtags = !withHashtags"><i class="ti ti-hash"></i></button>
-			<button v-tooltip="i18n.ts.mention" class="_button" :class="$style.footerButton" @click="insertMention"><i class="ti ti-at"></i></button>
-			<button v-if="showAddMfmFunction" v-tooltip="i18n.ts.addMfmFunction" :class="['_button', $style.footerButton]" @click="insertMfmFunction"><i class="ti ti-palette"></i></button>
-			<button v-if="postFormActions.length > 0" v-tooltip="i18n.ts.plugins" class="_button" :class="$style.footerButton" @click="showActions"><i class="ti ti-plug"></i></button>
+			<button v-tooltip="i18n.ts.useCw" type="button" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: useCw }]" :aria-label="i18n.ts.useCw" :aria-pressed="useCw" @click="useCw = !useCw"><i class="ti ti-eye-off" aria-hidden="true"></i></button>
+			<button v-tooltip="i18n.ts.hashtags" type="button" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: withHashtags }]" :aria-label="i18n.ts.hashtags" :aria-pressed="withHashtags" @click="withHashtags = !withHashtags"><i class="ti ti-hash" aria-hidden="true"></i></button>
+			<button v-tooltip="i18n.ts.mention" type="button" class="_button" :class="$style.footerButton" :aria-label="i18n.ts.mention" @click="insertMention"><i class="ti ti-at" aria-hidden="true"></i></button>
+			<button v-if="showAddMfmFunction" v-tooltip="i18n.ts.addMfmFunction" type="button" :class="['_button', $style.footerButton]" :aria-label="i18n.ts.addMfmFunction" @click="insertMfmFunction"><i class="ti ti-palette" aria-hidden="true"></i></button>
+			<button v-if="postFormActions.length > 0" v-tooltip="i18n.ts.plugins" type="button" class="_button" :class="$style.footerButton" :aria-label="i18n.ts.plugins" @click="showActions"><i class="ti ti-plug" aria-hidden="true"></i></button>
+			<button v-tooltip="i18n.ts.emoji" type="button" :class="['_button', $style.footerButton]" :aria-label="i18n.ts.emoji" @click="insertEmoji"><i class="ti ti-mood-happy" aria-hidden="true"></i></button>
 		</div>
 		<div :class="$style.footerRight">
-			<button v-tooltip="i18n.ts.emoji" :class="['_button', $style.footerButton]" @click="insertEmoji"><i class="ti ti-mood-happy"></i></button>
+			<button ref="submitButtonEl" type="button" class="_button" :class="$style.submit" :disabled="!canPost" :aria-busy="posting" data-testid="post-form-submit" @click="post">
+				<div :class="$style.submitInner"><template v-if="posted"></template><template v-else-if="posting"><MkEllipsis/></template><template v-else>{{ submitText }}</template><i :class="submitIcon" aria-hidden="true"></i></div>
+			</button>
 		</div>
 	</footer>
 	<datalist id="hashtags">
@@ -293,12 +295,12 @@ const submitText = computed((): string => {
 	return scheduledAt.value != null
 		? i18n.ts.schedule
 		: selectedZalipWork.value
-		? 'Поделиться'
+			? i18n.ts.zalip.shareTitle
 			: renoteTargetNote.value
-			? i18n.ts.quote
-			: replyTargetNote.value
-				? i18n.ts.reply
-				: i18n.ts.note;
+				? i18n.ts.quote
+				: replyTargetNote.value
+					? i18n.ts.reply
+					: i18n.ts.note;
 });
 
 const submitIcon = computed((): string => {
@@ -1003,7 +1005,7 @@ async function post(ev?: PointerEvent) {
 	if (ev != null) {
 		const el = (ev.currentTarget ?? ev.target) as HTMLElement | null;
 
-		if (el && prefer.s.animation) {
+		if (el && prefer.s.animation && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
 			const rect = el.getBoundingClientRect();
 			const x = rect.left + (el.offsetWidth / 2);
 			const y = rect.top + (el.offsetHeight / 2);
@@ -1572,53 +1574,62 @@ defineExpose({
 .root {
 	position: relative;
 	container-type: inline-size;
+	font-family: var(--zalip-font-family);
+	color: var(--MI_THEME-fg);
+	background: var(--MI_THEME-panel);
 }
+.root.draghover { outline: 2px solid var(--MI_THEME-accent); outline-offset: -2px; }
 
 //#region header
 .header {
-	z-index: 1000;
-	min-height: 50px;
-	display: flex;
-	flex-wrap: nowrap;
-	gap: 4px;
+	position: sticky;
+	top: 0;
+	z-index: 2;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+	align-items: center;
+	min-height: 56px;
+	padding: 0 16px;
+	background: var(--MI_THEME-panel);
+	border-bottom: 1px solid var(--MI_THEME-divider);
 }
+.heading { margin: 0; font-size: 16px; font-weight: 700; line-height: 24px; }
 
 .headerLeft {
 	display: flex;
-	flex: 1;
-	flex-wrap: nowrap;
 	align-items: center;
-	gap: 6px;
-	padding-left: 12px;
+	min-width: 0;
 }
 
 .cancel {
-	padding: 8px;
+	min-height: 40px;
+	font-size: 14px;
+	text-align: start;
+	color: var(--MI_THEME-fgTransparentWeak);
 }
+.authorRow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 16px 10px; }
+.account { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 44px; border-radius: 8px; > i { flex: 0 0 auto; font-size: 12px; color: var(--MI_THEME-fgTransparentWeak); } }
+.accountName { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; font-weight: 700; }
+.audience { display: flex; align-items: center; flex: 0 0 auto; gap: 2px; color: var(--MI_THEME-fgTransparentWeak); font-size: 13px; }
 
 .avatar {
 	display: block;
-	width: 28px;
-	height: 28px;
-	margin: auto;
+	flex: 0 0 40px;
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
 	object-fit: cover;
 }
 
 .headerRight {
 	display: flex;
-	min-height: 48px;
-	font-size: 0.9em;
-	flex-wrap: nowrap;
 	align-items: center;
-	margin-left: auto;
-	gap: 4px;
-	overflow: clip;
-	padding-left: 4px;
+	justify-content: flex-end;
 }
 
 .submit {
-	margin: 12px 12px 12px 6px;
-	vertical-align: bottom;
+	margin: 0;
+	border-radius: 999px;
 
 	&:focus-visible {
 		outline: none;
@@ -1630,7 +1641,7 @@ defineExpose({
 	}
 
 	&:disabled {
-		opacity: 0.7;
+		opacity: 0.45;
 	}
 
 	&.posting {
@@ -1639,13 +1650,13 @@ defineExpose({
 
 	&:not(:disabled):hover {
 		> .submitInner {
-			background: linear-gradient(90deg, hsl(from var(--MI_THEME-accent) h s calc(l + 5)), hsl(from var(--MI_THEME-accent) h s calc(l + 5)));
+			filter: brightness(1.08);
 		}
 	}
 
 	&:not(:disabled):active {
 		> .submitInner {
-			background: linear-gradient(90deg, hsl(from var(--MI_THEME-accent) h s calc(l + 5)), hsl(from var(--MI_THEME-accent) h s calc(l + 5)));
+			filter: brightness(.95);
 		}
 	}
 }
@@ -1661,23 +1672,35 @@ defineExpose({
 }
 
 .submitInner {
-	padding: 0 12px;
-	line-height: 34px;
-	font-weight: bold;
-	border-radius: 6px;
-	min-width: 90px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	padding: 0 16px;
+	min-height: 40px;
+	font-size: 14px;
+	font-weight: 700;
+	border-radius: inherit;
+	min-width: 96px;
 	box-sizing: border-box;
 	color: var(--MI_THEME-fgOnAccent);
-	background: linear-gradient(90deg, var(--MI_THEME-buttonGradateA), var(--MI_THEME-buttonGradateB));
+	background: var(--MI_THEME-accent);
+	transition: filter .15s;
+	> i { font-size: 18px; }
 }
 
 .headerRightItem {
 	margin: 0;
-	padding: 8px;
-	border-radius: 6px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 36px;
+	min-width: 36px;
+	padding: 0 6px;
+	border-radius: 8px;
 
 	&:hover {
-		background: light-dark(rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.05));
+		background: var(--MI_THEME-buttonHoverBg);
 	}
 
 	&:disabled {
@@ -1685,19 +1708,19 @@ defineExpose({
 	}
 
 	&.danger {
-		color: #ff2a2a;
+		color: var(--MI_THEME-warn);
 	}
 }
 
 .headerRightButtonText {
-	padding-left: 6px;
+	padding-left: 5px;
 }
 
 .visibility {
 	overflow: clip;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	max-width: 210px;
+	max-width: 180px;
 
 	&:enabled {
 		> .headerRightButtonText {
@@ -1708,11 +1731,12 @@ defineExpose({
 //#endregion
 
 .preview {
-	padding: 16px 20px 0 20px;
+	padding: 12px 16px;
 	min-height: 75px;
 	max-height: 150px;
 	overflow: auto;
-	background-size: auto auto;
+	border-top: 1px solid var(--MI_THEME-divider);
+	background: var(--MI_THEME-bg);
 }
 
 .zalipShare {
@@ -1739,16 +1763,8 @@ defineExpose({
 	}
 }
 
-html[data-color-scheme=dark] .preview {
-	background-image: repeating-linear-gradient(135deg, transparent, transparent 5px, #0004 5px, #0004 10px);
-}
-
-html[data-color-scheme=light] .preview {
-	background-image: repeating-linear-gradient(135deg, transparent, transparent 5px, #00000005 5px, #00000005 10px);
-}
-
 .targetNote {
-	padding: 0 20px 16px 20px;
+	padding: 0 16px 16px;
 }
 
 .withQuote {
@@ -1757,7 +1773,7 @@ html[data-color-scheme=light] .preview {
 }
 
 .toSpecified {
-	padding: 6px 24px;
+	padding: 6px 16px;
 	margin-bottom: 8px;
 	overflow: auto;
 	white-space: nowrap;
@@ -1773,19 +1789,19 @@ html[data-color-scheme=light] .preview {
 	margin-right: 14px;
 	padding: 8px 0 8px 8px;
 	border-radius: 8px;
-	background: light-dark(rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0.1));
+	background: var(--MI_THEME-buttonBg);
 }
 
 .hasNotSpecifiedMentions {
-	margin: 0 20px 16px 20px;
+	margin: 0 16px 16px;
 }
 
 .scheduledAt {
-	margin: 0 20px 16px 20px;
+	margin: 0 16px 16px;
 }
 
 .showHowToUse {
-	margin: 0 20px 16px 20px;
+	margin: 0 16px 16px;
 }
 
 .cw,
@@ -1793,19 +1809,18 @@ html[data-color-scheme=light] .preview {
 .text {
 	display: block;
 	box-sizing: border-box;
-	padding: 0 24px;
+	padding: 0 16px;
 	margin: 0;
 	width: 100%;
-	font-size: 110%;
+	font-size: 16px;
+	line-height: 24px;
 	border: none;
 	border-radius: 0;
 	background: transparent;
 	color: var(--MI_THEME-fg);
 	font-family: inherit;
 
-	&:focus {
-		outline: none;
-	}
+	&:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: -2px; border-radius: 4px; }
 
 	&:disabled {
 		opacity: 0.5;
@@ -1836,7 +1851,7 @@ html[data-color-scheme=light] .preview {
 	text-align: center;
 
 	&.cwTextOver {
-		color: #ff2a2a;
+		color: var(--MI_THEME-error);
 	}
 }
 
@@ -1860,7 +1875,7 @@ html[data-color-scheme=light] .preview {
 	max-width: 100%;
 	min-width: 100%;
 	width: 100%;
-	min-height: 90px;
+	min-height: 132px;
 	max-height: 500px;
 	field-sizing: content;
 }
@@ -1877,45 +1892,51 @@ html[data-color-scheme=light] .preview {
 	text-align: center;
 
 	&.textOver {
-		color: #ff2a2a;
+		color: var(--MI_THEME-error);
 	}
 }
 
 .footer {
+	position: sticky;
+	bottom: 0;
+	z-index: 2;
 	display: flex;
-	padding: 0 16px 16px 16px;
-	font-size: 1em;
+	align-items: flex-end;
+	gap: 8px;
+	padding: 10px 16px max(10px, env(safe-area-inset-bottom));
+	border-top: 1px solid var(--MI_THEME-divider);
+	background: var(--MI_THEME-panel);
 }
 
 .footerLeft {
 	flex: 1;
-	display: grid;
-	grid-auto-flow: row;
-	grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
-	grid-auto-rows: 40px;
+	min-width: 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px;
 }
 
 .footerRight {
-	flex: 0;
+	flex: 0 0 auto;
 	margin-left: auto;
-	display: grid;
-	grid-auto-flow: row;
-	grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
-	grid-auto-rows: 40px;
-	direction: rtl;
+	display: flex;
+	align-items: center;
 }
 
 .footerButton {
-	display: inline-block;
+	display: inline-grid;
+	place-items: center;
 	padding: 0;
 	margin: 0;
-	font-size: 1em;
-	width: auto;
-	height: 100%;
-	border-radius: 6px;
+	font-size: 20px;
+	width: 36px;
+	height: 40px;
+	border-radius: 50%;
+	color: var(--MI_THEME-fgTransparentWeak);
+	transition: background .15s, color .15s;
 
 	&:hover {
-		background: light-dark(rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.05));
+		background: var(--MI_THEME-buttonHoverBg);
 	}
 
 	&.footerButtonActive {
@@ -1926,23 +1947,14 @@ html[data-color-scheme=light] .preview {
 .previewButtonActive {
 	color: var(--MI_THEME-accent);
 }
+.cancel:focus-visible, .account:focus-visible, .headerRightItem:focus-visible, .footerButton:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 1px; }
+@media (hover: none), (pointer: coarse) { .footerButton, .headerRightItem, .cancel { min-width: 44px; min-height: 44px; } .submitInner { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) { .root *, .submitInner { transition: none !important; animation: none !important; } }
 
 @container (max-width: 500px) {
-	.headerRight {
-		font-size: .9em;
-	}
-
-	.headerRightButtonText {
-		display: none;
-	}
-
-	.visibility {
-		overflow: initial;
-	}
-
-	.submit {
-		margin: 8px 8px 8px 4px;
-	}
+	.header { min-height: 52px; }
+	.authorRow { padding: 12px 16px 10px; }
+	.visibility { max-width: 132px; }
 
 	.toSpecified {
 		padding: 6px 16px;
@@ -1958,30 +1970,18 @@ html[data-color-scheme=light] .preview {
 	}
 
 	.text {
-		min-height: 80px;
+		min-height: 150px;
 	}
 
 	.footer {
-		padding: 0 8px 8px 8px;
+		padding: 8px 10px max(8px, env(safe-area-inset-bottom));
 	}
 }
 
 @container (max-width: 350px) {
-	.footer {
-		font-size: 0.9em;
-	}
-
-	.footerLeft {
-		grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
-	}
-
-	.footerRight {
-		grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
-	}
-
-	.headerRight {
-		gap: 0;
-	}
+	.authorRow { gap: 4px; }
+	.visibility { max-width: 108px; }
+	.submitInner { min-width: 84px; padding: 0 10px; }
 
 }
 </style>

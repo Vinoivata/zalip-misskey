@@ -105,6 +105,13 @@ const modalRootEl = useTemplateRef('modalRootEl');
 const content = useTemplateRef('content');
 const zIndex = os.claimZIndex(props.zPriority);
 const useSendAnime = ref(false);
+const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+const reducedMotion = ref(reducedMotionQuery.matches);
+
+function onReducedMotionChange(event: MediaQueryListEvent): void {
+	reducedMotion.value = event.matches;
+}
+
 const type = computed<ModalTypes>(() => {
 	if (props.preferType === 'auto') {
 		if ((prefer.s.menuStyle === 'drawer') || (prefer.s.menuStyle === 'auto' && isTouchUsing && deviceKind === 'smartphone')) {
@@ -118,7 +125,7 @@ const type = computed<ModalTypes>(() => {
 });
 const isEnableBgTransparent = computed(() => props.transparentBg && (type.value === 'popup'));
 const transitionName = computed((() =>
-	prefer.s.animation
+	prefer.s.animation && !reducedMotion.value
 		? useSendAnime.value
 			? 'send'
 			: type.value === 'drawer'
@@ -316,6 +323,9 @@ const alignObserver = new ResizeObserver((entries, observer) => {
 });
 
 onMounted(() => {
+	reducedMotion.value = reducedMotionQuery.matches;
+	reducedMotionQuery.addEventListener('change', onReducedMotionChange);
+
 	watch(() => props.anchorElement, async () => {
 		if (props.anchorElement) {
 			props.anchorElement.style.pointerEvents = 'none';
@@ -348,6 +358,8 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+	reducedMotionQuery.removeEventListener('change', onReducedMotionChange);
+
 	// A parent may remove an open dialog with v-if (for example after saving a
 	// rating). Release while the DOM ancestry still exists, not after unmount.
 	releaseFocusTrap?.();

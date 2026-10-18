@@ -20,6 +20,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		:items="items"
 		:align="align"
 		:width="width"
+		:appearance="appearance"
 		:max-height="maxHeight"
 		:asDrawer="type === 'drawer'"
 		:returnFocusTo="returnFocusTo"
@@ -42,6 +43,7 @@ defineProps<{
 	items: MenuItem[];
 	align?: 'center' | string;
 	width?: number;
+	appearance?: 'zalip-note';
 	anchorElement?: HTMLElement | null;
 	returnFocusTo?: HTMLElement | null;
 	debugDisablePredictionCone?: boolean;

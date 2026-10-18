@@ -15,6 +15,7 @@
 }
 
 :root {
+	--zalip-font-family: Inter, 'Hiragino Maru Gothic Pro', "BIZ UDGothic", Roboto, HelveticaNeue, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 	--zalip-feed-width: 780px;
 	// Measured light/dark reference surfaces. Independent of saved accent palettes.
 	--zalip-social-bg: light-dark(#f7f9fa, #080808);
@@ -62,7 +63,7 @@
 html {
 	overflow: auto;
 	overflow-wrap: break-word;
-	font-family: 'Hiragino Maru Gothic Pro', "BIZ UDGothic", Roboto, HelveticaNeue, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+	font-family: var(--zalip-font-family);
 	font-size: 14px;
 	line-height: 1.35;
 	text-size-adjust: 100%;
@@ -87,7 +88,7 @@ html {
 	}
 
 	&.useSystemFont {
-		font-family: system-ui;
+		--zalip-font-family: system-ui;
 	}
 
 	&:not(.forceSelectableAll) {

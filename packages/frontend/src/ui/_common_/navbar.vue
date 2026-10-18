@@ -57,7 +57,7 @@ function openAppearanceMenu(event: PointerEvent): void {
 </script>
 
 <style lang="scss" module>
-.root { display: flex; flex-direction: column; flex: 0 0 240px; width: 240px; height: 100%; padding: 20px 28px 20px 16px; box-sizing: border-box; overflow-y: auto; scrollbar-width: none; background: var(--zalip-social-bg); color: var(--zalip-social-muted); font-family: Inter, Arial, sans-serif; }
+.root { display: flex; flex-direction: column; flex: 0 0 240px; width: 240px; height: 100%; padding: 20px 28px 20px 16px; box-sizing: border-box; overflow-y: auto; scrollbar-width: none; background: var(--zalip-social-bg); color: var(--zalip-social-muted); font-family: var(--zalip-font-family); }
 .brand { align-self: flex-start; padding: 0 12px 24px; color: var(--zalip-social-fg); text-decoration: none; font-size: 38px; font-weight: 800; letter-spacing: -3px; line-height: 1; }
 .menu { display: flex; flex-direction: column; gap: 4px; }
 .item, .post, .secondary, .admin { display: flex; align-items: center; gap: 18px; min-height: 54px; padding: 0 14px; border-radius: 30px; text-decoration: none; color: inherit; text-align: left; box-sizing: border-box; }

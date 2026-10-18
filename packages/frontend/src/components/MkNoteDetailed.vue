@@ -54,6 +54,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<MkNoteHeader :note="appearNote" stacked/>
 					<MkInstanceTicker v-if="showTicker" :host="appearNote.user.host" :instance="appearNote.user.instance"/>
 				</div>
+				<MkZalipFollowButton v-if="!appearNote.isHidden" :user="appearNote.user"/>
 				<button ref="menuButton" type="button" class="_button" :class="$style.menuButton" :aria-label="i18n.ts.more" @click="showMenu()"><i class="ti ti-dots" aria-hidden="true"></i></button>
 			</header>
 			<div :class="$style.noteContent">
@@ -243,6 +244,7 @@ import { useZalipNoteViews } from '@/composables/use-zalip-note-views.js';
 import MkNoteSub from '@/components/MkNoteSub.vue';
 import MkZalipCommentThread from '@/components/MkZalipCommentThread.vue';
 import MkNoteHeader from '@/components/MkNoteHeader.vue';
+import MkZalipFollowButton from '@/components/MkZalipFollowButton.vue';
 import MkZalipIcon from '@/components/MkZalipIcon.vue';
 import MkZalipBookmark from '@/components/MkZalipBookmark.vue';
 import MkNoteSimple from '@/components/MkNoteSimple.vue';

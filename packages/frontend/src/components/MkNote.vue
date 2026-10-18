@@ -54,6 +54,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div :class="[$style.threadContent, { [$style.hasReplyPreview]: hasReplyPreview }]">
 				<div :class="$style.headerRow">
 					<MkNoteHeader :note="appearNote" stacked :class="$style.noteHeader"/>
+					<MkZalipFollowButton v-if="!appearNote.isHidden" :user="appearNote.user" :mock="mock"/>
 					<button ref="menuButton" type="button" :class="$style.menuButton" class="_button" :aria-label="i18n.ts.more" @click="showMenu()"><i class="ti ti-dots" aria-hidden="true"></i></button>
 				</div>
 				<MkInstanceTicker v-if="showTicker" :class="$style.instanceTicker" :host="appearNote.user.host" :instance="appearNote.user.instance"/>
@@ -213,6 +214,7 @@ import { useZalipNoteViews } from '@/composables/use-zalip-note-views.js';
 // コンポーネント外部の依存関係
 import MkNoteSub from '@/components/MkNoteSub.vue';
 import MkNoteHeader from '@/components/MkNoteHeader.vue';
+import MkZalipFollowButton from '@/components/MkZalipFollowButton.vue';
 import MkZalipIcon from '@/components/MkZalipIcon.vue';
 import MkZalipBookmark from '@/components/MkZalipBookmark.vue';
 import MkZalipReplyPreview from '@/components/MkZalipReplyPreview.vue';

@@ -138,7 +138,7 @@ async function submit(): Promise<void> {
 </script>
 
 <style lang="scss" module>
-.root { display: flex; align-items: center; gap: 12px; margin: 12px; padding: 12px 16px; min-height: 62px; box-sizing: border-box; border: 1px solid var(--zalip-social-border); border-radius: 28px; background: color-mix(in srgb, var(--zalip-social-panel) 92%, transparent); color: var(--zalip-social-fg); backdrop-filter: blur(18px); box-shadow: 0 2px 16px var(--zalip-glass-shadow); pointer-events: auto; font-family: Inter, Arial, sans-serif; }
+.root { display: flex; align-items: center; gap: 12px; margin: 12px; padding: 12px 16px; min-height: 62px; box-sizing: border-box; border: 1px solid var(--zalip-social-border); border-radius: 28px; background: color-mix(in srgb, var(--zalip-social-panel) 92%, transparent); color: var(--zalip-social-fg); backdrop-filter: blur(18px); box-shadow: 0 2px 16px var(--zalip-glass-shadow); pointer-events: auto; font-family: var(--zalip-font-family); }
 .floating { margin: 0; }
 .avatar { flex: 0 0 28px; width: 28px; height: 28px; }
 .form { flex: 1; min-width: 0; }

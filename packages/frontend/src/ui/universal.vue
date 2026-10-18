@@ -180,7 +180,7 @@ function onContextmenu(ev: PointerEvent) {
 	--MI_THEME-fgTransparent: var(--zalip-social-muted);
 	--MI_THEME-divider: var(--zalip-social-border);
 	--MI_THEME-panelHighlight: var(--zalip-social-hover);
-	font-family: Inter, Arial, sans-serif;
+	font-family: var(--zalip-font-family);
 }
 
 @media (max-width: 1099px) {

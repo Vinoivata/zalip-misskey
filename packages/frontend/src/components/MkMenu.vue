@@ -12,6 +12,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		[$style.big]: big,
 		[$style.asDrawer]: asDrawer,
 		[$style.widthSpecified]: width != null,
+		[$style.zalipNote]: appearance === 'zalip-note',
 	}"
 	@focusin.passive.stop="() => {}"
 >
@@ -108,7 +109,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				v-else-if="item.type === 'switch'"
 				role="menuitemcheckbox"
 				tabindex="0"
-				:class="['_button', $style.item]"
+				:class="['_button', $style.item, $style.switch]"
 				:disabled="unref(item.disabled)"
 				@click.prevent="switchItem(item)"
 				@mouseenter.passive="onItemMouseEnter"
@@ -254,6 +255,7 @@ const props = defineProps<{
 	asDrawer?: boolean;
 	align?: 'center' | string;
 	width?: number;
+	appearance?: 'zalip-note';
 	maxHeight?: number;
 	debugDisablePredictionCone?: boolean;
 	debugShowPredictionCone?: boolean;
@@ -573,13 +575,13 @@ function guardMouseMove(ev: MouseEvent) {
 		}
 	}
 
-	&:not(.asDrawer):not(.widthSpecified) {
+	&:not(.asDrawer):not(.widthSpecified):not(.zalipNote) {
 		> .menu {
 			max-width: 400px;
 		}
 	}
 
-	&.big:not(.asDrawer) {
+	&.big:not(.asDrawer):not(.zalipNote) {
 		> .menu {
 			min-width: 230px;
 
@@ -635,6 +637,41 @@ function guardMouseMove(ev: MouseEvent) {
 	&:focus-visible {
 		outline: none;
 	}
+}
+
+// Only the three-dot note action surface opts in. Native navigation, settings,
+// submenus, keyboard handling and menu-item semantics retain their defaults.
+.root.zalipNote {
+	> .menu {
+		--menuHoverFg: var(--MI_THEME-fg);
+		--menuHoverBg: var(--MI_THEME-panelHighlight);
+		--menuActiveFg: var(--MI_THEME-fg);
+		--menuActiveBg: var(--MI_THEME-buttonHoverBg);
+		width: 300px;
+		min-width: 0;
+		max-width: 90vw;
+		padding: 12px 0;
+		border-radius: 16px;
+		font-family: var(--zalip-font-family, inherit);
+
+		> .item {
+			min-height: 44px;
+			padding: 12px 20px;
+			font-size: 15px;
+			font-weight: 600;
+			line-height: 20px;
+
+			> .item_content { min-width: 0; flex: 1; }
+			.item_content_text { min-width: 0; max-width: 100%; }
+			> .icon { width: 20px; font-size: 20px; flex-shrink: 0; }
+			&:not(.parent):not(.switch) > .icon { order: 2; margin: 0 0 0 12px; }
+			&::before { width: calc(100% - 16px); border-radius: 8px; }
+		}
+
+		> .divider { margin: 8px 0; }
+	}
+
+	&.asDrawer > .menu { padding-bottom: max(env(safe-area-inset-bottom, 0px), 12px); }
 }
 
 .item {

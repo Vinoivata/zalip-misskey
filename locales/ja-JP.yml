@@ -789,6 +789,11 @@ zalip:
   commentsError: "Не удалось загрузить комментарии. Попробуйте ещё раз."
   commentsNewest: "Сначала новые"
   postViews: "Просмотры"
+  _postForm:
+    newPost: "Новая запись"
+    attachTitle: "Прикрепить фильм, сериал или аниме"
+    replaceTitle: "Заменить тайтл"
+    removeTitle: "Убрать тайтл"
   commentsOldest: "Сначала старые"
   commentSignIn: "Войдите, чтобы оставить комментарий"
   commentError: "Не удалось отправить комментарий. Попробуйте ещё раз."

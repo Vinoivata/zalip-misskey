@@ -3159,6 +3159,24 @@ export interface Locale extends ILocale {
          * Просмотры
          */
         "postViews": string;
+        "_postForm": {
+            /**
+             * Новая запись
+             */
+            "newPost": string;
+            /**
+             * Прикрепить фильм, сериал или аниме
+             */
+            "attachTitle": string;
+            /**
+             * Заменить тайтл
+             */
+            "replaceTitle": string;
+            /**
+             * Убрать тайтл
+             */
+            "removeTitle": string;
+        };
         /**
          * Сначала старые
          */

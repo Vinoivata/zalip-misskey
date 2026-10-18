@@ -20,6 +20,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<MkA :class="$style.time" :to="notePage(appearNote)"><MkTime :time="appearNote.createdAt"/></MkA>
 					<span v-if="appearNote.visibility !== 'public'" :class="$style.visibility" :title="i18n.ts._visibility[appearNote.visibility]"><i :class="appearNote.visibility === 'home' ? 'ti ti-home' : appearNote.visibility === 'followers' ? 'ti ti-lock' : 'ti ti-mail'" aria-hidden="true"></i></span>
 					<i v-if="appearNote.localOnly" class="ti ti-rocket-off" :title="i18n.ts._visibility.disableFederation" aria-hidden="true"></i>
+					<MkZalipFollowButton :user="appearNote.user" :mock="mock"/>
 					<button ref="menuButton" type="button" class="_button" :class="$style.menu" :aria-label="i18n.ts.more" @click="showMenu()"><i class="ti ti-dots" aria-hidden="true"></i></button>
 				</header>
 				<p v-if="appearNote.cw != null" :class="$style.cw"><Mfm v-if="appearNote.cw" :text="appearNote.cw" :author="appearNote.user"/><MkCwButton v-model="showContent" :text="appearNote.text" :files="appearNote.files" :poll="appearNote.poll"/></p>
@@ -66,6 +67,7 @@ import MkPoll from '@/components/MkPoll.vue';
 import MkNoteSimple from '@/components/MkNoteSimple.vue';
 import MkReactionIcon from '@/components/MkReactionIcon.vue';
 import MkZalipIcon from '@/components/MkZalipIcon.vue';
+import MkZalipFollowButton from '@/components/MkZalipFollowButton.vue';
 import ZalipShareCard from '@/components/ZalipShareCard.vue';
 import { DI } from '@/di.js';
 import { $i } from '@/i.js';

@@ -616,6 +616,7 @@ export async function cropImageFile<F extends File | Blob>(imageFile: F, options
 export function popupMenu(items: (MenuItem | null)[], anchorElement?: HTMLElement | EventTarget | null, options?: {
 	align?: string;
 	width?: number;
+	appearance?: 'zalip-note';
 	onClosing?: () => void;
 	onClosed?: () => void;
 	debugDisablePredictionCone?: boolean;
@@ -632,6 +633,7 @@ export function popupMenu(items: (MenuItem | null)[], anchorElement?: HTMLElemen
 			anchorElement,
 			width: options?.width,
 			align: options?.align,
+			appearance: options?.appearance,
 			returnFocusTo,
 			debugDisablePredictionCone: options?.debugDisablePredictionCone,
 			debugShowPredictionCone: options?.debugShowPredictionCone,
