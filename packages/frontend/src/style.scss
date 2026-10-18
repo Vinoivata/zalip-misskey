@@ -31,7 +31,7 @@
 	--zalip-glass: light-dark(rgba(255, 255, 255, .58), rgba(28, 28, 30, .5));
 	--zalip-glass-shadow: light-dark(rgba(0, 0, 0, .12), rgba(0, 0, 0, .35));
 	--zalip-glass-highlight: light-dark(rgba(255, 255, 255, .85), rgba(255, 255, 255, .16));
-	--zalip-glass-active: color-mix(in srgb, var(--MI_THEME-accent) 18%, light-dark(rgba(15, 20, 25, .15), rgba(255, 255, 255, .20)));
+	--zalip-glass-active: color-mix(in srgb, var(--zalip-social-fg) 20%, transparent);
 	--zalip-social-link: #ff2969;
 	--zalip-content-max-width: 960px;
 	--zalip-content-small-max-width: 640px;

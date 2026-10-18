@@ -8,6 +8,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<MkA to="/" :class="$style.brand" :aria-label="i18n.ts.zalip.brand">zalip</MkA>
 	<nav :class="$style.menu" :aria-label="i18n.ts.menu">
 		<MkA to="/timeline" :class="$style.item" :activeClass="$style.active"><MkZalipIcon name="home"/><span>{{ navbarItemDef.feed.title }}</span></MkA>
+		<button type="button" class="_button" :class="$style.item" @click="openZalipSearch('note')"><MkZalipIcon name="search"/><span>{{ i18n.ts.zalip.search }}</span></button>
 		<MkA to="/" exact :class="$style.item" :activeClass="$style.active"><MkZalipIcon name="reels"/><span>{{ navbarItemDef.zalip.title }}</span></MkA>
 		<MkA v-if="$i && $i.policies.chatAvailability !== 'unavailable'" to="/chat" :class="$style.item" :activeClass="$style.active"><MkZalipIcon name="messages"/><span>{{ i18n.ts.zalip.messages }}</span><span v-if="$i.hasUnreadChatMessages" :class="$style.indicator"></span></MkA>
 		<MkA v-if="$i" to="/my/notifications" :class="$style.item" :activeClass="$style.active"><MkZalipIcon name="heart"/><span>{{ i18n.ts.notifications }}</span><span v-if="$i.hasUnreadNotification" :class="$style.indicator"></span></MkA>
@@ -41,6 +42,7 @@ import { $i } from '@/i.js';
 import { getZalipAppearanceMenu } from '@/utility/zalip-theme.js';
 import { openZalipCreateMenu } from '@/utility/zalip-create.js';
 import { pleaseLogin } from '@/utility/please-login.js';
+import { openZalipSearch } from '@/utility/zalip-search.js';
 
 defineProps<{ showWidgetButton?: boolean; asDrawer?: boolean }>();
 const emit = defineEmits<{ (ev: 'widgetButtonClick'): void }>();
@@ -61,7 +63,7 @@ function openAppearanceMenu(event: PointerEvent): void {
 .item, .post, .secondary, .admin { display: flex; align-items: center; gap: 18px; min-height: 54px; padding: 0 14px; border-radius: 30px; text-decoration: none; color: inherit; text-align: left; box-sizing: border-box; }
 .item { position: relative; align-self: flex-start; max-width: 100%; gap: 14px; font-size: 17px; font-weight: 600; > svg { width: 27px; height: 27px; flex-shrink: 0; } > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
 .item:hover, .secondary:hover, .account:hover { background: var(--zalip-social-hover); }
-.active { background: var(--zalip-accent-soft); color: var(--zalip-social-fg); box-shadow: inset 0 0 0 1px var(--zalip-accent-border); > svg { color: var(--MI_THEME-accent); } }
+.active { background: var(--zalip-social-hover); color: var(--zalip-social-fg); }
 .post { justify-content: center; min-height: 48px; margin-top: 18px; border: 1px solid var(--zalip-social-fg); font-size: 19px; font-weight: 600; }
 .admin { min-height: 42px; padding: 0 10px; gap: 10px; font-size: 14px; color: var(--MI_THEME-accent); }
 .bottom { margin-top: auto; padding-top: 24px; }
