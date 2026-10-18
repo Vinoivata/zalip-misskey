@@ -4,7 +4,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div v-if="note == null" :class="$style.deleted">
+<MkZalipCommentThread v-if="detail && note" :key="note.id" :note="note" :depth="Math.max(0, depth - 1)" @reply="emit('reply', $event)"/>
+<div v-else-if="note == null" :class="$style.deleted">
 	{{ i18n.ts.deletedNote }}
 </div>
 <div v-else-if="!muted" :class="[$style.root, { [$style.children]: depth > 1, [$style.thread]: thread }]">
@@ -12,7 +13,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div v-if="note.channel" :class="$style.colorBar" :style="{ background: note.channel.color }"></div>
 		<MkAvatar :class="$style.avatar" :user="note.user" link preview/>
 		<div :class="$style.body">
-			<MkNoteHeader :class="$style.header" :note="note" stacked/>
+			<MkNoteHeader :class="$style.header" :note="note" :stacked="detail"/>
 			<div>
 				<p v-if="note.cw != null" :class="$style.cw">
 					<Mfm v-if="note.cw != ''" style="margin-right: 8px;" :text="note.cw" :author="note.user" :nyaize="'respect'"/>
@@ -21,15 +22,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<div v-show="note.cw == null || showContent">
 					<MkSubNoteContent :class="$style.text" :note="note"/>
 				</div>
-				<button v-if="detail" type="button" class="_button" :class="$style.replyButton" @click="replyToComment"><i class="ti ti-message-circle" aria-hidden="true"></i> {{ i18n.ts.reply }}</button>
 			</div>
 		</div>
-	</div>
-	<template v-if="depth < 5">
-		<MkNoteSub v-for="reply in replies" :key="reply.id" :note="reply" :class="$style.reply" :detail="true" :depth="depth + 1" @reply="emit('reply', $event)"/>
-	</template>
-	<div v-else :class="$style.more">
-		<MkA class="_link" :to="notePage(note)">{{ i18n.ts.continueThread }} <i class="ti ti-chevron-double-right"></i></MkA>
 	</div>
 </div>
 <div v-else :class="$style.muted" @click="muted = false">
@@ -49,8 +43,7 @@ import * as Misskey from 'misskey-js';
 import MkNoteHeader from '@/components/MkNoteHeader.vue';
 import MkSubNoteContent from '@/components/MkSubNoteContent.vue';
 import MkCwButton from '@/components/MkCwButton.vue';
-import { notePage } from '@/filters/note.js';
-import { misskeyApi } from '@/utility/misskey-api.js';
+import MkZalipCommentThread from '@/components/MkZalipCommentThread.vue';
 import { i18n } from '@/i18n.js';
 import { $i } from '@/i.js';
 import { userPage } from '@/filters/user.js';
@@ -74,26 +67,12 @@ const emit = defineEmits<{
 const muted = ref(props.note && $i ? checkWordMute(props.note, $i, $i.mutedWords) : false);
 
 const showContent = ref(false);
-const replies = ref<Misskey.entities.Note[]>([]);
-
-function replyToComment(): void {
-	if (props.note != null) emit('reply', props.note);
-}
-
-if (props.detail && props.note) {
-	misskeyApi('notes/children', {
-		noteId: props.note.id,
-		limit: 5,
-	}).then(res => {
-		replies.value = res;
-	}).catch(() => { /* The direct thread link remains available if nested replies fail. */ });
-}
 </script>
 
 <style lang="scss" module>
 .root {
-	padding: 16px;
-	font-size: 14px;
+	padding: 16px 24px;
+	font-size: max(1em, 14px);
 	position: relative;
 
 	&.children {
@@ -105,8 +84,8 @@ if (props.detail && props.note) {
 .thread::after {
 	content: '';
 	position: absolute;
-	left: 36px;
-	top: 60px;
+	left: 43px;
+	top: 58px;
 	bottom: -14px;
 	width: 1px;
 	background: var(--MI_THEME-divider);
@@ -131,9 +110,9 @@ if (props.detail && props.note) {
 	flex-shrink: 0;
 	display: block;
 	margin: 0 8px 0 0;
-	width: 40px;
-	height: 40px;
-	border-radius: 50%;
+	width: 38px;
+	height: 38px;
+	border-radius: 8px;
 }
 
 .body {
@@ -156,7 +135,7 @@ if (props.detail && props.note) {
 .text {
 	margin: 0;
 	padding: 0;
-	line-height: 1.55;
+	line-height: 1.6;
 }
 
 .replyButton {
@@ -192,7 +171,7 @@ if (props.detail && props.note) {
 			padding: 10px 0 0 8px;
 		}
 	}
-	.thread::after { top: 58px; }
+	.thread::after { left: 35px; top: 56px; }
 }
 
 .muted {

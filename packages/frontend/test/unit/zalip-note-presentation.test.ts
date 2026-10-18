@@ -5,7 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/vue';
-import { defineComponent, h } from 'vue';
+import { defineComponent, h, nextTick } from 'vue';
 import type * as Misskey from 'misskey-js';
 import MkNote from '@/components/MkNote.vue';
 import MkNoteDetailed from '@/components/MkNoteDetailed.vue';
@@ -13,7 +13,7 @@ import MkNoteHeader from '@/components/MkNoteHeader.vue';
 import MkNoteSub from '@/components/MkNoteSub.vue';
 import { i18n } from '@/i18n.js';
 
-const actions = vi.hoisted(() => ({ react: vi.fn(), toggleReact: vi.fn(), renote: vi.fn(), reply: vi.fn(), showMenu: vi.fn(), push: vi.fn(), previewVisible: false }));
+const actions = vi.hoisted(() => ({ react: vi.fn(), toggleReact: vi.fn(), renote: vi.fn(), reply: vi.fn(), showMenu: vi.fn(), push: vi.fn(), share: vi.fn(), previewVisible: false, viewBindings: [] as Array<{ target: { readonly value: HTMLElement | null }; enabled: () => boolean }> }));
 // Vitest's disabled-CSS module proxy stringifies Symbols during circular SFC
 // imports. Keep class names available to these DOM tests without loading CSS.
 vi.mock('@/components/MkNote.vue?vue&type=style&index=0&lang.module.scss', () => ({ default: new Proxy({}, { get: (_, key) => typeof key === 'string' ? `note_${key}` : undefined }) }));
@@ -25,6 +25,14 @@ vi.mock('@/router.js', () => ({ useRouter: () => ({ push: actions.push }) }));
 vi.mock('@/os.js', () => ({ popup: vi.fn() }));
 vi.mock('@/utility/url-preview.js', () => ({ isEnabledUrlPreview: true }));
 vi.mock('@/utility/misskey-api.js', () => ({ misskeyApi: vi.fn().mockResolvedValue([]) }));
+vi.mock('@/utility/zalip-note-share.js', () => ({ openZalipNoteShare: actions.share }));
+vi.mock('@/composables/use-zalip-note-views.js', async () => {
+	const { computed } = await import('vue');
+	return { useZalipNoteViews: (target: { readonly value: HTMLElement | null }, note: () => Misskey.entities.Note, enabled: () => boolean) => {
+		actions.viewBindings.push({ target, enabled });
+		return computed(() => note().zalipViewCount);
+	} };
+});
 vi.mock('@/composables/use-note.js', async () => {
 	const { ref, reactive } = await import('vue');
 	return { useNote: (props: { note: Misskey.entities.Note }) => ({ note: props.note, appearNote: props.note, $appearNote: reactive(props.note), hideByPlugin: ref(false), isRenote: false, showContent: ref(false), isDeleted: ref(false), translating: ref(false), translation: ref(null), muted: ref(false), hardMuted: ref(false), collapsed: ref(true), renoteCollapsed: ref(false), parsed: ref(null), urls: ref(['https://example.org/fixture']), showTicker: ref(false), canRenote: ref(props.note.visibility !== 'specified'), isMyRenote: ref(false), renote: actions.renote, reply: actions.reply, react: actions.react, reactViaMfmEmoji: vi.fn(), toggleReact: actions.toggleReact, onContextmenu: vi.fn(), showMenu: actions.showMenu, clip: vi.fn(), showRenoteMenu: vi.fn(), blur: vi.fn() }) };
@@ -67,7 +75,7 @@ function setup(component: typeof MkNote | typeof MkNoteDetailed | typeof MkNoteH
 	return render(component, { props: { note: fixture, ...props }, global: { stubs, directives: { hotkey: {}, 'user-preview': {}, tooltip: {} } } });
 }
 
-beforeEach(() => { vi.clearAllMocks(); actions.previewVisible = false; });
+beforeEach(() => { vi.clearAllMocks(); actions.previewVisible = false; actions.viewBindings = []; });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('Zalip compact note presentation', () => {
@@ -100,23 +108,61 @@ describe('Zalip compact note presentation', () => {
 		await fireEvent.click(view.getByRole('button', { name: 'Toggle CW' }));
 		expect(hiddenContent?.style.display).not.toBe('none');
 	});
-	it.each([MkNote, MkNoteDetailed])('keeps the same semantic action order, real counts and native reaction/renote handlers in %s', async component => {
+	it.each([MkNote, MkNoteDetailed])('keeps the semantic action order, separate real counts, share and native reaction/renote handlers in %s', async component => {
 		const view = setup(component);
 		const article = view.container.querySelector('article')!;
 		const footer = article.querySelector('footer')!;
-		const buttons = [...footer.querySelectorAll('button')];
-		expect(buttons.map(button => button.getAttribute('aria-label'))).toEqual([i18n.ts.reaction, i18n.ts.zalip.comments, i18n.ts.renote, 'Fixture bookmark']);
-		expect(buttons[0].getAttribute('aria-pressed')).toBe('true');
-		expect(buttons[0].textContent).toContain('7');
-		expect(buttons[1].textContent).toContain('3');
-		expect(buttons[2].textContent).toContain('2');
-		expect(buttons[3].getAttribute('data-note-id')).toBe('fixture-note');
-		await fireEvent.click(buttons[0]);
-		await fireEvent.click(buttons[2]);
+		const controls = [...footer.querySelectorAll('button, a[aria-label]')];
+		expect(controls.map(control => control.getAttribute('aria-label'))).toEqual([i18n.ts.reaction, i18n.ts.reactions, i18n.ts.zalip.comments, i18n.ts.renote, 'Fixture bookmark', i18n.ts.share]);
+		expect(controls[0].getAttribute('aria-pressed')).toBe('true');
+		expect(controls[1].textContent).toBe('7');
+		expect(controls[2].textContent).toContain('3');
+		expect(controls[3].textContent).toContain('2');
+		expect(controls[4].getAttribute('data-note-id')).toBe('fixture-note');
+		await fireEvent.click(controls[0]);
+		await fireEvent.click(controls[3]);
+		await fireEvent.click(controls[5]);
 		expect(actions.toggleReact).toHaveBeenCalledTimes(1);
 		expect(actions.renote).toHaveBeenCalledTimes(1);
+		expect(actions.share.mock.calls[0][0]).toEqual(expect.objectContaining({ id: 'fixture-note' }));
 		expect(view.getByText('Fixture Author')).toBeTruthy();
 		expect(view.getByText('@author')).toBeTruthy();
+	});
+	it.each([MkNote, MkNoteDetailed])('opens the reaction audience without adding/removing a reaction in %s', async component => {
+		const view = setup(component);
+		const count = view.container.querySelector<HTMLElement>('article footer [class*="reactionCount"]')!;
+		if (component === MkNote) {
+			expect(count.tagName).toBe('A');
+			expect(count.getAttribute('href')).toBe('/notes/fixture-note/reactions');
+			count.addEventListener('click', event => event.preventDefault());
+		} else {
+			expect(count.tagName).toBe('BUTTON');
+		}
+		await fireEvent.click(count);
+		expect(actions.toggleReact).not.toHaveBeenCalled(); expect(actions.react).not.toHaveBeenCalled();
+		if (component === MkNoteDetailed) {
+			expect(view.getByRole('heading', { name: i18n.ts.reactions })).toBeTruthy();
+			expect((view.getByRole('combobox', { name: i18n.ts.zalip.discussion }) as HTMLSelectElement).value).toBe('reactions');
+		}
+	});
+	it.each([MkNote, MkNoteDetailed])('shows an existing view aggregate as noninteractive text and never invents missing counts in %s', component => {
+		const view = setup(component, note({ zalipViewCount: 0 }));
+		const counter = view.container.querySelector<HTMLElement>('article footer [class*="viewCount"]')!;
+		expect(counter.tagName).toBe('SPAN');
+		expect(counter.textContent).toContain('0');
+		expect(counter.getAttribute('aria-label')).toBe(`${i18n.ts.zalip.postViews}: 0`);
+		expect(counter.closest('button, a, [role="button"]')).toBeNull();
+		cleanup();
+		expect(setup(component, note({ zalipViewCount: undefined })).container.querySelector('[class*="viewCount"]')).toBeNull();
+	});
+	it.each([MkNote, MkNoteDetailed])('binds dwell to the actual article and disables it until CW content is revealed in %s', async component => {
+		const view = setup(component, note({ cw: 'Content warning' }));
+		await nextTick();
+		const binding = actions.viewBindings[0];
+		expect(binding.target.value?.tagName).toBe('ARTICLE');
+		expect(binding.enabled()).toBe(false);
+		await fireEvent.click(view.getByRole('button', { name: 'Toggle CW' }));
+		expect(binding.enabled()).toBe(true);
 	});
 	it('does not draw a thread rail on an ordinary card and marks only real parent context', () => {
 		const plain = setup(MkNote);
@@ -141,11 +187,14 @@ describe('Zalip compact note presentation', () => {
 	it.each([MkNote, MkNoteDetailed])('keeps zero counts visible and the private renote action disabled in %s', component => {
 		const view = setup(component, note({ reactions: {}, reactionCount: 0, myReaction: null, repliesCount: 0, renoteCount: 0, visibility: 'specified' }));
 		const footer = view.container.querySelector('article footer')!;
-		const buttons = [...footer.querySelectorAll('button')];
-		expect(buttons[0].textContent).toContain('0');
-		expect(buttons[1].textContent).toContain('0');
-		expect(buttons[2].disabled).toBe(true);
-		expect(buttons[0].getAttribute('aria-pressed')).toBe('false');
+		const toggle = footer.querySelector('button[aria-pressed]')!;
+		const count = footer.querySelector('[class*="reactionCount"]')!;
+		const comments = footer.querySelector(`[aria-label="${i18n.ts.zalip.comments}"]`)!;
+		const renote = footer.querySelector<HTMLButtonElement>(`[aria-label="${i18n.ts.renote}"]`)!;
+		expect(count.textContent).toBe('0');
+		expect(comments.textContent).toContain('0');
+		expect(renote.disabled).toBe(true);
+		expect(toggle.getAttribute('aria-pressed')).toBe('false');
 	});
 	it('keeps profile/time metadata semantic, including private visibility and long names', () => {
 		const fixture = note({ visibility: 'followers' }); fixture.user.name = 'Long author name '.repeat(15);

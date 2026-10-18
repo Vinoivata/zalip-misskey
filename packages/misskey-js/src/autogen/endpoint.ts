@@ -773,6 +773,8 @@ import type {
 	ZalipLibraryListResponse,
 	ZalipLibraryUpdateRequest,
 	ZalipLibraryUpdateResponse,
+	ZalipNotesViewsRecordRequest,
+	ZalipNotesViewsRecordResponse,
 	ZalipPlaybackAllohaShowRequest,
 	ZalipPlaybackAllohaShowResponse,
 	ZalipPlaybackSourcesRequest,
@@ -1304,6 +1306,7 @@ export type Endpoints = {
 	'zalip/genres/list': { req: EmptyRequest; res: ZalipGenresListResponse };
 	'zalip/library/list': { req: EmptyRequest; res: ZalipLibraryListResponse };
 	'zalip/library/update': { req: ZalipLibraryUpdateRequest; res: ZalipLibraryUpdateResponse };
+	'zalip/notes/views/record': { req: ZalipNotesViewsRecordRequest; res: ZalipNotesViewsRecordResponse };
 	'zalip/playback/alloha/show': { req: ZalipPlaybackAllohaShowRequest; res: ZalipPlaybackAllohaShowResponse };
 	'zalip/playback/sources': { req: ZalipPlaybackSourcesRequest; res: ZalipPlaybackSourcesResponse };
 	'zalip/progress/continue': { req: ZalipProgressContinueRequest; res: ZalipProgressContinueResponse };

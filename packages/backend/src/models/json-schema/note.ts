@@ -70,6 +70,12 @@ export const packedNoteSchema = {
 			type: 'boolean',
 			optional: true, nullable: false,
 		},
+		zalipViewCount: {
+			type: 'integer',
+			optional: true, nullable: false,
+			minimum: 0,
+			maximum: Number.MAX_SAFE_INTEGER,
+		},
 		visibility: {
 			type: 'string',
 			optional: false, nullable: false,

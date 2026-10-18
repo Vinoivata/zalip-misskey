@@ -47,7 +47,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		{{ i18n.ts.deletedNote }}
 	</div>
 	<template v-else>
-		<article :class="$style.note" @contextmenu.stop="onContextmenu">
+		<article ref="articleEl" :class="$style.note" @contextmenu.stop="onContextmenu">
 			<header :class="$style.noteHeader">
 				<MkAvatar :class="$style.noteHeaderAvatar" :user="appearNote.user" link preview/>
 				<div :class="$style.noteHeaderBody">
@@ -92,7 +92,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</div>
 					<ZalipShareCard v-if="appearNote.zalipShare" :share="appearNote.zalipShare"/>
 					<div v-if="appearNote.files && appearNote.files.length > 0">
-						<MkMediaList ref="galleryEl" :mediaList="appearNote.files"/>
+						<MkMediaList ref="galleryEl" :mediaList="appearNote.files" layout="carousel"/>
 					</div>
 					<MkPoll
 						v-if="appearNote.poll"
@@ -116,6 +116,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<MkA :to="notePage(appearNote)">
 						<time :datetime="appearNote.createdAt">{{ formattedDate }}</time>
 					</MkA>
+					<span v-if="viewCount != null" :class="$style.viewCount" :aria-label="`${i18n.ts.zalip.postViews}: ${number(viewCount)}`"><i class="ti ti-chart-bar" aria-hidden="true"></i>{{ number(viewCount) }} {{ i18n.ts.zalip.postViews }}</span>
 					<span v-if="appearNote.visibility !== 'public'" style="margin-left: 0.5em;">
 						<span style="border: 1px solid var(--MI_THEME-divider); margin-right: 0.5em;"></span>
 						<i v-if="appearNote.visibility === 'home'" class="ti ti-home"></i>
@@ -125,11 +126,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</span>
 				</div>
 				<div :class="$style.actionRow">
+					<div :class="$style.reactionAction">
 					<button ref="reactButton" type="button" :class="[$style.noteFooterButton, { [$style.reacted]: $appearNote.myReaction != null }]" class="_button" :aria-label="i18n.ts.reaction" :aria-pressed="$appearNote.myReaction != null" @click="toggleReact()">
 						<MkReactionIcon v-if="summaryReaction" :class="$style.summaryReaction" :reaction="summaryReaction" :emojiUrl="$appearNote.reactionEmojis[summaryReaction.substring(1, summaryReaction.length - 1)]"/>
 						<MkZalipIcon v-else :name="appearNote.reactionAcceptance === 'likeOnly' ? 'heart' : 'mood'"/>
-						<span :class="$style.noteFooterButtonCount">{{ number($appearNote.reactionCount) }}</span>
 					</button>
+					<button type="button" class="_button" :class="$style.reactionCount" :aria-label="i18n.ts.reactions" @click="tab = 'reactions'">{{ number($appearNote.reactionCount) }}</button>
+					</div>
 					<button v-tooltip="i18n.ts.zalip.comments" class="_button" :class="$style.noteFooterButton" :aria-label="i18n.ts.zalip.comments" @click="openComments()">
 						<MkZalipIcon name="reply"/>
 						<span :class="$style.noteFooterButtonCount">{{ number(appearNote.repliesCount) }}</span>
@@ -150,6 +153,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</button>
 
 					<MkZalipBookmark :class="$style.bookmark" :noteId="appearNote.id"/>
+					<button type="button" class="_button" :class="$style.noteFooterButton" :aria-label="i18n.ts.share" @click="shareNote"><i class="ti ti-send" aria-hidden="true"></i></button>
 					<button v-if="prefer.s.showClipButtonInNoteFooter" ref="clipButton" class="_button" :class="$style.noteFooterButton" :aria-label="i18n.ts.clip" @click="clip()">
 						<i class="ti ti-paperclip"></i>
 					</button>
@@ -168,9 +172,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div>
 			<div v-if="tab === 'replies'" :class="$style.comments">
 				<MkLoading v-if="repliesPending"/>
-				<div v-else-if="repliesError" :class="$style.commentsState"><p>{{ i18n.ts.zalip.commentsError }}</p><button class="_textButton" type="button" @click="loadReplies()">{{ i18n.ts.retry }}</button></div>
-				<p v-else-if="repliesLoaded && replies.length === 0" :class="$style.commentsState">{{ i18n.ts.zalip.commentsEmpty }}</p>
-				<MkNoteSub v-for="note in replies" :key="note.id" :note="note" :class="$style.reply" :detail="true" @reply="replyToComment"/>
+				<div v-if="repliesError" :class="$style.commentsState"><p>{{ i18n.ts.zalip.commentsError }}</p><button class="_textButton" type="button" @click="loadReplies(true)">{{ i18n.ts.retry }}</button></div>
+				<p v-else-if="!repliesPending && repliesLoaded && replies.length === 0" :class="$style.commentsState">{{ i18n.ts.zalip.commentsEmpty }}</p>
+				<MkZalipCommentThread v-for="note in replies" :key="note.id" :note="note" :ancestors="[appearNote.id]" :class="$style.reply" @reply="replyToComment"/>
 				<button v-if="repliesHasMore && !repliesPending" type="button" class="_textButton" :class="$style.commentsState" @click="loadReplies(true)">{{ i18n.ts.loadMore }}</button>
 				<ZalipCommentForm :rootNote="appearNote" :replyTo="commentTarget" floating @posted="commentPosted" @cancelReply="commentTarget = appearNote"/>
 			</div>
@@ -217,7 +221,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { inject, provide, ref, useTemplateRef, markRaw, computed, onMounted } from 'vue';
+import { inject, provide, ref, useTemplateRef, markRaw, computed, toRefs, watch, onBeforeUnmount } from 'vue';
 import * as Misskey from 'misskey-js';
 import type { Keymap } from '@/utility/hotkey.js';
 import { useNote } from '@/composables/use-note.js';
@@ -230,9 +234,14 @@ import { Paginator } from '@/utility/paginator.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import number from '@/filters/number.js';
 import { DI } from '@/di.js';
+import { $i } from '@/i.js';
+import { createZalipDiscussionPager } from '@/utility/zalip-discussion-pager.js';
+import { openZalipNoteShare } from '@/utility/zalip-note-share.js';
+import { useZalipNoteViews } from '@/composables/use-zalip-note-views.js';
 
 // コンポーネント外部の依存関係
 import MkNoteSub from '@/components/MkNoteSub.vue';
+import MkZalipCommentThread from '@/components/MkZalipCommentThread.vue';
 import MkNoteHeader from '@/components/MkNoteHeader.vue';
 import MkZalipIcon from '@/components/MkZalipIcon.vue';
 import MkZalipBookmark from '@/components/MkZalipBookmark.vue';
@@ -261,6 +270,7 @@ const inChannel = inject(DI.inChannel, null);
 
 // Template Refsの定義
 const rootEl = useTemplateRef('rootEl');
+const articleEl = useTemplateRef('articleEl');
 const menuButton = useTemplateRef('menuButton');
 const renoteButton = useTemplateRef('renoteButton');
 const renoteTime = useTemplateRef('renoteTime');
@@ -311,6 +321,7 @@ const {
 // provide
 provide(DI.mfmEmojiReactCallback, reactViaMfmEmoji);
 const summaryReaction = computed(() => $appearNote.myReaction ?? Object.entries($appearNote.reactions).sort((a, b) => b[1] - a[1])[0]?.[0]);
+const viewCount = useZalipNoteViews(articleEl, () => appearNote, () => !muted.value && !hideByPlugin.value && !isDeleted.value && (appearNote.cw == null || showContent.value));
 const formattedDate = computed(() => new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(new Date(appearNote.createdAt)) + ' · ' + new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(appearNote.createdAt)));
 
 // MkNoteDetailed固有
@@ -342,37 +353,13 @@ const reactionsPaginator = markRaw(new Paginator('notes/reactions', {
 	})),
 }));
 
-const replies = ref<Misskey.entities.Note[]>([]);
-const repliesLoaded = ref(false);
-const repliesPending = ref(false);
-const repliesError = ref(false);
-const repliesHasMore = ref(false);
-let repliesRequest = 0;
+const repliesPager = createZalipDiscussionPager({ accountId: () => $i?.id ?? null, fetchPage: params => misskeyApi('notes/replies', params) });
+const { items: replies, loaded: repliesLoaded, pending: repliesPending, error: repliesError, hasMore: repliesHasMore } = toRefs(repliesPager.state);
 const commentTarget = ref<Misskey.entities.Note>(appearNote);
 
 async function loadReplies(append = false): Promise<void> {
-	if (append && repliesPending.value) return;
-	const request = ++repliesRequest;
-	const ascending = oldestFirst.value;
-	const cursor = append ? replies.value.at(-1)?.id : undefined;
-	if (!append) replies.value = [];
-	repliesLoaded.value = true;
-	repliesPending.value = true;
-	repliesError.value = false;
-	try {
-		const res = await misskeyApi('notes/children', {
-			noteId: appearNote.id,
-			limit: 30,
-			...(ascending ? { sinceId: cursor ?? appearNote.id } : cursor ? { untilId: cursor } : {}),
-		});
-		if (request !== repliesRequest) return;
-		repliesHasMore.value = res.length === 30;
-		replies.value = append ? [...replies.value, ...res.filter(note => !replies.value.some(current => current.id === note.id))] : res;
-	} catch {
-		if (request === repliesRequest) repliesError.value = true;
-	} finally {
-		if (request === repliesRequest) repliesPending.value = false;
-	}
+	if (!append) repliesPager.reset(appearNote.id, oldestFirst.value);
+	await repliesPager.load();
 }
 
 function openComments(): void {
@@ -384,14 +371,22 @@ function replyToComment(target: Misskey.entities.Note): void {
 	commentTarget.value = target;
 }
 
-function commentPosted(): void {
+function commentPosted(posted: Misskey.entities.Note): void {
+	if (!$i || posted.userId !== $i.id) return;
 	commentTarget.value = appearNote;
-	void loadReplies();
+	repliesPager.insert(posted);
 }
 
-onMounted(() => {
+watch(() => [appearNote.id, $i?.id], () => {
+	repliesPager.reset(appearNote.id, oldestFirst.value);
+	commentTarget.value = appearNote;
 	if (tab.value === 'replies') void loadReplies();
-});
+}, { immediate: true });
+onBeforeUnmount(() => repliesPager.reset(''));
+
+function shareNote(event: MouseEvent): void {
+	openZalipNoteShare(appearNote, event.currentTarget instanceof HTMLElement ? event.currentTarget : null);
+}
 
 const conversation = ref<Misskey.entities.Note[]>([]);
 const conversationLoaded = ref(false);
@@ -516,8 +511,8 @@ const keymap = {
 }
 
 .note {
-	padding: 16px 16px 0;
-	font-size: 14px;
+	padding: 18px 18px 0;
+	font-size: 18px;
 
 	&:hover > .main > .footer > .button {
 		opacity: 1;
@@ -527,31 +522,31 @@ const keymap = {
 .noteHeader {
 	display: flex;
 	position: relative;
-	margin-bottom: 10px;
-	align-items: flex-start;
+	margin-bottom: 16px;
+	align-items: center;
 }
 
 .noteHeaderAvatar {
 	display: block;
 	flex-shrink: 0;
-	width: 40px;
-	height: 40px;
+	width: 48px;
+	height: 48px;
 }
 
 .noteHeaderBody {
 	flex: 1;
 	min-width: 0;
-	padding: 0 8px 0 8px;
-	font-size: 14px;
+	padding: 0 12px;
+	font-size: 16px;
 }
 
 .noteContent {
 	container-type: inline-size;
 	overflow-wrap: break-word;
-	line-height: 1.55;
+	line-height: 1.45;
 }
 
-.menuButton { display: grid; place-items: center; flex: 0 0 36px; width: 36px; height: 40px; margin-top: -4px; border-radius: 50%; font-size: 20px; color: var(--MI_THEME-fgTransparentWeak); }
+.menuButton { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; border-radius: 50%; font-size: 20px; color: var(--MI_THEME-fgTransparentWeak); }
 .menuButton:hover { background: var(--MI_THEME-panelHighlight); }
 .menuButton:focus-visible { outline: 2px solid var(--MI_THEME-focus); }
 
@@ -602,21 +597,25 @@ const keymap = {
 }
 
 .noteFooterInfo {
-	margin: 12px 0 4px;
+	margin: 16px 0 0;
 	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 12px;
+	font-size: 14px;
 }
-.actionRow { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; min-height: 40px; }
+.viewCount { display: inline-flex; align-items: center; gap: 4px; margin-inline-start: 12px; color: var(--MI_THEME-fgTransparentWeak); font-size: 12px; font-variant-numeric: tabular-nums; }
+.actionRow { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; min-height: 56px; border-top: 1px solid var(--MI_THEME-divider); }
+.reactionAction { display: inline-flex; align-items: center; gap: 2px; }
+.reactionCount { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; min-height: 44px; color: var(--MI_THEME-fgTransparentWeak); font-size: 13px; font-variant-numeric: tabular-nums; }
+.reactionCount:focus-visible { outline: 2px solid var(--MI_THEME-focus); border-radius: 8px; }
 .noteFooterButton.reacted { color: var(--MI_THEME-accent); }
-.actionRow > .bookmark { min-width: 32px; min-height: 32px; > svg { width: 20px; height: 20px; } }
+.actionRow > .bookmark { min-width: 44px; min-height: 44px; > svg { width: 22px; height: 22px; } }
 .discussionSelect { max-width: 50%; padding: 5px 8px; border: 1px solid var(--MI_THEME-divider); border-radius: 7px; background: transparent; color: var(--MI_THEME-fgTransparentWeak); font: inherit; font-size: 12px; }
 
 .noteFooterButton {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	min-width: 32px;
-	min-height: 32px;
+	min-width: 44px;
+	min-height: 44px;
 	gap: 5px;
 	margin: 0;
 	padding: 0;
@@ -624,7 +623,7 @@ const keymap = {
 	border: 0;
 	border-radius: 999px;
 	font-size: 20px;
-	> svg { width: 20px; height: 20px; }
+	> svg { width: 22px; height: 22px; }
 
 	&:hover {
 		color: var(--MI_THEME-fgHighlighted);

@@ -199,7 +199,7 @@ onActivated(() => {
 	position: sticky;
 	top: var(--zalip-chrome-top, 0px);
 	z-index: 100;
-	height: 48px;
+	height: 60px;
 	display: flex;
 	align-items: center;
 	box-sizing: border-box;
@@ -214,11 +214,11 @@ onActivated(() => {
 .mode { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; height: 32px; padding: 0 10px; border-radius: 99px; color: var(--zalip-social-muted); font-size: 13px; font-weight: 500; white-space: nowrap; text-decoration: none; > svg { width: 16px; height: 16px; } }
 .modeActive { color: var(--zalip-social-fg); background: var(--zalip-social-hover); font-weight: 700; }
 .mode:hover { background: var(--zalip-social-hover); }
-.composer { display: flex; align-items: center; gap: 12px; min-height: 76px; padding: 16px; box-sizing: border-box; border-bottom: 1px solid var(--zalip-social-border); }
-.composerInput { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; text-align: left; color: var(--zalip-social-muted); font-size: 14px; }
+.composer { display: flex; align-items: center; gap: 12px; min-height: 82px; padding: 16px 24px; box-sizing: border-box; border-bottom: 1px solid var(--zalip-social-border); }
+.composerInput { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 1; text-align: left; color: var(--zalip-social-muted); font-size: 16px; }
 .composeAvatar, .composerAnonymous { flex: 0 0 40px; width: 40px; height: 40px; }
 .composerAnonymous { display: grid; place-items: center; border-radius: 50%; background: var(--zalip-social-hover); }
-.publish { flex: 0 0 auto; min-height: 32px; padding: 0 16px; border-radius: 99px; background: var(--zalip-social-fg); color: var(--zalip-social-panel); font-size: 13px; font-weight: 600; }
+.publish { flex: 0 0 auto; min-height: 34px; padding: 0 16px; border-radius: 99px; background: var(--MI_THEME-accent); color: var(--MI_THEME-fgOnAccent); font-size: 14px; font-weight: 600; }
 .tl { background: var(--zalip-social-panel); }
 @media (max-width: 1099px) { .feedHead { height: 48px; } }
 @media (max-width: 600px) { .composer { display: none; } }

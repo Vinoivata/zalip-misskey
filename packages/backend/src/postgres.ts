@@ -93,6 +93,7 @@ import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
 import { MiZalipEpisodeNoteContext } from '@/models/ZalipEpisodeNoteContext.js';
 import { MiZalipLibraryEntry } from '@/models/ZalipLibraryEntry.js';
 import { MiZalipWatchProgress } from '@/models/ZalipWatchProgress.js';
+import { MiZalipNoteViewStat } from '@/models/ZalipNoteViewStat.js';
 import { MiZalipNoteContext } from '@/models/ZalipNoteContext.js';
 import { MiZalipReleaseEvent } from '@/models/ZalipReleaseEvent.js';
 import { MiZalipSeason } from '@/models/ZalipSeason.js';
@@ -255,6 +256,7 @@ export const entities = [
 	MiZalipEpisodeNoteContext,
 	MiZalipLibraryEntry,
 	MiZalipWatchProgress,
+	MiZalipNoteViewStat,
 	MiZalipNoteContext,
 	MiZalipSharedNote,
 	MiZalipReleaseEvent,

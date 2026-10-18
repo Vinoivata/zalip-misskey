@@ -7,30 +7,37 @@ SPDX-License-Identifier: AGPL-3.0-only
 <section :class="$style.root">
 	<header :class="$style.header">
 		<div>
-			<p :class="$style.eyebrow"><i class="ti ti-messages"></i> Обсуждение</p>
+			<p :class="$style.eyebrow"><i class="ti ti-messages"></i> {{ i18n.ts.zalip.discussion }}</p>
 			<h2>{{ heading }}</h2>
 		</div>
-		<MkA :class="$style.threadLink" :to="`/notes/${noteId}/replies`"><span>Вся ветка</span><i class="ti ti-arrow-up-right"></i></MkA>
+		<div :class="$style.controls">
+			<select v-model="oldestFirst" :class="$style.sort" :aria-label="i18n.ts.sort"><option :value="false">{{ i18n.ts.zalip.commentsNewest }}</option><option :value="true">{{ i18n.ts.zalip.commentsOldest }}</option></select>
+			<MkA :class="$style.threadLink" :to="`/notes/${noteId}/replies`" :aria-label="i18n.ts.continueThread"><i class="ti ti-arrow-up-right"></i></MkA>
+		</div>
 	</header>
 
-	<div v-if="pending" :class="$style.state"><i class="ti ti-loader-2 ti-spin"></i> Загружаем комментарии…</div>
-	<div v-else-if="error" :class="$style.state"><i class="ti ti-message-off"></i> {{ error }}</div>
-	<template v-else-if="rootNote">
-		<div v-if="comments.length" :class="$style.comments">
-			<MkNoteSub v-for="comment in comments" :key="comment.id" :note="comment" :detail="true" @reply="replyTo = $event"/>
+	<div v-if="pending || pager.state.pending" :class="$style.state"><MkLoading/></div>
+	<div v-if="error || pager.state.error" :class="$style.state"><span>{{ i18n.ts.zalip.commentsError }}</span><button class="_textButton" type="button" @click="retry">{{ i18n.ts.retry }}</button></div>
+	<template v-if="rootNote">
+		<div v-if="pager.state.items.length" :class="$style.comments">
+			<MkZalipCommentThread v-for="comment in pager.state.items" :key="comment.id" :note="comment" :ancestors="[noteId]" @reply="replyTo = $event"/>
 		</div>
-		<p v-else :class="$style.empty">Пока нет комментариев. Начните обсуждение первым.</p>
+		<p v-else-if="!pending && !pager.state.pending && !error && !pager.state.error" :class="$style.empty">{{ i18n.ts.zalip.commentsEmpty }}</p>
+		<button v-if="pager.state.hasMore && !pager.state.pending" class="_textButton" type="button" :class="$style.state" @click="pager.load">{{ i18n.ts.loadMore }}</button>
 		<ZalipCommentForm v-if="replyTo != null" :rootNote="rootNote" :replyTo="replyTo" @posted="commentPosted" @cancelReply="replyTo = rootNote"/>
 	</template>
 </section>
 </template>
 
 <script lang="ts" setup>
-import { ref, watch } from 'vue';
+import { ref, watch, onBeforeUnmount } from 'vue';
 import * as Misskey from 'misskey-js';
-import MkNoteSub from '@/components/MkNoteSub.vue';
+import MkZalipCommentThread from '@/components/MkZalipCommentThread.vue';
 import ZalipCommentForm from '@/components/ZalipCommentForm.vue';
 import { misskeyApi } from '@/utility/misskey-api.js';
+import { createZalipDiscussionPager } from '@/utility/zalip-discussion-pager.js';
+import { $i } from '@/i.js';
+import { i18n } from '@/i18n.js';
 
 const props = defineProps<{
 	noteId: string;
@@ -38,52 +45,68 @@ const props = defineProps<{
 }>();
 
 const pending = ref(true);
-const error = ref<string | null>(null);
+const error = ref(false);
 const rootNote = ref<Misskey.entities.Note | null>(null);
-const comments = ref<Misskey.entities.Note[]>([]);
 const replyTo = ref<Misskey.entities.Note | null>(null);
+const oldestFirst = ref(false);
+const pager = createZalipDiscussionPager({ accountId: () => $i?.id ?? null, fetchPage: params => misskeyApi('notes/replies', params) });
 let requestId = 0;
 
 async function load(): Promise<void> {
 	const currentRequestId = ++requestId;
+	const noteId = props.noteId;
+	const account = $i?.id;
+	const current = () => currentRequestId === requestId && props.noteId === noteId && account === $i?.id;
 	pending.value = true;
-	error.value = null;
+	error.value = false;
+	rootNote.value = null;
+	replyTo.value = null;
+	pager.reset(noteId, oldestFirst.value);
 	try {
-		const [note, children] = await Promise.all([
-			misskeyApi('notes/show', { noteId: props.noteId }),
-			misskeyApi('notes/children', { noteId: props.noteId, limit: 100 }),
+		const [note] = await Promise.all([
+			misskeyApi('notes/show', { noteId }),
+			pager.load(),
 		]);
-		if (currentRequestId !== requestId) return;
+		if (!current()) return;
+		if (note.isHidden || note.deletedAt) throw new Error('Unavailable discussion');
 		rootNote.value = note;
-		comments.value = children;
 		replyTo.value = note;
 	} catch {
-		if (currentRequestId !== requestId) return;
+		if (!current()) return;
 		rootNote.value = null;
-		comments.value = [];
+		pager.reset('');
 		replyTo.value = null;
-		error.value = 'Не удалось загрузить комментарии. Обновите страницу и попробуйте снова.';
+		error.value = true;
 	} finally {
-		if (currentRequestId === requestId) pending.value = false;
+		if (current()) pending.value = false;
 	}
 }
 
-async function commentPosted(): Promise<void> {
-	await load();
+function retry(): void {
+	if (rootNote.value) void pager.load();
+	else void load();
 }
 
-watch(() => props.noteId, () => {
+function commentPosted(note: Misskey.entities.Note): void {
+	if (!$i || note.userId !== $i.id) return;
+	pager.insert(note);
+	replyTo.value = rootNote.value;
+}
+
+watch(() => [props.noteId, $i?.id], () => {
 	void load();
 }, { immediate: true });
+watch(oldestFirst, () => { pager.reset(props.noteId, oldestFirst.value); void pager.load(); });
+onBeforeUnmount(() => { requestId++; pager.reset(''); });
 </script>
 
 <style lang="scss" module>
 .root {
 	margin-top: 28px;
 	overflow: clip;
-	background: color(from var(--MI_THEME-panel) srgb r g b / 0.72);
+	background: var(--zalip-social-panel);
 	border: 1px solid var(--MI_THEME-divider);
-	border-radius: 16px;
+	border-radius: 12px;
 }
 
 .header {
@@ -111,6 +134,9 @@ watch(() => props.noteId, () => {
 	margin: 0;
 	font-size: 1.08em;
 }
+
+.controls { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sort { max-width: 180px; padding: 8px; border: 1px solid var(--MI_THEME-divider); border-radius: 8px; color: var(--MI_THEME-fgTransparentWeak); background: var(--zalip-social-panel); font: inherit; font-size: 12px; }
 
 .threadLink {
 	display: inline-flex;

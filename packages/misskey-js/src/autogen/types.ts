@@ -4505,6 +4505,16 @@ export type paths = {
          */
         post: operations['zalip___library___update'];
     };
+    '/zalip/notes/views/record': {
+        /**
+         * zalip/notes/views/record
+         * @description Record a visible post after UI dwell. Authenticated viewers only; deduplicated for 24 hours without IP or device tracking. Own posts are excluded.
+         *
+         *     **Internal Endpoint**: This endpoint is an API for the misskey mainframe and is not intended for use by third parties.
+         *     **Credential required**: *Yes*
+         */
+        post: operations['zalip___notes___views___record'];
+    };
     '/zalip/playback/alloha/show': {
         /**
          * zalip/playback/alloha/show
@@ -5152,6 +5162,7 @@ export type components = {
             renote?: components['schemas']['Note'] | null;
             isHidden?: boolean;
             isZalipDiscussionRoot?: boolean;
+            zalipViewCount?: number;
             /** @enum {string} */
             visibility: 'public' | 'home' | 'followers' | 'specified';
             mentions?: string[];
@@ -42907,6 +42918,85 @@ export interface operations {
             };
             /** @description I'm Ai */
             418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    zalip___notes___views___record: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                    /** Format: misskey:id */
+                    noteId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        counted: boolean;
+                        viewCount: number;
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

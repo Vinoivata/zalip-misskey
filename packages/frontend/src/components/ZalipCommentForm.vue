@@ -30,7 +30,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, nextTick, onActivated, onDeactivated, onMounted, ref, useTemplateRef, watch } from 'vue';
+import { computed, nextTick, onActivated, onDeactivated, onMounted, onBeforeUnmount, ref, useTemplateRef, watch } from 'vue';
 import * as Misskey from 'misskey-js';
 import MkAvatar from '@/components/global/MkAvatar.vue';
 import { $i, incNotesCount } from '@/i.js';
@@ -49,6 +49,8 @@ const active = ref(true);
 const text = ref('');
 const posting = ref(false);
 const error = ref<string | null>(null);
+let submission = 0;
+let alive = true;
 const maxLength = computed(() => instance?.maxNoteTextLength ?? 1000);
 const isReply = computed(() => props.replyTo.id !== props.rootNote.id);
 const placeholder = computed(() => i18n.tsx.zalip.replyPlaceholder({ name: props.replyTo.user.name ?? props.replyTo.user.username }));
@@ -62,6 +64,13 @@ onActivated(() => {
 onDeactivated(() => {
 	active.value = false;
 	replySlot.value = null;
+});
+onBeforeUnmount(() => { alive = false; submission++; });
+watch(() => [props.rootNote.id, $i?.id], () => {
+	submission++;
+	posting.value = false;
+	text.value = '';
+	error.value = null;
 });
 watch(() => props.replyTo.id, () => {
 	error.value = null;
@@ -90,7 +99,7 @@ function openFullComposer(): void {
 }
 
 useGlobalEvent('notePosted', note => {
-	if (!posting.value && note.replyId === props.replyTo.id) {
+	if (alive && active.value && $i && note.userId === $i.id && !posting.value && note.replyId === props.replyTo.id) {
 		text.value = '';
 		emit('posted', note);
 		nextTick(resize);
@@ -99,6 +108,11 @@ useGlobalEvent('notePosted', note => {
 
 async function submit(): Promise<void> {
 	if (!canSubmit.value || $i == null) return;
+	const request = ++submission;
+	const account = $i.id;
+	const rootId = props.rootNote.id;
+	const replyId = props.replyTo.id;
+	const current = () => alive && active.value && request === submission && $i?.id === account && props.rootNote.id === rootId && props.replyTo.id === replyId;
 	posting.value = true;
 	error.value = null;
 	try {
@@ -109,15 +123,16 @@ async function submit(): Promise<void> {
 			localOnly: props.rootNote.localOnly,
 			...(props.rootNote.visibility === 'specified' ? { visibleUserIds: props.rootNote.visibleUserIds } : {}),
 		});
+		if (!current()) return;
 		text.value = '';
 		nextTick(resize);
 		globalEvents.emit('notePosted', result.createdNote);
 		incNotesCount();
 		emit('posted', result.createdNote);
 	} catch {
-		error.value = i18n.ts.zalip.commentError;
+		if (current()) error.value = i18n.ts.zalip.commentError;
 	} finally {
-		posting.value = false;
+		if (alive && request === submission) posting.value = false;
 	}
 }
 </script>

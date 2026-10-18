@@ -3156,6 +3156,10 @@ export interface Locale extends ILocale {
          */
         "commentsNewest": string;
         /**
+         * Просмотры
+         */
+        "postViews": string;
+        /**
          * Сначала старые
          */
         "commentsOldest": string;

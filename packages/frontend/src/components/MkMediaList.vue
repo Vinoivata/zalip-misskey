@@ -11,19 +11,25 @@ SPDX-License-Identifier: AGPL-3.0-only
 			ref="gallery"
 			:class="[
 				$style.medias,
-				...(prefer.s.showMediaListByGridInWideArea ? [$style.gridInWideArea] : []),
-				count === 1 ? [$style.n1, {
+				...(carousel ? [$style.carousel] : prefer.s.showMediaListByGridInWideArea ? [$style.gridInWideArea] : []),
+				carousel ? null : count === 1 ? [$style.n1, {
 					[$style.n116_9]: prefer.s.mediaListWithOneImageAppearance === '16_9',
 					[$style.n11_1]: prefer.s.mediaListWithOneImageAppearance === '1_1',
 					[$style.n12_3]: prefer.s.mediaListWithOneImageAppearance === '2_3',
 				}] : count === 2 ? $style.n2 : count === 3 ? $style.n3 : count === 4 ? $style.n4 : $style.nMany,
 			]"
+			:role="carousel ? 'group' : undefined"
+			:aria-label="carousel ? i18n.ts.images : undefined"
+			:tabindex="carousel ? 0 : undefined"
+			@scroll.passive="onScroll"
+			@keydown="onCarouselKeydown"
 		>
 			<template v-for="media in mediaList.filter(media => previewable(media))">
 				<XVideo
 					v-if="media.type.startsWith('video')"
 					:key="`video:${media.id}`"
 					:class="$style.media"
+					data-carousel-item
 					:video="media"
 					@mediaClick="onMediaClick(media)"
 				/>
@@ -33,18 +39,24 @@ SPDX-License-Identifier: AGPL-3.0-only
 					:marker="`${markerId}:${media.id}`"
 					:disableImageLink="true"
 					:class="$style.media"
+					data-carousel-item
 					:image="media"
 					:raw="raw"
 					@mediaClick="onMediaClick(media)"
 				/>
 			</template>
 		</div>
+		<div v-if="carousel" :class="$style.carouselControls">
+			<button type="button" class="_button" :class="$style.carouselButton" :aria-label="i18n.ts.zalip._importer.previous" :disabled="previousDisabled" @click.stop="moveTo(activeIndex - 1)"><i class="ti ti-chevron-left" aria-hidden="true"></i></button>
+			<span :class="$style.carouselCounter" aria-live="polite" aria-atomic="true">{{ activeIndex + 1 }} / {{ count }}</span>
+			<button type="button" class="_button" :class="$style.carouselButton" :aria-label="i18n.ts.next" :disabled="nextDisabled" @click.stop="moveTo(activeIndex + 1)"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
+		</div>
 	</div>
 </div>
 </template>
 
 <script lang="ts" setup>
-import { computed, markRaw, onMounted, onUnmounted, useTemplateRef } from 'vue';
+import { computed, markRaw, onMounted, useTemplateRef, watch } from 'vue';
 import * as Misskey from 'misskey-js';
 import { FILE_TYPE_BROWSERSAFE } from '@@/js/const.js';
 import type { Content } from '@/components/MkLightbox.item.vue';
@@ -54,18 +66,28 @@ import XVideo from '@/components/MkMediaVideo.vue';
 import * as os from '@/os.js';
 import { prefer } from '@/preferences.js';
 import { genId } from '@/utility/id.js';
+import { i18n } from '@/i18n.js';
+import { useMediaCarousel } from '@/composables/use-media-carousel.js';
+import { canRevealFile } from '@/utility/sensitive-file.js';
 
 const props = defineProps<{
 	mediaList: Misskey.entities.DriveFile[];
 	raw?: boolean;
+	layout?: 'grid' | 'carousel';
 }>();
 
 const gallery = useTemplateRef('gallery');
 const count = computed(() => props.mediaList.filter(media => previewable(media)).length);
+const carousel = computed(() => props.layout === 'carousel' && count.value > 1);
+const { activeIndex, previousDisabled, nextDisabled, onScroll, moveTo, onKeydown } = useMediaCarousel(gallery, count, carousel, () => prefer.s.animation);
 const markerId = genId();
 
 async function calcAspectRatio() {
 	if (!gallery.value) return;
+	if (carousel.value) {
+		gallery.value.style.aspectRatio = '';
+		return;
+	}
 
 	const img = props.mediaList[0];
 
@@ -101,14 +123,13 @@ onMounted(() => {
 	if (gallery.value == null) return; // TSを黙らすため
 });
 
-onUnmounted(() => {
-});
+watch([carousel, () => props.mediaList, () => prefer.s.mediaListWithOneImageAppearance], calcAspectRatio, { flush: 'post', deep: true });
 
-const previewable = (file: Misskey.entities.DriveFile): boolean => {
+function previewable(file: Misskey.entities.DriveFile): boolean {
 	if (file.type === 'image/svg+xml') return true; // svgのwebpublic/thumbnailはpngなのでtrue
 	// FILE_TYPE_BROWSERSAFEに適合しないものはブラウザで表示するのに不適切
 	return (file.type.startsWith('video') || file.type.startsWith('image')) && FILE_TYPE_BROWSERSAFE.includes(file.type);
-};
+}
 
 function onMediaClick(file: Misskey.entities.DriveFile) {
 	if (prefer.s.imageNewTab) {
@@ -116,6 +137,18 @@ function onMediaClick(file: Misskey.entities.DriveFile) {
 		return;
 	}
 	openGallery(file.id);
+}
+
+async function onCarouselKeydown(event: KeyboardEvent): Promise<void> {
+	if (!carousel.value) return;
+	if (onKeydown(event)) return;
+	if (event.target !== gallery.value || !['Enter', ' '].includes(event.key)) return;
+	const file = props.mediaList.filter(media => previewable(media)).at(activeIndex.value);
+	if (file == null) return;
+	event.preventDefault();
+	event.stopPropagation();
+	if (!(await canRevealFile(file))) return;
+	onMediaClick(file);
 }
 
 async function openGallery(id?: string) {
@@ -244,6 +277,58 @@ defineExpose({
 	overflow: hidden; // clipにするとバグる
 	border-radius: 8px;
 	cursor: zoom-in;
+}
+
+.medias.carousel {
+	display: flex;
+	gap: 8px;
+	height: auto;
+	aspect-ratio: 16 / 9;
+	overflow-x: auto;
+	overscroll-behavior-x: contain;
+	scroll-snap-type: x mandatory;
+	scrollbar-width: thin;
+	border-radius: 8px;
+
+	> .media {
+		flex: 0 0 100%;
+		width: 100%;
+		height: 100%;
+		min-width: 0;
+		scroll-snap-align: start;
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--MI_THEME-focus);
+		outline-offset: 2px;
+	}
+}
+
+.carouselControls {
+	display: flex;
+	justify-content: flex-end;
+	align-items: center;
+	gap: 8px;
+	margin-top: 4px;
+}
+
+.carouselButton {
+	display: grid;
+	place-items: center;
+	width: 44px;
+	height: 44px;
+	border-radius: var(--MI-radius);
+	background: var(--MI_THEME-buttonBg);
+
+	&:hover:enabled { background: var(--MI_THEME-buttonHoverBg); }
+	&:disabled { opacity: .35; }
+}
+
+.carouselCounter {
+	min-width: 48px;
+	text-align: center;
+	font-size: .85em;
+	font-variant-numeric: tabular-nums;
 }
 
 @container (min-width: 500px) {

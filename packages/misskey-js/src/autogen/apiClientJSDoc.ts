@@ -5495,6 +5495,18 @@ declare module '../api.js' {
     ): Promise<SwitchCaseResponseType<E, P>>;
 
     /**
+     * Record a visible post after UI dwell. Authenticated viewers only; deduplicated for 24 hours without IP or device tracking. Own posts are excluded.
+     *
+     * **Internal Endpoint**: This endpoint is an API for the misskey mainframe and is not intended for use by third parties.
+     * **Credential required**: *Yes*
+     */
+    request<E extends 'zalip/notes/views/record', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
      * Returns cached, validated Alloha iframe choices for a published Zalip work after login.
      *
      * **Credential required**: *Yes* / **Permission**: *read:account*

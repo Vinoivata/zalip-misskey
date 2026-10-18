@@ -2308,6 +2308,8 @@ declare namespace entities {
         ZalipLibraryListResponse,
         ZalipLibraryUpdateRequest,
         ZalipLibraryUpdateResponse,
+        ZalipNotesViewsRecordRequest,
+        ZalipNotesViewsRecordResponse,
         ZalipPlaybackAllohaShowRequest,
         ZalipPlaybackAllohaShowResponse,
         ZalipPlaybackSourcesRequest,
@@ -4234,6 +4236,12 @@ type ZalipLibraryUpdateRequest = operations['zalip___library___update']['request
 
 // @public (undocumented)
 type ZalipLibraryUpdateResponse = operations['zalip___library___update']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipNotesViewsRecordRequest = operations['zalip___notes___views___record']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipNotesViewsRecordResponse = operations['zalip___notes___views___record']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
 type ZalipPlaybackAllohaShowRequest = operations['zalip___playback___alloha___show']['requestBody']['content']['application/json'];

@@ -129,10 +129,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 						</div>
 					</section>
 					<section v-if="work.galleryPaths.length" :class="$style.gallery">
-						<h2><i class="ti ti-photo" aria-hidden="true"></i> Кадры</h2>
-						<div :class="$style.galleryGrid">
-							<a v-for="path in work.galleryPaths" :key="path" :href="tmdbBackdrop(path)" target="_blank" rel="noopener noreferrer" :aria-label="`Открыть кадр из ${work.title}`"><img :src="tmdbGalleryImage(path)" alt="" width="480" height="270" loading="lazy" decoding="async"></a>
-						</div>
+						<h2><i class="ti ti-photo" aria-hidden="true"></i> {{ i18n.ts.images }}</h2>
+						<MkZalipImageGallery :images="work.galleryPaths.map(path => ({ url: importerImageUrl(path, 'original') ?? '', thumbnailUrl: tmdbGalleryImage(path), alt: work!.title }))" :label="work.title"/>
 					</section>
 					<section v-for="section in catalogueSections" :key="section.id" :class="$style.catalogueSection" :aria-labelledby="`${work.id}-taxonomy-${section.id}`">
 						<header :class="$style.catalogueHeading">
@@ -225,6 +223,7 @@ import type { TaxonomyLink as CatalogLink, TaxonomySectionId } from '@/utility/z
 import type { LegacyAllohaPlayback, PlaybackProvider, PlaybackProviderSetting, PlaybackSource } from '@/utility/zalip-playback.js';
 import type { WatchProgress } from '@/utility/zalip-watch-progress.js';
 import MkModal from '@/components/MkModal.vue';
+import MkZalipImageGallery from '@/components/MkZalipImageGallery.vue';
 import MkPullToRefresh from '@/components/MkPullToRefresh.vue';
 import { prefer } from '@/preferences.js';
 import { getEpisodeProgress } from '@/utility/zalip-episode-progress.js';
@@ -387,6 +386,7 @@ const libraryPending = ref(false);
 const libraryLoadFailed = ref(false);
 const personalActionsDisabled = computed(() => saving.value || (!!$i && !libraryReady.value));
 let workRequest = 0;
+let discussionRequest = 0;
 let libraryWriteRequest = 0;
 const libraryStatus = ref<LibraryStatus | null>(null);
 const saved = computed(() => libraryStatus.value != null);
@@ -563,6 +563,7 @@ function libraryStatusIcon(status: LibraryStatus | null): string {
 
 async function load(): Promise<void> {
 	const request = ++workRequest;
+	discussionRequest++;
 	libraryWriteRequest++;
 	saving.value = false;
 	workMenuOpen.value = false;
@@ -887,23 +888,30 @@ async function openActiveDiscussion(): Promise<void> {
 	if (!$i || work.value == null || openingDiscussionScope.value != null) return;
 	const scope = discussionScope.value;
 	const episode = selectedEpisode.value;
+	const workId = work.value.id;
+	const workEpoch = workRequest;
+	const request = ++discussionRequest;
+	const account = $i.id;
+	const current = () => request === discussionRequest && workEpoch === workRequest && $i?.id === account && work.value?.id === workId && discussionScope.value === scope && (scope !== 'episode' || selectedEpisode.value?.id === episode?.id);
 	if (scope === 'episode' && episode == null) return;
 	openingDiscussionScope.value = scope;
 	discussionError.value = null;
 	try {
 		if (scope === 'episode' && episode != null) {
 			const discussion = await misskeyApiZalip<{ noteId: string }>('zalip/episodes/discussions/ensure', { episodeId: episode.id });
+			if (!current()) return;
 			episode.discussionNoteId = discussion.noteId;
 		} else {
-			const discussion = await misskeyApiZalip<{ noteId: string }>('zalip/discussions/ensure', { workId: work.value.id });
+			const discussion = await misskeyApiZalip<{ noteId: string }>('zalip/discussions/ensure', { workId });
+			if (!current()) return;
 			discussionNoteId.value = discussion.noteId;
 		}
 		await nextTick();
-		focusDiscussion();
+		if (current()) focusDiscussion();
 	} catch {
-		discussionError.value = scope === 'episode' ? i18n.ts.zalip.openEpisodeDiscussionFailed : i18n.ts.zalip.openWorkDiscussionFailed;
+		if (current()) discussionError.value = scope === 'episode' ? i18n.ts.zalip.openEpisodeDiscussionFailed : i18n.ts.zalip.openWorkDiscussionFailed;
 	} finally {
-		openingDiscussionScope.value = null;
+		if (request === discussionRequest) openingDiscussionScope.value = null;
 	}
 }
 
@@ -1203,9 +1211,6 @@ definePage(() => ({
 .episodeDiscussButton { display: inline-flex; align-items: center; gap: 7px; margin-top: 12px; color: var(--MI_THEME-accent); font-size: 13px; }
 .gallery { margin: 32px 0; }
 .gallery h2 { font-size: 17px; }
-.galleryGrid { display: flex; gap: 10px; overflow-x: auto; }
-.galleryGrid a { flex: 0 0 180px; }
-.galleryGrid img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 12px; }
 .catalogueSection { min-width: 0; margin: 34px 0; }
 .catalogueHeading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 16px; }
 .catalogueHeading h2 { margin: 0; font-size: 18px; }

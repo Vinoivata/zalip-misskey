@@ -68,6 +68,7 @@
 - Feat: Add private continue-watching rails, canonical episode/voice restoration and verified Kodik time-based resume without changing library statuses.
 - Enhance: Simplify the Zalip importer around preview-first single-title imports, separate field protection from selection, and clarify provider-specific movie resume limits.
 - Enhance: Match Zalip feed and thread typography, author rows, reply previews and actions to the Notr reference; defer offscreen media and URL previews, use native poster thumbnails and load only nearby home slides.
+- Enhance: Restore Zalip's shared desktop header and feed width, add swipeable post/title galleries and URL sharing, and unify post, title and episode replies into lazy, paginated Threads-style discussions.
 
 ### Server
 - Fix: Retain existing Kinopoisk photos through one validated image-CDN redirect during original-only artwork localization without enabling redirect chains or broadening image limits.
@@ -102,6 +103,7 @@
 - Fix: Import Kodik gallery images through its bounded two-hop same-image CDN chain while retaining protected network, decoder and timeout limits.
 - Fix: Allow verified Alloha and Collaps time-based watch progress in the database constraint without rewriting existing viewing history.
 - Enhance: Expose existing native Drive poster thumbnails in public Zalip catalogue responses using bounded batch lookups without rewriting original artwork.
+- Feat: Count authenticated local note views after a visible dwell, with durable aggregates, native visibility checks and rolling daily Redis deduplication without IP or device tracking.
 
 ## 2026.7.0
 
