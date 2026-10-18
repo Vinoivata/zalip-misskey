@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { ref, computed } from 'vue';
+import { ref, computed, reactive, onActivated, onDeactivated, onBeforeUnmount } from 'vue';
 import * as mfm from 'mfm-js';
 import * as Misskey from 'misskey-js';
 import { isLink } from '@@/js/is-link.js';
@@ -61,6 +61,8 @@ export interface UseNoteOptions {
 	currentClip?: Ref<Misskey.entities.Clip | null> | null;
 	currentAntenna?: Ref<Misskey.entities.Antenna | null> | null;
 }
+
+type NoteActionActor = { id: string; token: string };
 
 export function calculateMuteStatus<
 	CheckOnly extends boolean,
@@ -129,7 +131,7 @@ export function useNote(
 
 	// 基本状態
 	const isRenote = Misskey.note.isPureRenote(rawNote);
-	const appearNote = getAppearNote(rawNote) ?? rawNote;
+	const appearNote = reactive(getAppearNote(rawNote) ?? rawNote);
 
 	// キャプチャ（ストリーム購読）
 	const { $note: $appearNote, subscribe: subscribeManuallyToNoteCapture } = useNoteCapture({
@@ -143,6 +145,16 @@ export function useNote(
 	const isDeleted = ref(false);
 	const translating = ref(false);
 	const translation = ref<Misskey.entities.NotesTranslateResponse | null>(null);
+	const renoteChanging = ref(false);
+	const reactionChanging = ref(false);
+	let alive = true;
+	let active = true;
+	let renoteMenuOpen = false;
+	const countedRenotes = new Set<string>();
+
+	onActivated(() => { active = true; });
+	onDeactivated(() => { active = false; });
+	onBeforeUnmount(() => { alive = false; countedRenotes.clear(); });
 
 	// ミュート判定
 	const muted = ref($i ? calculateMuteStatus(appearNote, $i, $i.mutedWords, inTimeline && !tl_withSensitive.value) : false);
@@ -155,19 +167,58 @@ export function useNote(
 	const isLong = computed(() => shouldCollapsed(appearNote, urls.value ?? []));
 	const collapsed = ref(appearNote.cw == null && isLong.value);
 	const showTicker = computed(() => (prefer.s.instanceTicker === 'always') || (prefer.s.instanceTicker === 'remote' && appearNote.user.instance));
-	const canRenote = computed(() => ['public', 'home'].includes(appearNote.visibility) || (appearNote.visibility === 'followers' && appearNote.userId === $i?.id));
-	const renoteCollapsed = ref(prefer.s.collapseRenotes && isRenote && (($i && ($i.id === rawNote.userId || $i.id === appearNote.userId)) || ($appearNote.myReaction != null)));
+	const canRenote = computed(() => !isDeleted.value && !appearNote.isHidden && (['public', 'home'].includes(appearNote.visibility) || (appearNote.visibility === 'followers' && appearNote.userId === $i?.id)));
+	const renoteCollapsed = ref(prefer.s.collapseRenotes && isRenote && appearNote.replyId == null && (($i && ($i.id === rawNote.userId || $i.id === appearNote.userId)) || ($appearNote.myReaction != null)));
 
 	const pleaseLoginContext = computed<OpenOnRemoteOptions>(() => ({
 		type: 'lookup',
 		url: `https://${host}/notes/${appearNote.id}`,
 	}));
 
+	function actor(): NoteActionActor | null { return $i ? { id: $i.id, token: $i.token } : null; }
+
+	function current(captured: NoteActionActor): boolean {
+		return alive && active && !props.mock && !isDeleted.value && !appearNote.isHidden && props.note.id === rawNote.id && $i?.id === captured.id && $i.token === captured.token;
+	}
+
+	async function authorize(): Promise<NoteActionActor | null> {
+		if (!alive || !active || props.mock || isDeleted.value || appearNote.isHidden) return null;
+		const captured = actor();
+		try {
+			if (!(await pleaseLogin({ openOnRemote: pleaseLoginContext.value })) || !captured || !current(captured)) return null;
+		} catch (error) { if (captured) reportActionError(error, captured); return null; }
+		try { showMovedDialog(); } catch { return null; }
+		return captured;
+	}
+
+	function reportActionError(error: unknown, captured: NoteActionActor): void {
+		if (!current(captured)) return;
+		const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : null;
+		const text = code === 'RATE_LIMIT_EXCEEDED' ? i18n.ts.cannotPerformTemporaryDescription
+			: code === 'NO_SUCH_NOTE' || code === 'NO_SUCH_RENOTE_TARGET' ? i18n.ts.deletedNote
+				: ['CANNOT_RENOTE_DUE_TO_VISIBILITY', 'YOU_HAVE_BEEN_BLOCKED', 'YOU_ARE_BLOCKING', 'ROLE_PERMISSION_DENIED', 'ACCESS_DENIED'].includes(code ?? '') ? i18n.ts.operationForbidden
+					: i18n.ts.somethingHappened;
+		void os.alert({ type: 'error', text });
+	}
+
+	function onRenoteCreated(note: Misskey.entities.Note, captured: NoteActionActor): void {
+		if (!current(captured) || note.userId !== captured.id || note.renoteId !== appearNote.id || !note.id) return;
+		if (!countedRenotes.has(note.id)) {
+			countedRenotes.add(note.id);
+			appearNote.renoteCount = Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, appearNote.renoteCount) + 1);
+			if (countedRenotes.size > 128) countedRenotes.delete(countedRenotes.values().next().value!);
+		}
+	}
+
 	// グローバルイベントの監視
 	useGlobalEvent('noteDeleted', (noteId) => {
 		if (noteId === rawNote.id || noteId === appearNote.id) {
 			isDeleted.value = true;
 		}
+	});
+	useGlobalEvent('notePosted', note => {
+		const captured = actor();
+		if (captured) onRenoteCreated(note, captured);
 	});
 
 	// ツールチップのセットアップ (Mockでない場合のみ)
@@ -215,107 +266,95 @@ export function useNote(
 
 	// 共通アクション関数群
 	async function renote() {
-		if (props.mock) return;
-		const isLoggedIn = await pleaseLogin({ openOnRemote: pleaseLoginContext.value });
-		if (!isLoggedIn) return;
-		showMovedDialog();
-		if (els.renoteButton == null) return;
-		const { menu } = getRenoteMenu({
-			note: rawNote,
-			renoteButton: els.renoteButton,
-			mock: props.mock,
-		});
-		os.popupMenu(menu, els.renoteButton.value);
-		subscribeManuallyToNoteCapture();
+		if (props.mock || !canRenote.value || renoteMenuOpen || renoteChanging.value) return;
+		renoteMenuOpen = true;
+		let captured: NoteActionActor | null = null;
+		try {
+			captured = await authorize();
+			if (!captured || !canRenote.value || els.renoteButton == null) return;
+			const contextActor = captured;
+			const { menu } = getRenoteMenu({
+				note: rawNote,
+				renoteButton: els.renoteButton,
+				context: {
+					actor: contextActor,
+					isCurrent: () => current(contextActor) && canRenote.value,
+					changing: renoteChanging,
+					onCreated: note => onRenoteCreated(note, contextActor),
+					onError: error => reportActionError(error, contextActor),
+				},
+			});
+			const closed = os.popupMenu(menu, els.renoteButton.value, { appearance: 'zalip-note' });
+			subscribeManuallyToNoteCapture();
+			await closed;
+		} catch (error) { if (captured) reportActionError(error, captured); } finally { renoteMenuOpen = false; }
 	}
 
 	async function reply() {
-		if (props.mock) return;
-		const isLoggedIn = await pleaseLogin({ openOnRemote: pleaseLoginContext.value });
-		if (!isLoggedIn) return;
-		os.post({
-			reply: appearNote,
-			channel: appearNote.channel,
-		}).then(() => {
-			focus();
-		});
+		const captured = await authorize();
+		if (!captured) return;
+		try {
+			await os.post({ reply: appearNote, channel: appearNote.channel });
+			if (current(captured)) focus();
+		} catch (error) { reportActionError(error, captured); }
+	}
+
+	async function changeReaction(captured: NoteActionActor, reaction: string, remove = false): Promise<boolean> {
+		if (!current(captured) || reactionChanging.value) return false;
+		reactionChanging.value = true;
+		try {
+			if (remove) await misskeyApi('notes/reactions/delete', { noteId: appearNote.id }, captured.token);
+			else await misskeyApi('notes/reactions/create', { noteId: appearNote.id, reaction }, captured.token);
+			if (!current(captured)) return false;
+			noteEvents.emit(`${remove ? 'unreacted' : 'reacted'}:${appearNote.id}`, { userId: captured.id, reaction });
+			if (!remove) sound.playMisskeySfx('reaction');
+			return true;
+		} catch (error) { reportActionError(error, captured); return false; } finally { reactionChanging.value = false; }
 	}
 
 	async function react(customCallback?: (reaction: string) => void) {
-		const isLoggedIn = await pleaseLogin({ openOnRemote: pleaseLoginContext.value });
-		if (!isLoggedIn) return;
-		showMovedDialog();
-
-		if (appearNote.reactionAcceptance === 'likeOnly') {
-			sound.playMisskeySfx('reaction');
-			if (props.mock) return;
-			misskeyApi('notes/reactions/create', {
-				noteId: appearNote.id,
-				reaction: '❤️',
-			}).then(() => {
-				noteEvents.emit(`reacted:${appearNote.id}`, { userId: $i!.id, reaction: '❤️' });
-			});
-			if (els.reactButton != null && els.reactButton.value != null && prefer.s.animation) {
-				const rect = els.reactButton.value.getBoundingClientRect();
-				const { dispose } = os.popup(MkRippleEffect, {
-					x: rect.left + (els.reactButton.value.offsetWidth / 2),
-					y: rect.top + (els.reactButton.value.offsetHeight / 2),
-				}, {
-					end: () => dispose(),
-				});
-			}
-		} else {
-			blur();
-			reactionPicker.show(els.reactButton?.value ?? null, rawNote, async (reaction) => {
-				if (prefer.s.confirmOnReact) {
-					const confirm = await os.confirm({
-						type: 'question',
-						text: i18n.tsx.reactAreYouSure({ emoji: reaction.replace('@.', '') }),
-					});
-					if (confirm.canceled) return;
-				}
-				sound.playMisskeySfx('reaction');
-				if (props.mock) {
-					if (customCallback) customCallback(reaction);
-					return;
-				}
-				misskeyApi('notes/reactions/create', {
-					noteId: appearNote.id,
-					reaction: reaction,
-				}).then(() => {
-					noteEvents.emit(`reacted:${appearNote.id}`, { userId: $i!.id, reaction: reaction });
-				});
-				if (appearNote.text && appearNote.text.length > 100 && (Date.now() - new Date(appearNote.createdAt).getTime() < 1000 * 3)) {
-					claimAchievement('reactWithoutRead');
-				}
-			}, () => { focus(); });
+		if (reactionChanging.value) return;
+		if (props.mock) {
+			if (appearNote.reactionAcceptance === 'likeOnly') customCallback?.('❤️');
+			else reactionPicker.show(els.reactButton?.value ?? null, rawNote, reaction => customCallback?.(reaction), focus);
+			return;
 		}
+		const captured = await authorize();
+		if (!captured) return;
+		if (appearNote.reactionAcceptance === 'likeOnly') {
+			if (!(await changeReaction(captured, '❤️'))) return;
+			if (els.reactButton?.value && prefer.s.animation && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+				const el = els.reactButton.value;
+				const rect = el.getBoundingClientRect();
+				const { dispose } = os.popup(MkRippleEffect, { x: rect.left + (el.offsetWidth / 2), y: rect.top + (el.offsetHeight / 2) }, { end: () => dispose() });
+			}
+			return;
+		}
+		blur();
+		reactionPicker.show(els.reactButton?.value ?? null, rawNote, async reaction => {
+			if (!current(captured)) return;
+			try {
+				if (prefer.s.confirmOnReact) {
+					const confirm = await os.confirm({ type: 'question', text: i18n.tsx.reactAreYouSure({ emoji: reaction.replace('@.', '') }) });
+					if (confirm.canceled || !current(captured)) return;
+				}
+				if (await changeReaction(captured, reaction)) {
+					if (appearNote.text && appearNote.text.length > 100 && (Date.now() - new Date(appearNote.createdAt).getTime() < 1000 * 3)) claimAchievement('reactWithoutRead');
+				}
+			} catch (error) { reportActionError(error, captured); }
+		}, () => { if (current(captured)) focus(); });
 	}
 
 	async function reactViaMfmEmoji(reaction: string) {
-		if (props.mock) return;
-		const isLoggedIn = await pleaseLogin({ openOnRemote: pleaseLoginContext.value });
-		if (!isLoggedIn) return;
-		showMovedDialog();
-		sound.playMisskeySfx('reaction');
-		misskeyApi('notes/reactions/create', {
-			noteId: appearNote.id,
-			reaction: reaction,
-		}).then(() => {
-			noteEvents.emit(`reacted:${appearNote.id}`, {
-				userId: $i!.id,
-				reaction: reaction,
-			});
-		});
+		const captured = await authorize();
+		if (captured) await changeReaction(captured, reaction);
 	}
 
-	function undoReact(): void {
+	async function undoReact(): Promise<void> {
 		const oldReaction = $appearNote.myReaction;
-		if (!oldReaction) return;
-		if (props.mock) return;
-		misskeyApi('notes/reactions/delete', { noteId: appearNote.id }).then(() => {
-			noteEvents.emit(`unreacted:${appearNote.id}`, { userId: $i!.id, reaction: oldReaction });
-		});
+		if (!oldReaction || props.mock || reactionChanging.value) return;
+		const captured = await authorize();
+		if (captured && $appearNote.myReaction === oldReaction) await changeReaction(captured, oldReaction, true);
 	}
 
 	function toggleReact(customMockCallback?: (reaction: string) => void) {
@@ -345,6 +384,7 @@ export function useNote(
 				translation,
 				currentClip: currentClip?.value,
 				currentAntenna: currentAntenna?.value ?? undefined,
+				appearance: 'zalip-note',
 			});
 			os.contextMenu(menu, ev).then(focus).finally(cleanup);
 		}
@@ -358,6 +398,7 @@ export function useNote(
 			translation,
 			currentClip: currentClip?.value,
 			currentAntenna: currentAntenna?.value ?? undefined,
+			appearance: 'zalip-note',
 		});
 		os.popupMenu(menu, els.menuButton.value, { appearance: 'zalip-note' }).then(focus).finally(cleanup);
 	}
@@ -371,16 +412,21 @@ export function useNote(
 	}
 
 	async function showRenoteMenu() {
-		if (props.mock) return;
-		const isLoggedIn = await pleaseLogin({ openOnRemote: pleaseLoginContext.value });
-		if (!isLoggedIn) return;
+		if (!isRenote || renoteChanging.value) return;
+		const captured = await authorize();
+		if (!captured) return;
 
 		const getUnrenote = () => ({
 			text: i18n.ts.unrenote,
 			icon: 'ti ti-trash',
 			danger: true,
-			action: () => {
-				misskeyApi('notes/delete', { noteId: rawNote.id }).then(() => { globalEvents.emit('noteDeleted', rawNote.id); });
+			action: async () => {
+				if (!current(captured) || renoteChanging.value || !Misskey.note.isPureRenote(rawNote) || !(rawNote.userId === captured.id || $i?.isModerator || $i?.isAdmin)) return;
+				renoteChanging.value = true;
+				try {
+					await misskeyApi('notes/delete', { noteId: rawNote.id }, captured.token);
+					if (current(captured)) globalEvents.emit('noteDeleted', rawNote.id);
+				} catch (error) { reportActionError(error, captured); } finally { renoteChanging.value = false; }
 			},
 		});
 

@@ -11,18 +11,18 @@ SPDX-License-Identifier: AGPL-3.0-only
 	:class="$style.root"
 	tabindex="0"
 >
-	<div v-if="appearNote.reply && appearNote.reply.replyId">
+	<div v-if="appearNote.reply && appearNote.reply.replyId && !isCommentRepost">
 		<div v-if="!conversationLoaded" style="padding: 16px">
 			<MkButton style="margin: 0 auto;" primary rounded @click="loadConversation">{{ i18n.ts.loadConversation }}</MkButton>
 		</div>
 		<MkNoteSub v-for="note in conversation" :key="note.id" :class="$style.replyToMore" :note="note" thread/>
 	</div>
-	<MkNoteSub v-if="appearNote.replyId" :note="appearNote?.reply ?? null" :class="$style.replyTo" thread/>
+	<MkNoteSub v-if="appearNote.replyId && !isCommentRepost" :note="appearNote?.reply ?? null" :class="$style.replyTo" thread/>
 	<div v-if="isRenote" :class="$style.renote">
 		<MkAvatar :class="$style.renoteAvatar" :user="note.user" link preview/>
 		<i class="ti ti-repeat" style="margin-right: 4px;"></i>
 		<span :class="$style.renoteText">
-			<I18n :src="i18n.ts.renotedBy" tag="span">
+			<I18n :src="isCommentRepost ? i18n.ts.zalip.commentRenotedBy : i18n.ts.renotedBy" tag="span">
 				<template #user>
 					<MkA v-user-preview="note.userId" :class="$style.renoteName" :to="userPage(note.user)">
 						<MkUserName :user="note.user"/>
@@ -40,7 +40,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<i v-else-if="note.visibility === 'followers'" class="ti ti-lock"></i>
 				<i v-else-if="note.visibility === 'specified'" ref="specified" class="ti ti-mail"></i>
 			</span>
-			<span v-if="note.localOnly" style="margin-left: 0.5em;" :title="i18n.ts._visibility['disableFederation']"><i class="ti ti-rocket-off"></i></span>
 		</div>
 	</div>
 	<div v-if="isRenote && note.renote == null" :class="$style.deleted">
@@ -52,11 +51,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<MkAvatar :class="$style.noteHeaderAvatar" :user="appearNote.user" link preview/>
 				<div :class="$style.noteHeaderBody">
 					<MkNoteHeader :note="appearNote" stacked/>
-					<MkInstanceTicker v-if="showTicker" :host="appearNote.user.host" :instance="appearNote.user.instance"/>
 				</div>
 				<MkZalipFollowButton v-if="!appearNote.isHidden" :user="appearNote.user"/>
 				<button ref="menuButton" type="button" class="_button" :class="$style.menuButton" :aria-label="i18n.ts.more" @click="showMenu()"><i class="ti ti-dots" aria-hidden="true"></i></button>
 			</header>
+			<MkA v-if="isCommentRepost" :class="$style.commentContext" :to="`/notes/${appearNote.replyId}`"><MkZalipIcon name="reply"/><span>{{ commentContextTitle }}</span></MkA>
 			<div :class="$style.noteContent">
 				<p v-if="appearNote.cw != null" :class="$style.cw">
 					<Mfm
@@ -71,7 +70,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</p>
 				<div v-show="appearNote.cw == null || showContent">
 					<span v-if="appearNote.isHidden" style="opacity: 0.5">({{ i18n.ts.private }})</span>
-					<MkA v-if="appearNote.replyId" :class="$style.noteReplyTarget" :to="`/notes/${appearNote.replyId}`"><i class="ti ti-arrow-back-up"></i></MkA>
+					<MkA v-if="appearNote.replyId && !isCommentRepost" :class="$style.noteReplyTarget" :to="`/notes/${appearNote.replyId}`"><i class="ti ti-arrow-back-up"></i></MkA>
 					<Mfm
 						v-if="appearNote.text"
 						:parsedNodes="parsed"
@@ -154,7 +153,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</button>
 
 					<MkZalipBookmark :class="$style.bookmark" :noteId="appearNote.id"/>
-					<button type="button" class="_button" :class="$style.noteFooterButton" :aria-label="i18n.ts.share" @click="shareNote"><i class="ti ti-send" aria-hidden="true"></i></button>
 					<button v-if="prefer.s.showClipButtonInNoteFooter" ref="clipButton" class="_button" :class="$style.noteFooterButton" :aria-label="i18n.ts.clip" @click="clip()">
 						<i class="ti ti-paperclip"></i>
 					</button>
@@ -237,8 +235,8 @@ import number from '@/filters/number.js';
 import { DI } from '@/di.js';
 import { $i } from '@/i.js';
 import { createZalipDiscussionPager } from '@/utility/zalip-discussion-pager.js';
-import { openZalipNoteShare } from '@/utility/zalip-note-share.js';
 import { useZalipNoteViews } from '@/composables/use-zalip-note-views.js';
+import { getNoteSummary } from '@/utility/get-note-summary.js';
 
 // コンポーネント外部の依存関係
 import MkNoteSub from '@/components/MkNoteSub.vue';
@@ -253,7 +251,6 @@ import MkMediaList from '@/components/MkMediaList.vue';
 import MkCwButton from '@/components/MkCwButton.vue';
 import MkPoll from '@/components/MkPoll.vue';
 import MkUrlPreview from '@/components/MkUrlPreview.vue';
-import MkInstanceTicker from '@/components/MkInstanceTicker.vue';
 import MkUserCardMini from '@/components/MkUserCardMini.vue';
 import MkPagination from '@/components/MkPagination.vue';
 import MkButton from '@/components/MkButton.vue';
@@ -296,7 +293,6 @@ const {
 	isMyRenote,
 	parsed,
 	urls,
-	showTicker,
 
 	// 関数群
 	renote,
@@ -323,6 +319,10 @@ const {
 // provide
 provide(DI.mfmEmojiReactCallback, reactViaMfmEmoji);
 const summaryReaction = computed(() => $appearNote.myReaction ?? Object.entries($appearNote.reactions).sort((a, b) => b[1] - a[1])[0]?.[0]);
+const isCommentRepost = isRenote && appearNote.replyId != null;
+const commentContextTitle = computed(() => appearNote.reply?.isZalipDiscussionRoot && !appearNote.reply.isHidden && appearNote.reply.cw == null
+	? getNoteSummary(appearNote.reply, { showReply: false, showRenote: false })
+	: i18n.ts.zalip.commentContext);
 const viewCount = useZalipNoteViews(articleEl, () => appearNote, () => !muted.value && !hideByPlugin.value && !isDeleted.value && (appearNote.cw == null || showContent.value));
 const formattedDate = computed(() => new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(new Date(appearNote.createdAt)) + ' · ' + new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(appearNote.createdAt)));
 
@@ -386,10 +386,6 @@ watch(() => [appearNote.id, $i?.id], () => {
 }, { immediate: true });
 onBeforeUnmount(() => repliesPager.reset(''));
 
-function shareNote(event: MouseEvent): void {
-	openZalipNoteShare(appearNote, event.currentTarget instanceof HTMLElement ? event.currentTarget : null);
-}
-
 const conversation = ref<Misskey.entities.Note[]>([]);
 const conversationLoaded = ref(false);
 
@@ -429,7 +425,7 @@ const keymap = {
 </script>
 
 <style lang="scss" module>
-.summaryReaction { width: 22px; height: 22px; font-size: 22px; object-fit: contain; }
+.summaryReaction { width: 20px; height: 20px; font-size: 20px; object-fit: contain; }
 .root {
 	position: relative;
 	font-size: 14px;
@@ -548,7 +544,7 @@ const keymap = {
 	line-height: 1.45;
 }
 
-.menuButton { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; border-radius: 50%; font-size: 20px; color: var(--MI_THEME-fgTransparentWeak); }
+.menuButton { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; border-radius: 50%; font-size: 18px; color: var(--MI_THEME-fgTransparentWeak); }
 .menuButton:hover { background: var(--MI_THEME-panelHighlight); }
 .menuButton:focus-visible { outline: 2px solid var(--MI_THEME-focus); }
 
@@ -564,6 +560,7 @@ const keymap = {
 	color: var(--MI_THEME-accent);
 	margin-right: 0.5em;
 }
+.commentContext { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 0 0 12px; color: var(--MI_THEME-fgTransparentWeak); font-size: 13px; > svg { flex: 0 0 16px; width: 16px; height: 16px; } > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
 
 .rn {
 	margin-left: 4px;
@@ -609,7 +606,7 @@ const keymap = {
 .reactionCount { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; min-height: 44px; color: var(--MI_THEME-fgTransparentWeak); font-size: 13px; font-variant-numeric: tabular-nums; }
 .reactionCount:focus-visible { outline: 2px solid var(--MI_THEME-focus); border-radius: 8px; }
 .noteFooterButton.reacted { color: var(--MI_THEME-accent); }
-.actionRow > .bookmark { min-width: 44px; min-height: 44px; > svg { width: 22px; height: 22px; } }
+.actionRow > .bookmark { min-width: 44px; min-height: 44px; > svg { width: 20px; height: 20px; } }
 .discussionSelect { max-width: 50%; padding: 5px 8px; border: 1px solid var(--MI_THEME-divider); border-radius: 7px; background: transparent; color: var(--MI_THEME-fgTransparentWeak); font: inherit; font-size: 12px; }
 
 .noteFooterButton {
@@ -625,7 +622,7 @@ const keymap = {
 	border: 0;
 	border-radius: 999px;
 	font-size: 20px;
-	> svg { width: 22px; height: 22px; }
+	> svg { width: 20px; height: 20px; }
 
 	&:hover {
 		color: var(--MI_THEME-fgHighlighted);

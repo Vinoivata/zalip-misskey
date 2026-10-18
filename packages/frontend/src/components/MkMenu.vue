@@ -657,14 +657,13 @@ function guardMouseMove(ev: MouseEvent) {
 		> .item {
 			min-height: 44px;
 			padding: 12px 20px;
-			font-size: 15px;
-			font-weight: 600;
+			font-size: 14px;
+			font-weight: 500;
 			line-height: 20px;
 
 			> .item_content { min-width: 0; flex: 1; }
 			.item_content_text { min-width: 0; max-width: 100%; }
-			> .icon { width: 20px; font-size: 20px; flex-shrink: 0; }
-			&:not(.parent):not(.switch) > .icon { order: 2; margin: 0 0 0 12px; }
+			> .icon { width: 20px; font-size: 20px; flex-shrink: 0; margin-right: 12px; }
 			&::before { width: calc(100% - 16px); border-radius: 8px; }
 		}
 

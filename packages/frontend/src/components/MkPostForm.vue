@@ -40,10 +40,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<span :class="$style.headerRightButtonText">{{ targetChannel.name }}</span>
 				</button>
 			</template>
-			<button v-if="visibility !== 'specified'" v-tooltip="i18n.ts._visibility.disableFederation" type="button" class="_button" :class="[$style.headerRightItem, { [$style.danger]: localOnly }]" :aria-label="i18n.ts._visibility.disableFederation" :aria-pressed="localOnly" :disabled="targetChannel != null" @click="toggleLocalOnly">
-				<span v-if="!localOnly"><i class="ti ti-rocket"></i></span>
-				<span v-else><i class="ti ti-rocket-off"></i></span>
-			</button>
 		</div>
 	</div>
 	<MkNoteSimple v-if="replyTargetNote" :class="$style.targetNote" :note="replyTargetNote"/>
@@ -138,7 +134,6 @@ import type { UploaderItem } from '@/composables/use-uploader.js';
 import MkNotePreview from '@/components/MkNotePreview.vue';
 import ZalipShareCard from '@/components/ZalipShareCard.vue';
 import XPostFormAttaches from '@/components/MkPostFormAttaches.vue';
-import XTextCounter from '@/components/MkPostForm.TextCounter.vue';
 import MkPollEditor from '@/components/MkPollEditor.vue';
 import MkNoteSimple from '@/components/MkNoteSimple.vue';
 import { erase, unique } from '@/utility/array.js';
@@ -594,110 +589,9 @@ function setVisibility() {
 	});
 }
 
-async function toggleLocalOnly() {
-	if (targetChannel.value) {
-		visibility.value = 'public';
-		localOnly.value = true; // TODO: チャンネルが連合するようになった折には消す
-		return;
-	}
-
-	const neverShowInfo = miLocalStorage.getItem('neverShowLocalOnlyInfo');
-
-	if (!localOnly.value && neverShowInfo !== 'true') {
-		const confirm = await os.actions({
-			type: 'question',
-			title: i18n.ts.disableFederationConfirm,
-			text: i18n.ts.disableFederationConfirmWarn,
-			actions: [
-				{
-					value: 'yes' as const,
-					text: i18n.ts.disableFederationOk,
-					primary: true,
-				},
-				{
-					value: 'neverShow' as const,
-					text: `${i18n.ts.disableFederationOk} (${i18n.ts.neverShow})`,
-					danger: true,
-				},
-				{
-					value: 'no' as const,
-					text: i18n.ts.cancel,
-				},
-			],
-		});
-		if (confirm.canceled) return;
-		if (confirm.result === 'no') return;
-
-		if (confirm.result === 'neverShow') {
-			miLocalStorage.setItem('neverShowLocalOnlyInfo', 'true');
-		}
-	}
-
-	localOnly.value = !localOnly.value;
-	if (prefer.s.rememberNoteVisibility) {
-		store.set('localOnly', localOnly.value);
-	}
-}
-
-async function toggleReactionAcceptance() {
-	const select = await os.select({
-		title: i18n.ts.reactionAcceptance,
-		items: [
-			{ value: null, label: i18n.ts.all },
-			{ value: 'likeOnlyForRemote' as const, label: i18n.ts.likeOnlyForRemote },
-			{ value: 'nonSensitiveOnly' as const, label: i18n.ts.nonSensitiveOnly },
-			{ value: 'nonSensitiveOnlyForLocalLikeOnlyForRemote' as const, label: i18n.ts.nonSensitiveOnlyForLocalLikeOnlyForRemote },
-			{ value: 'likeOnly' as const, label: i18n.ts.likeOnly },
-		],
-		default: reactionAcceptance.value,
-	});
-	if (select.canceled) return;
-	reactionAcceptance.value = select.result;
-}
-
 //#region その他の設定メニューpopup
 function showOtherSettings() {
-	let reactionAcceptanceIcon = 'ti ti-icons';
-	let reactionAcceptanceCaption = '';
-
-	switch (reactionAcceptance.value) {
-		case 'likeOnly':
-			reactionAcceptanceIcon = 'ti ti-heart _love';
-			reactionAcceptanceCaption = i18n.ts.likeOnly;
-			break;
-
-		case 'likeOnlyForRemote':
-			reactionAcceptanceIcon = 'ti ti-heart-plus';
-			reactionAcceptanceCaption = i18n.ts.likeOnlyForRemote;
-			break;
-
-		case 'nonSensitiveOnly':
-			reactionAcceptanceCaption = i18n.ts.nonSensitiveOnly;
-			break;
-
-		case 'nonSensitiveOnlyForLocalLikeOnlyForRemote':
-			reactionAcceptanceCaption = i18n.ts.nonSensitiveOnlyForLocalLikeOnlyForRemote;
-			break;
-
-		default:
-			reactionAcceptanceCaption = i18n.ts.all;
-			break;
-	}
-
 	const menuItems = [{
-		type: 'component',
-		component: XTextCounter,
-		props: {
-			textLength: textLength,
-		},
-	}, { type: 'divider' }, {
-		icon: reactionAcceptanceIcon,
-		text: i18n.ts.reactionAcceptance,
-		caption: reactionAcceptanceCaption,
-		action: () => {
-			toggleReactionAcceptance();
-		},
-	}, { type: 'divider' }, {
 		type: 'button',
 		text: i18n.ts._drafts.saveToDraft,
 		icon: 'ti ti-cloud-upload',

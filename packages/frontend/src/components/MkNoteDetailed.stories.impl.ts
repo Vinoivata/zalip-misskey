@@ -17,3 +17,7 @@ export const Default = {
 } satisfies StoryObj<typeof MkNoteDetailed>;
 
 export const Mobile = { ...Default, parameters: { ...Default.parameters, viewport: { defaultViewport: 'mobile1' } } } satisfies StoryObj<typeof MkNoteDetailed>;
+
+const discussion = { ...note(), id: 'discussion-fixture', text: 'Обсуждение: Fixture film — серия 2', isZalipDiscussionRoot: true, files: [] };
+const comment = { ...note(), id: 'comment-fixture', text: 'The reposted episode comment, not its technical discussion root.', replyId: discussion.id, reply: discussion, files: [file()] };
+export const RepostedContentComment = { ...Default, args: { note: { ...note(), text: null, files: [], poll: undefined, renoteId: comment.id, renote: comment } } } satisfies StoryObj<typeof MkNoteDetailed>;

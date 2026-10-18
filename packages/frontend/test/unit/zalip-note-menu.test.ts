@@ -8,6 +8,7 @@ import { cleanup, fireEvent, render } from '@testing-library/vue';
 import { nextTick, ref } from 'vue';
 import MkMenu from '@/components/MkMenu.vue';
 import MkPopupMenu from '@/components/MkPopupMenu.vue';
+import menuSource from '@/components/MkMenu.vue?raw';
 import type { MenuItem } from '@/types/menu.js';
 
 vi.mock('@/os.js', () => ({ popupMenu: vi.fn().mockResolvedValue(undefined) }));
@@ -18,6 +19,12 @@ async function settle(): Promise<void> { await nextTick(); await Promise.resolve
 afterEach(cleanup);
 
 describe('scoped note action menu appearance', () => {
+	it('uses modest type and left-hand icons only in the opt-in post menu', () => {
+		const scoped = menuSource.split('.root.zalipNote {')[1].split('\n.item {')[0];
+		expect(scoped).toContain('font-size: 14px;'); expect(scoped).toContain('font-weight: 500;');
+		expect(scoped).toContain('font-size: 20px; flex-shrink: 0; margin-right: 12px;');
+		expect(scoped).not.toContain('order: 2'); expect(scoped).toContain('min-height: 44px;');
+	});
 	it('is opt-in and preserves the native action order, dividers, dangerous actions and click behavior', async () => {
 		const save = vi.fn(); const report = vi.fn();
 		const items: MenuItem[] = [{ text: 'Save fixture', icon: 'ti ti-bookmark', action: save }, { type: 'divider' }, { text: 'Report fixture', icon: 'ti ti-flag', danger: true, action: report }];

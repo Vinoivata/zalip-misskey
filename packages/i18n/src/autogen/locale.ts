@@ -3156,6 +3156,14 @@ export interface Locale extends ILocale {
          */
         "commentsNewest": string;
         /**
+         * {user} делает репост комментария
+         */
+        "commentRenotedBy": ParameterizedString<"user">;
+        /**
+         * Перейти к обсуждению
+         */
+        "commentContext": string;
+        /**
          * Просмотры
          */
         "postViews": string;

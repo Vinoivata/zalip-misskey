@@ -9,6 +9,7 @@ import { defineComponent, h, nextTick } from 'vue';
 import type * as Misskey from 'misskey-js';
 import MkZalipCommentThread from '@/components/MkZalipCommentThread.vue';
 import MkNoteSub from '@/components/MkNoteSub.vue';
+import commentSource from '@/components/MkZalipCommentThread.vue?raw';
 import { globalEvents } from '@/events.js';
 import { i18n } from '@/i18n.js';
 
@@ -59,12 +60,30 @@ describe('shared Threads-style comments', () => {
 		await fireEvent.click(view.getByRole('button', { name: i18n.ts.reaction }));
 		await fireEvent.click(view.getByRole('button', { name: i18n.ts.reply }));
 		await fireEvent.click(view.getByRole('button', { name: i18n.ts.renote }));
-		await fireEvent.click(view.getByRole('button', { name: i18n.ts.share }));
+		expect(view.queryByRole('button', { name: i18n.ts.share })).toBeNull();
 		await fireEvent.click(view.getByRole('button', { name: i18n.ts.more }));
 		expect(controls.react).toHaveBeenCalledTimes(1); expect(controls.renote).toHaveBeenCalledTimes(1); expect(controls.menu).toHaveBeenCalledTimes(1);
 		expect(view.emitted().reply).toEqual([[fixture]]);
-		expect(controls.share.mock.calls[0][0]).toEqual(fixture);
+		expect(controls.share).not.toHaveBeenCalled();
 		expect(controls.api).not.toHaveBeenCalled();
+	});
+	it('keeps real audience information but omits the federation status and dedicated send action', () => {
+		const view = setup(note('000', { visibility: 'followers', localOnly: true }));
+		expect(view.getByRole('img', { name: i18n.ts._visibility.followers })).toBeTruthy();
+		expect(view.container.querySelector('.ti-lock')).toBeTruthy();
+		expect(view.container.querySelector('.ti-rocket-off, .ti-send')).toBeNull();
+		expect(view.queryByRole('button', { name: i18n.ts.share })).toBeNull();
+		expect(commentSource).not.toContain('openZalipNoteShare');
+		expect(commentSource).not.toContain('shareButton');
+	});
+	it('keeps the three native actions ordered and the compact dots inside an accessible menu target', () => {
+		const view = setup();
+		const actions = view.container.querySelector('footer')!;
+		expect(Array.from(actions.querySelectorAll('button'), button => button.getAttribute('aria-label'))).toEqual([i18n.ts.reaction, i18n.ts.reply, i18n.ts.renote]);
+		const menu = view.getByRole('button', { name: i18n.ts.more });
+		expect(menu.querySelector('.ti-dots')).toBeTruthy();
+		expect(commentSource).toContain('flex: 0 0 44px; width: 44px; height: 44px;');
+		expect(commentSource).toContain('width: 18px; height: 18px; font-size: 18px;');
 	});
 	it('provides a programmatic focus return target for native menus and reaction pickers', async () => {
 		const view = setup();
@@ -87,6 +106,21 @@ describe('shared Threads-style comments', () => {
 		expect(view.queryByText('Comment 001')).toBeNull();
 		await fireEvent.click(view.getByRole('button', { name: i18n.ts.loadReplies })); await settle();
 		expect(controls.api).toHaveBeenCalledTimes(1);
+	});
+	it('scales real branch geometry from the 32px root and 28px nested avatars with 20px actions', async () => {
+		controls.api.mockResolvedValue([note('001', { replyId: '000', repliesCount: 0 })]);
+		const view = setup();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.loadReplies })); await settle();
+		const parent = view.container.querySelector('[data-comment-id="000"]')!;
+		const child = view.container.querySelector('[data-comment-id="001"]')!;
+		expect(parent.className).not.toContain('nested');
+		expect(child.className).toContain('nested');
+		expect(commentSource).toContain('--comment-avatar: 32px;');
+		expect(commentSource).toContain('.nested { --comment-avatar: 28px;');
+		expect(commentSource).toContain('grid-template-columns: var(--comment-avatar) minmax(0, 1fr)');
+		expect(commentSource).toContain('left: calc(var(--comment-avatar) / 2 - .5px)');
+		expect(commentSource).toContain('height: calc(12px + var(--comment-child-avatar) / 2)');
+		expect(commentSource).toContain('> svg { width: 20px; height: 20px; }');
 	});
 	it('retains pagination affordances and allows an explicit retry after a failed expansion', async () => {
 		controls.api.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce([note('001', { replyId: '000', repliesCount: 0 })]);

@@ -15,4 +15,5 @@ export const Default = {
 
 export const WithWarning = { ...Default, args: { ...Default.args, initialText: 'A draft remains private until its author explicitly submits it.', initialCw: 'Spoilers', initialVisibility: 'followers' } } satisfies StoryObj<typeof MkPostForm>;
 export const Reply = { ...Default, args: { ...Default.args, reply: note() } } satisfies StoryObj<typeof MkPostForm>;
+export const ExistingPrivateDefaults = { ...WithWarning, args: { ...WithWarning.args, initialLocalOnly: true } } satisfies StoryObj<typeof MkPostForm>;
 export const Mobile = { ...WithWarning, parameters: { layout: 'fullscreen', viewport: { defaultViewport: 'mobile1' } } } satisfies StoryObj<typeof MkPostForm>;

@@ -788,6 +788,8 @@ zalip:
   commentsEmpty: "Пока нет комментариев. Начните обсуждение."
   commentsError: "Не удалось загрузить комментарии. Попробуйте ещё раз."
   commentsNewest: "Сначала новые"
+  commentRenotedBy: "{user} делает репост комментария"
+  commentContext: "Перейти к обсуждению"
   postViews: "Просмотры"
   _postForm:
     newPost: "Новая запись"

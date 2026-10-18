@@ -10,6 +10,7 @@ import type * as Misskey from 'misskey-js';
 import MkPostForm from '@/components/MkPostForm.vue';
 import postFormSource from '@/components/MkPostForm.vue?raw';
 import { i18n } from '@/i18n.js';
+import { prefer } from '@/preferences.js';
 
 const controls = vi.hoisted(() => ({
 	api: vi.fn(), apiWithDialog: vi.fn(), popup: vi.fn(), menu: vi.fn(), confirm: vi.fn(), upload: vi.fn(), addFiles: vi.fn(), abort: vi.fn(), dispose: vi.fn(), choosePc: vi.fn(), chooseDrive: vi.fn(), inputDatetime: vi.fn(), drafts: new Map<string, string>(),
@@ -71,6 +72,7 @@ function note(patch: Partial<Misskey.entities.Note> = {}): Misskey.entities.Note
 beforeEach(() => {
 	vi.clearAllMocks(); controls.drafts.clear();
 	controls.setTip(true); controls.tour.mockResolvedValue(undefined);
+	prefer.s.defaultNoteLocalOnly = false;
 	controls.api.mockResolvedValue({ createdNote: note({ id: 'created', text: 'Created' }) });
 	controls.apiWithDialog.mockResolvedValue({ id: 'draft' });
 	controls.confirm.mockResolvedValue({ canceled: false });
@@ -116,7 +118,8 @@ describe('Notr-style native post composer', () => {
 		await fireEvent.click(view.getByRole('button', { name: i18n.ts.other }));
 		const items = controls.menu.mock.calls[0][0] as Array<{ text?: string; action?: () => Promise<void> }>;
 		expect(controls.menu).toHaveBeenCalledExactlyOnceWith(items, view.getByRole('button', { name: i18n.ts.other }), { appearance: 'zalip-note', width: 300 });
-		expect(items.flatMap(item => item.text == null ? [] : [item.text])).toEqual([i18n.ts.reactionAcceptance, i18n.ts._drafts.saveToDraft, `${i18n.ts.schedulePost}...`, i18n.ts.preview, i18n.ts.reset]);
+		expect(items.flatMap(item => item.text == null ? [] : [item.text])).toEqual([i18n.ts._drafts.saveToDraft, `${i18n.ts.schedulePost}...`, i18n.ts.preview, i18n.ts.reset]);
+		expect(items.some(item => 'component' in item)).toBe(false);
 		await items.find(item => item.text === i18n.ts._drafts.saveToDraft)?.action?.();
 		expect(controls.apiWithDialog).toHaveBeenCalledWith('notes/drafts/create', expect.objectContaining({ text: 'Scheduled content', isActuallyScheduled: false }));
 		await items.find(item => item.text === `${i18n.ts.schedulePost}...`)?.action?.(); await settle();
@@ -125,6 +128,17 @@ describe('Notr-style native post composer', () => {
 		await fireEvent.click(view.getByTestId('post-form-submit')); await settle();
 		expect(controls.apiWithDialog).toHaveBeenCalledExactlyOnceWith('notes/drafts/create', expect.objectContaining({ text: 'Scheduled content', isActuallyScheduled: true, scheduledAt: expect.any(Number) }));
 		expect(controls.api).not.toHaveBeenCalled();
+	});
+	it('hides federation controls while preserving the existing default and explicit local-only payload', async () => {
+		prefer.s.defaultNoteLocalOnly = true;
+		const view = setup({ initialText: 'Existing local default' }); await settle();
+		expect(view.queryByRole('button', { name: i18n.ts._visibility.disableFederation })).toBeNull();
+		await fireEvent.click(view.getByTestId('post-form-submit')); await settle();
+		expect(controls.api).toHaveBeenCalledWith('notes/create', expect.objectContaining({ localOnly: true, visibility: 'public' }), undefined);
+		view.unmount(); controls.api.mockClear();
+		const explicit = setup({ initialText: 'Existing explicit choice', initialLocalOnly: false }); await settle();
+		await fireEvent.click(explicit.getByTestId('post-form-submit')); await settle();
+		expect(controls.api).toHaveBeenCalledWith('notes/create', expect.objectContaining({ localOnly: false, visibility: 'public' }), undefined);
 	});
 	it('uses the localized Help label while preserving the native tour and stored tip dismissal', async () => {
 		controls.setTip(false);
@@ -155,6 +169,8 @@ describe('Notr-style native post composer', () => {
 		await fireEvent.update(view.getByTestId('post-form-text'), 'Updated text'); await settle();
 		expect(JSON.parse(controls.drafts.get('drafts')!)['note:viewer'].data).toEqual(expect.objectContaining({ text: 'Updated text', cw: 'Saved warning', useCw: true, visibility: 'followers', localOnly: true, files: [{ id: 'file', name: 'Saved photo' }], poll: expect.objectContaining({ choices: ['Yes', 'No'] }) }));
 		expect(controls.api).not.toHaveBeenCalled();
+		await fireEvent.click(view.getByTestId('post-form-submit')); await settle();
+		expect(controls.api).toHaveBeenCalledWith('notes/create', expect.objectContaining({ text: 'Updated text', cw: 'Saved warning', visibility: 'followers', localOnly: true, reactionAcceptance: 'likeOnly' }), undefined);
 	});
 	it('keeps mock previews read-only and leaves the native IME Escape guard intact', async () => {
 		const view = setup({ mock: true, initialText: 'Preview' });

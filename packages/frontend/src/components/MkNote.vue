@@ -13,13 +13,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 	@keydown.enter.self.prevent="openComments()"
 	@keydown.space.self.prevent="openComments()"
 >
-	<MkNoteSub v-if="appearNote.replyId && !renoteCollapsed" :note="appearNote?.reply ?? null" :class="$style.replyTo" thread/>
+	<MkNoteSub v-if="appearNote.replyId && !isCommentRepost && !renoteCollapsed" :note="appearNote?.reply ?? null" :class="$style.replyTo" thread/>
 	<div v-if="pinned" :class="$style.tip"><i class="ti ti-pin"></i> {{ i18n.ts.pinnedNote }}</div>
 	<div v-if="isRenote" :class="$style.renote">
 		<div v-if="note.channel" :class="$style.colorBar" :style="{ background: note.channel.color }"></div>
 		<MkAvatar :class="$style.renoteAvatar" :user="note.user" link preview/>
 		<i class="ti ti-repeat" style="margin-right: 4px;"></i>
-		<I18n :src="i18n.ts.renotedBy" tag="span" :class="$style.renoteText">
+		<I18n :src="isCommentRepost ? i18n.ts.zalip.commentRenotedBy : i18n.ts.renotedBy" tag="span" :class="$style.renoteText">
 			<template #user>
 				<MkA v-user-preview="note.userId" :class="$style.renoteUserName" :to="userPage(note.user)">
 					<MkUserName :user="note.user"/>
@@ -36,7 +36,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<i v-else-if="note.visibility === 'followers'" class="ti ti-lock"></i>
 				<i v-else-if="note.visibility === 'specified'" ref="specified" class="ti ti-mail"></i>
 			</span>
-			<span v-if="note.localOnly" style="margin-left: 0.5em;" :title="i18n.ts._visibility['disableFederation']"><i class="ti ti-rocket-off"></i></span>
 			<span v-if="note.channel" style="margin-left: 0.5em;" :title="note.channel.name"><i class="ti ti-device-tv"></i></span>
 		</div>
 	</div>
@@ -57,7 +56,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<MkZalipFollowButton v-if="!appearNote.isHidden" :user="appearNote.user" :mock="mock"/>
 					<button ref="menuButton" type="button" :class="$style.menuButton" class="_button" :aria-label="i18n.ts.more" @click="showMenu()"><i class="ti ti-dots" aria-hidden="true"></i></button>
 				</div>
-				<MkInstanceTicker v-if="showTicker" :class="$style.instanceTicker" :host="appearNote.user.host" :instance="appearNote.user.instance"/>
+				<MkA v-if="isCommentRepost" :class="$style.commentContext" :to="`/notes/${appearNote.replyId}`"><MkZalipIcon name="reply"/><span>{{ commentContextTitle }}</span></MkA>
 				<div :class="$style.body" style="container-type: inline-size;">
 					<p v-if="appearNote.cw != null" :class="$style.cw">
 						<Mfm
@@ -73,7 +72,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<div v-show="appearNote.cw == null || showContent">
 						<div :class="[$style.text, { [$style.contentCollapsed]: hasLongText && collapsed }]">
 							<span v-if="appearNote.isHidden" style="opacity: 0.5">({{ i18n.ts.private }})</span>
-							<MkA v-if="appearNote.replyId" :class="$style.replyIcon" :to="`/notes/${appearNote.replyId}`"><i class="ti ti-arrow-back-up"></i></MkA>
+							<MkA v-if="appearNote.replyId && !isCommentRepost" :class="$style.replyIcon" :to="`/notes/${appearNote.replyId}`"><i class="ti ti-arrow-back-up"></i></MkA>
 							<Mfm
 								v-if="appearNote.text"
 								:parsedNodes="parsed"
@@ -116,7 +115,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</div>
 					<MkA v-if="appearNote.channel && !inChannel" :class="$style.channel" :to="`/channels/${appearNote.channel.id}`"><i class="ti ti-device-tv"></i> {{ appearNote.channel.name }}</MkA>
 				</div>
-				<MkZalipReplyPreview v-if="appearNote.repliesCount > 0 && (appearNote.cw == null || showContent)" :noteId="appearNote.id" :replyCount="appearNote.repliesCount" @visible="hasReplyPreview = $event"/>
+				<MkZalipReplyPreview v-if="appearNote.repliesCount > 0 && (appearNote.cw == null || showContent)" :noteId="appearNote.id" :replyCount="appearNote.repliesCount" :replyAnchor="commentButton" @visible="hasReplyPreview = $event"/>
 			</div>
 			<footer :class="$style.footer">
 				<div :class="$style.reactionAction">
@@ -127,7 +126,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</button>
 				<MkA :to="`/notes/${appearNote.id}/reactions`" :class="$style.reactionCount" :aria-label="i18n.ts.reactions">{{ number($appearNote.reactionCount) }}</MkA>
 				</div>
-				<button v-tooltip="i18n.ts.zalip.comments" type="button" :class="$style.footerButton" class="_button" :aria-label="i18n.ts.zalip.comments" @click="openComments()">
+				<button ref="commentButton" v-tooltip="i18n.ts.zalip.comments" type="button" :class="$style.footerButton" class="_button" :aria-label="i18n.ts.zalip.comments" @click="openComments()">
 					<MkZalipIcon name="reply"/>
 					<span :class="$style.actionLabel">{{ i18n.ts.zalip.comments }}</span>
 					<span :class="$style.footerButtonCount">{{ number(appearNote.repliesCount) }}</span>
@@ -148,7 +147,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<i class="ti ti-ban"></i>
 				</button>
 				<MkZalipBookmark :class="$style.bookmark" :noteId="appearNote.id"/>
-				<button type="button" class="_button" :class="$style.footerButton" :aria-label="i18n.ts.share" @click="shareNote"><i class="ti ti-send" aria-hidden="true"></i></button>
 				<span v-if="viewCount != null" :class="$style.viewCount" :title="i18n.ts.zalip.postViews" :aria-label="`${i18n.ts.zalip.postViews}: ${number(viewCount)}`"><i class="ti ti-chart-bar" aria-hidden="true"></i><span>{{ number(viewCount) }}</span></span>
 				<button v-if="prefer.s.showClipButtonInNoteFooter" ref="clipButton" type="button" :class="$style.footerButton" class="_button" :aria-label="i18n.ts.clip" @click="clip()">
 					<i class="ti ti-paperclip"></i>
@@ -208,7 +206,6 @@ import number from '@/filters/number.js';
 import { DI } from '@/di.js';
 import { useRouter } from '@/router.js';
 import { createZalipPostNavigation } from '@/utility/zalip-post-navigation.js';
-import { openZalipNoteShare } from '@/utility/zalip-note-share.js';
 import { useZalipNoteViews } from '@/composables/use-zalip-note-views.js';
 
 // コンポーネント外部の依存関係
@@ -224,7 +221,6 @@ import MkMediaList from '@/components/MkMediaList.vue';
 import MkCwButton from '@/components/MkCwButton.vue';
 import MkPoll from '@/components/MkPoll.vue';
 import MkUrlPreview from '@/components/MkUrlPreview.vue';
-import MkInstanceTicker from '@/components/MkInstanceTicker.vue';
 import ZalipShareCard from '@/components/ZalipShareCard.vue';
 
 const props = withDefaults(defineProps<{
@@ -260,6 +256,7 @@ const menuButton = useTemplateRef('menuButton');
 const renoteButton = useTemplateRef('renoteButton');
 const renoteTime = useTemplateRef('renoteTime');
 const reactButton = useTemplateRef('reactButton');
+const commentButton = useTemplateRef<HTMLElement>('commentButton');
 const clipButton = useTemplateRef('clipButton');
 const galleryEl = useTemplateRef('galleryEl');
 
@@ -279,7 +276,6 @@ const {
 	renoteCollapsed,
 	parsed,
 	urls,
-	showTicker,
 	canRenote,
 
 	renote,
@@ -310,13 +306,13 @@ const {
 // provide
 provide(DI.mfmEmojiReactCallback, reactViaMfmEmoji);
 const summaryReaction = computed(() => $appearNote.myReaction ?? Object.entries($appearNote.reactions).sort((a, b) => b[1] - a[1])[0]?.[0]);
+const isCommentRepost = isRenote && appearNote.replyId != null;
+const commentContextTitle = computed(() => appearNote.reply?.isZalipDiscussionRoot && !appearNote.reply.isHidden && appearNote.reply.cw == null
+	? getNoteSummary(appearNote.reply, { showReply: false, showRenote: false })
+	: i18n.ts.zalip.commentContext);
 // Only text participates in read-more. Media, polls and linked title cards stay fully reachable.
 const hasLongText = computed(() => shouldCollapsed({ ...appearNote, files: [] }, []));
 const viewCount = useZalipNoteViews(articleEl, () => appearNote, () => !props.mock && !hardMuted.value && !hideByPlugin.value && muted.value === false && !renoteCollapsed.value && (appearNote.cw == null || showContent.value));
-
-function shareNote(event: MouseEvent): void {
-	if (!props.mock) openZalipNoteShare(appearNote, event.currentTarget instanceof HTMLElement ? event.currentTarget : null);
-}
 
 // MkNote固有
 const showSoftWordMutedWord = computed(() => prefer.s.showSoftWordMutedWord);
@@ -416,7 +412,7 @@ const keymap = {
 </script>
 
 <style lang="scss" module>
-.summaryReaction { width: 22px; height: 22px; font-size: 22px; object-fit: contain; }
+.summaryReaction { width: 20px; height: 20px; font-size: 20px; object-fit: contain; }
 .instanceTicker { margin-top: 4px; }
 .root {
 	position: relative;
@@ -611,16 +607,18 @@ const keymap = {
 
 .threadContent { position: relative; }
 
-.hasReplyPreview::after {
+.threadContent::after {
 	content: '';
 	position: absolute;
-	left: -33px;
+	left: -32px;
 	top: 44px;
-	bottom: 24px;
+	bottom: 0;
 	width: 1px;
 	background: var(--MI_THEME-divider);
 	pointer-events: none;
 }
+.hasReplyPreview::after { bottom: 24px; }
+.commentContext { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 0 0 8px; color: var(--zalip-social-muted); font-size: 13px; > svg { flex: 0 0 16px; width: 16px; height: 16px; } > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
 
 .colorBar {
 	position: absolute;
@@ -636,8 +634,8 @@ const keymap = {
 	flex-shrink: 0;
 	display: block !important;
 	margin: 0 12px 0 0;
-	width: 42px;
-	height: 42px;
+	width: 40px;
+	height: 40px;
 	border-radius: 50%;
 
 	&.useSticky {
@@ -666,13 +664,13 @@ const keymap = {
 .menuButton {
 	display: grid;
 	place-items: center;
-	flex: 0 0 36px;
-	width: 36px;
-	height: 36px;
+	flex: 0 0 44px;
+	width: 44px;
+	height: 44px;
 	margin-top: -4px;
 	border-radius: 50%;
 	color: var(--MI_THEME-fgTransparentWeak);
-	font-size: 20px;
+	font-size: 18px;
 	&:hover { background: var(--MI_THEME-panelHighlight); }
 	&:focus-visible { outline: 2px solid var(--MI_THEME-focus); }
 }
@@ -766,7 +764,7 @@ const keymap = {
 	color: var(--zalip-social-muted);
 	transition: color 0.16s ease, background 0.16s ease;
 	> i { font-size: 19px; }
-	> svg { width: 22px; height: 22px; }
+	> svg { width: 20px; height: 20px; }
 
 	&:hover {
 		background: color-mix(in srgb, var(--MI_THEME-panelHighlight) 80%, transparent);
@@ -785,7 +783,7 @@ const keymap = {
 .reactionCount:focus-visible { outline: 2px solid var(--MI_THEME-focus); border-radius: 8px; }
 .viewCount { display: inline-flex; align-items: center; gap: 4px; color: var(--zalip-social-muted); min-height: 40px; font-size: 12px; font-variant-numeric: tabular-nums; > i { font-size: 18px; } }
 .reacted { color: var(--MI_THEME-accent); }
-.footer > .bookmark { min-width: 32px; min-height: 40px; > svg { width: 22px; height: 22px; } }
+.footer > .bookmark { min-width: 32px; min-height: 40px; > svg { width: 20px; height: 20px; } }
 
 .footerButtonCount {
 	display: inline;
@@ -815,9 +813,9 @@ const keymap = {
 @container (max-width: 580px) {
 	.article { padding: 14px 12px 8px; }
 	.avatar { width: 40px; height: 40px; margin-right: 10px; }
-	.hasReplyPreview::after { left: -30px; }
+	.threadContent::after { left: -30px; }
 	.avatar.useSticky { position: relative !important; top: auto; }
-	.menuButton { width: 28px; height: 32px; flex-basis: 28px; margin-top: -5px; }
+	.menuButton { margin-top: -5px; }
 	.renote, .tip { padding: 10px 12px 0; font-size: 12px; }
 	.footer { gap: clamp(4px, 2vw, 10px); }
 	.root.showActionsOnlyHover .footer { position: relative; visibility: visible; top: auto; right: auto; background: transparent; box-shadow: none; }

@@ -18,10 +18,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<i v-if="appearNote.user.isBot" class="ti ti-robot" :title="i18n.ts._role._condition.isBot" aria-hidden="true"></i>
 					<img v-for="(role, index) in appearNote.user.badgeRoles" :key="index" :class="$style.badge" :src="role.iconUrl ?? undefined" :alt="role.name" :title="role.name" loading="lazy" decoding="async">
 					<MkA :class="$style.time" :to="notePage(appearNote)"><MkTime :time="appearNote.createdAt"/></MkA>
-					<span v-if="appearNote.visibility !== 'public'" :class="$style.visibility" :title="i18n.ts._visibility[appearNote.visibility]"><i :class="appearNote.visibility === 'home' ? 'ti ti-home' : appearNote.visibility === 'followers' ? 'ti ti-lock' : 'ti ti-mail'" aria-hidden="true"></i></span>
-					<i v-if="appearNote.localOnly" class="ti ti-rocket-off" :title="i18n.ts._visibility.disableFederation" aria-hidden="true"></i>
+					<span v-if="appearNote.visibility !== 'public'" :class="$style.visibility" role="img" :aria-label="i18n.ts._visibility[appearNote.visibility]" :title="i18n.ts._visibility[appearNote.visibility]"><i :class="appearNote.visibility === 'home' ? 'ti ti-home' : appearNote.visibility === 'followers' ? 'ti ti-lock' : 'ti ti-mail'" aria-hidden="true"></i></span>
 					<MkZalipFollowButton :user="appearNote.user" :mock="mock"/>
-					<button ref="menuButton" type="button" class="_button" :class="$style.menu" :aria-label="i18n.ts.more" @click="showMenu()"><i class="ti ti-dots" aria-hidden="true"></i></button>
+					<button ref="menuButton" type="button" class="_button" :class="$style.menu" :aria-label="i18n.ts.more" :title="i18n.ts.more" @click="showMenu()"><i class="ti ti-dots" aria-hidden="true"></i></button>
 				</header>
 				<p v-if="appearNote.cw != null" :class="$style.cw"><Mfm v-if="appearNote.cw" :text="appearNote.cw" :author="appearNote.user"/><MkCwButton v-model="showContent" :text="appearNote.text" :files="appearNote.files" :poll="appearNote.poll"/></p>
 				<div v-show="appearNote.cw == null || showContent">
@@ -36,7 +35,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<button ref="reactButton" type="button" class="_button" :class="[$style.action, { [$style.reacted]: $appearNote.myReaction != null }]" :aria-label="i18n.ts.reaction" :aria-pressed="$appearNote.myReaction != null" @click="toggleReact()"><MkReactionIcon v-if="summaryReaction" :class="$style.reaction" :reaction="summaryReaction" :emojiUrl="$appearNote.reactionEmojis[summaryReaction.substring(1, summaryReaction.length - 1)]"/><MkZalipIcon v-else :name="appearNote.reactionAcceptance === 'likeOnly' ? 'heart' : 'mood'"/><span>{{ number($appearNote.reactionCount) }}</span></button>
 					<button type="button" class="_button" :class="$style.action" :aria-label="i18n.ts.reply" @click="emit('reply', appearNote)"><MkZalipIcon name="reply"/><span>{{ number(replyCount) }}</span></button>
 					<button ref="renoteButton" type="button" class="_button" :class="$style.action" :aria-label="i18n.ts.renote" :disabled="!canRenote" @click="renote()"><MkZalipIcon name="repeat"/><span>{{ number(appearNote.renoteCount) }}</span></button>
-					<button ref="shareButton" type="button" class="_button" :class="$style.action" :aria-label="i18n.ts.share" @click="openZalipNoteShare(appearNote, shareButton)"><i class="ti ti-send" aria-hidden="true"></i></button>
 				</footer>
 				<template v-if="hasReplies && !atDepthLimit">
 					<button type="button" class="_button" :class="$style.expand" :aria-expanded="pager.state.expanded" :aria-controls="childrenId" @click="pager.toggle()"><i :class="pager.state.expanded ? 'ti ti-minus' : 'ti ti-plus'" aria-hidden="true"></i>{{ pager.state.expanded ? i18n.ts.showLess : i18n.ts.loadReplies }}</button>
@@ -77,7 +75,6 @@ import { notePage } from '@/filters/note.js';
 import { userPage } from '@/filters/user.js';
 import number from '@/filters/number.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
-import { openZalipNoteShare } from '@/utility/zalip-note-share.js';
 import { checkWordMute } from '@/utility/check-word-mute.js';
 import { commentThreadBudgetKey, createCommentReplyPager, createCommentThreadBudget, COMMENT_THREAD_MAX_DEPTH } from '@/utility/zalip-comment-thread.js';
 
@@ -87,7 +84,6 @@ const rootEl = useTemplateRef<HTMLElement>('rootEl');
 const menuButton = useTemplateRef<HTMLElement>('menuButton');
 const reactButton = useTemplateRef<HTMLElement>('reactButton');
 const renoteButton = useTemplateRef<HTMLElement>('renoteButton');
-const shareButton = useTemplateRef<HTMLElement>('shareButton');
 const childrenId = useId();
 const { appearNote, $appearNote, hideByPlugin, hardMuted, muted, isDeleted, showContent, collapsed, parsed, canRenote, renote, toggleReact, showMenu, reactViaMfmEmoji } = useNote(props, { rootEl, menuButton, reactButton, renoteButton });
 provide(DI.mfmEmojiReactCallback, reactViaMfmEmoji);
@@ -113,19 +109,19 @@ useGlobalEvent('noteDeleted', id => pager.remove(id));
 </script>
 
 <style lang="scss" module>
-.root { padding: 16px 24px; min-width: 0; font-size: max(1em, 14px); }
-.nested { padding: 12px 0 0; }
-.comment { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 10px; }
+.root { --comment-avatar: 32px; --comment-child-avatar: 28px; padding: 16px 24px; min-width: 0; font-size: max(1em, 14px); }
+.nested { --comment-avatar: 28px; padding: 12px 0 0; }
+.comment { display: grid; grid-template-columns: var(--comment-avatar) minmax(0, 1fr); gap: 10px; }
 .gutter { position: relative; }
-.avatar { display: block; width: 36px; height: 36px; border-radius: 50%; }
-.rail { position: absolute; left: 17px; top: 44px; bottom: 0; border-left: 1px solid var(--MI_THEME-divider); pointer-events: none; }
+.avatar { display: block; width: var(--comment-avatar); height: var(--comment-avatar); border-radius: 50%; }
+.rail { position: absolute; left: calc(var(--comment-avatar) / 2 - .5px); top: calc(var(--comment-avatar) + 8px); bottom: 0; border-left: 1px solid var(--MI_THEME-divider); pointer-events: none; }
 .body { min-width: 0; }
 .header { display: flex; align-items: center; gap: 7px; min-height: 28px; color: var(--MI_THEME-fgTransparentWeak); font-size: 13px; }
 .author { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--MI_THEME-fg); font-size: 14px; font-weight: 700; }
 .time { flex: 0 0 auto; color: inherit; }
 .badge { width: 16px; height: 16px; object-fit: contain; }
 .visibility { flex: 0 0 auto; }
-.menu { display: grid; place-items: center; flex: 0 0 32px; min-height: 32px; margin-left: auto; font-size: 18px; }
+.menu { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; margin: -8px 0 -8px auto; color: var(--MI_THEME-fgTransparentWeak); border-radius: 50%; > i { display: block; width: 18px; height: 18px; font-size: 18px; line-height: 18px; } &:hover { color: var(--MI_THEME-fg); } &:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: -2px; } }
 .text { line-height: 1.6; overflow-wrap: anywhere; }
 .collapsed { max-height: 9.6em; overflow: clip; }
 .textToggle { min-height: 36px; color: var(--MI_THEME-accent); font-size: 13px; }
@@ -133,16 +129,16 @@ useGlobalEvent('noteDeleted', id => pager.remove(id));
 .media { margin-top: 8px; }
 .quote { margin-top: 8px; padding: 10px; border: 1px solid var(--MI_THEME-divider); border-radius: var(--MI-radius); }
 .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; margin-top: 5px; }
-.action { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 32px; min-height: 32px; color: var(--MI_THEME-fgTransparentWeak); font-size: 13px; font-variant-numeric: tabular-nums; > svg { width: 19px; height: 19px; } > i { font-size: 19px; } }
+.action { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 32px; min-height: 32px; color: var(--MI_THEME-fgTransparentWeak); font-size: 13px; font-variant-numeric: tabular-nums; > svg { width: 20px; height: 20px; } > i { font-size: 20px; } }
 .action.reacted { color: var(--MI_THEME-accent); }
 .action:disabled { opacity: .4; cursor: default; }
 .reaction { width: 20px; height: 20px; font-size: 20px; }
 .action:hover:not(:disabled), .expand:hover, .more:hover { color: var(--MI_THEME-accent); }
 .expand, .more, .continue { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; font-size: 13px; color: var(--MI_THEME-fgTransparentWeak); }
-.branch { margin-left: 36px; }
+.branch { margin-left: var(--comment-avatar); }
 .branchItem { position: relative; }
-.branchItem::before { content: ''; position: absolute; left: -19px; top: 0; width: 18px; height: 30px; box-sizing: border-box; border-left: 1px solid var(--MI_THEME-divider); border-bottom: 1px solid var(--MI_THEME-divider); border-bottom-left-radius: 12px; pointer-events: none; }
-.branchContinues::after { content: ''; position: absolute; left: -19px; top: 0; bottom: 0; border-left: 1px solid var(--MI_THEME-divider); pointer-events: none; }
+.branchItem::before { content: ''; position: absolute; left: calc(var(--comment-avatar) / -2 - .5px); top: 0; width: calc(var(--comment-avatar) / 2 + .5px); height: calc(12px + var(--comment-child-avatar) / 2); box-sizing: border-box; border-left: 1px solid var(--MI_THEME-divider); border-bottom: 1px solid var(--MI_THEME-divider); border-bottom-left-radius: 12px; pointer-events: none; }
+.branchContinues::after { content: ''; position: absolute; left: calc(var(--comment-avatar) / -2 - .5px); top: 0; bottom: 0; border-left: 1px solid var(--MI_THEME-divider); pointer-events: none; }
 .state { margin: 0; padding: 12px 0; font-size: 13px; color: var(--MI_THEME-fgTransparentWeak); > p { margin: 0 0 6px; } }
 .muted { width: 100%; min-height: 44px; text-align: center; color: var(--MI_THEME-fgTransparentWeak); }
 @media (hover: none), (pointer: coarse) { .action, .menu { min-width: 44px; min-height: 44px; } }
