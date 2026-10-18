@@ -6,7 +6,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <div
 	ref="rootEl"
-	:class="$style.root"
+	:class="[$style.root, { [$style.noMotion]: !animationEnabled }]"
 >
 	<div
 		ref="mainEl"
@@ -23,7 +23,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		@click="onClick"
 	>
 		<div
-			:class="[$style.transformer, { [$style.transition]: enableTransition }]"
+			:class="[$style.transformer, { [$style.transition]: enableTransition && animationEnabled }]"
 			:style="{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }"
 			@transitionend.self="enableTransition = false"
 			@transitioncancel.self="enableTransition = false"
@@ -47,9 +47,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 							:width="content?.width ?? undefined"
 						/>
 						<img
-							v-else-if="content.type === 'video' && content.thumbnailUrl != null"
+							v-else-if="activated && content.type === 'video' && content.thumbnailUrl != null"
 							:src="content.thumbnailUrl"
 							:class="$style.hiddenThumbnail"
+							alt=""
+							loading="lazy"
+							decoding="async"
 						/>
 						<div v-else :class="$style.hiddenPlaceholder"></div>
 						<div :class="[$style.hiddenText, { [$style.withBlur]: content.type === 'video' && content.thumbnailUrl != null }]">
@@ -63,25 +66,36 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</div>
 				<template v-else>
 					<img
-						v-if="(!originalContentLoaded || !thumbnailContentLoaded) && (content.thumbnailUrl != null)"
+						v-if="activated && !thumbnailContentFailed && (!originalContentLoaded || !thumbnailContentLoaded) && (content.thumbnailUrl != null)"
+						ref="thumbnailEl"
 						:class="[$style.content, $style.thumbnail]"
 						:src="content.thumbnailUrl"
 						draggable="false"
-						@load="thumbnailContentLoaded = true"
+						alt=""
+						loading="lazy"
+						decoding="async"
+						@load="onThumbnailLoad"
+						@error="onThumbnailError"
 					>
 
-					<template v-if="activated">
+					<template v-if="activated && !originalContentFailed">
 						<img
 							v-if="content.type === 'image'"
+							:key="`image-${originalAttempt}`"
+							ref="originalImageEl"
+							data-lightbox-original
 							:class="$style.content"
 							:src="content.url"
-							:alt="content.file?.comment ?? undefined"
+							:alt="content.file?.comment ?? content.filename ?? ''"
 							draggable="false"
-							@load="originalContentLoaded = true"
+							decoding="async"
+							@load="onOriginalImageLoad"
+							@error="onOriginalError"
 						>
 						<video
 							v-else-if="content.type === 'video'"
 							ref="videoEl"
+							:key="`video-${originalAttempt}`"
 							data-gallery-click-action="video"
 							:class="[$style.video, { [$style.videoSized]: videoAspectRatio != null }]"
 							:src="content.url"
@@ -90,6 +104,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							:controls="prefer.s.useNativeUiForVideoAudioPlayer"
 							playsinline
 							@loadedmetadata="onVideoLoadedMetadata"
+							@error="onOriginalError"
 							@click.stop="onVideoClick"
 						></video>
 						<div v-if="content.type === 'video' && !prefer.s.useNativeUiForVideoAudioPlayer && !isVideoPlaying" :class="$style.playIconWrapper">
@@ -99,7 +114,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						</div>
 					</template>
 
-					<div v-if="activated && (!originalContentLoaded || (content.type === 'video' && isVideoPlaying && !isVideoActuallyPlaying))" :class="$style.loading">
+					<div v-if="activated && !originalContentFailed && (!originalContentLoaded || (content.type === 'video' && isVideoPlaying && !isVideoActuallyPlaying))" :class="$style.loading">
 						<MkLoading/>
 					</div>
 				</template>
@@ -107,13 +122,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</div>
 
-	<div :class="[$style.header, { [$style.infoShowing]: infoShowing && !isZooming }]">
+	<div v-if="activated && !hide && originalContentFailed" :class="$style.loadError" role="status">
+		<div :class="$style.loadErrorPanel">
+			<span>{{ i18n.ts.cannotLoad }}</span>
+			<button type="button" class="_button" :class="$style.retryButton" @click.stop="retryOriginal">{{ i18n.ts.retry }}</button>
+		</div>
+	</div>
+
+	<div :class="[$style.header, { [$style.infoShowing]: infoShowing && !isZooming }]" :inert="!infoShowing || isZooming">
 		<div :class="$style.title" class="_acrylic">
-			<button class="_button" :class="$style.titleButton" @click="openMenu"><i class="ti ti-dots"></i></button>
+			<button type="button" class="_button" :class="$style.titleButton" :aria-label="i18n.ts.more" @click="openMenu"><i class="ti ti-dots" aria-hidden="true"></i></button>
 			<div :class="$style.titleText">
 				<MkCondensedLine :minScale="0.5">{{ content.filename }}</MkCondensedLine>
 			</div>
-			<button class="_button" :class="$style.titleButton" @click="closeThis"><i class="ti ti-x"></i></button>
+			<button type="button" class="_button" :class="$style.titleButton" :aria-label="i18n.ts.close" @click="closeThis"><i class="ti ti-x" aria-hidden="true"></i></button>
 		</div>
 	</div>
 
@@ -196,8 +218,10 @@ const props = withDefaults(defineProps<{
 	content: Content;
 	activated: boolean;
 	initiallyOpened?: boolean;
+	animation?: boolean;
 }>(), {
 	initiallyOpened: false,
+	animation: true,
 });
 
 const emit = defineEmits<{
@@ -211,18 +235,56 @@ const emit = defineEmits<{
 const rootEl = useTemplateRef('rootEl');
 const mainEl = useTemplateRef('mainEl');
 const videoEl = useTemplateRef('videoEl');
+const originalImageEl = useTemplateRef('originalImageEl');
+const thumbnailEl = useTemplateRef('thumbnailEl');
 const videoControl = useTemplateRef('videoControl');
 
 provide(DI.mkLightboxItemVideoEl, videoEl);
 
 const originalContentLoaded = ref(false);
 const thumbnailContentLoaded = ref(false);
+const originalContentFailed = ref(false);
+const thumbnailContentFailed = ref(false);
+const originalAttempt = ref(0);
+const animationEnabled = computed(() => props.animation && !!prefer.s.animation);
 const enableTransition = ref(false);
 const infoShowing = ref(false);
 const hide = ref(true);
 const isVideoPlaying = computed(() => videoControl.value?.isPlaying ?? false);
 const isVideoActuallyPlaying = computed(() => videoControl.value?.isActuallyPlaying ?? false);
 let canOpenAnimation = false;
+let disposed = false;
+
+function onThumbnailLoad(event: Event) {
+	if (event.currentTarget === thumbnailEl.value && props.activated) thumbnailContentLoaded.value = true;
+}
+
+function onThumbnailError(event: Event) {
+	if (event.currentTarget === thumbnailEl.value && props.activated) thumbnailContentFailed.value = true;
+}
+
+function onOriginalImageLoad(event: Event) {
+	if (event.currentTarget === originalImageEl.value && props.activated) originalContentLoaded.value = true;
+}
+
+function onOriginalError(event: Event) {
+	if (props.activated && (event.currentTarget === originalImageEl.value || event.currentTarget === videoEl.value)) originalContentFailed.value = true;
+}
+
+function retryOriginal() {
+	originalAttempt.value++;
+	originalContentLoaded.value = false;
+	originalContentFailed.value = false;
+}
+
+watch(() => props.activated, activated => {
+	if (!activated) {
+		videoEl.value?.pause();
+		stopInertia();
+		originalContentLoaded.value = false;
+		originalContentFailed.value = false;
+	}
+});
 
 const videoAspectRatio = ref<number | null>(
 	props.content.width != null && props.content.height != null && props.content.width > 0 && props.content.height > 0
@@ -230,7 +292,8 @@ const videoAspectRatio = ref<number | null>(
 		: null
 );
 
-function onVideoLoadedMetadata() {
+function onVideoLoadedMetadata(event: Event) {
+	if (event.currentTarget !== videoEl.value || !props.activated) return;
 	originalContentLoaded.value = true;
 
 	// ドライブ上のメタデータが無い場合に限り、動画自体の初期サイズから縦横比を確定させる
@@ -407,6 +470,7 @@ function resetToNeutral() {
 }
 
 function closeThis() {
+	stopInertia();
 	emit('close');
 
 	infoShowing.value = false;
@@ -536,6 +600,7 @@ function resolveClickAction(target: EventTarget | null): 'hidden' | 'video' | nu
 
 function onPointerdown(ev: PointerEvent) {
 	if (mainEl.value == null) return;
+	stopInertia();
 	pointerEventCache.set(ev.pointerId, ev);
 	mainEl.value.setPointerCapture(ev.pointerId);
 
@@ -693,6 +758,7 @@ function onPointerup(ev: PointerEvent) {
 	isHorizontalSwiping = false;
 
 	onZoomGestureEnd();
+	startInertia();
 }
 
 const doubleTapDetector = makeDoubleTapDetector((ev) => {
@@ -750,15 +816,25 @@ let rafHandle: ReturnType<typeof window['requestAnimationFrame']> | null = null;
 let latestInertiaTimeStamp = 0;
 const inertiaFactor = 0.9;
 
-function updateInertia(timeStamp: number) {
+function stopInertia() {
+	if (rafHandle != null) window.cancelAnimationFrame(rafHandle);
+	rafHandle = null;
+}
+
+function startInertia() {
+	stopInertia();
+	if (!animationEnabled.value || !isZooming.value || isDragging || (Math.abs(pointerVec.x) < 0.01 && Math.abs(pointerVec.y) < 0.01)) return;
+	latestInertiaTimeStamp = performance.now();
 	rafHandle = window.requestAnimationFrame(updateInertia);
+}
+
+function updateInertia(timeStamp: number) {
+	rafHandle = null;
+	if (!animationEnabled.value || !isZooming.value || isDragging) return;
+	if (Math.abs(pointerVec.x) < 0.01 && Math.abs(pointerVec.y) < 0.01) return;
 	const timeDelta = timeStamp - latestInertiaTimeStamp;
 	latestInertiaTimeStamp = timeStamp;
 	if (timeDelta > 100) return;
-
-	if (isDragging) return;
-	if (!isZooming.value) return;
-	if (Math.abs(pointerVec.x) < 0.01 && Math.abs(pointerVec.y) < 0.01) return;
 	transform.value = clampZoomTransform({
 		x: transform.value.x + pointerVec.x * timeDelta,
 		y: transform.value.y + pointerVec.y * timeDelta,
@@ -766,15 +842,12 @@ function updateInertia(timeStamp: number) {
 	});
 	pointerVec.x *= inertiaFactor ** (timeDelta / 16.67);
 	pointerVec.y *= inertiaFactor ** (timeDelta / 16.67);
+	rafHandle = window.requestAnimationFrame(updateInertia);
 }
 
-watch(isZooming, () => {
+watch([isZooming, animationEnabled], () => {
 	pointerVec = { x: 0, y: 0 };
-	if (isZooming.value) {
-		rafHandle = window.requestAnimationFrame(updateInertia);
-	} else {
-		if (rafHandle != null) window.cancelAnimationFrame(rafHandle);
-	}
+	stopInertia();
 });
 //#endregion
 
@@ -791,7 +864,7 @@ function animateFromSourceToNeutral() {
 	transform.value.scale = 1;
 
 	nextTick(() => {
-		sourceElement.style.visibility = 'hidden';
+		if (!disposed && props.activated && rootEl.value?.isConnected) sourceElement.style.visibility = 'hidden';
 	});
 }
 
@@ -915,9 +988,8 @@ function onDeactive() {
 }
 
 onBeforeUnmount(() => {
-	if (rafHandle) {
-		window.cancelAnimationFrame(rafHandle);
-	}
+	disposed = true;
+	stopInertia();
 });
 
 defineExpose({
@@ -985,6 +1057,38 @@ defineExpose({
 	display: grid;
 	place-items: center;
 	pointer-events: none;
+}
+
+.loadError {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	pointer-events: none;
+}
+
+.loadErrorPanel {
+	display: grid;
+	justify-items: center;
+	gap: 12px;
+	padding: 16px;
+	border-radius: var(--MI-radius);
+	background: var(--MI_THEME-panel);
+	color: var(--MI_THEME-fg);
+}
+
+.retryButton {
+	min-width: 44px;
+	min-height: 44px;
+	padding: 8px 16px;
+	border-radius: var(--MI-radius);
+	background: var(--MI_THEME-buttonBg);
+	pointer-events: auto;
+	&:focus-visible { outline: 2px solid var(--MI_THEME-focus); }
+}
+
+.noMotion {
+	.contentWrapper, .header, .footer, .playIcon { transition: none !important; }
 }
 
 .transformer {

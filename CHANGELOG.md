@@ -70,6 +70,8 @@
 - Enhance: Match Zalip feed and thread typography, author rows, reply previews and actions to the Notr reference; defer offscreen media and URL previews, use native poster thumbnails and load only nearby home slides.
 - Enhance: Restore Zalip's shared desktop header and feed width, add swipeable post/title galleries and URL sharing, and unify post, title and episode replies into lazy, paginated Threads-style discussions.
 - Enhance: Restyle the Zalip post composer and note/settings menus, add compact native follow controls with batched relationship loading, keep active icons outlined and unify typography while respecting system-font and reduced-motion preferences.
+- Fix: Preserve author names beside compact mobile follow controls and refine composer help, focus indication and advanced settings without changing posting or subscription behavior.
+- Enhance: Show post albums with natural-proportion adjacent photos and compact title-frame previews, improve keyboard and edge navigation, and make fullscreen galleries resilient, accessible and lazy-loaded.
 
 ### Server
 - Fix: Retain existing Kinopoisk photos through one validated image-CDN redirect during original-only artwork localization without enabling redirect chains or broadening image limits.

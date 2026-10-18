@@ -6,6 +6,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/vue';
 import { defineComponent, h, nextTick } from 'vue';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type * as Misskey from 'misskey-js';
 import MkZalipFollowButton from '@/components/MkZalipFollowButton.vue';
 import { i18n } from '@/i18n.js';
@@ -52,6 +55,23 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('compact native author follow actions', () => {
+	it('retains full accessible and tooltip labels when the mobile visual label is hidden', async () => {
+		const view = render(MkZalipFollowButton, { props: { user: user() } }); await settle(); enter(); await settle();
+		const button = view.getByRole('button', { name: i18n.ts.follow, pressed: false });
+		expect(button.getAttribute('title')).toBe(i18n.ts.follow); expect(button.querySelector('span')?.textContent).toBe(i18n.ts.follow);
+		relations.set('author', row('author', { isFollowing: true })); channels[0].handlers.get('follow')!(user()); await settle();
+		expect(view.getByRole('button', { name: i18n.ts.youFollowing, pressed: true })).toBe(button); expect(button.getAttribute('title')).toBe(i18n.ts.youFollowing); expect(button.querySelector('.ti-check')).toBeTruthy();
+		relations.set('author', row('author', { hasPendingFollowRequestFromYou: true })); channels[0].handlers.get('unfollow')!(user()); await settle();
+		expect(view.getByRole('button', { name: i18n.ts.followRequestPending, pressed: true })).toBe(button); expect(button.getAttribute('title')).toBe(i18n.ts.followRequestPending); expect(button.querySelector('.ti-hourglass-empty')).toBeTruthy();
+	});
+	it('uses icon-only mobile sizing without changing the desktop text control or coarse touch target', () => {
+		const source = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../src/components/MkZalipFollowButton.vue'), 'utf8');
+		const desktop = source.slice(source.indexOf('<style'), source.indexOf('@media'));
+		expect(desktop).toContain('min-height: 26px;'); expect(desktop).toContain('padding: 0 10px;'); expect(desktop).not.toContain('display: none');
+		const mobile = source.match(/@media \(max-width: 600px\) \{([\s\S]+?)\n\}/)?.[1];
+		expect(mobile).toContain('--zalip-follow-compact-size: 36px;'); expect(mobile).toContain('flex-basis: var(--zalip-follow-compact-size);'); expect(mobile).toContain('.root > span { display: none; }');
+		expect(source).toContain('@media (max-width: 600px) and (pointer: coarse) { .root { --zalip-follow-compact-size: 44px; } }');
+	});
 	it('loads only viewport demand, batches authors and shares one main-channel subscription', async () => {
 		const Host = defineComponent({ setup: () => () => h('div', [h(MkZalipFollowButton, { user: user('a') }), h(MkZalipFollowButton, { user: user('a') }), h(MkZalipFollowButton, { user: user('b') })]) });
 		const view = render(Host); await settle(); expect(controls.api).not.toHaveBeenCalled();

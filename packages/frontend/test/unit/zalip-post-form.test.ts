@@ -8,10 +8,12 @@ import { cleanup, fireEvent, render } from '@testing-library/vue';
 import { defineComponent, h, nextTick } from 'vue';
 import type * as Misskey from 'misskey-js';
 import MkPostForm from '@/components/MkPostForm.vue';
+import postFormSource from '@/components/MkPostForm.vue?raw';
 import { i18n } from '@/i18n.js';
 
 const controls = vi.hoisted(() => ({
 	api: vi.fn(), apiWithDialog: vi.fn(), popup: vi.fn(), menu: vi.fn(), confirm: vi.fn(), upload: vi.fn(), addFiles: vi.fn(), abort: vi.fn(), dispose: vi.fn(), choosePc: vi.fn(), chooseDrive: vi.fn(), inputDatetime: vi.fn(), drafts: new Map<string, string>(),
+	tour: vi.fn(), storeSet: vi.fn(), setTip: (_shown: boolean) => {},
 	account: { id: 'viewer', username: 'viewer', name: 'Viewer name', host: null, avatarUrl: '/avatar.png', isSilenced: false, policies: { scheduledNoteLimit: 10 } },
 }));
 vi.mock('@/i.js', () => ({ ensureSignin: () => controls.account, notesCount: 10, incNotesCount: vi.fn() }));
@@ -24,13 +26,15 @@ vi.mock('@/utility/achievements.js', () => ({ claimAchievement: vi.fn() }));
 vi.mock('@/plugin.js', () => ({ getPluginHandlers: () => [] }));
 vi.mock('@/utility/emoji-picker.js', () => ({ emojiPicker: { show: vi.fn() } }));
 vi.mock('@/utility/mfm-function-picker.js', () => ({ mfmFunctionPicker: vi.fn() }));
-vi.mock('@/utility/tour.js', () => ({ startTour: vi.fn() }));
+vi.mock('@/utility/tour.js', () => ({ startTour: controls.tour }));
 vi.mock('@/os.js', () => ({ popup: controls.popup, popupMenu: controls.menu, apiWithDialog: controls.apiWithDialog, confirm: controls.confirm, chooseFileFromPc: controls.choosePc, inputDatetime: controls.inputDatetime, alert: vi.fn(), selectUser: vi.fn(), actions: vi.fn() }));
 vi.mock('@/local-storage.js', () => ({ miLocalStorage: { getItem: (key: string) => controls.drafts.get(key) ?? null, setItem: (key: string, value: string) => controls.drafts.set(key, value) } }));
 vi.mock('@/preferences.js', () => ({ prefer: { s: { rememberNoteVisibility: false, defaultNoteVisibility: 'public', defaultNoteLocalOnly: false, keepCw: false, animation: false, enableQuickAddMfmFunction: false }, commit: vi.fn() } }));
 vi.mock('@/store.js', async () => {
 	const { ref } = await import('vue');
-	return { store: { s: { showPreview: false, reactionAcceptance: null, visibility: 'public', localOnly: false }, r: { tips: ref({ postForm: true }) }, set: vi.fn(), model: (key: string) => ref(key === 'postFormWithHashtags' ? false : '') } };
+	const tips = ref({ postForm: true });
+	controls.setTip = shown => { tips.value = { postForm: shown }; };
+	return { store: { s: { showPreview: false, reactionAcceptance: null, visibility: 'public', localOnly: false }, r: { tips }, set: controls.storeSet, model: (key: string) => ref(key === 'postFormWithHashtags' ? false : '') } };
 });
 vi.mock('@/composables/use-uploader.js', async () => {
 	const { ref } = await import('vue');
@@ -47,7 +51,7 @@ vi.mock('@/components/MkPostForm.TextCounter.vue', () => ({ default: { template:
 const stubs = {
 	MkUserName: defineComponent({ props: ['user'], setup: props => () => h('span', props.user.name) }),
 	MkAcct: defineComponent({ props: ['user'], setup: props => () => h('span', `@${props.user.username}`) }),
-	MkInfo: defineComponent({ setup: (_, { slots }) => () => h('aside', slots.default?.()) }),
+	MkInfo: defineComponent({ props: { closable: Boolean }, emits: ['close'], setup: (props, { slots, emit }) => () => h('aside', [slots.default?.(), props.closable ? h('button', { type: 'button', 'aria-label': i18n.ts.close, onClick: () => emit('close') }) : null]) }),
 	MkTime: defineComponent({ setup: () => () => h('time', 'Scheduled time') }),
 	I18n: defineComponent({ setup: (_, { slots }) => () => h('span', slots.x?.()) }),
 	MkEllipsis: true,
@@ -66,6 +70,7 @@ function note(patch: Partial<Misskey.entities.Note> = {}): Misskey.entities.Note
 
 beforeEach(() => {
 	vi.clearAllMocks(); controls.drafts.clear();
+	controls.setTip(true); controls.tour.mockResolvedValue(undefined);
 	controls.api.mockResolvedValue({ createdNote: note({ id: 'created', text: 'Created' }) });
 	controls.apiWithDialog.mockResolvedValue({ id: 'draft' });
 	controls.confirm.mockResolvedValue({ canceled: false });
@@ -110,6 +115,8 @@ describe('Notr-style native post composer', () => {
 		const view = setup({ initialText: 'Scheduled content' });
 		await fireEvent.click(view.getByRole('button', { name: i18n.ts.other }));
 		const items = controls.menu.mock.calls[0][0] as Array<{ text?: string; action?: () => Promise<void> }>;
+		expect(controls.menu).toHaveBeenCalledExactlyOnceWith(items, view.getByRole('button', { name: i18n.ts.other }), { appearance: 'zalip-note', width: 300 });
+		expect(items.flatMap(item => item.text == null ? [] : [item.text])).toEqual([i18n.ts.reactionAcceptance, i18n.ts._drafts.saveToDraft, `${i18n.ts.schedulePost}...`, i18n.ts.preview, i18n.ts.reset]);
 		await items.find(item => item.text === i18n.ts._drafts.saveToDraft)?.action?.();
 		expect(controls.apiWithDialog).toHaveBeenCalledWith('notes/drafts/create', expect.objectContaining({ text: 'Scheduled content', isActuallyScheduled: false }));
 		await items.find(item => item.text === `${i18n.ts.schedulePost}...`)?.action?.(); await settle();
@@ -118,6 +125,26 @@ describe('Notr-style native post composer', () => {
 		await fireEvent.click(view.getByTestId('post-form-submit')); await settle();
 		expect(controls.apiWithDialog).toHaveBeenCalledExactlyOnceWith('notes/drafts/create', expect.objectContaining({ text: 'Scheduled content', isActuallyScheduled: true, scheduledAt: expect.any(Number) }));
 		expect(controls.api).not.toHaveBeenCalled();
+	});
+	it('uses the localized Help label while preserving the native tour and stored tip dismissal', async () => {
+		controls.setTip(false);
+		const view = setup();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.help })); await settle();
+		expect(controls.tour).toHaveBeenCalledTimes(1);
+		expect(controls.tour.mock.calls[0][0]).toHaveLength(6);
+		expect(controls.storeSet).toHaveBeenCalledWith('tips', { postForm: true });
+		controls.storeSet.mockClear();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.close }));
+		expect(controls.storeSet).toHaveBeenCalledExactlyOnceWith('tips', { postForm: true });
+		expect(controls.api).not.toHaveBeenCalled(); expect(controls.apiWithDialog).not.toHaveBeenCalled();
+	});
+	it('keeps a visible focus underline and automatic sizing, hiding only the mobile resize grip', () => {
+		const focus = postFormSource.match(/\.cw,\s*\.hashtags,\s*\.text\s*\{[\s\S]*?&:focus-visible\s*\{([^}]*)\}/)?.[1];
+		expect(focus).toContain('outline: none;');
+		expect(focus).toContain('box-shadow: inset 0 -2px 0 var(--MI_THEME-focus);');
+		expect(postFormSource).toMatch(/@media\s*\(max-width:\s*600px\)\s*\{\s*\.text\s*\{\s*resize:\s*none;/);
+		expect(postFormSource.match(/resize:\s*none;/g)).toHaveLength(1);
+		expect(postFormSource).toContain('field-sizing: content;');
 	});
 	it('restores and updates a local draft without discarding native CW, files, visibility or poll state', async () => {
 		controls.drafts.set('drafts', JSON.stringify({ 'note:viewer': { updatedAt: new Date().toISOString(), data: { text: 'Saved text', useCw: true, cw: 'Saved warning', visibility: 'followers', localOnly: true, files: [{ id: 'file', name: 'Saved photo' }], poll: { choices: ['Yes', 'No'], multiple: false, expiresAt: null, expiredAfter: null }, quoteId: null, reactionAcceptance: 'likeOnly', scheduledAt: null } } }));

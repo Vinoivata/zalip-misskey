@@ -60,7 +60,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</div>
 	<MkInfo v-if="!store.r.tips.value.postForm" :class="$style.showHowToUse" closable @close="closeTip('postForm')">
-		<button class="_textButton" @click="showTour">{{ i18n.ts._postForm.showHowToUse }}</button>
+		<button type="button" class="_textButton" @click="showTour">{{ i18n.ts.help }}</button>
 	</MkInfo>
 	<MkInfo v-if="scheduledAt != null" :class="$style.scheduledAt">
 		<I18n :src="i18n.ts.scheduleToPostOnX" tag="span">
@@ -736,7 +736,7 @@ function showOtherSettings() {
 		},
 	}] satisfies MenuItem[];
 
-	os.popupMenu(menuItems, otherSettingsButton.value);
+	os.popupMenu(menuItems, otherSettingsButton.value, { appearance: 'zalip-note', width: 300 });
 }
 //#endregion
 
@@ -1820,7 +1820,7 @@ defineExpose({
 	color: var(--MI_THEME-fg);
 	font-family: inherit;
 
-	&:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: -2px; border-radius: 4px; }
+	&:focus-visible { outline: none; box-shadow: inset 0 -2px 0 var(--MI_THEME-focus); }
 
 	&:disabled {
 		opacity: 0.5;
@@ -1950,6 +1950,7 @@ defineExpose({
 .cancel:focus-visible, .account:focus-visible, .headerRightItem:focus-visible, .footerButton:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 1px; }
 @media (hover: none), (pointer: coarse) { .footerButton, .headerRightItem, .cancel { min-width: 44px; min-height: 44px; } .submitInner { min-height: 44px; } }
 @media (prefers-reduced-motion: reduce) { .root *, .submitInner { transition: none !important; animation: none !important; } }
+@media (max-width: 600px) { .text { resize: none; } }
 
 @container (max-width: 500px) {
 	.header { min-height: 52px; }

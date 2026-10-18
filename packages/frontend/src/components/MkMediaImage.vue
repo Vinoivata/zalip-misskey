@@ -18,7 +18,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		}"
 	>
 		<MkImgWithBlurhash
-			v-if="prefer.s.enableHighQualityImagePlaceholders"
+			v-if="prefer.s.enableHighQualityImagePlaceholders && url"
 			:hash="image.blurhash"
 			:src="(prefer.s.dataSaver.media && hide) ? null : url"
 			:forceBlurhash="hide"
@@ -31,13 +31,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 			:class="$style.image"
 			:marker="marker"
 			defer
+			@error.capture="onImageError"
 		/>
 		<div
-			v-else-if="prefer.s.dataSaver.media || hide"
+			v-else-if="hide || !url"
 			:title="image.comment || image.name"
 			:style="hide ? 'background: #888;' : null"
-			:class="$style.image"
-		></div>
+			:class="[$style.image, $style.placeholder]"
+			:role="!hide && !url ? 'img' : undefined"
+			:aria-label="!hide && !url ? image.comment || image.name : undefined"
+		><i v-if="!hide && !url" class="ti ti-photo" aria-hidden="true"></i></div>
 		<img
 			v-else
 			:src="url"
@@ -47,6 +50,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			:data-marker="marker"
 			loading="lazy"
 			decoding="async"
+			@error="onImageError"
 		/>
 	</component>
 	<template v-if="hide">
@@ -100,13 +104,26 @@ const emit = defineEmits<{
 }>();
 
 const hide = ref(true);
+const failedUrls = ref<ReadonlySet<string>>(new Set());
 
-const url = computed(() => (props.raw || prefer.s.loadRawImages)
-	? props.image.url
-	: prefer.s.disableShowingAnimatedImages
-		? getStaticImageUrl(props.image.url)
-		: props.image.thumbnailUrl!,
-);
+const url = computed(() => {
+	const candidates = props.raw || prefer.s.loadRawImages ? [props.image.url]
+		: prefer.s.disableShowingAnimatedImages ? [getStaticImageUrl(props.image.url)]
+			: [props.image.thumbnailUrl, props.image.url];
+	return candidates.find((candidate): candidate is string => typeof candidate === 'string' && candidate.length > 0 && !failedUrls.value.has(candidate)) ?? null;
+});
+
+function onImageError(event: Event): void {
+	const image = event.target;
+	if (!(image instanceof HTMLImageElement)) return;
+	const failed = image.getAttribute('src');
+	// Ignore late errors from a replaced source instead of poisoning the new image.
+	if (failed && failed === url.value) failedUrls.value = new Set([...failedUrls.value, failed]);
+}
+
+watch(() => [props.image.id, props.image.url, props.image.thumbnailUrl], () => {
+	failedUrls.value = new Set();
+}, { flush: 'sync' });
 
 async function onClick(ev: PointerEvent) {
 	if (!props.controls) {
@@ -116,7 +133,8 @@ async function onClick(ev: PointerEvent) {
 
 	if (hide.value) {
 		ev.stopPropagation();
-		if (!(await canRevealFile(props.image))) {
+		const image = props.image;
+		if (!(await canRevealFile(image)) || image !== props.image) {
 			return;
 		}
 
@@ -263,5 +281,12 @@ html[data-color-scheme=light] .visible {
 	height: 100%;
 	object-fit: contain;
 	object-position: center;
+}
+
+.placeholder {
+	display: grid;
+	place-items: center;
+	color: var(--MI_THEME-fg);
+	font-size: 24px;
 }
 </style>

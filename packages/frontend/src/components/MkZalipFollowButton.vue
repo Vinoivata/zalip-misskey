@@ -12,6 +12,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 	:class="[$style.root, { [$style.selected]: relation?.isFollowing || relation?.hasPendingFollowRequestFromYou }]"
 	:disabled="disabled"
 	:aria-label="label"
+	:title="label"
+	:aria-pressed="!!(relation?.isFollowing || relation?.hasPendingFollowRequestFromYou)"
 	:aria-busy="busy"
 	:data-zalip-follow="user.id"
 	data-zalip-post-interactive
@@ -115,4 +117,9 @@ async function onClick(): Promise<void> {
 @keyframes followSpin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .root { transition: none; } .spinner { animation: none; } }
 @media (pointer: coarse) { .root { min-height: 44px; } }
+@media (max-width: 600px) {
+	.root { --zalip-follow-compact-size: 36px; width: var(--zalip-follow-compact-size); min-width: var(--zalip-follow-compact-size); max-width: var(--zalip-follow-compact-size); min-height: var(--zalip-follow-compact-size); flex-basis: var(--zalip-follow-compact-size); box-sizing: border-box; padding: 0; gap: 0; }
+	.root > span { display: none; }
+}
+@media (max-width: 600px) and (pointer: coarse) { .root { --zalip-follow-compact-size: 44px; } }
 </style>
