@@ -462,6 +462,11 @@ function toStories(component: string): Promise<string> {
 		globSync('src/components/MkInviteCode.vue'),
 		globSync('src/components/MkTagItem.vue'),
 		globSync('src/components/MkZalipFeed.vue'),
+		globSync('src/components/MkNote.vue'),
+		globSync('src/components/MkNoteHeader.vue'),
+		globSync('src/components/MkNoteDetailed.vue'),
+		globSync('src/components/MkNoteSub.vue'),
+		globSync('src/components/MkZalipReplyPreview.vue'),
 		globSync('src/components/MkZalipAccentPicker.vue'),
 		globSync('src/components/MkZalipSectionHeader.vue'),
 		globSync('src/components/MkZalipBookmarkTabs.vue'),
@@ -472,7 +477,7 @@ function toStories(component: string): Promise<string> {
 		globSync('src/pages/admin/overview.ap-requests.vue'),
 		globSync('src/pages/user/home.vue'),
 		globSync('src/pages/search.vue'),
-	].flat();
+	].flat().map(component => component.replaceAll('\\', '/'));
 	await Promise.all(components.map(async (component) => {
 		const stories = component.replace(/\.vue$/, '.stories.ts');
 		await writeFile(stories, await toStories(component));

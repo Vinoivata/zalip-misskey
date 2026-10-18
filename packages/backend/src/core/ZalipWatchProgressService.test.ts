@@ -66,7 +66,7 @@ function fixture() {
 	const db = { manager, getRepository, transaction: vi.fn(async <T>(action: (value: typeof manager) => Promise<T>) => { const pending = turn.then(() => action(manager)); turn = pending.then(() => undefined, () => undefined); return pending; }) };
 	const playbackSettings = { show: vi.fn(async () => ({ providers: defaultPlaybackSettings() })) };
 	const settings = { getRuntime: vi.fn(async () => ({})) };
-	const catalogue = { packWork: vi.fn((value: MiZalipWork) => ({ id: value.id, title: value.title })) };
+	const catalogue = { packWork: vi.fn((value: MiZalipWork) => ({ id: value.id, title: value.title })), nativePosterThumbnails: vi.fn(async () => new Map<string, string>()) };
 	const service = new ZalipWatchProgressService(db as never, playbackSettings as never, settings as never, catalogue as never);
 	return { service, work, season, episodes, rows, progress, works, seasons, identities, legacy, manager, playbackSettings, settings, catalogue };
 }
@@ -419,11 +419,14 @@ describe('ZalipWatchProgressService private playback state', () => {
 
 	it('continue enforces owner/publication/visibility/completion in SQL and uses bounded stable keysets', async () => {
 		const f = fixture(); await f.service.start(owner, target);
+		f.catalogue.nativePosterThumbnails.mockResolvedValue(new Map([['work', 'https://local.example/files/thumbnail-key']]));
 		const row = { ...f.rows.get('owner:work')!, work: f.work, episode: f.episodes.get('episode1')! };
 		const query = { innerJoinAndSelect: vi.fn(), leftJoinAndSelect: vi.fn(), where: vi.fn(), andWhere: vi.fn(), orderBy: vi.fn(), addOrderBy: vi.fn(), take: vi.fn(), getMany: vi.fn(async () => [row, { ...row, workId: 'work0' }]) };
 		for (const method of ['innerJoinAndSelect', 'leftJoinAndSelect', 'where', 'andWhere', 'orderBy', 'addOrderBy', 'take'] as const) query[method].mockReturnValue(query);
 		f.progress.createQueryBuilder.mockReturnValue(query);
 		const first = await f.service.continue(owner, 1);
+		expect(f.catalogue.nativePosterThumbnails).toHaveBeenCalledExactlyOnceWith([f.work]);
+		expect(f.catalogue.packWork).toHaveBeenCalledWith(f.work, undefined, 'https://local.example/files/thumbnail-key');
 		expect(first.items).toHaveLength(1); expect(first.nextCursor).not.toBeNull();
 		expect(query.where).toHaveBeenCalledWith('progress.userId = :userId', { userId: 'owner' });
 		expect(query.andWhere).toHaveBeenCalledWith('work.publicationState = :publicationState', { publicationState: 'published' });

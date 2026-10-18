@@ -30,7 +30,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			:height="imgHeight ?? undefined"
 			:width="imgWidth ?? undefined"
 			:class="$style.img"
-			:src="src ?? undefined"
+			:src="renderedSrc ?? undefined"
 			:title="title ?? undefined"
 			:alt="alt ?? undefined"
 			:data-marker="marker ?? undefined"
@@ -48,6 +48,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed, nextTick, useTemplateRef, watch, ref } from 'vue';
 import { prefer } from '@/preferences.js';
 import MkBlurhash from '@/components/MkBlurhash.vue';
+import { useMediaActivation } from '@/composables/use-media-activation.js';
 
 const props = withDefaults(defineProps<{
 	transition?: {
@@ -69,6 +70,7 @@ const props = withDefaults(defineProps<{
 	forceBlurhash?: boolean;
 	onlyAvgColor?: boolean; // 軽量化のためにBlurhashを使わずに平均色だけを描画
 	marker?: string;
+	defer?: boolean;
 }>(), {
 	transition: null,
 	src: null,
@@ -79,23 +81,28 @@ const props = withDefaults(defineProps<{
 	cover: true,
 	forceBlurhash: false,
 	onlyAvgColor: false,
+	defer: false,
 });
 
 const root = useTemplateRef('root');
 const img = useTemplateRef('img');
+const active = useMediaActivation(root, () => props.defer);
+const renderedSrc = computed(() => active.value ? props.src : null);
 const loaded = ref(false);
 const imgWidth = ref(props.width);
 const imgHeight = ref(props.height);
 const hide = computed(() => !loaded.value || props.forceBlurhash);
 
 function waitForDecode() {
-	if (props.src != null && props.src !== '') {
+	const source = renderedSrc.value;
+	loaded.value = false;
+	if (source != null && source !== '') {
 		nextTick()
 			.then(() => img.value?.decode())
 			.then(() => {
-				loaded.value = true;
+				if (renderedSrc.value === source && img.value) loaded.value = true;
 			}, error => {
-				console.log('Error occurred during decoding image', img.value, error);
+				if (_DEV_) console.debug('Image decode failed', error);
 			});
 	} else {
 		loaded.value = false;
@@ -111,7 +118,7 @@ watch([() => props.width, () => props.height, root], () => {
 	immediate: true,
 });
 
-watch(() => props.src, () => {
+watch(renderedSrc, () => {
 	waitForDecode();
 }, {
 	immediate: true,

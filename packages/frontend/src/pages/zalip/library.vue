@@ -38,7 +38,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<div v-else :class="[$style.grid, { [$style.listView]: viewMode === 'cards' }]">
 						<MkA v-for="entry in filteredEntries" :key="entry.work.id" :to="`/zalip/${entry.work.slug}`" :class="$style.card">
 							<div :class="$style.poster">
-								<img v-if="entry.work.posterPath" :src="tmdbImage(entry.work.posterPath)" :alt="entry.work.title" loading="lazy">
+								<img v-if="images.poster(entry.work)" :src="images.poster(entry.work)!" :alt="entry.work.title" width="300" height="450" loading="lazy" decoding="async" @error="images.failed">
 								<i v-else class="ti ti-movie"></i>
 								<span v-if="entry.status" :class="$style.statusBadge"><i :class="statusIcon(entry.status)" aria-hidden="true"></i>{{ statusLabel(entry.status) }}</span>
 							</div>
@@ -67,7 +67,7 @@ import { prefer } from '@/preferences.js';
 import { miLocalStorage } from '@/local-storage.js';
 import { definePage } from '@/page.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
-import { importerImageUrl } from '@/utility/zalip-importer.js';
+import { useZalipImages } from '@/utility/zalip-image.js';
 import { i18n } from '@/i18n.js';
 import ZalipContinueRail from '@/pages/zalip/continue-rail.vue';
 
@@ -90,12 +90,14 @@ type LibraryEntry = {
 		description?: string | null;
 		releaseYear: number | null;
 		posterPath: string | null;
+		posterThumbnailUrl?: string | null;
 	};
 };
 
 const props = defineProps<{ filter?: string }>();
 const continueRail = useTemplateRef('continueRail');
 const entries = ref<LibraryEntry[]>([]);
+const images = useZalipImages();
 const pending = ref(true);
 const loadError = ref(false);
 let latestRequest = 0;
@@ -145,10 +147,6 @@ const statusCounts = computed(() => ({
 	on_hold: entries.value.filter(entry => entry.status === 'on_hold').length,
 	dropped: entries.value.filter(entry => entry.status === 'dropped').length,
 }));
-
-function tmdbImage(path: string): string | undefined {
-	return importerImageUrl(path) ?? undefined;
-}
 
 function kindLabel(kind: WorkKind): string {
 	return ({ movie: i18n.ts.zalip.catalogueKindMovie, series: i18n.ts.zalip.catalogueKindSeries, anime: i18n.ts.zalip.catalogueKindAnime, animation: i18n.ts.zalip.catalogueKindAnimation })[kind];

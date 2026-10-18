@@ -40,7 +40,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div v-else-if="isCatalogueTab" :class="$style.results" role="list">
 				<MkA v-for="work in visibleWorks" :key="work.id" :to="`/zalip/${work.slug}`" :class="$style.workResult" role="listitem" @click="dismissDialog">
 					<div :class="$style.poster">
-						<img v-if="work.posterPath" :src="posterUrl(work.posterPath)" alt="" loading="lazy">
+						<img v-if="images.poster(work, 'w185')" :src="images.poster(work, 'w185')!" alt="" width="185" height="278" loading="lazy" decoding="async" @error="images.failed">
 						<i v-else class="ti ti-movie"></i>
 					</div>
 					<div :class="$style.resultBody">
@@ -88,7 +88,7 @@ import type { ZalipSearchTab } from '@/utility/zalip-search.js';
 import MkModalWindow from '@/components/MkModalWindow.vue';
 import { i18n } from '@/i18n.js';
 import { misskeyApi, misskeyApiZalip } from '@/utility/misskey-api.js';
-import { importerImageUrl } from '@/utility/zalip-importer.js';
+import { useZalipImages } from '@/utility/zalip-image.js';
 
 type WorkKind = 'movie' | 'series' | 'anime' | 'animation';
 
@@ -101,6 +101,7 @@ type ZalipWork = {
 	releaseYear: number | null;
 	genres: string[];
 	posterPath: string | null;
+	posterThumbnailUrl?: string | null;
 };
 
 type SearchTab = {
@@ -126,6 +127,7 @@ const searchInput = useTemplateRef('searchInput');
 const query = ref('');
 const activeTab = ref<ZalipSearchTab>('catalogue');
 const works = ref<ZalipWork[]>([]);
+const images = useZalipImages();
 const notes = ref<Misskey.entities.Note[]>([]);
 const users = ref<Misskey.entities.User[]>([]);
 const pending = ref(false);
@@ -156,10 +158,6 @@ const visibleResults = computed(() => {
 
 function dismissDialog(): void {
 	dialog.value?.close();
-}
-
-function posterUrl(path: string): string | undefined {
-	return importerImageUrl(path, 'w185') ?? undefined;
 }
 
 function kindLabel(kind: WorkKind): string {

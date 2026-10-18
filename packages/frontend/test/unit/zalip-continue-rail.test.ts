@@ -71,6 +71,14 @@ describe('continue watching rail', () => {
 		await fireEvent.error(image);
 		expect(view.queryByRole('img', { hidden: true })).toBeNull();
 	});
+	it('uses the existing small poster rendition only when no episode still or backdrop is available', async () => {
+		vi.mocked(misskeyApiZalip).mockResolvedValue({ items: [{ ...item, episode: null, work: { ...item.work, backdropPath: null, posterThumbnailUrl: 'https://social.example/files/thumbnail-poster' } }], nextCursor: null });
+		const view = setup();
+		const image = await view.findByRole('img', { hidden: true });
+		expect(image.getAttribute('src')).toBe('https://social.example/files/thumbnail-poster');
+		await fireEvent.error(image);
+		expect(image.getAttribute('src')).toContain('/poster.jpg');
+	});
 	it('does not let a concurrent refresh resurrect a successfully reset history card', async () => {
 		let finishReset!: (result: unknown) => void;
 		const previous = vi.mocked(misskeyApiZalip).getMockImplementation()!;

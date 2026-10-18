@@ -33,6 +33,7 @@ export const meta = {
 			externalRatings: { type: 'array', optional: true, nullable: false, items: { type: 'object', optional: false, nullable: false, properties: { source: { type: 'string', optional: false, nullable: false }, value: { type: 'number', optional: false, nullable: false }, votes: { type: 'integer', optional: false, nullable: true } }, required: ['source', 'value', 'votes'] } },
 			runtimeMinutes: { type: 'integer', nullable: true },
 			posterPath: { type: 'string', nullable: true },
+			posterThumbnailUrl: { type: 'string', optional: true, nullable: true },
 			backdropPath: { type: 'string', nullable: true },
 			logoPath: { type: 'string', nullable: true },
 			galleryPaths: { type: 'array', items: { type: 'string' } },

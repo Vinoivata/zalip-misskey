@@ -16,32 +16,35 @@ SPDX-License-Identifier: AGPL-3.0-only
 				@focusin="pauseOnboardingForFocus"
 				@focusout="resumeOnboardingAfterFocus"
 			>
-				<div ref="heroRail" :class="$style.heroRail" @scroll.passive="updateOnboardingPosition" @pointerdown="beginOnboardingSwipe" @pointermove="heroDrag.onPointerMove" @pointerup="heroDrag.onPointerUp" @pointercancel="heroDrag.onPointerCancel" @click.capture="heroDrag.onClickCapture">
-					<article v-for="(slide, index) in onboardingSlides" :key="`${slide.to}-${index}`" :class="[$style.onboardingCard, { [$style.onboardingCardActive]: index === activeOnboardingIndex }]" role="group" aria-roledescription="slide" :aria-label="i18n.tsx.zalip.onboardingSlideCounter({ current: (index + 1).toString(), total: onboardingSlides.length.toString() })">
-						<picture :class="$style.onboardingBackdrop">
-							<source v-if="slide.posterPath" media="(max-width: 767px)" :srcset="tmdbImage(slide.posterPath)">
-							<img :src="slide.backdropPath ? tmdbBackdrop(slide.backdropPath) : slide.posterPath ? tmdbImage(slide.posterPath) : slide.image" alt="" draggable="false" :loading="index <= 1 ? 'eager' : 'lazy'">
-						</picture>
-						<div :class="$style.onboardingShade"></div>
-						<p :class="$style.onboardingEyebrow">{{ slide.eyebrow }}</p>
-						<div :class="$style.onboardingCopy">
-							<img v-if="slide.logoPath" :class="$style.onboardingLogo" :src="tmdbLogo(slide.logoPath)" :alt="slide.title" draggable="false">
-							<h2 v-else>{{ slide.title }}</h2>
-							<div v-if="slide.kind" :class="$style.onboardingMeta">
-								<span>{{ kindLabel(slide.kind) }}</span><span v-if="slide.releaseYear">{{ slide.releaseYear }}</span>
-								<span v-if="slide.communityRating != null" :class="$style.onboardingRating" :aria-label="i18n.tsx.zalip.communityRating({ rating: formatCommunityRating(slide.communityRating) })">★ {{ formatCommunityRating(slide.communityRating) }}</span>
+				<div v-if="!homeLoaded" :class="$style.heroPlaceholder" role="status" aria-busy="true"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i><span>{{ i18n.ts.loading }}</span></div>
+				<template v-else>
+					<div ref="heroRail" :class="$style.heroRail" @scroll.passive="updateOnboardingPosition" @pointerdown="beginOnboardingSwipe" @pointermove="heroDrag.onPointerMove" @pointerup="heroDrag.onPointerUp" @pointercancel="heroDrag.onPointerCancel" @click.capture="heroDrag.onClickCapture">
+						<article v-for="(slide, index) in onboardingSlides" :key="`${slide.to}-${index}`" :class="[$style.onboardingCard, { [$style.onboardingCardActive]: index === activeOnboardingIndex }]" role="group" aria-roledescription="slide" :aria-label="i18n.tsx.zalip.onboardingSlideCounter({ current: (index + 1).toString(), total: onboardingSlides.length.toString() })">
+							<picture :class="$style.onboardingBackdrop">
+								<source v-if="slide.posterPath && zalipHeroImageNearby(index, activeOnboardingIndex)" media="(max-width: 767px)" :srcset="tmdbImage(slide.posterPath)">
+								<img :src="zalipHeroImageNearby(index, activeOnboardingIndex) ? slide.backdropPath ? tmdbBackdrop(slide.backdropPath) : slide.posterPath ? tmdbImage(slide.posterPath) : slide.image : undefined" alt="" draggable="false" :loading="index === activeOnboardingIndex ? 'eager' : 'lazy'" :fetchpriority="index === activeOnboardingIndex ? 'high' : 'auto'" decoding="async" width="1280" height="720">
+							</picture>
+							<div :class="$style.onboardingShade"></div>
+							<p :class="$style.onboardingEyebrow">{{ slide.eyebrow }}</p>
+							<div :class="$style.onboardingCopy">
+								<img v-if="slide.logoPath" :class="$style.onboardingLogo" :src="zalipHeroImageNearby(index, activeOnboardingIndex) ? tmdbLogo(slide.logoPath) : undefined" :alt="slide.title" draggable="false" :loading="index === activeOnboardingIndex ? 'eager' : 'lazy'" decoding="async">
+								<h2 v-else>{{ slide.title }}</h2>
+								<div v-if="slide.kind" :class="$style.onboardingMeta">
+									<span>{{ kindLabel(slide.kind) }}</span><span v-if="slide.releaseYear">{{ slide.releaseYear }}</span>
+									<span v-if="slide.communityRating != null" :class="$style.onboardingRating" :aria-label="i18n.tsx.zalip.communityRating({ rating: formatCommunityRating(slide.communityRating) })">★ {{ formatCommunityRating(slide.communityRating) }}</span>
+								</div>
+								<p v-if="slide.description" :class="$style.onboardingDescription">{{ slide.description }}</p>
+								<MkA :to="slide.to" :class="$style.onboardingAction">{{ slide.action }}</MkA>
 							</div>
-							<p v-if="slide.description" :class="$style.onboardingDescription">{{ slide.description }}</p>
-							<MkA :to="slide.to" :class="$style.onboardingAction">{{ slide.action }}</MkA>
-						</div>
-					</article>
-				</div>
-				<div :class="$style.onboardingControls">
-					<div :class="$style.onboardingDots" role="group" :aria-label="i18n.ts.zalip.onboardingDots">
-						<button v-for="(_slide, index) in onboardingSlides" :key="index" type="button" class="_button" :class="{ [$style.onboardingDotActive]: index === activeOnboardingIndex }" :aria-label="i18n.tsx.zalip.onboardingDot({ number: (index + 1).toString() })" :aria-current="index === activeOnboardingIndex ? 'true' : undefined" @click="selectOnboarding(index)"></button>
+						</article>
 					</div>
-					<button type="button" class="_button" :class="$style.onboardingPlayback" :aria-label="onboardingPaused ? i18n.ts.zalip.onboardingResume : i18n.ts.zalip.onboardingPause" :aria-pressed="onboardingPaused" @click="toggleOnboardingAutoplay"><MkZalipIcon :name="onboardingPaused ? 'play' : 'pause'"/></button>
-				</div>
+					<div :class="$style.onboardingControls">
+						<div :class="$style.onboardingDots" role="group" :aria-label="i18n.ts.zalip.onboardingDots">
+							<button v-for="(_slide, index) in onboardingSlides" :key="index" type="button" class="_button" :class="{ [$style.onboardingDotActive]: index === activeOnboardingIndex }" :aria-label="i18n.tsx.zalip.onboardingDot({ number: (index + 1).toString() })" :aria-current="index === activeOnboardingIndex ? 'true' : undefined" @click="selectOnboarding(index)"></button>
+						</div>
+						<button type="button" class="_button" :class="$style.onboardingPlayback" :aria-label="onboardingPaused ? i18n.ts.zalip.onboardingResume : i18n.ts.zalip.onboardingPause" :aria-pressed="onboardingPaused" @click="toggleOnboardingAutoplay"><MkZalipIcon :name="onboardingPaused ? 'play' : 'pause'"/></button>
+					</div>
+				</template>
 			</section>
 
 			<ZalipContinueRail ref="continueRail"/>
@@ -56,7 +59,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<div v-for="item in showcaseItems" :key="item.id" :class="$style.releaseListItem" role="listitem">
 						<MkA :to="item.to" :class="$style.releaseCard">
 							<div :class="$style.releasePoster">
-								<img v-if="item.work.posterPath" :src="tmdbImage(item.work.posterPath)" :alt="item.work.title" loading="lazy">
+								<img v-if="images.poster(item.work)" :src="images.poster(item.work)!" :alt="item.work.title" width="300" height="450" loading="lazy" decoding="async" @error="images.failed">
 								<i v-else class="ti ti-movie"></i>
 								<span :class="$style.releaseBadge"><i :class="isEpisodeShowcase ? 'ti ti-player-play-filled' : 'ti ti-sparkles'"></i><span :class="$style.releaseBadgeText">{{ item.badge }}</span></span>
 							</div>
@@ -77,6 +80,7 @@ import { definePage } from '@/page.js';
 import { i18n } from '@/i18n.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { importerImageUrl } from '@/utility/zalip-importer.js';
+import { useZalipImages, zalipHeroImageNearby } from '@/utility/zalip-image.js';
 import { zalipWorkRoute } from '@/utility/zalip-work-route.js';
 import { useZalipHorizontalDrag } from '@/composables/use-zalip-horizontal-drag.js';
 import MkZalipFeed from '@/components/MkZalipFeed.vue';
@@ -94,6 +98,7 @@ type ZalipWork = {
 	description: string | null;
 	releaseYear: number | null;
 	posterPath: string | null;
+	posterThumbnailUrl?: string | null;
 	backdropPath: string | null;
 	logoPath: string | null;
 	trailerYoutubeKey: string | null;
@@ -187,6 +192,8 @@ const onboardingFallbackSlides: ZalipHeroSlide[] = [
 ] as const;
 
 const works = ref<ZalipWork[]>([]);
+const images = useZalipImages();
+const homeLoaded = ref(false);
 const feed = useTemplateRef('feed');
 const continueRail = useTemplateRef('continueRail');
 const releaseEvents = ref<ZalipReleaseEvent[]>([]);
@@ -194,6 +201,7 @@ const releaseEventsLoaded = ref(false);
 const activeOnboardingIndex = ref(1);
 const onboardingPaused = ref(false);
 const onboardingSlides = computed<ZalipHeroSlide[]>(() => {
+	if (!homeLoaded.value) return [];
 	const featured = works.value.filter(work => work.backdropPath || work.posterPath).slice(0, 5);
 	if (featured.length === 0) return onboardingFallbackSlides;
 	return featured.map(work => ({
@@ -285,6 +293,8 @@ async function loadHome(reportFailure = false): Promise<void> {
 		});
 	} catch {
 		failed = true;
+	} finally {
+		homeLoaded.value = true;
 	}
 
 	try {
@@ -342,7 +352,7 @@ function stopOnboardingAutoplay(): void {
 
 function startOnboardingAutoplay(): void {
 	stopOnboardingAutoplay();
-	if (onboardingPaused.value || onboardingHovered || onboardingFocused || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+	if (!homeLoaded.value || !onboardingSlides.value.length || onboardingPaused.value || onboardingHovered || onboardingFocused || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 	onboardingTimer = window.setInterval(() => showOnboarding(1), 6500);
 }
 
@@ -383,6 +393,8 @@ function beginOnboardingSwipe(event: PointerEvent): void {
 watch(onboardingSlides, async () => {
 	await nextTick();
 	scrollToOnboarding(Math.min(1, onboardingSlides.value.length - 1), false);
+	if (heroRail.value) heroResizeObserver?.observe(heroRail.value);
+	startOnboardingAutoplay();
 });
 
 onMounted(() => {
@@ -406,6 +418,7 @@ definePage(() => ({
 <style lang="scss" module>
 .page { min-width: 0; margin: 0 auto; padding: 14px 0 30px; }
 .onboarding { container-type: inline-size; min-width: 0; }
+.heroPlaceholder { display: flex; align-items: center; justify-content: center; gap: 10px; height: 402px; color: var(--MI_THEME-fgTransparentWeak); background: var(--MI_THEME-panel); border-radius: var(--MI-radius); }
 .heroRail {
 	--hero-width: min(78cqw, 760px);
 	position: relative;
@@ -450,6 +463,7 @@ definePage(() => ({
 .onboardingDots { display: flex; gap: 4px; button { display: grid; place-items: center; width: 24px; height: 30px; &::before { content: ''; width: 14px; height: 4px; border-radius: 2px; background: var(--zalip-social-muted); opacity: .35; } &:focus-visible { outline: 2px solid var(--MI_THEME-focus); border-radius: 4px; } } .onboardingDotActive::before { background: var(--MI_THEME-accent); opacity: 1; } }
 .onboardingPlayback { display: grid; place-items: center; width: 30px; height: 30px; color: var(--zalip-social-muted); border-radius: 50%; > svg { width: 16px; height: 16px; } &:focus-visible { outline: 2px solid var(--MI_THEME-focus); } }
 @container (max-width: 700px) {
+	.heroPlaceholder { height: 468px; }
 	.heroRail { --hero-width: min(80cqw, 360px); gap: 12px; }
 	.onboardingCard { height: 416px; border-radius: 14px; }
 	.onboardingBackdrop img { object-position: center top; }
@@ -463,6 +477,7 @@ definePage(() => ({
 	.onboardingAction { width: 100%; }
 }
 @container (max-width: 350px) {
+	.heroPlaceholder { height: 442px; }
 	.onboardingCard { height: 390px; }
 	.onboardingCopy h2 { font-size: 21px; }
 	.onboardingCopy { left: 12px; width: calc(100% - 24px); }

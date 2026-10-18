@@ -14,7 +14,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</MkA>
 		<div v-if="note.user.isBot" :class="$style.isBot">bot</div>
 		<div v-if="note.user.badgeRoles" :class="$style.badgeRoles">
-			<img v-for="(role, i) in note.user.badgeRoles" :key="i" v-tooltip="role.name" :class="$style.badgeRole" :src="role.iconUrl!"/>
+			<img v-for="(role, i) in note.user.badgeRoles" :key="i" v-tooltip="role.name" :class="$style.badgeRole" :src="role.iconUrl!" :alt="role.name" loading="lazy" decoding="async"/>
 		</div>
 	</div>
 	<div :class="$style.username"><MkAcct :user="note.user"/></div>
@@ -67,11 +67,11 @@ const mock = inject(DI.mock, false);
 	grid-template-columns: minmax(0, max-content) auto;
 	align-items: baseline;
 	justify-content: start;
-	gap: 0 5px;
-	font-size: 15px;
-	line-height: 1.4;
+	gap: 1px 8px;
+	font-size: 14px;
+	line-height: 1.35;
 	.identity { min-width: 0; }
-	.username { grid-column: 1 / -1; grid-row: 2; margin: 0; font-size: 14px; }
+	.username { grid-column: 1 / -1; grid-row: 2; margin: 0; font-size: 13px; }
 	.info { grid-column: 2; grid-row: 1; margin: 0; font-size: 13px; }
 	.info::before { margin-right: 4px; content: '·'; }
 	.name { margin: 0; }
@@ -124,7 +124,11 @@ const mock = inject(DI.mock, false);
 }
 
 .badgeRoles {
-	margin: 0 .5em 0 0;
+	display: inline-flex;
+	align-items: center;
+	flex-shrink: 0;
+	gap: 3px;
+	margin: 0 0 0 5px;
 }
 
 .badgeRole {

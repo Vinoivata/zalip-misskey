@@ -30,6 +30,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			:style="hide ? 'filter: brightness(0.7);' : null"
 			:class="$style.image"
 			:marker="marker"
+			defer
 		/>
 		<div
 			v-else-if="prefer.s.dataSaver.media || hide"
@@ -44,6 +45,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 			:title="image.comment || image.name"
 			:class="$style.image"
 			:data-marker="marker"
+			loading="lazy"
+			decoding="async"
 		/>
 	</component>
 	<template v-if="hide">

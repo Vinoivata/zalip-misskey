@@ -89,9 +89,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<div v-else-if="loadError" :class="$style.empty"><i class="ti ti-alert-circle"></i><strong>{{ i18n.ts.zalip.catalogueLoadFailed }}</strong><button type="button" class="_button" @click="loadWorks">{{ i18n.ts.zalip.catalogueRetry }}</button></div>
 					<div v-else-if="sortedWorks.length === 0" :class="$style.empty"><i class="ti ti-filter-off"></i><strong>{{ i18n.ts.zalip.catalogueNoResults }}</strong><span>{{ i18n.ts.zalip.catalogueNoResultsDescription }}</span><button type="button" class="_button" @click="resetFilters">{{ i18n.ts.zalip.catalogueResetFilters }}</button></div>
 					<div v-else :class="[$style.grid, { [$style.listView]: viewMode === 'cards' }]">
-						<MkA v-for="work in sortedWorks" :key="work.id" :to="`/zalip/${work.slug}`" :class="$style.card">
+						<MkA v-for="(work, index) in sortedWorks" :key="work.id" :to="`/zalip/${work.slug}`" :class="$style.card">
 							<div :class="$style.poster">
-								<img v-if="work.posterPath" :src="tmdbImage(work.posterPath)" alt="" loading="lazy"><i v-else class="ti ti-movie"></i>
+								<img v-if="images.poster(work)" :src="images.poster(work)!" alt="" width="300" height="450" :loading="index === 0 ? 'eager' : 'lazy'" decoding="async" @error="images.failed"><i v-else class="ti ti-movie"></i>
 								<span v-if="library[work.id]" :class="[$style.status, $style[library[work.id]]]">{{ statusLabel(library[work.id]) }}</span>
 							</div>
 							<div :class="$style.cardBody">
@@ -126,7 +126,7 @@ import { definePage } from '@/page.js';
 import { i18n } from '@/i18n.js';
 import { useRouter } from '@/router.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
-import { importerImageUrl } from '@/utility/zalip-importer.js';
+import { useZalipImages } from '@/utility/zalip-image.js';
 import { miLocalStorage } from '@/local-storage.js';
 import { $i } from '@/i.js';
 
@@ -152,12 +152,14 @@ type ZalipWork = {
 	originalTitle: string | null;
 	releaseYear: number | null;
 	posterPath: string | null;
+	posterThumbnailUrl?: string | null;
 	genres: string[];
 	description: string | null;
 	communityRating: number | null;
 };
 
 const DISPLAYED_GENRES = 24;
+const images = useZalipImages();
 const MAX_SELECTED_GENRES = 40;
 const kinds: WorkKind[] = ['movie', 'series', 'anime', 'animation'];
 const props = withDefaults(defineProps<{
@@ -252,10 +254,6 @@ function pluralTitles(count: number): string {
 	if (last === 1 && lastTwo !== 11) return i18n.ts.zalip.catalogueTitleOne;
 	if (last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14)) return i18n.ts.zalip.catalogueTitleFew;
 	return i18n.ts.zalip.catalogueTitleMany;
-}
-
-function tmdbImage(path: string): string | undefined {
-	return importerImageUrl(path) ?? undefined;
 }
 
 function kindLabel(kind: WorkKind): string {

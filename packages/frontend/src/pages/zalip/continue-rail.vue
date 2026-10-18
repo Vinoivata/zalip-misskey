@@ -44,7 +44,7 @@ const drag = useZalipHorizontalDrag();
 let request = 0;
 
 function image(item: ContinueWatchingItem): string | null {
-	return [item.episode?.stillPath, item.work.backdropPath, item.work.posterPath].map(value => importerImageUrl(value ?? null, 'w780')).find(value => value && !broken.value.has(value)) ?? null;
+	return [item.episode?.stillPath, item.work.backdropPath, item.work.posterThumbnailUrl, item.work.posterPath].map(value => importerImageUrl(value ?? null, 'w780')).find(value => value && !broken.value.has(value)) ?? null;
 }
 
 function imageFailed(item: ContinueWatchingItem): void { const url = image(item); if (url) broken.value = new Set([...broken.value, url]); }

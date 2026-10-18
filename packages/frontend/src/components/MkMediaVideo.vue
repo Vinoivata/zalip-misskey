@@ -27,6 +27,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 			:class="$style.video"
 			:src="video.thumbnailUrl"
 			:alt="video.comment ?? undefined"
+			loading="lazy"
+			decoding="async"
 		/>
 		<video
 			v-else

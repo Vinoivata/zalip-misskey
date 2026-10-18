@@ -15,9 +15,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div v-if="!conversationLoaded" style="padding: 16px">
 			<MkButton style="margin: 0 auto;" primary rounded @click="loadConversation">{{ i18n.ts.loadConversation }}</MkButton>
 		</div>
-		<MkNoteSub v-for="note in conversation" :key="note.id" :class="$style.replyToMore" :note="note"/>
+		<MkNoteSub v-for="note in conversation" :key="note.id" :class="$style.replyToMore" :note="note" thread/>
 	</div>
-	<MkNoteSub v-if="appearNote.replyId" :note="appearNote?.reply ?? null" :class="$style.replyTo"/>
+	<MkNoteSub v-if="appearNote.replyId" :note="appearNote?.reply ?? null" :class="$style.replyTo" thread/>
 	<div v-if="isRenote" :class="$style.renote">
 		<MkAvatar :class="$style.renoteAvatar" :user="note.user" link preview/>
 		<i class="ti ti-repeat" style="margin-right: 4px;"></i>
@@ -51,28 +51,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<header :class="$style.noteHeader">
 				<MkAvatar :class="$style.noteHeaderAvatar" :user="appearNote.user" link preview/>
 				<div :class="$style.noteHeaderBody">
-					<div>
-						<MkA v-user-preview="appearNote.user.id" :class="$style.noteHeaderName" :to="userPage(appearNote.user)">
-							<MkUserName :nowrap="false" :user="appearNote.user"/>
-						</MkA>
-						<span v-if="appearNote.user.isBot" :class="$style.isBot">bot</span>
-						<div :class="$style.noteHeaderInfo">
-							<span v-if="appearNote.visibility !== 'public'" style="margin-left: 0.5em;" :title="i18n.ts._visibility[appearNote.visibility]">
-								<i v-if="appearNote.visibility === 'home'" class="ti ti-home"></i>
-								<i v-else-if="appearNote.visibility === 'followers'" class="ti ti-lock"></i>
-								<i v-else-if="appearNote.visibility === 'specified'" ref="specified" class="ti ti-mail"></i>
-							</span>
-							<span v-if="appearNote.localOnly" style="margin-left: 0.5em;" :title="i18n.ts._visibility['disableFederation']"><i class="ti ti-rocket-off"></i></span>
-						</div>
-					</div>
-					<div :class="$style.noteHeaderUsernameAndBadgeRoles">
-						<div :class="$style.noteHeaderUsername">
-							<MkAcct :user="appearNote.user"/>
-						</div>
-						<div v-if="appearNote.user.badgeRoles" :class="$style.noteHeaderBadgeRoles">
-							<img v-for="(role, i) in appearNote.user.badgeRoles" :key="i" v-tooltip="role.name" :class="$style.noteHeaderBadgeRole" :src="role.iconUrl!"/>
-						</div>
-					</div>
+					<MkNoteHeader :note="appearNote" stacked/>
 					<MkInstanceTicker v-if="showTicker" :host="appearNote.user.host" :instance="appearNote.user.instance"/>
 				</div>
 				<button ref="menuButton" type="button" class="_button" :class="$style.menuButton" :aria-label="i18n.ts.more" @click="showMenu()"><i class="ti ti-dots" aria-hidden="true"></i></button>
@@ -146,33 +125,34 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</span>
 				</div>
 				<div :class="$style.actionRow">
-				<button v-tooltip="i18n.ts.zalip.comments" class="_button" :class="$style.noteFooterButton" :aria-label="i18n.ts.zalip.comments" @click="openComments()">
-					<MkZalipIcon name="reply"/>
-					<span :class="$style.noteFooterButtonCount">{{ number(appearNote.repliesCount) }}</span>
-				</button>
-				<button
-					v-if="canRenote"
-					ref="renoteButton"
-					class="_button"
-					:class="$style.noteFooterButton"
-					:aria-label="i18n.ts.renote"
-					@click="renote()"
-				>
-					<MkZalipIcon name="repeat"/>
-					<span :class="$style.noteFooterButtonCount">{{ number(appearNote.renoteCount) }}</span>
-				</button>
-				<button v-else class="_button" :class="$style.noteFooterButton" :aria-label="i18n.ts.renote" disabled>
-					<i class="ti ti-ban"></i>
-				</button>
-				<button ref="reactButton" :class="$style.noteFooterButton" class="_button" :aria-label="i18n.ts.reaction" :aria-pressed="$appearNote.myReaction != null" @click="toggleReact()">
-					<MkReactionIcon v-if="summaryReaction" :class="$style.summaryReaction" :reaction="summaryReaction" :emojiUrl="$appearNote.reactionEmojis[summaryReaction.substring(1, summaryReaction.length - 1)]"/>
-					<MkZalipIcon v-else :name="appearNote.reactionAcceptance === 'likeOnly' ? 'heart' : 'mood'"/>
-					<span :class="$style.noteFooterButtonCount">{{ number($appearNote.reactionCount) }}</span>
-				</button>
-				<MkZalipBookmark :noteId="appearNote.id"/>
-				<button v-if="prefer.s.showClipButtonInNoteFooter" ref="clipButton" class="_button" :class="$style.noteFooterButton" :aria-label="i18n.ts.clip" @click="clip()">
-					<i class="ti ti-paperclip"></i>
-				</button>
+					<button ref="reactButton" type="button" :class="[$style.noteFooterButton, { [$style.reacted]: $appearNote.myReaction != null }]" class="_button" :aria-label="i18n.ts.reaction" :aria-pressed="$appearNote.myReaction != null" @click="toggleReact()">
+						<MkReactionIcon v-if="summaryReaction" :class="$style.summaryReaction" :reaction="summaryReaction" :emojiUrl="$appearNote.reactionEmojis[summaryReaction.substring(1, summaryReaction.length - 1)]"/>
+						<MkZalipIcon v-else :name="appearNote.reactionAcceptance === 'likeOnly' ? 'heart' : 'mood'"/>
+						<span :class="$style.noteFooterButtonCount">{{ number($appearNote.reactionCount) }}</span>
+					</button>
+					<button v-tooltip="i18n.ts.zalip.comments" class="_button" :class="$style.noteFooterButton" :aria-label="i18n.ts.zalip.comments" @click="openComments()">
+						<MkZalipIcon name="reply"/>
+						<span :class="$style.noteFooterButtonCount">{{ number(appearNote.repliesCount) }}</span>
+					</button>
+					<button
+						v-if="canRenote"
+						ref="renoteButton"
+						class="_button"
+						:class="$style.noteFooterButton"
+						:aria-label="i18n.ts.renote"
+						@click="renote()"
+					>
+						<MkZalipIcon name="repeat"/>
+						<span :class="$style.noteFooterButtonCount">{{ number(appearNote.renoteCount) }}</span>
+					</button>
+					<button v-else class="_button" :class="$style.noteFooterButton" :aria-label="i18n.ts.renote" disabled>
+						<i class="ti ti-ban"></i>
+					</button>
+
+					<MkZalipBookmark :class="$style.bookmark" :noteId="appearNote.id"/>
+					<button v-if="prefer.s.showClipButtonInNoteFooter" ref="clipButton" class="_button" :class="$style.noteFooterButton" :aria-label="i18n.ts.clip" @click="clip()">
+						<i class="ti ti-paperclip"></i>
+					</button>
 				</div>
 			</footer>
 		</article>
@@ -239,6 +219,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script lang="ts" setup>
 import { inject, provide, ref, useTemplateRef, markRaw, computed, onMounted } from 'vue';
 import * as Misskey from 'misskey-js';
+import type { Keymap } from '@/utility/hotkey.js';
 import { useNote } from '@/composables/use-note.js';
 import { prefer } from '@/preferences.js';
 import { i18n } from '@/i18n.js';
@@ -249,10 +230,10 @@ import { Paginator } from '@/utility/paginator.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import number from '@/filters/number.js';
 import { DI } from '@/di.js';
-import type { Keymap } from '@/utility/hotkey.js';
 
 // コンポーネント外部の依存関係
 import MkNoteSub from '@/components/MkNoteSub.vue';
+import MkNoteHeader from '@/components/MkNoteHeader.vue';
 import MkZalipIcon from '@/components/MkZalipIcon.vue';
 import MkZalipBookmark from '@/components/MkZalipBookmark.vue';
 import MkNoteSimple from '@/components/MkNoteSimple.vue';
@@ -454,7 +435,7 @@ const keymap = {
 .summaryReaction { width: 22px; height: 22px; font-size: 22px; object-fit: contain; }
 .root {
 	position: relative;
-	font-size: max(1em, 15px);
+	font-size: 14px;
 	transition: box-shadow 0.1s ease;
 	overflow: clip;
 	contain: content;
@@ -535,8 +516,8 @@ const keymap = {
 }
 
 .note {
-	padding: 18px 18px 0;
-	font-size: 18px;
+	padding: 16px 16px 0;
+	font-size: 14px;
 
 	&:hover > .main > .footer > .button {
 		opacity: 1;
@@ -546,79 +527,31 @@ const keymap = {
 .noteHeader {
 	display: flex;
 	position: relative;
-	margin-bottom: 16px;
-	align-items: center;
+	margin-bottom: 10px;
+	align-items: flex-start;
 }
 
 .noteHeaderAvatar {
 	display: block;
 	flex-shrink: 0;
-	width: 48px;
-	height: 48px;
+	width: 40px;
+	height: 40px;
 }
 
 .noteHeaderBody {
 	flex: 1;
 	min-width: 0;
-	display: flex;
-	flex-direction: column;
-	justify-content: center;
-	padding-left: 12px;
-	font-size: 16px;
-}
-
-.noteHeaderName {
-	font-weight: bold;
-	line-height: 1.3;
-}
-
-.isBot {
-	display: inline-block;
-	margin: 0 0.5em;
-	padding: 4px 6px;
-	font-size: 80%;
-	line-height: 1;
-	border: solid 0.5px var(--MI_THEME-divider);
-	border-radius: 4px;
-}
-
-.noteHeaderInfo {
-	float: right;
-}
-
-.noteHeaderUsernameAndBadgeRoles {
-	display: flex;
-}
-
-.noteHeaderUsername {
-	margin-bottom: 2px;
-	margin-right: 0.5em;
-	line-height: 1.3;
-	word-wrap: anywhere;
+	padding: 0 8px 0 8px;
 	font-size: 14px;
-	color: var(--MI_THEME-fgTransparentWeak);
-}
-
-.noteHeaderBadgeRoles {
-	margin: 0 .5em 0 0;
-}
-
-.noteHeaderBadgeRole {
-	height: 1.3em;
-	vertical-align: -20%;
-
-	& + .noteHeaderBadgeRole {
-		margin-left: 0.2em;
-	}
 }
 
 .noteContent {
 	container-type: inline-size;
 	overflow-wrap: break-word;
-	line-height: 1.45;
+	line-height: 1.55;
 }
 
-.menuButton { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; border-radius: 50%; font-size: 20px; color: var(--MI_THEME-fgTransparentWeak); }
+.menuButton { display: grid; place-items: center; flex: 0 0 36px; width: 36px; height: 40px; margin-top: -4px; border-radius: 50%; font-size: 20px; color: var(--MI_THEME-fgTransparentWeak); }
 .menuButton:hover { background: var(--MI_THEME-panelHighlight); }
 .menuButton:focus-visible { outline: 2px solid var(--MI_THEME-focus); }
 
@@ -669,31 +602,29 @@ const keymap = {
 }
 
 .noteFooterInfo {
-	margin: 16px 0;
-	opacity: 0.7;
-	font-size: 14px;
+	margin: 12px 0 4px;
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 12px;
 }
-.actionRow { display: flex; justify-content: space-between; align-items: center; min-height: 56px; border-top: 1px solid var(--MI_THEME-divider); }
-.actionRow > button:nth-child(3) { order: -1; }
+.actionRow { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; min-height: 40px; }
+.noteFooterButton.reacted { color: var(--MI_THEME-accent); }
+.actionRow > .bookmark { min-width: 32px; min-height: 32px; > svg { width: 20px; height: 20px; } }
 .discussionSelect { max-width: 50%; padding: 5px 8px; border: 1px solid var(--MI_THEME-divider); border-radius: 7px; background: transparent; color: var(--MI_THEME-fgTransparentWeak); font: inherit; font-size: 12px; }
 
 .noteFooterButton {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	min-width: 44px;
-	min-height: 44px;
+	min-width: 32px;
+	min-height: 32px;
+	gap: 5px;
 	margin: 0;
 	padding: 0;
 	color: var(--MI_THEME-fgTransparentWeak);
 	border: 0;
 	border-radius: 999px;
 	font-size: 20px;
-	> svg { width: 22px; height: 22px; }
-
-	&:not(:last-child) {
-		margin-right: 8px;
-	}
+	> svg { width: 20px; height: 20px; }
 
 	&:hover {
 		color: var(--MI_THEME-fgHighlighted);
@@ -704,12 +635,18 @@ const keymap = {
 
 .noteFooterButtonCount {
 	display: inline;
-	margin: 0 0 0 8px;
+	margin: 0;
 	font-size: 13px;
+	font-variant-numeric: tabular-nums;
 
 	&.reacted {
 		color: var(--MI_THEME-accent);
 	}
+}
+
+@media (hover: none), (pointer: coarse) {
+	.noteFooterButton, .actionRow > .bookmark { min-width: 44px; min-height: 44px; }
+	.menuButton { min-width: 44px; min-height: 44px; }
 }
 
 .reply:not(:first-child) {
@@ -806,7 +743,7 @@ const keymap = {
 
 @container (max-width: 500px) {
 	.root {
-		font-size: max(1em, 15px);
+		font-size: 14px;
 	}
 	.tab {
 		padding-inline: 4px;
@@ -822,12 +759,12 @@ const keymap = {
 	}
 
 	.note {
-		padding: 16px 16px 0;
+		padding: 14px 16px 0;
 	}
 
 	.noteHeaderAvatar {
-		width: 48px;
-		height: 48px;
+		width: 40px;
+		height: 40px;
 	}
 
 	.commentsHeader {
@@ -840,21 +777,17 @@ const keymap = {
 }
 
 @container (max-width: 350px) {
-	.noteFooterButton {
-		&:not(:last-child) {
-			margin-right: 6px;
-		}
-	}
+	.actionRow { gap: 10px; }
 }
 
 @container (max-width: 300px) {
 	.root {
-		font-size: max(1em, 15px);
+		font-size: 14px;
 	}
 
 	.noteHeaderAvatar {
-		width: 42px;
-		height: 42px;
+		width: 40px;
+		height: 40px;
 	}
 
 	.noteFooterButton {

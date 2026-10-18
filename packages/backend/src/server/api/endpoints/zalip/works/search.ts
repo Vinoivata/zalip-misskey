@@ -21,6 +21,7 @@ const workSchema = {
 		genres: { type: 'array', items: { type: 'string' } },
 		runtimeMinutes: { type: 'integer', nullable: true },
 		posterPath: { type: 'string', nullable: true },
+		posterThumbnailUrl: { type: 'string', optional: true, nullable: true },
 		backdropPath: { type: 'string', nullable: true },
 		logoPath: { type: 'string', nullable: true },
 		trailerYoutubeKey: { type: 'string', nullable: true },

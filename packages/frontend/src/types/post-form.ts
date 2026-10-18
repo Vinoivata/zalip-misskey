@@ -14,6 +14,7 @@ export type ZalipWorkShare = {
 	releaseYear: number | null;
 	genres: string[];
 	posterPath: string | null;
+	posterThumbnailUrl?: string | null;
 };
 
 export interface PostFormProps {

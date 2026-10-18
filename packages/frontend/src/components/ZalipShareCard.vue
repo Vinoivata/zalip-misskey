@@ -6,7 +6,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <MkA :to="`/zalip/${share.slug}`" :class="[$style.card, { [$style.preview]: preview }]">
 	<div :class="$style.poster">
-		<img v-if="share.posterPath" :src="posterUrl(share.posterPath)" alt="" loading="lazy">
+		<img v-if="images.poster(share)" :src="images.poster(share)!" alt="" width="300" height="450" loading="lazy" decoding="async" @error="images.failed">
 		<i v-else class="ti ti-movie"></i>
 	</div>
 	<div :class="$style.body">
@@ -21,7 +21,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script lang="ts" setup>
 import { computed } from 'vue';
 import { i18n } from '@/i18n.js';
-import { importerImageUrl } from '@/utility/zalip-importer.js';
+import { useZalipImages } from '@/utility/zalip-image.js';
 type ZalipShare = {
 	slug: string;
 	kind: 'movie' | 'series' | 'anime' | 'animation';
@@ -30,19 +30,18 @@ type ZalipShare = {
 	releaseYear: number | null;
 	genres: string[];
 	posterPath: string | null;
+	posterThumbnailUrl?: string | null;
 };
 
 const props = defineProps<{
 	share: ZalipShare;
 	preview?: boolean;
 }>();
+const images = useZalipImages();
 
 const kindLabel = computed(() => ({ movie: i18n.ts.zalip.searchMovies, series: i18n.ts.zalip.searchSeries, anime: i18n.ts.zalip.searchAnime, animation: i18n.ts.zalip.searchAnimation })[props.share.kind]);
 const kindIcon = computed(() => ({ movie: 'ti ti-movie', series: 'ti ti-device-tv', anime: 'ti ti-sparkles', animation: 'ti ti-mood-smile' })[props.share.kind]);
 
-function posterUrl(path: string): string | undefined {
-	return importerImageUrl(path, 'w342') ?? undefined;
-}
 </script>
 
 <style lang="scss" module>

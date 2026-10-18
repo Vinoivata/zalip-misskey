@@ -17,7 +17,8 @@ import { MiZalipSeason } from '@/models/ZalipSeason.js';
 import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
 import { MiZalipLibraryEntry } from '@/models/ZalipLibraryEntry.js';
 import { MiZalipWatchProgress } from '@/models/ZalipWatchProgress.js';
-import { api, castAsError, createAppToken, initTestDb, sendEnvUpdateRequest, signup } from '../utils.js';
+import { MiDriveFile } from '@/models/DriveFile.js';
+import { api, castAsError, createAppToken, initTestDb, origin, sendEnvUpdateRequest, signup } from '../utils.js';
 import type * as misskey from 'misskey-js';
 
 type ImporterTaxonomyEntry = { id: string; name: string; data: Record<string, unknown> };
@@ -84,6 +85,25 @@ describe('Zalip discussions', () => {
 		assert.strictEqual(response.status, 200);
 		assert.strictEqual(response.body.created, false);
 		assert.strictEqual(typeof response.body.noteId, 'string');
+	});
+
+	test('adds only an exact existing native poster thumbnail to a published work and preserves its original', async () => {
+		const db = await initTestDb(true);
+		const posterUrl = `${origin}/files/zalip-native-poster`;
+		const thumbnailUrl = `${origin}/files/thumbnail-zalip-native-poster`;
+		await db.getRepository(MiDriveFile).insert({ id: 'zalipnativeposter', name: 'Native poster fixture.jpg', md5: '0'.repeat(32), type: 'image/jpeg', size: 1000, storedInternal: true, isLink: false, url: posterUrl, accessKey: 'zalip-native-poster', thumbnailUrl, thumbnailAccessKey: 'thumbnail-zalip-native-poster' });
+		await db.getRepository(MiZalipWork).insert({ id: 'zalipnativework', slug: 'zalip-native-poster-fixture', title: 'Native poster fixture', kind: 'movie', publicationState: 'published', posterPath: posterUrl, createdAt: new Date(), updatedAt: new Date(), publishedAt: new Date(), importData: { locks: ['posterUrl'], localArtwork: { posterUrl }, sources: { posterUrl: 'manual' } } });
+		const before = await db.getRepository(MiZalipWork).findOneByOrFail({ id: 'zalipnativework' });
+		const detail = await api('zalip/works/show', { slug: before.slug });
+		assert.strictEqual(detail.status, 200);
+		assert.strictEqual(detail.body.posterPath, posterUrl);
+		assert.strictEqual(detail.body.posterThumbnailUrl, thumbnailUrl);
+		const page = await api('zalip/works/page', { query: 'Native poster fixture' });
+		assert.strictEqual(page.status, 200);
+		assert.strictEqual(page.body.items.find(work => work.id === before.id)?.posterThumbnailUrl, thumbnailUrl);
+		assert.deepStrictEqual(await db.getRepository(MiZalipWork).findOneByOrFail({ id: before.id }), before);
+		await db.getRepository(MiZalipWork).update(before.id, { publicationState: 'draft' });
+		assert.strictEqual((await api('zalip/works/show', { slug: before.slug })).status, 404);
 	});
 
 	test('pages beyond 100 published titles with global ordering and scoped cursors, excluding drafts', async () => {

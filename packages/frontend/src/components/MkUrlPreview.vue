@@ -43,9 +43,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</MkButton>
 	</div>
 </template>
-<div v-else>
+<div v-else ref="previewRoot">
 	<component :is="self ? 'MkA' : 'a'" :class="[$style.link, { [$style.compact]: compact }]" :[attr]="maybeRelativeUrl" rel="nofollow noopener" :target="target" :title="url">
-		<div v-if="thumbnail && !sensitive" :class="$style.thumbnail" :style="prefer.s.dataSaver.urlPreviewThumbnail ? '' : { backgroundImage: `url('${thumbnail}')` }">
+		<div v-if="thumbnail && !sensitive" :class="$style.thumbnail">
+			<img v-if="!prefer.s.dataSaver.urlPreviewThumbnail" :src="thumbnail" alt="" loading="lazy" decoding="async"/>
 		</div>
 		<article :class="$style.body">
 			<header :class="$style.header">
@@ -57,7 +58,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<p v-else-if="fetching" :class="$style.text"><MkEllipsis/></p>
 			<p v-else-if="description" :class="$style.text" :title="description">{{ description.length > 85 ? description.slice(0, 85) + '…' : description }}</p>
 			<footer :class="$style.footer">
-				<img v-if="icon" :class="$style.siteIcon" :src="icon"/>
+				<img v-if="icon" :class="$style.siteIcon" :src="icon" alt="" width="16" height="16" loading="lazy" decoding="async"/>
 				<p v-if="unknownUrl" :class="$style.siteName">{{ requestUrl.host }}</p>
 				<p v-else-if="fetching" :class="$style.siteName"><MkEllipsis/></p>
 				<p v-else :class="$style.siteName" :title="sitename ?? requestUrl.host">{{ sitename ?? requestUrl.host }}</p>
@@ -83,7 +84,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, defineAsyncComponent, onDeactivated, onUnmounted, ref } from 'vue';
+import { computed, defineAsyncComponent, onDeactivated, onUnmounted, ref, useTemplateRef, watch } from 'vue';
 import { url as local } from '@@/js/config.js';
 import { versatileLang } from '@@/js/intl-const.js';
 import type { SummalyResult } from '@misskey-dev/summaly';
@@ -95,6 +96,7 @@ import { transformPlayerUrl } from '@/utility/url-preview.js';
 import { store } from '@/store.js';
 import { prefer } from '@/preferences.js';
 import { maybeMakeRelative } from '@@/js/url.js';
+import { useMediaActivation } from '@/composables/use-media-activation.js';
 
 const props = withDefaults(defineProps<{
 	url: string;
@@ -115,6 +117,9 @@ const self = maybeRelativeUrl !== props.url;
 const attr = self ? 'to' : 'href';
 const target = self ? null : '_blank';
 const fetching = ref(true);
+const previewRoot = useTemplateRef('previewRoot');
+const active = useMediaActivation(previewRoot);
+const previewAbort = new AbortController();
 const summalyResult = ref<SummalyResult | null>(null);
 const title = computed(() => summalyResult.value?.title ?? null);
 const description = computed(() => summalyResult.value?.description ?? null);
@@ -148,7 +153,9 @@ if (requestUrl.hostname === 'music.youtube.com' && requestUrl.pathname.match('^/
 
 requestUrl.hash = '';
 
-window.fetch(`/url?url=${encodeURIComponent(requestUrl.href)}&lang=${versatileLang}`)
+watch(active, (visible) => {
+	if (!visible) return;
+	void window.fetch(`/url?url=${encodeURIComponent(requestUrl.href)}&lang=${versatileLang}`, { signal: previewAbort.signal })
 	.then(res => {
 		if (!res.ok) {
 			if (_DEV_) {
@@ -170,7 +177,13 @@ window.fetch(`/url?url=${encodeURIComponent(requestUrl.href)}&lang=${versatileLa
 		unknownUrl.value = false;
 
 		summalyResult.value = info;
+	})
+	.catch(() => {
+		if (previewAbort.signal.aborted) return;
+		fetching.value = false;
+		unknownUrl.value = true;
 	});
+}, { immediate: true });
 
 function adjustTweetHeight(message: MessageEvent) {
 	if (message.origin !== 'https://platform.twitter.com') return;
@@ -196,6 +209,7 @@ function openPlayer(): void {
 window.addEventListener('message', adjustTweetHeight);
 
 onUnmounted(() => {
+	previewAbort.abort();
 	window.removeEventListener('message', adjustTweetHeight);
 });
 </script>
@@ -271,6 +285,7 @@ onUnmounted(() => {
 	display: flex;
 	justify-content: center;
 	align-items: center;
+	> img { width: 100%; height: 100%; object-fit: cover; }
 
 	& + .body {
 		left: 100px;

@@ -10,6 +10,8 @@ import { IdService } from '@/core/IdService.js';
 import { NoteCreateService } from '@/core/NoteCreateService.js';
 import { zalipDiscussionRootMarker } from '@/misc/zalip-discussion-root.js';
 import { MiNote } from '@/models/Note.js';
+import { MiDriveFile } from '@/models/DriveFile.js';
+import type { Config } from '@/config.js';
 import type { MiLocalUser, MiUser } from '@/models/User.js';
 import {
 	MiZalipLibraryEntry,
@@ -67,6 +69,8 @@ export type PackedZalipWork = {
 	genres: string[];
 	runtimeMinutes: number | null;
 	posterPath: string | null;
+	/** Existing native Drive rendition for small cards; the selected original remains unchanged. */
+	posterThumbnailUrl?: string | null;
 	backdropPath: string | null;
 	logoPath: string | null;
 	trailerYoutubeKey: string | null;
@@ -185,10 +189,11 @@ export class ZalipCatalogService {
 		private idService: IdService,
 		private noteCreateService: NoteCreateService,
 		private notificationService: NotificationService,
+		@Inject(DI.config) private config?: Config,
 	) {
 	}
 
-	public packWork(work: MiZalipWork, rating: Pick<PackedZalipWork, 'communityRating' | 'ratingCount'> = { communityRating: null, ratingCount: 0 }): PackedZalipWork {
+	public packWork(work: MiZalipWork, rating: Pick<PackedZalipWork, 'communityRating' | 'ratingCount'> = { communityRating: null, ratingCount: 0 }, posterThumbnailUrl?: string): PackedZalipWork {
 		return {
 			id: work.id,
 			slug: work.slug,
@@ -200,12 +205,49 @@ export class ZalipCatalogService {
 			genres: work.genres,
 			runtimeMinutes: work.runtimeMinutes,
 			posterPath: work.posterPath,
+			...(posterThumbnailUrl ? { posterThumbnailUrl } : {}),
 			backdropPath: work.backdropPath,
 			logoPath: work.logoPath,
 			trailerYoutubeKey: work.trailerYoutubeKey,
 			communityRating: rating.communityRating,
 			ratingCount: rating.ratingCount,
 		};
+	}
+
+	/** Resolve existing public, locally stored image renditions in finite indexed batches, never by fetching a URL. */
+	public async nativePosterThumbnails(works: readonly MiZalipWork[]): Promise<Map<string, string>> {
+		const result = new Map<string, string>();
+		if (!this.config?.url) return result;
+		const origin = new URL(this.config.url).origin;
+		const localKey = (value: string | null | undefined): string | null => {
+			if (typeof value !== 'string' || value.length > 512 || /[%\\\s?#]/u.test(value)) return null;
+			try {
+				const url = new URL(value);
+				const key = /^\/files\/([A-Za-z0-9-]{1,200})$/u.exec(url.pathname)?.[1];
+				return key && !url.username && !url.password && url.origin === origin && value === `${origin}/files/${key}` ? key : null;
+			} catch { return null; }
+		};
+		const candidates = works.flatMap(work => {
+			const key = work.publicationState === 'published' ? localKey(work.posterPath) : null;
+			return key ? [{ workId: work.id, url: work.posterPath!, key }] : [];
+		});
+		const keys = [...new Set(candidates.map(candidate => candidate.key))];
+		const thumbnails = new Map<string, string>();
+		for (let start = 0; start < keys.length; start += 100) {
+			const files = await this.db.getRepository(MiDriveFile).find({
+				where: { accessKey: In(keys.slice(start, start + 100)), isLink: false, storedInternal: true },
+				select: { accessKey: true, url: true, thumbnailAccessKey: true, thumbnailUrl: true, type: true, isLink: true, storedInternal: true },
+			});
+			for (const file of files) {
+				if (file.isLink || !file.storedInternal || !file.type.startsWith('image/') || localKey(file.url) !== file.accessKey || !file.thumbnailAccessKey?.startsWith('thumbnail-') || localKey(file.thumbnailUrl) !== file.thumbnailAccessKey) continue;
+				thumbnails.set(file.url, file.thumbnailUrl!);
+			}
+		}
+		for (const candidate of candidates) {
+			const thumbnail = thumbnails.get(candidate.url);
+			if (thumbnail) result.set(candidate.workId, thumbnail);
+		}
+		return result;
 	}
 
 	/**
@@ -233,8 +275,8 @@ export class ZalipCatalogService {
 	}
 
 	private async packWorksWithCommunityRatings(works: MiZalipWork[]): Promise<PackedZalipWork[]> {
-		const ratings = await this.getCommunityRatings(works);
-		return works.map(work => this.packWork(work, ratings.get(work.id)));
+		const [ratings, thumbnails] = await Promise.all([this.getCommunityRatings(works), this.nativePosterThumbnails(works)]);
+		return works.map(work => this.packWork(work, ratings.get(work.id), thumbnails.get(work.id)));
 	}
 
 	public async listPublished(limit: number, filters: ZalipPublishedCatalogueFilters = {}): Promise<PackedZalipWork[]> {
@@ -430,13 +472,14 @@ export class ZalipCatalogService {
 			.orderBy('event.createdAt', 'DESC')
 			.take(limit)
 			.getMany();
-		const ratings = await this.getCommunityRatings(availability.flatMap(event => event.work ? [event.work] : []));
+		const availabilityWorks = availability.flatMap(event => event.work ? [event.work] : []);
+		const [ratings, thumbnails] = await Promise.all([this.getCommunityRatings(availabilityWorks), this.nativePosterThumbnails(availabilityWorks)]);
 		const combined: PackedZalipSubscribedReleaseEvent[] = [
 			...(await this.packReleaseEvents(events)).map(event => ({ ...event, source: 'catalogue' as const })),
 			...availability.flatMap(event => event.work == null ? [] : [{
 				id: event.id,
 				createdAt: event.createdAt.toISOString(),
-				work: this.packWork(event.work, ratings.get(event.work.id)),
+				work: this.packWork(event.work, ratings.get(event.work.id), thumbnails.get(event.work.id)),
 				source: 'playback' as const,
 				season: event.seasonNumber == null ? null : { seasonNumber: event.seasonNumber, title: '' },
 				episode: event.episodeNumber == null ? null : { episodeNumber: event.episodeNumber, title: '' },
@@ -446,13 +489,14 @@ export class ZalipCatalogService {
 	}
 
 	private async packReleaseEvents(events: MiZalipReleaseEvent[]): Promise<PackedZalipReleaseEvent[]> {
-		const ratings = await this.getCommunityRatings(events.flatMap(event => event.work == null ? [] : [event.work]));
+		const works = events.flatMap(event => event.work == null ? [] : [event.work]);
+		const [ratings, thumbnails] = await Promise.all([this.getCommunityRatings(works), this.nativePosterThumbnails(works)]);
 		return events.flatMap(event => {
 			if (event.work == null || event.season == null || event.episode == null) return [];
 			return [{
 				id: event.id,
 				createdAt: event.createdAt.toISOString(),
-				work: this.packWork(event.work, ratings.get(event.work.id)),
+				work: this.packWork(event.work, ratings.get(event.work.id), thumbnails.get(event.work.id)),
 				season: { seasonNumber: event.season.seasonNumber, title: event.season.title },
 				episode: { episodeNumber: event.episode.episodeNumber, title: event.episode.title },
 			}];
@@ -467,14 +511,15 @@ export class ZalipCatalogService {
 			.orderBy('entry.updatedAt', 'DESC')
 			.getMany();
 
-		const ratings = await this.getCommunityRatings(entries.flatMap(entry => entry.work == null ? [] : [entry.work]));
+		const works = entries.flatMap(entry => entry.work == null ? [] : [entry.work]);
+		const [ratings, thumbnails] = await Promise.all([this.getCommunityRatings(works), this.nativePosterThumbnails(works)]);
 		return entries.map(entry => ({
 			status: entry.status,
 			episodesWatched: entry.episodesWatched,
 			personalRating: entry.personalRating,
 			isFavorite: entry.isFavorite,
 			isReleaseSubscribed: entry.isReleaseSubscribed,
-			work: this.packWork(entry.work!, ratings.get(entry.work!.id)),
+			work: this.packWork(entry.work!, ratings.get(entry.work!.id), thumbnails.get(entry.work!.id)),
 		}));
 	}
 

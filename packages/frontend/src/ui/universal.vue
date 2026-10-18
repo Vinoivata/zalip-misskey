@@ -4,7 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div :class="[$style.root, { '_forceShrinkSpacer': isMobile, [$style.mobile]: isMobile, [$style.social]: isSocial, [$style.wide]: pageMetadata?.needWideArea, [$style.chatRoom]: isChatRoom, [$style.withMobileNav]: isMobile && !isThread && !isChatRoom }]">
+<div :class="[$style.root, { '_forceShrinkSpacer': isMobile, [$style.mobile]: isMobile, [$style.social]: isSocial, [$style.compactSocial]: isTimeline || isThread, [$style.wide]: pageMetadata?.needWideArea, [$style.chatRoom]: isChatRoom, [$style.withMobileNav]: isMobile && !isThread && !isChatRoom }]">
 	<XTitlebar v-if="prefer.r.showTitlebar.value" style="flex-shrink: 0;"/>
 
 	<div :class="$style.nonTitlebarArea">
@@ -18,7 +18,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<XAnnouncements v-if="$i"/>
 				<XStatusBars :class="$style.statusbars"/>
 			</div>
-			<ZalipSiteHeader :mobile="isMobile" :hidden="headerHidden"/>
+			<ZalipSiteHeader v-if="isMobile || !isTimeline" :mobile="isMobile" :hidden="headerHidden"/>
 			<StackingRouterView v-if="prefer.s['experimental.stackingRouterView']" :class="$style.content"/>
 			<RouterView v-else :class="$style.content"/>
 			<XMobileFooterMenu v-if="isMobile && !isThread && !isChatRoom" :hidden="chromeHidden"/>
@@ -61,6 +61,7 @@ const XAnnouncements = defineAsyncComponent(() => import('@/ui/_common_/announce
 
 const isRoot = computed(() => mainRouter.currentRoute.value.name === 'index');
 const isThread = computed(() => mainRouter.currentRoute.value.name === 'note');
+const isTimeline = computed(() => mainRouter.currentRoute.value.path === '/timeline');
 const isChatRoom = computed(() => /^\/chat\/(user|room)\//.test(mainRouter.currentRoute.value.path));
 const isSocial = computed(() => isThread.value || ['/', '/timeline', '/my/favorites', '/my/notifications', '/chat'].includes(mainRouter.currentRoute.value.path) || isChatRoom.value);
 const chromeHidden = ref(false);
@@ -226,6 +227,7 @@ function onContextmenu(ev: PointerEvent) {
 .replySlot { position: absolute; z-index: 1100; bottom: max(12px, env(safe-area-inset-bottom, 0px)); left: 12px; right: 12px; max-width: calc(var(--zalip-feed-width) - 24px); margin-inline: auto; pointer-events: none; }
 
 .social .contents { border-inline: 1px solid var(--zalip-social-border); background: var(--zalip-social-panel); }
+.compactSocial:not(.mobile) .nonTitlebarArea { max-width: calc(240px + var(--zalip-feed-width)); }
 .social :global(._pageScrollable) { background: var(--zalip-social-panel); }
 
 .statusbars {

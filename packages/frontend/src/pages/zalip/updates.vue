@@ -17,7 +17,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div v-else-if="events.length === 0" :class="$style.empty"><i class="ti ti-bell-off"></i><strong>{{ i18n.ts.zalip.updatesEmptyTitle }}</strong><span>{{ i18n.ts.zalip.updatesEmptyDescription }}</span><MkA to="/catalog" :class="$style.start">{{ i18n.ts.zalip.updatesOpenCatalogue }}</MkA></div>
 			<div v-else :class="$style.list">
 				<MkA v-for="event in events" :key="event.id" :to="zalipWorkRoute(event.work.slug, event.season?.seasonNumber, event.episode?.episodeNumber)" :class="$style.event">
-					<img v-if="event.work.posterPath" :src="tmdbImage(event.work.posterPath)" :alt="event.work.title" loading="lazy">
+					<img v-if="images.poster(event.work)" :src="images.poster(event.work)!" :alt="event.work.title" width="300" height="450" loading="lazy" decoding="async" @error="images.failed">
 					<i v-else class="ti ti-movie" :class="$style.posterPlaceholder" aria-hidden="true"></i>
 					<div><p>{{ event.work.title }}</p><h2>{{ releaseLabel(event) }}</h2><span>{{ event.source === 'playback' ? i18n.ts.zalip.releaseInPlayer : i18n.ts.zalip.releaseInCatalogue }} · {{ dateLabel(event.createdAt) }}</span></div>
 				</MkA>
@@ -33,14 +33,14 @@ import { useZalipPageReload } from '@/composables/use-zalip-page-reload.js';
 import { zalipWorkRoute } from '@/utility/zalip-work-route.js';
 import { definePage } from '@/page.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
-import { importerImageUrl } from '@/utility/zalip-importer.js';
+import { useZalipImages } from '@/utility/zalip-image.js';
 import { i18n } from '@/i18n.js';
 
 type ReleaseEvent = {
 	id: string;
 	createdAt: string;
 	source: 'catalogue' | 'playback';
-	work: { slug: string; title: string; posterPath: string | null; };
+	work: { slug: string; title: string; posterPath: string | null; posterThumbnailUrl?: string | null; };
 	season: { seasonNumber: number; title: string; } | null;
 	episode: { episodeNumber: number; title: string; } | null;
 };
@@ -50,9 +50,7 @@ const pending = ref(true);
 const loadError = ref(false);
 let latestRequest = 0;
 
-function tmdbImage(path: string): string | undefined {
-	return importerImageUrl(path) ?? undefined;
-}
+const images = useZalipImages();
 
 function releaseLabel(event: ReleaseEvent): string {
 	if (event.season == null || event.episode == null) return i18n.ts.zalip.releaseAvailable;

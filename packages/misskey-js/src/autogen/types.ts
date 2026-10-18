@@ -42786,6 +42786,7 @@ export interface operations {
                             genres: string[];
                             runtimeMinutes: number | null;
                             posterPath: string | null;
+                            posterThumbnailUrl?: string | null;
                             backdropPath: string | null;
                             logoPath: string | null;
                             trailerYoutubeKey: string | null;
@@ -43118,6 +43119,7 @@ export interface operations {
                                 genres: string[];
                                 runtimeMinutes: number | null;
                                 posterPath: string | null;
+                                posterThumbnailUrl?: string | null;
                                 backdropPath: string | null;
                                 logoPath: string | null;
                                 trailerYoutubeKey: string | null;
@@ -44092,6 +44094,7 @@ export interface operations {
                         genres: string[];
                         runtimeMinutes: number | null;
                         posterPath: string | null;
+                        posterThumbnailUrl?: string | null;
                         backdropPath: string | null;
                         logoPath: string | null;
                         trailerYoutubeKey: string | null;
@@ -44191,6 +44194,7 @@ export interface operations {
                             genres: string[];
                             runtimeMinutes: number | null;
                             posterPath: string | null;
+                            posterThumbnailUrl?: string | null;
                             backdropPath: string | null;
                             logoPath: string | null;
                             trailerYoutubeKey: string | null;
@@ -44290,6 +44294,7 @@ export interface operations {
                         genres: string[];
                         runtimeMinutes: number | null;
                         posterPath: string | null;
+                        posterThumbnailUrl?: string | null;
                         backdropPath: string | null;
                         logoPath: string | null;
                         trailerYoutubeKey: string | null;
@@ -44380,6 +44385,7 @@ export interface operations {
                         }[];
                         runtimeMinutes: number | null;
                         posterPath: string | null;
+                        posterThumbnailUrl?: string | null;
                         backdropPath: string | null;
                         logoPath: string | null;
                         galleryPaths: string[];

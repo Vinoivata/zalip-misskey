@@ -20,7 +20,7 @@ export type WatchProgress = {
 	lastPlayedAt: string;
 };
 export type ContinueWatchingItem = WatchProgress & {
-	work: { id: string; slug: string; title: string; posterPath: string | null; backdropPath: string | null };
+	work: { id: string; slug: string; title: string; posterPath: string | null; posterThumbnailUrl?: string | null; backdropPath: string | null };
 	episode: { id: string; title: string; stillPath: string | null } | null;
 };
 export type WatchTarget = Pick<WatchProgress, 'workId' | 'episodeId' | 'provider' | 'translationId'>;

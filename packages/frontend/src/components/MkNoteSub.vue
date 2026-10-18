@@ -7,12 +7,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 <div v-if="note == null" :class="$style.deleted">
 	{{ i18n.ts.deletedNote }}
 </div>
-<div v-else-if="!muted" :class="[$style.root, { [$style.children]: depth > 1 }]">
+<div v-else-if="!muted" :class="[$style.root, { [$style.children]: depth > 1, [$style.thread]: thread }]">
 	<div :class="$style.main">
 		<div v-if="note.channel" :class="$style.colorBar" :style="{ background: note.channel.color }"></div>
 		<MkAvatar :class="$style.avatar" :user="note.user" link preview/>
 		<div :class="$style.body">
-			<MkNoteHeader :class="$style.header" :note="note" :stacked="detail"/>
+			<MkNoteHeader :class="$style.header" :note="note" stacked/>
 			<div>
 				<p v-if="note.cw != null" :class="$style.cw">
 					<Mfm v-if="note.cw != ''" style="margin-right: 8px;" :text="note.cw" :author="note.user" :nyaize="'respect'"/>
@@ -59,6 +59,7 @@ import { checkWordMute } from '@/utility/check-word-mute.js';
 const props = withDefaults(defineProps<{
 	note: Misskey.entities.Note | null;
 	detail?: boolean;
+	thread?: boolean;
 
 	// how many notes are in between this one and the note being viewed in detail
 	depth?: number;
@@ -91,14 +92,25 @@ if (props.detail && props.note) {
 
 <style lang="scss" module>
 .root {
-	padding: 16px 24px;
-	font-size: max(1em, 14px);
+	padding: 16px;
+	font-size: 14px;
 	position: relative;
 
 	&.children {
 		padding: 10px 0 0 16px;
 		font-size: 1em;
 	}
+}
+
+.thread::after {
+	content: '';
+	position: absolute;
+	left: 36px;
+	top: 60px;
+	bottom: -14px;
+	width: 1px;
+	background: var(--MI_THEME-divider);
+	pointer-events: none;
 }
 
 .main {
@@ -119,9 +131,9 @@ if (props.detail && props.note) {
 	flex-shrink: 0;
 	display: block;
 	margin: 0 8px 0 0;
-	width: 38px;
-	height: 38px;
-	border-radius: 8px;
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
 }
 
 .body {
@@ -144,7 +156,7 @@ if (props.detail && props.note) {
 .text {
 	margin: 0;
 	padding: 0;
-	line-height: 1.6;
+	line-height: 1.55;
 }
 
 .replyButton {
@@ -180,6 +192,7 @@ if (props.detail && props.note) {
 			padding: 10px 0 0 8px;
 		}
 	}
+	.thread::after { top: 58px; }
 }
 
 .muted {

@@ -205,8 +205,9 @@ export class ZalipWatchProgressService {
 		const rows = await query.orderBy('progress.lastPlayedAt', 'DESC').addOrderBy('progress.workId', 'DESC').take(limit + 1).getMany();
 		const visible = rows.slice(0, limit);
 		const last = visible.at(-1);
+		const thumbnails = await this.catalogue.nativePosterThumbnails(visible.map(row => row.work!));
 		return {
-			items: visible.map(row => ({ ...this.pack(row), work: this.catalogue.packWork(row.work!), episode: row.episode ? { id: row.episode.id, title: row.episode.title, stillPath: row.episode.stillPath } : null })),
+			items: visible.map(row => ({ ...this.pack(row), work: this.catalogue.packWork(row.work!, undefined, thumbnails.get(row.workId)), episode: row.episode ? { id: row.episode.id, title: row.episode.title, stillPath: row.episode.stillPath } : null })),
 			nextCursor: rows.length > limit && last ? Buffer.from(JSON.stringify({ played: last.lastPlayedAt.toISOString(), workId: last.workId })).toString('base64url') : null,
 		};
 	}

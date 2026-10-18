@@ -3,12 +3,18 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { describe, test, assert, afterEach } from 'vitest';
+import { describe, test, assert, afterEach, vi } from 'vitest';
 import { render, cleanup, type RenderResult } from '@testing-library/vue';
 import type { SummalyResult } from '@misskey-dev/summaly';
 import { components } from '@/components/index.js';
 import { directives } from '@/directives/index.js';
 import MkUrlPreview from '@/components/MkUrlPreview.vue';
+
+// These fixtures exercise preview rendering; viewport gating has its own tests.
+vi.mock('@/composables/use-media-activation.js', async () => {
+	const { ref } = await import('vue');
+	return { useMediaActivation: () => ref(true) };
+});
 
 describe('MkUrlPreview', () => {
 	const renderPreviewBy = async (summary: Partial<SummalyResult>): Promise<RenderResult> => {

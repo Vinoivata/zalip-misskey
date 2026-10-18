@@ -11,18 +11,18 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div v-else-if="work == null" :class="$style.state"><i class="ti ti-movie-off" aria-hidden="true"></i> Тайтл не найден или ещё не опубликован.</div>
 			<article v-else :class="$style.work">
 				<section :class="[$style.hero, { [$style.hasLogo]: work.logoPath, [$style.hasMobilePoster]: work.posterPath }]">
-					<div v-if="work.backdropPath" :class="$style.heroBackground" aria-hidden="true"><img :src="tmdbBackdrop(work.backdropPath)" alt=""></div>
+					<div v-if="work.backdropPath" :class="$style.heroBackground" aria-hidden="true"><img :src="tmdbBackdrop(work.backdropPath)" alt="" decoding="async" width="1280" height="720"></div>
 					<div :class="$style.mobileArtwork">
-						<div v-if="work.backdropPath || work.posterPath" :class="$style.mobileArtworkBackdrop" aria-hidden="true"><img :src="work.backdropPath ? tmdbBackdrop(work.backdropPath) : tmdbImage(work.posterPath!)" alt=""></div>
-						<img v-if="work.posterPath" :class="$style.mobileArtworkPoster" :src="tmdbImage(work.posterPath)" :alt="work.title" width="500" height="750">
+						<div v-if="work.backdropPath || work.posterPath" :class="$style.mobileArtworkBackdrop" aria-hidden="true"><img :src="work.backdropPath ? tmdbBackdrop(work.backdropPath) : tmdbImage(work.posterPath!)" alt="" decoding="async" width="1280" height="720"></div>
+						<img v-if="work.posterPath" :class="$style.mobileArtworkPoster" :src="tmdbImage(work.posterPath)" :alt="work.title" width="500" height="750" fetchpriority="high" decoding="async">
 						<div v-else-if="!work.backdropPath" :class="$style.missingArtwork"><i class="ti ti-movie" aria-hidden="true"></i><span>{{ work.title }}</span></div>
 					</div>
 					<div :class="$style.heroInner">
 						<nav :class="$style.breadcrumb" :aria-label="i18n.ts.zalip.catalogueHeading"><MkA to="/catalog">{{ i18n.ts.zalip.catalogueHeading }}</MkA><i class="ti ti-chevron-right" aria-hidden="true"></i><span>{{ work.title }}</span></nav>
-						<div v-if="work.logoPath" :class="$style.titleLogo"><img :src="tmdbImage(work.logoPath)" :alt="work.title"></div>
+						<div v-if="work.logoPath" :class="$style.titleLogo"><img :src="tmdbImage(work.logoPath)" :alt="work.title" decoding="async"></div>
 						<div :class="$style.heroContent">
 							<aside :class="$style.sidebar">
-								<div :class="$style.poster"><img v-if="work.posterPath" :src="tmdbImage(work.posterPath)" :alt="work.title"><i v-else class="ti ti-movie" aria-hidden="true"></i></div>
+								<div :class="$style.poster"><img v-if="work.posterPath" :src="tmdbImage(work.posterPath)" :alt="work.title" width="500" height="750" decoding="async"><i v-else class="ti ti-movie" aria-hidden="true"></i></div>
 								<div :class="$style.sidebarActions">
 									<button type="button" class="_button" :class="$style.watchButton" @click="openPlayer"><i class="ti ti-player-play-filled" aria-hidden="true"></i>{{ i18n.ts.zalip.watchTitle }}</button>
 									<button type="button" class="_button" :class="$style.sideButton" @click="focusDiscussion">{{ i18n.ts.zalip.discussTitle }}</button>
@@ -84,7 +84,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<div ref="watchFrame" :class="$style.watchFrame">
 								<div v-if="$i && playerOpen && activePlayerIframe" :class="$style.playerFrame"><iframe :key="`${activePlayerIframeKey}:${resumeFrameRevision}`" ref="playbackIframe" :src="resumeIframeUrl ?? activePlayerIframe" :title="i18n.ts.zalip.playerTab + ': ' + work.title" loading="lazy" referrerpolicy="origin" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>
 								<div v-else :class="$style.playerPreview">
-									<img v-if="selectedEpisode?.stillPath || work.backdropPath" :src="tmdbBackdrop(selectedEpisode?.stillPath || work.backdropPath!)" alt="" loading="lazy">
+									<img v-if="selectedEpisode?.stillPath || work.backdropPath" :src="tmdbBackdrop(selectedEpisode?.stillPath || work.backdropPath!)" alt="" width="1280" height="720" loading="lazy" decoding="async">
 									<button v-if="$i && activePlayback && selectedEpisodeAvailable" type="button" class="_button" :class="$style.playOverlay" :aria-label="i18n.ts.zalip.watchTitle" @click="openSelectedPlayer"><i class="ti ti-player-play-filled" aria-hidden="true"></i></button>
 									<button v-else-if="!$i" type="button" class="_button" :class="$style.playerState" @click="signInForDiscussion"><i class="ti ti-login" aria-hidden="true"></i>{{ i18n.ts.zalip.playerSignIn }}</button>
 									<p v-else-if="kodikEpisodeContextBlocked && episodesPending" :class="$style.playerState" role="status"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i>{{ i18n.ts.zalip.playerEpisodesLoading }}</p>
@@ -109,7 +109,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 								<p v-else-if="!episodes.length" :class="$style.episodeRailState">{{ i18n.ts.zalip.playerEpisodesEmpty }}</p>
 								<div v-else ref="episodeRail" :class="$style.episodeRail" :aria-label="i18n.ts.zalip.workEpisodes" @pointerdown="episodeDrag.onPointerDown" @pointermove="episodeDrag.onPointerMove" @pointerup="episodeDrag.onPointerUp" @pointercancel="episodeDrag.onPointerCancel" @click.capture="episodeDrag.onClickCapture">
 									<button v-for="episode in episodes" :key="episode.id" :data-episode-id="episode.id" type="button" class="_button" :class="[$style.episodeTile, { [$style.selectedEpisodeTile]: selectedEpisode?.id === episode.id }]" :aria-pressed="selectedEpisode?.id === episode.id" @click="selectEpisode(episode)">
-										<span :class="$style.episodeThumb"><img v-if="episode.stillPath" :src="tmdbGalleryImage(episode.stillPath)" alt="" loading="lazy"><i v-else class="ti ti-device-tv" aria-hidden="true"></i><span v-if="selectedEpisode?.id === episode.id" :class="$style.selectedPlay"><i class="ti ti-player-play-filled" aria-hidden="true"></i></span></span>
+										<span :class="$style.episodeThumb"><img v-if="episode.stillPath" :src="tmdbGalleryImage(episode.stillPath)" alt="" width="480" height="270" loading="lazy" decoding="async"><i v-else class="ti ti-device-tv" aria-hidden="true"></i><span v-if="selectedEpisode?.id === episode.id" :class="$style.selectedPlay"><i class="ti ti-player-play-filled" aria-hidden="true"></i></span></span>
 										<strong>{{ i18n.tsx.zalip.playerEpisodeNumber({ number: episode.episodeNumber }) }}</strong>
 										<small>{{ episode.title }}</small>
 									</button>
@@ -118,7 +118,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						</template>
 					</section>
 					<section v-if="selectedEpisode" :class="$style.episodeGuide" @touchstart.passive="startEpisodeSwipe" @touchend.passive="finishEpisodeSwipe" @touchcancel="episodeSwipeStart = null">
-						<img v-if="selectedEpisode.stillPath" :key="selectedEpisode.id" :class="$style.episodeGuideStill" :src="tmdbGalleryImage(selectedEpisode.stillPath)" alt="" loading="lazy">
+						<img v-if="selectedEpisode.stillPath" :key="selectedEpisode.id" :class="$style.episodeGuideStill" :src="tmdbGalleryImage(selectedEpisode.stillPath)" alt="" width="480" height="270" loading="lazy" decoding="async">
 						<div :class="$style.episodeGuideContent" aria-live="polite">
 							<p>{{ i18n.ts.zalip.episodeInformation }}</p>
 							<div :class="$style.guideNavigation"><button type="button" class="_button" :disabled="!previousEpisode" :aria-label="i18n.ts.zalip.playerPreviousEpisode" @click="selectRelativeEpisode(-1)"><i class="ti ti-chevron-left" aria-hidden="true"></i></button><span>{{ i18n.ts.zalip.episodeSwipeHint }}</span><button type="button" class="_button" :disabled="!nextEpisode" :aria-label="i18n.ts.zalip.playerNextEpisode" @click="selectRelativeEpisode(1)"><i class="ti ti-chevron-right" aria-hidden="true"></i></button></div>
@@ -131,7 +131,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<section v-if="work.galleryPaths.length" :class="$style.gallery">
 						<h2><i class="ti ti-photo" aria-hidden="true"></i> Кадры</h2>
 						<div :class="$style.galleryGrid">
-							<a v-for="path in work.galleryPaths" :key="path" :href="tmdbBackdrop(path)" target="_blank" rel="noopener noreferrer" :aria-label="`Открыть кадр из ${work.title}`"><img :src="tmdbGalleryImage(path)" alt="" loading="lazy"></a>
+							<a v-for="path in work.galleryPaths" :key="path" :href="tmdbBackdrop(path)" target="_blank" rel="noopener noreferrer" :aria-label="`Открыть кадр из ${work.title}`"><img :src="tmdbGalleryImage(path)" alt="" width="480" height="270" loading="lazy" decoding="async"></a>
 						</div>
 					</section>
 					<section v-for="section in catalogueSections" :key="section.id" :class="$style.catalogueSection" :aria-labelledby="`${work.id}-taxonomy-${section.id}`">

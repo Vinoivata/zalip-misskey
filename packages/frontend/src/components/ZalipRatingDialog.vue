@@ -11,7 +11,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<button type="button" class="_button" :class="$style.close" :disabled="saving" :aria-label="i18n.ts.close" @click="dismiss"><i class="ti ti-x" aria-hidden="true"></i></button>
 		</header>
 		<div v-if="title" :class="$style.workHeader">
-			<div :class="$style.poster"><img v-if="posterUrl" :src="posterUrl" alt=""><i v-else class="ti ti-movie" aria-hidden="true"></i></div>
+			<div :class="$style.poster"><img v-if="posterUrl" :src="posterUrl" alt="" width="300" height="450" decoding="async"><i v-else class="ti ti-movie" aria-hidden="true"></i></div>
 			<h3>{{ title }}</h3><p v-if="subtitle">{{ subtitle }}</p>
 		</div>
 		<div :class="$style.picker">
@@ -31,7 +31,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div v-else-if="relatedError" :class="$style.empty"><p role="alert">{{ i18n.ts.zalip.libraryLoadFailed }}</p><button type="button" class="_button" :class="$style.retry" :disabled="saving" @click="emit('retry')">{{ i18n.ts.retry }}</button></div>
 			<div v-else-if="similarWorks.length" :class="$style.relatedRail">
 				<figure v-for="entry in similarWorks" :key="entry.work.id" :class="$style.relatedCard">
-					<div :class="$style.relatedPoster"><img v-if="importerImageUrl(entry.work.posterPath)" :src="importerImageUrl(entry.work.posterPath, 'w342')!" alt="" loading="lazy"><i v-else class="ti ti-movie" aria-hidden="true"></i></div>
+					<div :class="$style.relatedPoster"><img v-if="images.poster(entry.work)" :src="images.poster(entry.work)!" alt="" width="300" height="450" loading="lazy" decoding="async" @error="images.failed"><i v-else class="ti ti-movie" aria-hidden="true"></i></div>
 					<figcaption>{{ entry.work.title }}</figcaption>
 				</figure>
 			</div>
@@ -44,7 +44,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script lang="ts">
 export type RatedLibraryEntry = {
 	personalRating: number | null;
-	work: { id: string; title: string; posterPath: string | null };
+	work: { id: string; title: string; posterPath: string | null; posterThumbnailUrl?: string | null };
 };
 </script>
 
@@ -52,7 +52,7 @@ export type RatedLibraryEntry = {
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, useTemplateRef, watch } from 'vue';
 import MkModal from '@/components/MkModal.vue';
 import { i18n } from '@/i18n.js';
-import { importerImageUrl } from '@/utility/zalip-importer.js';
+import { useZalipImages } from '@/utility/zalip-image.js';
 
 const props = withDefaults(defineProps<{
 	initialRating?: number;
@@ -73,6 +73,7 @@ const emit = defineEmits<{
 }>();
 
 const modal = useTemplateRef('modal');
+const images = useZalipImages();
 const rail = useTemplateRef('rail');
 const mobileQuery = window.matchMedia('(max-width: 600px)');
 const mobile = ref(mobileQuery.matches);

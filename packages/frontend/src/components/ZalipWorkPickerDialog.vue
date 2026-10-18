@@ -32,7 +32,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div v-else :class="$style.results">
 			<button v-for="work in results" :key="work.id" type="button" class="_button" :class="$style.result" @click="select(work)">
 				<div :class="$style.poster">
-					<img v-if="work.posterPath" :src="posterUrl(work.posterPath)" alt="" loading="lazy">
+					<img v-if="images.poster(work, 'w185')" :src="images.poster(work, 'w185')!" alt="" width="185" height="278" loading="lazy" decoding="async" @error="images.failed">
 					<i v-else class="ti ti-movie"></i>
 				</div>
 				<div :class="$style.body">
@@ -53,7 +53,7 @@ import { nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from
 import MkModalWindow from '@/components/MkModalWindow.vue';
 import type { ZalipWorkShare } from '@/types/post-form.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
-import { importerImageUrl } from '@/utility/zalip-importer.js';
+import { useZalipImages } from '@/utility/zalip-image.js';
 
 type SearchResult = ZalipWorkShare & {
 	originalTitle: string | null;
@@ -75,16 +75,13 @@ const dialog = useTemplateRef('dialog');
 const input = useTemplateRef('input');
 const query = ref(props.initialQuery);
 const results = ref<SearchResult[]>([]);
+const images = useZalipImages();
 const pending = ref(false);
 let searchTimer: number | null = null;
 let requestId = 0;
 
 function kindLabel(kind: ZalipWorkShare['kind']): string {
 	return ({ movie: 'Фильм', series: 'Сериал', anime: 'Аниме', animation: 'Анимация' })[kind];
-}
-
-function posterUrl(path: string): string | undefined {
-	return importerImageUrl(path, 'w185') ?? undefined;
 }
 
 async function search(term: string): Promise<void> {
