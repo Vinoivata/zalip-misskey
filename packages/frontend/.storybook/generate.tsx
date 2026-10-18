@@ -473,6 +473,7 @@ function toStories(component: string): Promise<string> {
 		globSync('src/components/MkZalipFollowButton.vue'),
 		globSync('src/components/MkMediaList.vue'),
 		globSync('src/components/MkMenu.vue'),
+		globSync('src/components/MkPopupMenu.vue'),
 		globSync('src/components/MkZalipImageGallery.vue'),
 		globSync('src/components/MkZalipAccentPicker.vue'),
 		globSync('src/components/MkZalipSectionHeader.vue'),

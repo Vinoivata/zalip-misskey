@@ -12,11 +12,11 @@ import menuSource from '@/components/MkMenu.vue?raw';
 import type { MenuItem } from '@/types/menu.js';
 
 vi.mock('@/os.js', () => ({ popupMenu: vi.fn().mockResolvedValue(undefined) }));
-vi.mock('@/components/MkModal.vue', () => ({ default: { template: '<div><slot type="popup" :maxHeight="400" /></div>' } }));
+vi.mock('@/components/MkModal.vue', () => ({ default: { props: ['preferType'], template: '<div data-testid="menu-modal" :data-mode="preferType"><slot :type="preferType === \'drawer\' ? \'drawer\' : \'popup\'" :maxHeight="400" /></div>' } }));
 
 const directives = { hotkey: {} };
 async function settle(): Promise<void> { await nextTick(); await Promise.resolve(); await nextTick(); }
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('scoped note action menu appearance', () => {
 	it('uses modest type and left-hand icons only in the opt-in post menu', () => {
@@ -50,5 +50,21 @@ describe('scoped note action menu appearance', () => {
 		expect(view.getByRole('menu').className).toContain('zalipNote'); expect(view.getByRole('menuitem', { name: 'Popup fixture' })).toBeTruthy();
 		const panel = view.getByRole('menu').firstElementChild as HTMLElement;
 		expect(panel.style.maxHeight).toContain('400px');
+	});
+	it.each([true, false])('uses a full-width native drawer only for narrow post menus (narrow=%s)', async narrow => {
+		const query = vi.fn().mockReturnValue({ matches: narrow });
+		vi.stubGlobal('matchMedia', query);
+		const view = render(MkPopupMenu, { props: { appearance: 'zalip-note', items: [{ text: 'Post fixture', action: vi.fn() }] }, global: { directives } }); await settle();
+		expect(query).toHaveBeenCalledWith('(max-width: 600px)');
+		expect(view.getByTestId('menu-modal').getAttribute('data-mode')).toBe(narrow ? 'drawer' : 'auto');
+		expect(view.getByRole('menu').className.includes('asDrawer')).toBe(narrow);
+		view.unmount();
+		const native = render(MkPopupMenu, { props: { items: [{ text: 'Native fixture', action: vi.fn() }] }, global: { directives } }); await settle();
+		expect(native.getByTestId('menu-modal').getAttribute('data-mode')).toBe('auto');
+	});
+	it('does not retain desktop width or bottom rounding in the post drawer and keeps safe-area padding', () => {
+		const drawer = menuSource.split('&.asDrawer > .menu {')[1].split('\n\t}')[0];
+		expect(drawer).toContain('width: 100%;'); expect(drawer).toContain('max-width: 100%;');
+		expect(drawer).toContain('border-radius: 24px 24px 0 0;'); expect(drawer).toContain('env(safe-area-inset-bottom, 0px)');
 	});
 });

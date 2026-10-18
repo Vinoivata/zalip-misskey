@@ -73,6 +73,7 @@
 - Fix: Preserve author names beside compact mobile follow controls and refine composer help, focus indication and advanced settings without changing posting or subscription behavior.
 - Enhance: Show post albums with natural-proportion adjacent photos and compact title-frame previews, improve keyboard and edge navigation, and make fullscreen galleries resilient, accessible and lazy-loaded.
 - Fix: Keep reposted comments and their attachments visible with clear discussion context, guard comment actions against stale requests, align reply previews and social controls, and simplify post menus without changing privacy or federation settings.
+- Fix: Open mobile post menus as full-width bottom sheets and reduce follow symbols and visible badges while retaining accessible touch targets.
 
 ### Server
 - Fix: Retain existing Kinopoisk photos through one validated image-CDN redirect during original-only artwork localization without enabling redirect chains or broadening image limits.

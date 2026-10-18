@@ -108,7 +108,8 @@ async function onClick(): Promise<void> {
 <style lang="scss" module>
 .root { display: inline-flex; align-items: center; justify-content: center; gap: 5px; flex: 0 0 auto; align-self: flex-start; min-height: 26px; max-width: min(150px, 42vw); padding: 0 10px; border: 1px solid var(--MI_THEME-divider); border-radius: 50px; color: var(--MI_THEME-fg); background: transparent; font-family: var(--zalip-font-family, inherit); font-size: 12px; font-weight: 700; line-height: 1.25; transition: background .15s, border-color .15s; }
 .root > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.root > i { flex-shrink: 0; font-size: 14px; }
+.root > i { display: grid; place-items: center; flex: 0 0 14px; width: 14px; height: 14px; font-size: 14px; line-height: 1; vertical-align: 0; }
+.root > i::before { display: block; font-size: 1em; line-height: 1; }
 .root:hover:not(:disabled) { background: var(--MI_THEME-buttonHoverBg); border-color: var(--MI_THEME-fgTransparentWeak); }
 .root:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; }
 .root:disabled { opacity: .65; }
@@ -118,7 +119,12 @@ async function onClick(): Promise<void> {
 @media (prefers-reduced-motion: reduce) { .root { transition: none; } .spinner { animation: none; } }
 @media (pointer: coarse) { .root { min-height: 44px; } }
 @media (max-width: 600px) {
-	.root { --zalip-follow-compact-size: 36px; width: var(--zalip-follow-compact-size); min-width: var(--zalip-follow-compact-size); max-width: var(--zalip-follow-compact-size); min-height: var(--zalip-follow-compact-size); flex-basis: var(--zalip-follow-compact-size); box-sizing: border-box; padding: 0; gap: 0; }
+	.root { --zalip-follow-compact-size: 36px; position: relative; width: var(--zalip-follow-compact-size); min-width: var(--zalip-follow-compact-size); max-width: var(--zalip-follow-compact-size); min-height: var(--zalip-follow-compact-size); flex-basis: var(--zalip-follow-compact-size); box-sizing: border-box; padding: 0; gap: 0; border-color: transparent; background: transparent; }
+	.root::before { content: ''; position: absolute; inset: 0; margin: auto; width: 28px; height: 28px; box-sizing: border-box; border: 1px solid var(--MI_THEME-divider); border-radius: 50%; background: transparent; }
+	.root.selected::before { background: var(--MI_THEME-panelHighlight); }
+	.root:hover:not(:disabled) { background: transparent; border-color: transparent; }
+	.root:hover:not(:disabled)::before { background: var(--MI_THEME-buttonHoverBg); border-color: var(--MI_THEME-fgTransparentWeak); }
+	.root > i { position: relative; }
 	.root > span { display: none; }
 }
 @media (max-width: 600px) and (pointer: coarse) { .root { --zalip-follow-compact-size: 44px; } }

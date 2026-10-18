@@ -670,7 +670,12 @@ function guardMouseMove(ev: MouseEvent) {
 		> .divider { margin: 8px 0; }
 	}
 
-	&.asDrawer > .menu { padding-bottom: max(env(safe-area-inset-bottom, 0px), 12px); }
+	&.asDrawer > .menu {
+		width: 100%;
+		max-width: 100%;
+		border-radius: 24px 24px 0 0;
+		padding-bottom: max(env(safe-area-inset-bottom, 0px), 12px);
+	}
 }
 
 .item {

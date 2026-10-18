@@ -71,6 +71,9 @@ describe('compact native author follow actions', () => {
 		const mobile = source.match(/@media \(max-width: 600px\) \{([\s\S]+?)\n\}/)?.[1];
 		expect(mobile).toContain('--zalip-follow-compact-size: 36px;'); expect(mobile).toContain('flex-basis: var(--zalip-follow-compact-size);'); expect(mobile).toContain('.root > span { display: none; }');
 		expect(source).toContain('@media (max-width: 600px) and (pointer: coarse) { .root { --zalip-follow-compact-size: 44px; } }');
+		expect(source).toContain('width: 28px; height: 28px;');
+		expect(source).toContain('.root > i::before { display: block; font-size: 1em; line-height: 1; }');
+		expect(source).toContain('width: 14px; height: 14px; font-size: 14px; line-height: 1;');
 	});
 	it('loads only viewport demand, batches authors and shares one main-channel subscription', async () => {
 		const Host = defineComponent({ setup: () => () => h('div', [h(MkZalipFollowButton, { user: user('a') }), h(MkZalipFollowButton, { user: user('a') }), h(MkZalipFollowButton, { user: user('b') })]) });

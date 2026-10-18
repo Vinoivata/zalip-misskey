@@ -10,6 +10,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	:manualShowing="manualShowing"
 	:zPriority="'high'"
 	:anchorElement="anchorElement"
+	:preferType="modalType"
 	:transparentBg="true"
 	:returnFocusTo="returnFocusTo"
 	@click="click"
@@ -39,7 +40,7 @@ import MkModal from './MkModal.vue';
 import MkMenu from './MkMenu.vue';
 import type { MenuItem } from '@/types/menu.js';
 
-defineProps<{
+const props = defineProps<{
 	items: MenuItem[];
 	align?: 'center' | string;
 	width?: number;
@@ -49,6 +50,10 @@ defineProps<{
 	debugDisablePredictionCone?: boolean;
 	debugShowPredictionCone?: boolean;
 }>();
+
+// MkModal initializes drawer geometry on opening; do not depend on touch/UA
+// detection for the mobile post menu (including narrow desktop/PWA windows).
+const modalType = props.appearance === 'zalip-note' && window.matchMedia('(max-width: 600px)').matches ? 'drawer' : 'auto';
 
 const emit = defineEmits<{
 	(ev: 'closed'): void;
