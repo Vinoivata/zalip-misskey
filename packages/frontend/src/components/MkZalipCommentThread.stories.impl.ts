@@ -2,7 +2,7 @@
  * SPDX-FileCopyrightText: syuilo and misskey-project
  * SPDX-License-Identifier: AGPL-3.0-only
  */
- 
+
 import { http, HttpResponse } from 'msw';
 import { file, note } from '../../.storybook/fakes.js';
 import MkZalipCommentThread from './MkZalipCommentThread.vue';
