@@ -98,6 +98,11 @@ describe('Zalip chat composer', () => {
 		const view = setup(); await fireEvent.update(view.getByRole('textbox'), 'x'.repeat(2001)); expect((view.getByRole('button', { name: i18n.ts.send }) as HTMLButtonElement).disabled).toBe(true);
 		await view.rerender({ active: false }); await fireEvent.keyDown(view.getByRole('textbox'), { key: 'Enter' }); expect(controls.api).not.toHaveBeenCalled();
 	});
+	it('keeps the capsule counter quiet until the limit approaches without changing validation', async () => {
+		const view = setup(); const input = view.getByRole('textbox'); await fireEvent.update(input, 'Hello'); expect(view.queryByText('5 / 2000')).toBeNull();
+		await fireEvent.update(input, 'x'.repeat(1800)); expect(view.getByText('1800 / 2000')).toBeTruthy(); expect((view.getByRole('button', { name: i18n.ts.send }) as HTMLButtonElement).disabled).toBe(false);
+		await fireEvent.update(input, 'x'.repeat(2001)); expect(view.getByText('2001 / 2000')).toBeTruthy(); expect((view.getByRole('button', { name: i18n.ts.send }) as HTMLButtonElement).disabled).toBe(true);
+	});
 	it('stops a permission result arriving after collapse without recording or uploading', async () => {
 		const pending = deferred<MediaStream>(); const track = { stop: vi.fn() }; controls.media.mockReturnValue(pending.promise);
 		vi.stubGlobal('MediaRecorder', class {}); Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: controls.media } });

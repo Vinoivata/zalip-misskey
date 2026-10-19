@@ -6,11 +6,17 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <div :class="$style.root" @dragover.prevent="onDragover" @drop.prevent.stop="onDrop">
 	<div v-if="editingMessage || replyTo" :class="$style.context"><i :class="editingMessage ? 'ti ti-pencil' : 'ti ti-corner-up-left'"></i><div><strong>{{ editingMessage ? i18n.ts.zalip._chatUi.editing : i18n.ts.zalip._chatUi.replyTo }}</strong><span>{{ (editingMessage || replyTo)?.text || i18n.ts.zalip._chatUi.attachment }}</span></div><button type="button" class="_button" :class="$style.button" :aria-label="i18n.ts.cancel" :disabled="sending" @click="cancelContext"><i class="ti ti-x"></i></button></div>
-	<textarea ref="textareaEl" v-model="text" :class="$style.textarea" :aria-label="i18n.ts.inputMessageHere" :placeholder="i18n.ts.inputMessageHere" :disabled="!allowed || sending || recording" :readonly="pickerOpen" maxlength="4000" rows="1" @keydown="onKeydown" @paste="onPaste" @input="emit('typing', text.length > 0)"></textarea>
 	<div v-if="file && !editingMessage" :class="$style.attachment"><i class="ti ti-paperclip"></i><span>{{ file.name }}</span><button type="button" class="_button" :class="$style.button" :aria-label="i18n.ts.remove" :disabled="sending" @click="file = null"><i class="ti ti-x"></i></button></div>
 	<p v-if="file || editingMessage?.file" :class="$style.hint">{{ i18n.ts.zalip._chatUi.privateFilesHint }}</p>
 	<div v-if="recording" :class="$style.recording" role="status"><i class="ti ti-microphone"></i>{{ i18n.ts.zalip._chatUi.recording }}<button type="button" class="_button" :class="$style.button" :aria-label="i18n.ts.zalip._chatUi.cancelRecording" @click="cancelRecording"><i class="ti ti-x"></i></button><button type="button" class="_button" :class="$style.button" :aria-label="i18n.ts.zalip._chatUi.stopRecording" @click="stopRecording"><i class="ti ti-player-stop"></i></button></div>
-	<footer :class="$style.footer"><button type="button" class="_button" :class="$style.button" :aria-label="i18n.ts.attachFile" :disabled="!allowed || busy || !!editingMessage" @click="chooseFile"><i class="ti ti-photo-plus"></i></button><button type="button" class="_button" :class="$style.button" :aria-label="i18n.ts.emoji" :disabled="!allowed || busy" @click="insertEmoji"><i class="ti ti-mood-happy"></i></button><button v-if="voiceSupported" type="button" class="_button" :class="$style.button" :aria-label="i18n.ts.zalip._chatUi.recordVoice" :disabled="!allowed || busy || !!editingMessage" @click="recordVoice"><i class="ti ti-microphone"></i></button><small :class="$style.counter">{{ Array.from(text).length }} / 2000</small><button type="button" class="_button" :class="[$style.button, $style.send]" :disabled="!canSend" :aria-label="editingMessage ? i18n.ts.save : i18n.ts.send" @click="send"><i :class="sending || uploading ? 'ti ti-loader-2 ti-spin' : editingMessage ? 'ti ti-check' : 'ti ti-send'"></i></button></footer>
+	<div :class="$style.capsule">
+		<button type="button" class="_button" :class="$style.button" :aria-label="i18n.ts.attachFile" :disabled="!allowed || busy || !!editingMessage" @click="chooseFile"><i class="ti ti-plus"></i></button>
+		<textarea ref="textareaEl" v-model="text" :class="$style.textarea" :aria-label="i18n.ts.inputMessageHere" :placeholder="i18n.ts.inputMessageHere" :disabled="!allowed || sending || recording" :readonly="pickerOpen" maxlength="4000" rows="1" @keydown="onKeydown" @paste="onPaste" @input="emit('typing', text.length > 0)"></textarea>
+		<button type="button" class="_button" :class="$style.button" :aria-label="i18n.ts.emoji" :disabled="!allowed || busy" @click="insertEmoji"><i class="ti ti-mood-smile"></i></button>
+		<button v-if="voiceSupported && !text.trim() && !file && !editingMessage && !sending && !uploading" type="button" class="_button" :class="$style.button" :aria-label="i18n.ts.zalip._chatUi.recordVoice" :disabled="!allowed || busy" @click="recordVoice"><i :class="voicePending ? 'ti ti-loader-2 ti-spin' : 'ti ti-microphone'"></i></button>
+		<button v-else type="button" class="_button" :class="[$style.button, $style.send]" :disabled="!canSend" :aria-label="editingMessage ? i18n.ts.save : i18n.ts.send" @click="send"><i :class="sending || uploading ? 'ti ti-loader-2 ti-spin' : editingMessage ? 'ti ti-check' : 'ti ti-arrow-up'"></i></button>
+	</div>
+	<small v-if="Array.from(text).length >= 1800" :class="[$style.counter, { [$style.overLimit]: Array.from(text).length > 2000 }]">{{ Array.from(text).length }} / 2000</small>
 	<p v-if="error" :class="$style.error" role="alert">{{ error }}</p><p v-if="!allowed" :class="$style.hint">{{ i18n.ts.zalip._chatUi.readOnly }}</p>
 </div>
 </template>
@@ -61,7 +67,10 @@ watch([text, file], () => { draftVersion++; saveDraft(); }, { flush: 'sync' });
 watch(() => [props.user?.id, props.room?.id, me.id], () => { epoch++; cancelRecording(); sending.value = false; uploading.value = false; error.value = ''; restore(); }, { immediate: true });
 watch(() => props.editingMessage?.id, () => { error.value = ''; if (props.editingMessage) text.value = props.editingMessage.text ?? ''; else restore(); void nextTick(() => textareaEl.value?.focus()); });
 watch(() => props.active, active => { if (!active) { cancelRecording(); emit('typing', false); } });
-watch(textareaEl, element => { autocomplete?.detach(); autocomplete = element ? new Autocomplete(element, text) : null; });
+watch(textareaEl, element => { autocomplete?.detach(); autocomplete = element ? new Autocomplete(element, text) : null; void nextTick(resizeTextarea); });
+watch(text, () => { void nextTick(resizeTextarea); });
+
+function resizeTextarea(): void { const element = textareaEl.value; if (!element) return; element.style.height = 'auto'; element.style.height = `${Math.min(Math.max(element.scrollHeight, 44), 144)}px`; }
 
 function cancelContext(): void { if (props.editingMessage) emit('cancelEdit'); else emit('cancelReply'); }
 
@@ -139,16 +148,18 @@ onBeforeUnmount(() => { saveDraft(); alive = false; epoch++; cancelRecording(); 
 </script>
 
 <style lang="scss" module>
-.root { padding: 8px; border: 1px solid var(--MI_THEME-divider); border-radius: 20px; background: var(--MI_THEME-panel); }
-.root:focus-within { border-color: var(--MI_THEME-accent); }
-.textarea { display: block; box-sizing: border-box; width: 100%; min-height: 44px; max-height: 160px; resize: vertical; field-sizing: content; padding: 10px; border: 0; color: var(--MI_THEME-fg); background: transparent; font: inherit; line-height: 1.5; }
-.textarea:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: -2px; border-radius: 12px; }
-.footer, .attachment, .recording, .context { display: flex; align-items: center; gap: 6px; }
-.attachment, .context { padding: 6px 10px; border-radius: 12px; background: var(--MI_THEME-accentedBg); > span, > div { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
+.root { min-width: 0; }
+.capsule { display: flex; align-items: flex-end; gap: 2px; min-height: 50px; padding: 3px; box-sizing: border-box; border: 1px solid var(--MI_THEME-divider); border-radius: 28px; background: var(--MI_THEME-panelHighlight); }
+.capsule:focus-within { border-color: var(--MI_THEME-accent); }
+.textarea { display: block; flex: 1; min-width: 0; box-sizing: border-box; width: 100%; min-height: 44px; max-height: 144px; resize: none; field-sizing: content; padding: 11px 4px; border: 0; color: var(--MI_THEME-fg); background: transparent; font: inherit; font-size: 15px; line-height: 22px; }
+.textarea:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: -2px; border-radius: 10px; }
+.attachment, .recording, .context { display: flex; align-items: center; gap: 6px; }
+.attachment, .context { padding: 6px 10px; margin-bottom: 8px; border-radius: 16px; background: var(--MI_THEME-accentedBg); > span, > div { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
 .context > div { display: grid; gap: 4px; font-size: 12px; > span { overflow: hidden; text-overflow: ellipsis; } strong { color: var(--MI_THEME-accent); } }
 .button { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; border-radius: 50%; font-size: 21px; &:hover:not(:disabled) { background: var(--MI_THEME-buttonHoverBg); } &:focus-visible { outline: 2px solid var(--MI_THEME-accent); outline-offset: 2px; } &:disabled { opacity: .45; } }
 .send { background: var(--MI_THEME-accent); color: var(--MI_THEME-fgOnAccent); }
-.counter { flex: 1; text-align: end; font-size: 10px; color: var(--MI_THEME-fgTransparentWeak); }
+.counter { display: block; margin: 5px 12px 0; text-align: end; font-size: 11px; color: var(--MI_THEME-fgTransparentWeak); }
+.overLimit { color: var(--MI_THEME-error); }
 .error, .hint { margin: 6px 10px; font-size: 12px; color: var(--MI_THEME-error); }
 .hint { color: var(--MI_THEME-fgTransparentWeak); }
 .recording { padding: 6px; font-size: 13px; color: var(--MI_THEME-error); }

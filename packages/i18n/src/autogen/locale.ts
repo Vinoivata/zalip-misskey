@@ -3396,6 +3396,34 @@ export interface Locale extends ILocale {
              * Прикрепляйте только файлы, ссылками на которые можно делиться.
              */
             "privateFilesHint": string;
+            /**
+             * Информация о диалоге
+             */
+            "conversationDetails": string;
+            /**
+             * Вложения из загруженных сообщений
+             */
+            "loadedAttachments": string;
+            /**
+             * Здесь показаны только вложения из уже загруженной части переписки.
+             */
+            "loadedAttachmentsHint": string;
+            /**
+             * В загруженных сообщениях пока нет вложений.
+             */
+            "noLoadedAttachments": string;
+            /**
+             * Медиа
+             */
+            "media": string;
+            /**
+             * Файлы
+             */
+            "files": string;
+            /**
+             * Сегодня
+             */
+            "today": string;
         };
         "_reviews": {
             /**

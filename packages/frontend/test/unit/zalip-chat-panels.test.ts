@@ -10,7 +10,7 @@ import Conversation from '@/components/MkZalipChatConversation.vue';
 import Sidebar from '@/components/MkZalipChatSidebar.vue';
 import { i18n } from '@/i18n.js';
 
-const controls = vi.hoisted(() => ({ api: vi.fn(), menu: vi.fn(), user: vi.fn(), account: null as any, channels: [] as any[], observers: [] as any[] }));
+const controls = vi.hoisted(() => ({ api: vi.fn(), menu: vi.fn(), user: vi.fn(), account: null as any, channels: [] as any[], observers: [] as any[], resizeObservers: [] as any[] }));
 vi.mock('@/i.js', () => ({ ensureSignin: () => controls.account }));
 vi.mock('@/utility/misskey-api.js', () => ({ misskeyApi: controls.api, misskeyApiZalip: controls.api }));
 vi.mock('@/os.js', () => ({ popupMenu: controls.menu, selectUser: controls.user, toast: vi.fn(), popups: { value: [] } }));
@@ -19,6 +19,8 @@ vi.mock('@/pages/chat/room.form.vue', () => ({ default: { props: ['active'], tem
 vi.mock('@/pages/chat/room.search.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('@/pages/chat/room.members.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('@/pages/chat/room.info.vue', () => ({ default: { template: '<div />' } }));
+vi.mock('@/components/MkMediaList.vue', () => ({ default: { props: ['mediaList'], template: '<div data-testid="loaded-media">{{ mediaList.length }}</div>' } }));
+vi.mock('@/components/MkMediaBanner.vue', () => ({ default: { props: ['media'], template: '<div data-testid="loaded-file" :data-sensitive="media.isSensitive">{{ media.name }}</div>' } }));
 vi.mock('@/pages/chat/XMessage.vue', () => ({ default: { props: ['message', 'isReadByRecipient'], emits: ['pin'], template: '<div><span>{{ message.text }}</span><span data-testid="reactions">{{ message.reactions.length }}</span><span v-if="isReadByRecipient">READ</span><button @click="$emit(\'pin\', message)">Pin message</button></div>' } }));
 vi.mock('@/components/MkPullToRefresh.vue', () => ({ default: { template: '<div><slot /></div>' } }));
 
@@ -41,7 +43,7 @@ function geometry(view: ReturnType<typeof setup>, visible = true) {
 }
 
 beforeEach(() => {
-	vi.clearAllMocks(); vi.useFakeTimers(); controls.channels.length = 0; controls.observers.length = 0;
+	vi.clearAllMocks(); vi.useFakeTimers(); controls.channels.length = 0; controls.observers.length = 0; controls.resizeObservers.length = 0;
 	controls.account = reactive({ id: 'me', username: 'me', host: null, policies: { chatAvailability: 'available' } });
 	controls.api.mockImplementation(async (endpoint: string, params: any) => {
 		if (endpoint === 'users/show') return { ...peer, id: params.userId };
@@ -52,6 +54,7 @@ beforeEach(() => {
 		return { ...preference, ...params };
 	});
 	vi.stubGlobal('IntersectionObserver', class { callback: any; constructor(callback: any) { this.callback = callback; controls.observers.push(this); } observe() {} disconnect() {} });
+	vi.stubGlobal('ResizeObserver', class { callback: any; constructor(callback: any) { this.callback = callback; controls.resizeObservers.push(this); } observe() {} disconnect() {} });
 	HTMLElement.prototype.scrollTo = vi.fn();
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
@@ -79,6 +82,30 @@ describe('Zalip conversation visibility and lifecycle', () => {
 		const view = setup(); await settle(); const composer = view.getByTestId('composer'); await fireEvent.update(composer, 'Unsent draft');
 		await view.rerender({ active: false }); await view.rerender({ active: true }); await settle();
 		expect(view.getByTestId('composer')).toBe(composer); expect((composer as HTMLTextAreaElement).value).toBe('Unsent draft'); expect(view.getByText('Message 01')).toBeTruthy();
+	});
+	it('does not read messages covered by narrow details and preserves the mounted composer', async () => {
+		const view = setup(); await settle(); const element = geometry(view); const observer = controls.observers.at(-1); const row = element.querySelector('[data-chat-message-id="02"]');
+		const composer = view.getByTestId('composer'); await fireEvent.update(composer, 'Unsent draft'); await fireEvent.scroll(element);
+		await fireEvent.click(view.getAllByRole('button', { name: i18n.ts.zalip._chatUi.conversationDetails })[1]); await settle();
+		observer.callback([{ target: row, isIntersecting: true, intersectionRatio: 1 }]); await vi.advanceTimersByTimeAsync(150); await settle();
+		expect(readCalls()).toHaveLength(0); expect((composer as HTMLTextAreaElement).disabled).toBe(true); expect((composer as HTMLTextAreaElement).value).toBe('Unsent draft');
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.close })); await settle(); geometry(view); await fireEvent.scroll(element); await vi.advanceTimersByTimeAsync(150); await settle();
+		expect(view.getByTestId('composer')).toBe(composer); expect(readCalls()).toHaveLength(1);
+	});
+	it('keeps visible desktop messages readable beside the split details pane', async () => {
+		const view = setup(); await settle(); controls.resizeObservers[0].callback([{ contentRect: { width: 1100 } }]); await settle();
+		await fireEvent.click(view.getAllByRole('button', { name: i18n.ts.zalip._chatUi.conversationDetails })[1]); await settle();
+		expect((view.getByTestId('composer') as HTMLTextAreaElement).disabled).toBe(false); const element = geometry(view); await fireEvent.scroll(element); await vi.advanceTimersByTimeAsync(150); await settle(); expect(readCalls()).toHaveLength(1);
+	});
+	it('shows only deduplicated loaded attachments and labels that limitation explicitly', async () => {
+		const original = controls.api.getMockImplementation()!; const image = { id: 'photo', name: 'Photo.jpg', type: 'image/jpeg', url: '/synthetic-photo' }; const file = { id: 'pdf', name: 'Guide.pdf', type: 'application/pdf', url: '/synthetic-file', isSensitive: true };
+		controls.api.mockImplementation(async (endpoint: string, params: any) => endpoint.endsWith('-timeline') ? [message('03', { file: image }), message('02', { file: image }), message('01', { file })] : original(endpoint, params));
+		const view = setup(); await settle(); await fireEvent.click(view.getAllByRole('button', { name: i18n.ts.zalip._chatUi.conversationDetails })[1]); await settle();
+		expect(view.getByText(i18n.ts.zalip._chatUi.loadedAttachmentsHint)).toBeTruthy(); expect(view.getByTestId('loaded-media').textContent).toBe('1'); expect(view.getByTestId('loaded-file').textContent).toBe('Guide.pdf'); expect(view.getByTestId('loaded-file').getAttribute('data-sensitive')).toBe('true'); expect(readCalls()).toHaveLength(0);
+	});
+	it('keeps date separators outside message visibility targets', async () => {
+		vi.setSystemTime(new Date('2026-10-20T12:00:00Z')); const view = setup(); await settle();
+		expect(view.getByText(i18n.ts.zalip._chatUi.today).closest('[data-chat-message-id]')).toBeNull(); expect(view.container.querySelectorAll('[data-chat-message-id]')).toHaveLength(2);
 	});
 	it('handles reaction removal by explicit actor and read receipt frontiers', async () => {
 		controls.api.mockImplementation(async (endpoint: string) => endpoint === 'users/show' ? peer : endpoint.endsWith('-timeline') ? [message('01', { fromUserId: 'me', fromUser: controls.account, reactions: [{ reaction: '❤️', userId: 'me', user: controls.account }, { reaction: '❤️', userId: 'peer', user: peer }] })] : preference);

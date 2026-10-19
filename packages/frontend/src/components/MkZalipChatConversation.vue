@@ -4,26 +4,47 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<section :class="[$style.root, { [$style.compact]: compact }]" :aria-label="metadata?.title || i18n.ts.zalip.messages">
-	<header v-if="!compact" :class="$style.header"><button type="button" class="_button" :class="[$style.icon, $style.back]" :aria-label="i18n.ts.zalip._chatUi.back" @click="emit('close')"><i class="ti ti-arrow-left"></i></button><MkAvatar v-if="user" :user="user" :class="$style.avatar" link/><i v-else class="ti ti-users-group"></i><strong>{{ metadata?.title || i18n.ts.zalip.messages }}</strong><button type="button" class="_button" :class="$style.icon" :aria-label="i18n.ts.zalip._chatUi.searchInConversation" @click="tab = tab === 'search' ? 'chat' : 'search'"><i class="ti ti-search"></i></button><button type="button" class="_button" :class="$style.icon" :aria-label="i18n.ts.more" @click="menu"><i class="ti ti-dots"></i></button></header>
+<section ref="root" :class="[$style.root, { [$style.compact]: compact }]" :aria-label="metadata?.title || i18n.ts.zalip.messages">
+	<header v-if="!compact" :class="$style.header">
+		<button type="button" class="_button" :class="[$style.icon, $style.back]" :aria-label="i18n.ts.zalip._chatUi.back" @click="emit('close')"><i class="ti ti-arrow-left"></i></button>
+		<button type="button" class="_button" :class="$style.identity" :aria-label="i18n.ts.zalip._chatUi.conversationDetails" :aria-expanded="detailsVisible" @click="detailsVisible = !detailsVisible">
+			<MkAvatar v-if="user" :user="user" :class="$style.avatar" :link="false"/><span v-else :class="[$style.avatar, $style.roomAvatar]"><i class="ti ti-users-group"></i></span>
+			<span :class="$style.identityText"><strong>{{ metadata?.title || i18n.ts.zalip.messages }}</strong><span v-if="someoneTyping" role="status" :class="$style.typingSubtitle">{{ i18n.ts.zalip._chatUi.typing }}</span><span v-else>{{ user ? `@${user.username}` : i18n.ts.zalip._chatUi.roomInfo }}</span></span>
+		</button>
+		<button type="button" class="_button" :class="[$style.icon, { [$style.selected]: tab === 'search' }]" :aria-label="i18n.ts.zalip._chatUi.searchInConversation" :aria-pressed="tab === 'search'" @click="tab = tab === 'search' ? 'chat' : 'search'; detailsVisible = false"><i class="ti ti-search"></i></button>
+		<button type="button" class="_button" :class="[$style.icon, { [$style.selected]: detailsVisible }]" :aria-label="i18n.ts.zalip._chatUi.conversationDetails" :aria-expanded="detailsVisible" @click="detailsVisible = !detailsVisible"><i class="ti ti-info-circle"></i></button>
+		<button type="button" class="_button" :class="$style.icon" :aria-label="i18n.ts.more" @click="menu"><i class="ti ti-dots"></i></button>
+	</header>
 	<div v-if="error" :class="$style.state"><p role="alert">{{ i18n.ts.zalip._chatUi.loadError }}</p><button type="button" class="_button" :class="$style.retry" @click="initialize">{{ i18n.ts.retry }}</button></div>
 	<div v-else-if="loading" :class="$style.state" role="status" :aria-label="i18n.ts.loading"><MkLoading/></div>
 	<template v-else-if="initialized">
-		<div v-if="pinned" :class="$style.pinned"><i class="ti ti-pin"></i><MkA :to="`/chat/messages/${pinned.id}`"><strong>{{ i18n.ts.zalip._chatUi.pinMessageForMe }}</strong><span>{{ pinned.text || pinned.file?.name || i18n.ts.zalip._chatUi.attachment }}</span></MkA><button type="button" class="_button" :class="$style.icon" :aria-label="i18n.ts.zalip._chatUi.unpin" @click="unpin"><i class="ti ti-x"></i></button></div>
-		<div v-if="tab !== 'chat'" :class="$style.detail"><button type="button" class="_button" :class="$style.retry" @click="tab = 'chat'"><i class="ti ti-arrow-left"></i> {{ i18n.ts.zalip.messages }}</button><XSearch v-if="tab === 'search'" :userId="userId" :roomId="roomId"/><XMembers v-else-if="tab === 'members' && room" :room="room" @inviteUser="inviteUser"/><XInfo v-else-if="tab === 'info' && room" :room="room"/></div>
-		<div v-show="tab === 'chat'" ref="viewport" :class="$style.timeline" tabindex="0" @scroll.passive="onScroll">
-			<button v-if="hasMore" type="button" class="_button" :class="$style.retry" :disabled="morePending" @click="fetchMore">{{ i18n.ts.loadMore }}</button><p v-if="moreError" role="alert" :class="$style.error">{{ i18n.ts.zalip._chatUi.loadError }}</p>
-			<p v-if="!messages.length" :class="$style.state">{{ i18n.ts.zalip._chatUi.empty }}</p>
-			<div v-for="message in messages" :key="message.id" :data-chat-message-id="message.id" :class="$style.message"><XMessage :message="message" :isReadByRecipient="isRead(message)" @reply="replyTo = $event; editing = null" @edit="editing = $event; replyTo = null" @forward="forward" @pin="pin"/></div>
+		<div :class="$style.content">
+			<div v-show="!detailsVisible || splitDetails" :class="$style.main">
+				<div v-if="pinned" :class="$style.pinned"><i class="ti ti-pin"></i><MkA :to="`/chat/messages/${pinned.id}`"><strong>{{ i18n.ts.zalip._chatUi.pinMessageForMe }}</strong><span>{{ pinned.text || pinned.file?.name || i18n.ts.zalip._chatUi.attachment }}</span></MkA><button type="button" class="_button" :class="$style.icon" :aria-label="i18n.ts.zalip._chatUi.unpin" @click="unpin"><i class="ti ti-x"></i></button></div>
+				<div v-if="tab !== 'chat'" :class="$style.detail"><button type="button" class="_button" :class="$style.retry" @click="tab = 'chat'"><i class="ti ti-arrow-left"></i> {{ i18n.ts.zalip.messages }}</button><XSearch v-if="tab === 'search'" :userId="userId" :roomId="roomId"/><XMembers v-else-if="tab === 'members' && room" :room="room" @inviteUser="inviteUser"/><XInfo v-else-if="tab === 'info' && room" :room="room"/></div>
+				<div v-show="timelineVisible" ref="viewport" :class="$style.timeline" tabindex="0" @scroll.passive="onScroll">
+					<div :class="$style.timelineContent">
+						<button v-if="hasMore" type="button" class="_button" :class="$style.retry" :disabled="morePending" @click="fetchMore">{{ i18n.ts.loadMore }}</button><p v-if="moreError" role="alert" :class="$style.error">{{ i18n.ts.zalip._chatUi.loadError }}</p>
+						<p v-if="!messages.length" :class="$style.state">{{ i18n.ts.zalip._chatUi.empty }}</p>
+						<template v-for="(message, index) in messages" :key="message.id"><div v-if="isNewDay(message, messages[index - 1])" :class="$style.date"><span>{{ dayLabel(message.createdAt) }}</span></div><div :data-chat-message-id="message.id" :class="$style.message"><XMessage :message="message" :isReadByRecipient="isRead(message)" @reply="replyTo = $event; editing = null" @edit="editing = $event; replyTo = null" @forward="forward" @pin="pin"/></div></template>
+					</div>
+				</div>
+				<div v-show="timelineVisible" :class="$style.composer"><button v-if="newMessages" type="button" class="_button" :class="$style.newMessages" @click="toBottom">{{ i18n.ts.zalip._chatUi.newMessages }} <i class="ti ti-arrow-down"></i></button><p v-if="compact && someoneTyping" :class="$style.typing" role="status">{{ i18n.ts.zalip._chatUi.typing }}</p><XForm :user="user" :room="room" :active="effectiveActive && timelineVisible" :replyTo="replyTo" :editingMessage="editing" @sent="sent" @typing="sendTyping" @cancelReply="replyTo = null" @cancelEdit="editing = null"/></div>
+			</div>
+			<aside v-if="detailsVisible" :class="[$style.details, { [$style.splitDetails]: splitDetails }]" :aria-label="i18n.ts.zalip._chatUi.conversationDetails">
+				<header :class="$style.detailsHeader"><strong>{{ i18n.ts.zalip._chatUi.conversationDetails }}</strong><button type="button" class="_button" :class="$style.icon" :aria-label="i18n.ts.close" @click="detailsVisible = false"><i class="ti ti-x"></i></button></header>
+				<div :class="$style.profile"><MkAvatar v-if="user" :user="user" :class="$style.profileAvatar" link/><span v-else :class="[$style.profileAvatar, $style.roomAvatar]"><i class="ti ti-users-group"></i></span><strong>{{ metadata?.title }}</strong><span v-if="user">@{{ user.username }}</span><p v-if="user?.description || room?.description" :class="['_selectable', $style.description]">{{ user?.description || room?.description }}</p><MkA v-if="user" :to="userPage(user)" :class="$style.profileLink">{{ i18n.ts.zalip._chatUi.openProfile }}</MkA></div>
+				<div v-if="room" :class="$style.groupActions"><button type="button" class="_button" @click="tab = 'members'; detailsVisible = false"><i class="ti ti-users"></i>{{ i18n.ts.zalip._chatUi.members }}</button><button type="button" class="_button" @click="tab = 'info'; detailsVisible = false"><i class="ti ti-info-circle"></i>{{ i18n.ts.zalip._chatUi.roomInfo }}</button></div>
+				<section :class="$style.attachments"><h3>{{ i18n.ts.zalip._chatUi.loadedAttachments }}</h3><p :class="$style.attachmentHint">{{ i18n.ts.zalip._chatUi.loadedAttachmentsHint }}</p><template v-if="loadedMedia.length"><h4>{{ i18n.ts.zalip._chatUi.media }}</h4><MkMediaList :mediaList="loadedMedia"/></template><template v-if="loadedFiles.length"><h4>{{ i18n.ts.zalip._chatUi.files }}</h4><MkMediaBanner v-for="file in loadedFiles" :key="file.id" :media="file"/></template><p v-if="!loadedMedia.length && !loadedFiles.length" :class="$style.attachmentHint">{{ i18n.ts.zalip._chatUi.noLoadedAttachments }}</p></section>
+			</aside>
 		</div>
-		<div v-if="tab === 'chat'" :class="$style.composer"><button v-if="newMessages" type="button" class="_button" :class="$style.newMessages" @click="toBottom">{{ i18n.ts.zalip._chatUi.newMessages }} <i class="ti ti-arrow-down"></i></button><p v-if="someoneTyping" :class="$style.typing" role="status">{{ i18n.ts.zalip._chatUi.typing }}</p><XForm :user="user" :room="room" :active="effectiveActive" :replyTo="replyTo" :editingMessage="editing" @sent="sent" @typing="sendTyping" @cancelReply="replyTo = null" @cancelEdit="editing = null"/></div>
 	</template>
 	<p v-if="actionError" role="alert" :class="$style.actionError">{{ actionError }}</p>
 </section>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, ref, useTemplateRef, watch } from 'vue';
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, useTemplateRef, watch } from 'vue';
 import type * as Misskey from 'misskey-js';
 import type { ChatConversationMetadata, ChatConversationPreferences, ChatUiMessage } from '@/utility/zalip-chat-types.js';
 import { chatConversationEvents } from '@/utility/zalip-chat-types.js';
@@ -32,6 +53,8 @@ import XForm from '@/pages/chat/room.form.vue';
 import XSearch from '@/pages/chat/room.search.vue';
 import XMembers from '@/pages/chat/room.members.vue';
 import XInfo from '@/pages/chat/room.info.vue';
+import MkMediaList from '@/components/MkMediaList.vue';
+import MkMediaBanner from '@/components/MkMediaBanner.vue';
 import { ensureSignin } from '@/i.js';
 import { i18n } from '@/i18n.js';
 import { misskeyApi, misskeyApiZalip } from '@/utility/misskey-api.js';
@@ -46,6 +69,12 @@ const user = ref<Misskey.entities.UserDetailed | null>(null); const room = ref<M
 const metadata = computed(() => user.value ? { title: user.value.name || user.value.username, user: user.value, room: null } : room.value ? { title: room.value.name, room: room.value, user: null } : null);
 const messages = ref<ChatUiMessage[]>([]); const loading = ref(false); const initialized = ref(false); const error = ref(false); const actionError = ref('');
 const hasMore = ref(false); const morePending = ref(false); const moreError = ref(false); const tab = ref('chat');
+const containerEl = useTemplateRef('root'); const detailsVisible = ref(false); const panelWidth = ref(0);
+const splitDetails = computed(() => !props.compact && panelWidth.value >= 680);
+const timelineVisible = computed(() => tab.value === 'chat' && (!detailsVisible.value || splitDetails.value));
+const loadedAttachments = computed(() => Array.from(new Map(messages.value.flatMap(message => message.file ? [[message.file.id, message.file] as const] : [])).values()));
+const loadedMedia = computed(() => loadedAttachments.value.filter(file => /^(image|video|audio)\//u.test(file.type)));
+const loadedFiles = computed(() => loadedAttachments.value.filter(file => !/^(image|video|audio)\//u.test(file.type)));
 const replyTo = ref<ChatUiMessage | null>(null); const editing = ref<ChatUiMessage | null>(null);
 const pinned = ref<ChatUiMessage | null>(null);
 let pinRequest = 0; let pinPending = false; let observerGeneration = 0; let resumeGeneration = 0;
@@ -55,9 +84,14 @@ const typingUntil = ref<Record<string, number>>({}); const tick = ref(Date.now()
 const someoneTyping = computed(() => effectiveActive.value && Object.entries(typingUntil.value).some(([id, expiry]) => id !== me.id && expiry > tick.value));
 let epoch = 0; let alive = true; let observer: IntersectionObserver | null = null; let lastRead = ''; let readPending = false; let pendingRead = '';
 let readTimer: number | null = null; let typingTick: number | null = null; let lastTyping = 0;
+let resizeObserver: ResizeObserver | null = null;
 let connection: Misskey.IChannelConnection<Misskey.Channels['chatUser']> | Misskey.IChannelConnection<Misskey.Channels['chatRoom']> | null = null;
 
 function target(): { userId?: string; roomId?: string } { return props.userId ? { userId: props.userId } : { roomId: props.roomId }; }
+
+function isNewDay(message: ChatUiMessage, previous?: ChatUiMessage): boolean { return !previous || new Date(message.createdAt).toDateString() !== new Date(previous.createdAt).toDateString(); }
+
+function dayLabel(createdAt: string): string { const date = new Date(createdAt); return Number.isNaN(date.getTime()) ? i18n.ts._ago.invalid : date.toDateString() === new Date().toDateString() ? i18n.ts.zalip._chatUi.today : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date); }
 
 function current(request: number, account: string): boolean { return alive && request === epoch && account === me.id; }
 
@@ -83,7 +117,7 @@ function connect(request: number, account: string): void {
 
 async function initialize(): Promise<void> {
 	const request = ++epoch; const account = me.id;
-	disposeConnection(); messages.value = []; user.value = null; room.value = null; pinned.value = null; pinRequest++; pinPending = false; initialized.value = false; error.value = false; hasMore.value = false; morePending.value = false; moreError.value = false; actionError.value = ''; tab.value = 'chat'; replyTo.value = null; editing.value = null; readFrontiers.value = {}; lastRead = ''; pendingRead = ''; readPending = false;
+	disposeConnection(); messages.value = []; user.value = null; room.value = null; pinned.value = null; pinRequest++; pinPending = false; initialized.value = false; error.value = false; hasMore.value = false; morePending.value = false; moreError.value = false; actionError.value = ''; tab.value = 'chat'; detailsVisible.value = false; replyTo.value = null; editing.value = null; readFrontiers.value = {}; lastRead = ''; pendingRead = ''; readPending = false;
 	if (!effectiveActive.value || (!!props.userId === !!props.roomId)) { loading.value = false; return; }
 	loading.value = true;
 	try {
@@ -124,31 +158,31 @@ function onScroll(): void { if (atBottom()) newMessages.value = false; checkVisi
 
 function observe(): void {
 	observer?.disconnect(); const generation = ++observerGeneration; const request = epoch; const account = me.id; const root = viewport.value;
-	if (!effectiveActive.value || !root || tab.value !== 'chat') return;
+	if (!effectiveActive.value || !root || !timelineVisible.value) return;
 	if (typeof IntersectionObserver !== 'undefined') { observer = new IntersectionObserver(entries => { if (generation !== observerGeneration || !current(request, account) || root !== viewport.value) return; for (const entry of entries) if (entry.isIntersecting && entry.intersectionRatio >= .5 && root.contains(entry.target)) queueRead((entry.target as HTMLElement).dataset.chatMessageId ?? ''); }, { root, threshold: .5 }); root.querySelectorAll('[data-chat-message-id]').forEach(element => observer?.observe(element)); }
 	checkVisible();
 }
 
 function visibleMessage(id: string): boolean {
-	if (!effectiveActive.value || tab.value !== 'chat' || !viewport.value || viewport.value.clientHeight <= 0 || !messages.value.some(message => message.id === id && message.fromUserId !== me.id)) return false;
+	if (!effectiveActive.value || !timelineVisible.value || !viewport.value || viewport.value.clientHeight <= 0 || !messages.value.some(message => message.id === id && message.fromUserId !== me.id)) return false;
 	const element = Array.from(viewport.value.querySelectorAll<HTMLElement>('[data-chat-message-id]')).find(item => item.dataset.chatMessageId === id);
 	if (!element) return false;
 	const root = viewport.value.getBoundingClientRect(); const item = element.getBoundingClientRect();
 	return root.width > 0 && root.height > 0 && item.width > 0 && item.height > 0 && Math.min(item.bottom, root.bottom, window.innerHeight) - Math.max(item.top, root.top, 0) >= item.height * .5 && item.right > Math.max(root.left, 0) && item.left < Math.min(root.right, window.innerWidth);
 }
 
-function checkVisible(): void { if (!effectiveActive.value || tab.value !== 'chat' || !viewport.value) return; for (const element of viewport.value.querySelectorAll<HTMLElement>('[data-chat-message-id]')) queueRead(element.dataset.chatMessageId ?? ''); }
+function checkVisible(): void { if (!effectiveActive.value || !timelineVisible.value || !viewport.value) return; for (const element of viewport.value.querySelectorAll<HTMLElement>('[data-chat-message-id]')) queueRead(element.dataset.chatMessageId ?? ''); }
 
 function queueRead(id: string): void { if (id <= lastRead || !visibleMessage(id)) return; if (id > pendingRead) pendingRead = id; if (!readTimer) readTimer = window.setTimeout(() => { readTimer = null; void markVisibleRead(); }, 120); }
 
 async function markVisibleRead(): Promise<void> {
-	if (!effectiveActive.value || tab.value !== 'chat' || readPending || !pendingRead || pendingRead <= lastRead) return;
+	if (!effectiveActive.value || !timelineVisible.value || readPending || !pendingRead || pendingRead <= lastRead) return;
 	if (!visibleMessage(pendingRead)) { pendingRead = ''; return; }
 	const request = epoch; const account = me.id; const messageId = pendingRead; readPending = true;
 	try { const result = await misskeyApi('chat/messages/read', { ...target(), messageId }); if (current(request, account) && result.readThroughId) { lastRead = result.readThroughId; chatConversationEvents.emit('changed'); } } catch { /* Never fabricate read receipts when a visibility acknowledgement fails. */ } finally { if (current(request, account)) { readPending = false; if (pendingRead > messageId) void markVisibleRead(); } }
 }
 
-function sendTyping(typing: boolean): void { if (!connection || (typing && (!effectiveActive.value || Date.now() - lastTyping < 1800))) return; lastTyping = Date.now(); connection.send('typing', { typing }); }
+function sendTyping(typing: boolean): void { if (!connection || (typing && (!effectiveActive.value || !timelineVisible.value || Date.now() - lastTyping < 1800))) return; lastTyping = Date.now(); connection.send('typing', { typing }); }
 
 function isRead(message: ChatUiMessage): boolean { return message.fromUserId === me.id && Object.entries(readFrontiers.value).some(([id, through]) => id !== me.id && through >= message.id); }
 
@@ -186,7 +220,7 @@ async function leaveRoom(): Promise<void> {
 }
 
 function menu(event: MouseEvent): void {
-	const request = epoch; const account = me.id; const selectTab = (value: string) => { if (current(request, account)) tab.value = value; };
+	const request = epoch; const account = me.id; const selectTab = (value: string) => { if (current(request, account)) { tab.value = value; detailsVisible.value = false; } };
 	void os.popupMenu([...(user.value ? [{ type: 'link' as const, text: i18n.ts.zalip._chatUi.openProfile, icon: 'ti ti-user', to: userPage(user.value) }] : []), { text: i18n.ts.zalip._chatUi.searchInConversation, icon: 'ti ti-search', action: () => selectTab('search') }, ...(room.value ? [{ text: i18n.ts.zalip._chatUi.members, icon: 'ti ti-users', action: () => selectTab('members') }, { text: i18n.ts.zalip._chatUi.roomInfo, icon: 'ti ti-info-circle', action: () => selectTab('info') }, ...(room.value.ownerId === me.id ? [{ text: i18n.ts._chat.inviteUser, icon: 'ti ti-user-plus', action: () => { if (current(request, account)) void inviteUser(); } }] : [{ text: i18n.ts._chat.leave, icon: 'ti ti-logout', action: () => { if (current(request, account)) void leaveRoom(); } }])] : [])], event.currentTarget as HTMLElement);
 }
 
@@ -203,29 +237,49 @@ async function resume(): Promise<void> {
 }
 
 watch(effectiveActive, active => { if (!active) disposeConnection(); else void resume(); });
-watch(tab, () => { sendTyping(false); void nextTick(observe); });
+watch([tab, detailsVisible, splitDetails], () => { sendTyping(false); if (!timelineVisible.value) pendingRead = ''; void nextTick(observe); });
+onMounted(() => { if (!containerEl.value) return; panelWidth.value = containerEl.value.clientWidth; if (typeof ResizeObserver !== 'undefined') { resizeObserver = new ResizeObserver(entries => { const width = entries[0]?.contentRect.width; if (width != null) panelWidth.value = width; }); resizeObserver.observe(containerEl.value); } });
 onActivated(() => { activated.value = true; }); onDeactivated(() => { activated.value = false; });
-onBeforeUnmount(() => { alive = false; epoch++; disposeConnection(); window.document.removeEventListener('visibilitychange', visibility); });
+onBeforeUnmount(() => { alive = false; epoch++; disposeConnection(); resizeObserver?.disconnect(); window.document.removeEventListener('visibilitychange', visibility); });
 defineExpose({ refresh: initialize });
 </script>
 
 <style lang="scss" module>
-.root { display: flex; flex: 1; flex-direction: column; height: 100%; width: 100%; min-height: 0; min-width: 0; background: var(--MI_THEME-panel); color: var(--MI_THEME-fg); }
-.header { display: flex; align-items: center; gap: 10px; min-height: 68px; padding: 8px 16px; box-sizing: border-box; border-bottom: 1px solid var(--MI_THEME-divider); strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
-.avatar { width: 38px; height: 38px; flex: 0 0 38px; }
+.root { display: flex; flex: 1; flex-direction: column; height: 100%; width: 100%; min-height: 0; min-width: 0; overflow: clip; background: var(--zalip-social-panel, var(--MI_THEME-panel)); color: var(--MI_THEME-fg); container-type: inline-size; }
+.header { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; min-height: 70px; padding: 9px 18px; box-sizing: border-box; border-bottom: 1px solid var(--MI_THEME-divider); }
+.identity { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; min-height: 44px; text-align: start; border-radius: 12px; }
+.identityText { display: grid; gap: 3px; min-width: 0; > strong, > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } > strong { font-size: 16px; font-weight: 650; line-height: 21px; } > span { color: var(--MI_THEME-fgTransparentWeak); font-size: 13px; line-height: 17px; } > .typingSubtitle { color: var(--MI_THEME-accent); } }
+.avatar { width: 40px; height: 40px; flex: 0 0 40px; }
+.roomAvatar { display: grid; place-items: center; border-radius: 50%; background: var(--MI_THEME-buttonBg); color: var(--MI_THEME-fgTransparentWeak); font-size: 22px; }
 .icon { display: grid; place-items: center; width: 44px; height: 44px; flex: 0 0 44px; border-radius: 50%; font-size: 20px; &:hover { background: var(--MI_THEME-buttonHoverBg); } }
+.selected { color: var(--MI_THEME-accent); background: var(--MI_THEME-accentedBg); }
 .back { display: none; }
-.timeline { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 20px; scrollbar-width: thin; }
-.message { margin-bottom: 16px; }
-.composer { position: relative; flex: 0 0 auto; padding: 8px 16px max(12px, env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--MI_THEME-divider); }
+.content { display: flex; flex: 1; min-width: 0; min-height: 0; }
+.main { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
+.timeline { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 16px 12px 10px; scrollbar-width: thin; }
+.timelineContent { display: flex; flex-direction: column; justify-content: flex-end; min-height: 100%; }
+.message { flex: 0 0 auto; margin-bottom: 8px; }
+.date { display: flex; justify-content: center; flex: 0 0 auto; margin: 16px 0 18px; > span { padding: 4px 12px; border: 1px solid var(--MI_THEME-divider); border-radius: 99px; color: var(--MI_THEME-fgTransparentWeak); font-size: 11px; line-height: 16px; } }
+.composer { position: relative; flex: 0 0 auto; padding: 10px 20px max(16px, env(safe-area-inset-bottom, 0px)); }
 .state { display: grid; place-content: center; min-height: 180px; padding: 20px; text-align: center; color: var(--MI_THEME-fgTransparentWeak); }
 .retry { display: block; min-height: 44px; padding: 8px 18px; margin: 8px auto; border-radius: 99px; background: var(--MI_THEME-buttonBg); color: var(--MI_THEME-accent); }
 .error, .actionError { color: var(--MI_THEME-error); text-align: center; font-size: 12px; }
 .detail { flex: 1; min-height: 0; overflow-y: auto; padding: 20px; }
+.details { flex: 1; min-width: 0; overflow-y: auto; padding: 4px 20px 24px; box-sizing: border-box; scrollbar-width: thin; }
+.splitDetails { flex: 0 0 280px; width: 280px; border-inline-start: 1px solid var(--MI_THEME-divider); }
+.detailsHeader { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-height: 48px; > strong { font-size: 13px; } }
+.profile { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px 0; text-align: center; > strong { max-width: 100%; overflow-wrap: anywhere; font-size: 17px; } > span:not(.profileAvatar) { color: var(--MI_THEME-fgTransparentWeak); font-size: 14px; } }
+.profileAvatar { width: 80px; height: 80px; margin-bottom: 8px; font-size: 32px; }
+.description { margin: 4px 0; max-width: 100%; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
+.profileLink { display: grid; place-items: center; min-height: 40px; padding: 0 20px; margin-top: 6px; border-radius: 99px; background: var(--MI_THEME-buttonBg); font-size: 13px; font-weight: 600; }
+.groupActions { display: grid; gap: 4px; margin-bottom: 20px; > button { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 10px; text-align: start; border-radius: 12px; font-size: 13px; &:hover { background: var(--MI_THEME-buttonHoverBg); } } }
+.attachments { padding-top: 20px; border-top: 1px solid var(--MI_THEME-divider); h3, h4 { margin: 0 0 10px; font-size: 12px; font-weight: 650; letter-spacing: .04em; } h4 { margin-top: 22px; text-transform: uppercase; } }
+.attachmentHint { color: var(--MI_THEME-fgTransparentWeak); font-size: 12px; line-height: 1.5; }
 .pinned { display: flex; align-items: center; gap: 10px; padding: 4px 12px; border-bottom: 1px solid var(--MI_THEME-divider); background: var(--MI_THEME-accentedBg); > a { display: grid; gap: 3px; flex: 1; min-width: 0; font-size: 12px; > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } } > i { color: var(--MI_THEME-accent); } }
 .typing { margin: 0 8px 6px; font-size: 12px; color: var(--MI_THEME-accent); }
 .newMessages { position: absolute; top: -44px; left: 50%; transform: translateX(-50%); min-height: 36px; padding: 6px 16px; border-radius: 99px; background: var(--MI_THEME-accent); color: var(--MI_THEME-fgOnAccent); white-space: nowrap; }
-.compact { .timeline { padding: 12px; } .composer { padding: 8px; } }
-@media (max-width: 900px) { .back { display: grid; } .header { padding-inline: 8px; } .timeline { padding: 16px 10px; } .composer { padding-inline: 8px; } }
+.compact { .timeline { padding: 8px 0; } .composer { padding: 8px; } }
+@media (max-width: 900px) { .back { display: grid; } .header { min-height: 68px; padding: 8px; gap: 0; } .identity { gap: 8px; } .timeline { padding: 10px 0 4px; } .composer { padding: 8px 10px max(12px, env(safe-area-inset-bottom, 0px)); } }
+@container (max-width: 450px) { .header > .icon { width: 40px; flex-basis: 40px; } .identityText > strong { font-size: 15px; } .identityText > span { font-size: 12px; } .identity .avatar { width: 34px; height: 34px; flex-basis: 34px; } .header { padding-inline: 4px; } }
 .root button:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; }
 </style>

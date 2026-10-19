@@ -17,10 +17,12 @@ const fixture: ChatConversationsResponse = { items: [
 ], nextCursor: null };
 
 export const Default = {
-	render(args) { return { components: { MkZalipChatSidebar }, setup: () => ({ args, select: action('select') }), template: '<div style="height: 640px; width: 340px;"><MkZalipChatSidebar v-bind="args" @select="select"/></div>' }; },
+	render(args) { return { components: { MkZalipChatSidebar }, setup: () => ({ args, select: action('select') }), template: '<div style="height: 640px; width: 360px;"><MkZalipChatSidebar v-bind="args" @select="select"/></div>' }; },
 	args: { selectedKey: 'user:demouser' },
 	parameters: { layout: 'centered', msw: { handlers: [http.post('*/api/zalip/chat/conversations', () => HttpResponse.json(fixture)), http.post('*/api/zalip/chat/preferences/update', () => HttpResponse.json(preferences))] } },
 } satisfies StoryObj<typeof MkZalipChatSidebar>;
+
+export const Compact = { ...Default, args: { ...Default.args, compact: true }, render(args) { return { components: { MkZalipChatSidebar }, setup: () => ({ args }), template: '<div style="height: 540px; width: 330px;"><MkZalipChatSidebar v-bind="args"/></div>' }; } } satisfies StoryObj<typeof MkZalipChatSidebar>;
 
 export const Empty = { ...Default, parameters: { ...Default.parameters, msw: { handlers: [http.post('*/api/zalip/chat/conversations', () => HttpResponse.json({ items: [], nextCursor: null }))] } } } satisfies StoryObj<typeof MkZalipChatSidebar>;
 export const Error = { ...Default, parameters: { ...Default.parameters, msw: { handlers: [http.post('*/api/zalip/chat/conversations', () => HttpResponse.json({ error: { code: 'INTERNAL_ERROR' } }, { status: 500 }))] } } } satisfies StoryObj<typeof MkZalipChatSidebar>;

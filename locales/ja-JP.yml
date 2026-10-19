@@ -849,6 +849,13 @@ zalip:
     openMessages: "Открыть сообщения"
     closeConversation: "Закрыть диалог"
     privateFilesHint: "Прикрепляйте только файлы, ссылками на которые можно делиться."
+    conversationDetails: "Информация о диалоге"
+    loadedAttachments: "Вложения из загруженных сообщений"
+    loadedAttachmentsHint: "Здесь показаны только вложения из уже загруженной части переписки."
+    noLoadedAttachments: "В загруженных сообщениях пока нет вложений."
+    media: "Медиа"
+    files: "Файлы"
+    today: "Сегодня"
   _reviews:
     title: "Отзывы и рецензии"
     reviews: "Отзывы"

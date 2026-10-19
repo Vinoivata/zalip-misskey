@@ -5,9 +5,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div :class="[$style.root, { [$style.isMe]: isMe }]">
-	<MkAvatar :class="[$style.avatar, prefer.s.useStickyIcons ? $style.useSticky : null]" :user="message.fromUser!" :link="!isMe" :preview="false"/>
+	<MkAvatar v-if="message.toRoomId && !isMe" :user="message.fromUser" :class="$style.groupAvatar" :preview="false"/>
 	<div :class="[$style.body, message.file != null ? $style.fullWidth : null]" @contextmenu.stop="onContextmenu">
-		<div :class="$style.header"><MkUserName v-if="!isMe && prefer.s['chat.showSenderName'] && message.fromUser != null" :user="message.fromUser"/></div>
+		<div v-if="!isMe && (message.toRoomId || isSearchResult) && message.fromUser != null" :class="$style.header"><MkUserName :user="message.fromUser"/></div>
 		<div :class="$style.fukidashi">
 			<div v-if="message.forwardedFromUser" :class="$style.forwarded"><i class="ti ti-arrow-forward-up"></i> {{ i18n.ts.zalip._chatUi.forwarded }} · {{ message.forwardedFromUser.name || message.forwardedFromUser.username }}</div>
 			<MkA v-if="message.reply" :to="`/chat/messages/${message.reply.id}`" :class="$style.replyPreview"><strong>{{ message.reply.fromUser.name || message.reply.fromUser.username }}</strong><span>{{ message.reply.text || message.reply.fileName || i18n.ts.zalip._chatUi.attachment }}</span></MkA>
@@ -22,16 +22,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 				:enableEmojiMenuReaction="true"
 			/>
 			<MkMediaList v-if="message.file" :mediaList="[message.file]"/>
+			<div :class="$style.footer">
+				<time :class="$style.time" :datetime="message.createdAt" :title="absoluteTime">{{ clockTime }}</time>
+				<span v-if="message.updatedAt" :class="$style.time">{{ i18n.ts.zalip._chatUi.edited }}</span>
+				<span v-if="isMe && !isSearchResult" :class="[$style.receipt, { [$style.read]: isReadByRecipient }]" :aria-label="isReadByRecipient ? i18n.ts.zalip._chatUi.read : i18n.ts.zalip._chatUi.sent" :title="isReadByRecipient ? i18n.ts.zalip._chatUi.read : i18n.ts.zalip._chatUi.sent"><i :class="isReadByRecipient ? 'ti ti-checks' : 'ti ti-check'"></i></span>
+				<MkA v-if="isSearchResult && 'toRoom' in message && message.toRoom != null" :to="`/chat/room/${message.toRoomId}`">{{ message.toRoom.name }}</MkA>
+				<MkA v-if="isSearchResult && 'toUser' in message && message.toUser != null && isMe" :to="`/chat/user/${message.toUserId}`">@{{ message.toUser.username }}</MkA>
+			</div>
 		</div>
+		<button type="button" class="_button" :class="$style.menuButton" :aria-label="i18n.ts.more" @click="showMenu"><i class="ti ti-dots"></i></button>
 		<MkUrlPreview v-for="url in urls" :key="url" :url="url" style="margin: 8px 0;"/>
-		<div :class="$style.footer">
-			<button type="button" class="_button" :class="$style.menuButton" :aria-label="i18n.ts.more" @click="showMenu"><i class="ti ti-dots"></i></button>
-			<MkTime :class="$style.time" :time="message.createdAt"/>
-			<span v-if="message.updatedAt" :class="$style.time">{{ i18n.ts.zalip._chatUi.edited }}</span>
-			<span v-if="isMe && !isSearchResult" :class="[$style.receipt, { [$style.read]: isReadByRecipient }]" :aria-label="isReadByRecipient ? i18n.ts.zalip._chatUi.read : i18n.ts.zalip._chatUi.sent" :title="isReadByRecipient ? i18n.ts.zalip._chatUi.read : i18n.ts.zalip._chatUi.sent"><i :class="isReadByRecipient ? 'ti ti-checks' : 'ti ti-check'"></i></span>
-			<MkA v-if="isSearchResult && 'toRoom' in message && message.toRoom != null" :to="`/chat/room/${message.toRoomId}`">{{ message.toRoom.name }}</MkA>
-			<MkA v-if="isSearchResult && 'toUser' in message && message.toUser != null && isMe" :to="`/chat/user/${message.toUserId}`">@{{ message.toUser.username }}</MkA>
-		</div>
 		<TransitionGroup
 			:enterActiveClass="prefer.s.animation ? $style.transition_reaction_enterActive : ''"
 			:leaveActiveClass="prefer.s.animation ? $style.transition_reaction_leaveActive : ''"
@@ -40,8 +40,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			:moveClass="prefer.s.animation ? $style.transition_reaction_move : ''"
 			tag="div" :class="$style.reactions"
 		>
-			<button v-for="record in message.reactions" :key="record.reaction + record.user.id" type="button" class="_button" :class="[$style.reaction, record.user.id === $i.id ? $style.reactionMy : null]" :aria-label="record.reaction" :aria-pressed="record.user.id === $i.id" @click="onReactionClick(record)">
-				<MkAvatar :user="record.user" :link="false" :class="$style.reactionAvatar"/>
+			<button v-for="record in message.reactions" :key="record.reaction + record.user.id" type="button" class="_button" :class="[$style.reaction, record.user.id === $i.id ? $style.reactionMy : null]" :aria-label="`${record.user.name || record.user.username}: ${record.reaction}`" :aria-pressed="record.user.id === $i.id" @click="onReactionClick(record)">
 				<MkReactionIcon
 					:withTooltip="true"
 					:reaction="record.reaction.replace(/^:(\w+):$/, ':$1@.:')"
@@ -93,6 +92,10 @@ onBeforeUnmount(() => { alive = false; });
 
 const isMe = computed(() => props.message.fromUserId === $i.id);
 const urls = computed(() => props.message.text ? extractUrlFromMfm(mfm.parse(props.message.text)) : []);
+const messageDate = computed(() => new Date(props.message.createdAt));
+const validDate = computed(() => !Number.isNaN(messageDate.value.getTime()));
+const clockTime = computed(() => validDate.value ? new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(messageDate.value) : i18n.ts._ago.invalid);
+const absoluteTime = computed(() => validDate.value ? new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'short' }).format(messageDate.value) : i18n.ts._ago.invalid);
 
 provide(DI.mfmEmojiReactCallback, (reaction) => {
 	void changeReaction(reaction);
@@ -226,49 +229,19 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 .root {
 	position: relative;
 	display: flex;
+	align-items: flex-end;
+	gap: 8px;
+	min-width: 0;
+	padding-inline: 32px;
 
 	&.isMe {
-		flex-direction: row-reverse;
-		text-align: right;
-
-		.footer {
-			flex-direction: row-reverse;
-		}
+		justify-content: flex-end;
 	}
 }
-
-.avatar {
-	display: block;
-	width: 50px;
-	height: 50px;
-
-	&.useSticky {
-		position: sticky;
-		top: calc(16px + var(--MI-stickyTop, 0px));
-	}
-}
-
-@container (max-width: 450px) {
-	.root {
-		&.isMe {
-			.avatar {
-				display: none;
-			}
-		}
-	}
-
-	.avatar {
-		width: 42px;
-		height: 42px;
-	}
-
-	.fukidashi {
-		font-size: 90%;
-	}
-}
+.groupAvatar { flex: 0 0 28px; width: 28px; height: 28px; }
 
 .body {
-	margin: 0 12px;
+	position: relative;
 	min-width: 0;
 	max-width: min(78%, 660px);
 
@@ -277,23 +250,29 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 	}
 }
 
+@container (max-width: 450px) {
+	.root { padding-inline: 24px; }
+	.body { max-width: 88%; }
+}
+
 .header {
-	min-height: 4px; // fukidashiの位置調整も兼ねるため
-	font-size: 80%;
+	margin: 0 10px 5px;
+	font-size: 12px;
+	color: var(--MI_THEME-fgTransparentWeak);
 }
 
 .fukidashi {
+	display: flow-root;
 	text-align: left;
-	padding: 12px 16px;
-	border: 1px solid var(--zalip-social-border);
-	border-radius: 20px 20px 20px 6px;
-	background: var(--zalip-social-raised);
-	color: var(--zalip-social-fg);
+	padding: 10px 14px 7px;
+	border-radius: 20px;
+	background: var(--zalip-social-raised, var(--MI_THEME-panelHighlight));
+	color: var(--zalip-social-fg, var(--MI_THEME-fg));
 	font-size: 15px;
-	line-height: 1.5;
+	line-height: 1.45;
 	overflow-wrap: anywhere;
 }
-.isMe .fukidashi { border-color: var(--zalip-accent-border); border-radius: 20px 20px 6px 20px; background: var(--zalip-accent-soft); }
+.isMe .fukidashi { background: var(--zalip-accent-soft, var(--MI_THEME-accentedBg)); }
 
 .content {
 	overflow: clip;
@@ -302,29 +281,33 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 }
 
 .footer {
-	display: flex;
-	flex-direction: row;
-	gap: 0.5em;
-	margin-top: 4px;
-	font-size: 75%;
+	float: inline-end;
+	display: inline-flex;
+	justify-content: flex-end;
+	flex-wrap: wrap;
+	gap: 5px;
+	margin: 5px 0 0 12px;
+	font-size: 11px;
+	line-height: 15px;
 	align-items: center;
 }
-.menuButton { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; font-size: 19px; }
-.receipt { display: inline-flex; align-items: center; font-size: 15px; color: var(--MI_THEME-fgTransparentWeak); &.read { color: var(--MI_THEME-accent); } }
+.menuButton { position: absolute; top: 50%; right: -30px; transform: translateY(-50%); width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; font-size: 16px; color: var(--MI_THEME-fgTransparentWeak); &::before { content: ''; position: absolute; inset: -9px; } &:hover, &:focus-visible { color: var(--MI_THEME-fg); background: var(--MI_THEME-buttonHoverBg); } &:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; } }
+.isMe .menuButton { right: auto; left: -30px; }
+.receipt { display: inline-flex; align-items: center; font-size: 13px; color: var(--MI_THEME-fgTransparentWeak); &.read { color: var(--MI_THEME-accent); } }
 .forwarded { font-size: 12px; color: var(--MI_THEME-accent); margin-bottom: 8px; }
 .replyPreview { display: grid; gap: 4px; padding: 8px 10px; margin-bottom: 8px; border-inline-start: 3px solid var(--MI_THEME-accent); border-radius: 8px; background: var(--MI_THEME-accentedBg); font-size: 12px; > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
 .error { color: var(--MI_THEME-error); font-size: 12px; }
 
 .time {
-	opacity: 0.5;
+	color: var(--MI_THEME-fgTransparentWeak);
 }
 
 .reactions {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
-	gap: 8px;
-	margin-top: 8px;
+	gap: 6px;
+	margin: 5px 4px 0;
 
 	&:empty {
 		display: none;
@@ -332,27 +315,30 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 }
 
 .reaction {
+	position: relative;
 	display: flex;
 	align-items: center;
-	border: solid 1px var(--MI_THEME-divider);
+	justify-content: center;
+	border: 1px solid var(--MI_THEME-divider);
 	border-radius: 999px;
-	padding: 8px;
-	min-height: 44px;
+	padding: 4px 8px;
+	min-height: 32px;
+	min-width: 36px;
 	box-sizing: border-box;
+	background: var(--MI_THEME-panel);
+	&::before { content: ''; position: absolute; inset: -6px -4px; }
+	&:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; }
 
 	&.reactionMy {
 		border-color: var(--MI_THEME-accent);
 	}
 }
 
-.reactionAvatar {
-	width: 24px;
-	height: 24px;
-	margin-right: 8px;
+.reactionIcon {
+	width: 20px;
+	height: 20px;
 }
 
-.reactionIcon {
-	width: 24px;
-	height: 24px;
-}
+@media (hover: hover) and (pointer: fine) { .menuButton { opacity: 0; } .root:hover .menuButton, .root:focus-within .menuButton { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .root :global(*) { transition: none !important; } }
 </style>

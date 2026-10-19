@@ -80,6 +80,7 @@
 - Feat: Add title-linked viewer reviews and essays with native 1–10 ratings, spoiler controls, sentiment filters, helpful votes, and editing without restarting playback.
 - Fix: Present cinema discussions as title or episode contexts instead of replies to their importing administrator, including quoted threads and full comment composition.
 - Feat: Add a responsive Zalip messenger and opt-in cinema mini-chats with conversation search, personal archive, pinning and mute controls, message replies, editing, forwarding, voice recording and visible-message read receipts.
+- Enhance: Refine Zalip messages with a Notr-inspired conversation switcher, consistent sidebar geometry, compact bubbles and composer, and accessible profile and loaded-attachment details without changing chat permissions or storage.
 
 ### Server
 - Feat: Add personal chat organisation and durable read frontiers, canonical replies, editing and forwarding, with strict participant access and revocable scoped realtime delivery.
