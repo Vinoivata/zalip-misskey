@@ -146,6 +146,7 @@ import { chooseDriveFile } from '@/utility/drive.js';
 import { store } from '@/store.js';
 import MkInfo from '@/components/MkInfo.vue';
 import { i18n } from '@/i18n.js';
+import { zalipDiscussionContext } from '@/utility/zalip-discussion-context.js';
 import { instance } from '@/instance.js';
 import { ensureSignin, notesCount, incNotesCount } from '@/i.js';
 import { getAccounts, getAccountMenu } from '@/accounts.js';
@@ -270,7 +271,8 @@ const placeholder = computed((): string => {
 	if (renoteTargetNote.value) {
 		return i18n.ts._postForm.quotePlaceholder;
 	} else if (replyTargetNote.value) {
-		return i18n.ts._postForm.replyPlaceholder;
+		const context = zalipDiscussionContext(replyTargetNote.value);
+		return context?.isRoot ? i18n.tsx.zalip.contentCommentPlaceholder({ title: context.title }) : i18n.ts._postForm.replyPlaceholder;
 	} else if (targetChannel.value) {
 		return i18n.ts._postForm.channelPlaceholder;
 	} else {
@@ -366,11 +368,11 @@ if (props.mention) {
 	text.value += ' ';
 }
 
-if (replyTargetNote.value && (replyTargetNote.value.user.username !== $i.username || (replyTargetNote.value.user.host != null && replyTargetNote.value.user.host !== host))) {
+if (replyTargetNote.value && !zalipDiscussionContext(replyTargetNote.value)?.isRoot && (replyTargetNote.value.user.username !== $i.username || (replyTargetNote.value.user.host != null && replyTargetNote.value.user.host !== host))) {
 	text.value = `@${replyTargetNote.value.user.username}${replyTargetNote.value.user.host != null ? '@' + toASCII(replyTargetNote.value.user.host) : ''} `;
 }
 
-if (replyTargetNote.value && replyTargetNote.value.text != null) {
+if (replyTargetNote.value && !zalipDiscussionContext(replyTargetNote.value)?.isRoot && replyTargetNote.value.text != null) {
 	const ast = mfm.parse(replyTargetNote.value.text);
 	const otherHost = replyTargetNote.value.user.host;
 

@@ -46,7 +46,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 		{{ i18n.ts.deletedNote }}
 	</div>
 	<template v-else>
-		<article ref="articleEl" :class="$style.note" @contextmenu.stop="onContextmenu">
+		<article v-if="contentContext?.isRoot" :class="$style.note"><MkZalipDiscussionCard :context="contentContext"/></article>
+		<article v-else ref="articleEl" :class="$style.note" @contextmenu.stop="onContextmenu">
 			<header :class="$style.noteHeader">
 				<MkAvatar :class="$style.noteHeaderAvatar" :user="appearNote.user" link preview/>
 				<div :class="$style.noteHeaderBody">
@@ -55,7 +56,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<MkZalipFollowButton v-if="!appearNote.isHidden" :user="appearNote.user"/>
 				<button ref="menuButton" type="button" class="_button" :class="$style.menuButton" :aria-label="i18n.ts.more" @click="showMenu()"><i class="ti ti-dots" aria-hidden="true"></i></button>
 			</header>
-			<MkA v-if="isCommentRepost" :class="$style.commentContext" :to="`/notes/${appearNote.replyId}`"><MkZalipIcon name="reply"/><span>{{ commentContextTitle }}</span></MkA>
+			<MkA v-if="isCommentRepost || contentContext" :class="$style.commentContext" :to="commentContextRoute"><MkZalipIcon name="reply"/><span>{{ commentContextTitle }}</span></MkA>
 			<div :class="$style.noteContent">
 				<p v-if="appearNote.cw != null" :class="$style.cw">
 					<Mfm
@@ -238,6 +239,8 @@ import { $i } from '@/i.js';
 import { createZalipDiscussionPager } from '@/utility/zalip-discussion-pager.js';
 import { useZalipNoteViews } from '@/composables/use-zalip-note-views.js';
 import { getNoteSummary } from '@/utility/get-note-summary.js';
+import MkZalipDiscussionCard from '@/components/MkZalipDiscussionCard.vue';
+import { zalipDiscussionContext, zalipDiscussionRoute } from '@/utility/zalip-discussion-context.js';
 
 // コンポーネント外部の依存関係
 import MkNoteSub from '@/components/MkNoteSub.vue';
@@ -321,9 +324,11 @@ const {
 provide(DI.mfmEmojiReactCallback, reactViaMfmEmoji);
 const summaryReaction = computed(() => $appearNote.myReaction ?? Object.entries($appearNote.reactions).sort((a, b) => b[1] - a[1])[0]?.[0]);
 const isCommentRepost = isRenote && appearNote.replyId != null;
-const commentContextTitle = computed(() => appearNote.reply?.isZalipDiscussionRoot && !appearNote.reply.isHidden && appearNote.reply.cw == null
+const contentContext = computed(() => zalipDiscussionContext(appearNote));
+const commentContextRoute = computed(() => contentContext.value ? zalipDiscussionRoute(contentContext.value) : `/notes/${appearNote.replyId}`);
+const commentContextTitle = computed(() => contentContext.value?.title ?? (appearNote.reply?.isZalipDiscussionRoot && !appearNote.reply.isHidden && appearNote.reply.cw == null
 	? getNoteSummary(appearNote.reply, { showReply: false, showRenote: false })
-	: i18n.ts.zalip.commentContext);
+	: i18n.ts.zalip.commentContext));
 const viewCount = useZalipNoteViews(articleEl, () => appearNote, () => !muted.value && !hideByPlugin.value && !isDeleted.value && (appearNote.cw == null || showContent.value));
 const formattedDate = computed(() => new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(new Date(appearNote.createdAt)) + ' · ' + new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(appearNote.createdAt)));
 

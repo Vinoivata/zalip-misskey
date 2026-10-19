@@ -3144,6 +3144,196 @@ export interface Locale extends ILocale {
          */
         "replyPlaceholder": ParameterizedString<"name">;
         /**
+         * Комментарий к «{title}»…
+         */
+        "contentCommentPlaceholder": ParameterizedString<"title">;
+        /**
+         * Обсуждение тайтла
+         */
+        "contentDiscussionLabel": string;
+        /**
+         * Обсуждение серии {episode} · сезон {season}
+         */
+        "contentEpisodeDiscussionLabel": ParameterizedString<"episode" | "season">;
+        "_reviews": {
+            /**
+             * Отзывы и рецензии
+             */
+            "title": string;
+            /**
+             * Отзывы
+             */
+            "reviews": string;
+            /**
+             * Рецензии
+             */
+            "essays": string;
+            /**
+             * Написать отзыв
+             */
+            "write": string;
+            /**
+             * Написать рецензию
+             */
+            "writeEssay": string;
+            /**
+             * Редактировать мой отзыв
+             */
+            "editOwn": string;
+            /**
+             * Впечатление
+             */
+            "opinion": string;
+            /**
+             * Все
+             */
+            "all": string;
+            /**
+             * Положительные
+             */
+            "positive": string;
+            /**
+             * Нейтральные
+             */
+            "neutral": string;
+            /**
+             * Отрицательные
+             */
+            "negative": string;
+            /**
+             * Сначала новые
+             */
+            "newest": string;
+            /**
+             * Сначала полезные
+             */
+            "helpful": string;
+            /**
+             * Без спойлеров
+             */
+            "hideSpoilers": string;
+            /**
+             * Содержит спойлеры
+             */
+            "spoiler": string;
+            /**
+             * Показать отзыв со спойлерами
+             */
+            "showSpoiler": string;
+            /**
+             * Заголовок рецензии
+             */
+            "titleLabel": string;
+            /**
+             * Ваше мнение
+             */
+            "bodyLabel": string;
+            /**
+             * Моя оценка
+             */
+            "ratingLabel": string;
+            /**
+             * Без оценки
+             */
+            "noRating": string;
+            /**
+             * Опубликовать
+             */
+            "submit": string;
+            /**
+             * Сохранить изменения
+             */
+            "save": string;
+            /**
+             * Отмена
+             */
+            "cancel": string;
+            /**
+             * Пока нет отзывов. Поделитесь впечатлениями первым.
+             */
+            "empty": string;
+            /**
+             * По выбранным фильтрам отзывов нет.
+             */
+            "filteredEmpty": string;
+            /**
+             * Войдите, чтобы написать отзыв и оценивать отзывы других.
+             */
+            "signIn": string;
+            /**
+             * Полезно
+             */
+            "useful": string;
+            /**
+             * Не полезно
+             */
+            "notUseful": string;
+            /**
+             * Пожаловаться
+             */
+            "report": string;
+            /**
+             * Удалить этот отзыв?
+             */
+            "deleteConfirm": string;
+            /**
+             * Не удалось загрузить отзывы.
+             */
+            "loadError": string;
+            /**
+             * Не удалось сохранить отзыв.
+             */
+            "saveError": string;
+            /**
+             * Не удалось сохранить голос.
+             */
+            "voteError": string;
+            /**
+             * Не удалось удалить отзыв.
+             */
+            "deleteError": string;
+            /**
+             * Напишите отзыв от 20 до 12 000 символов.
+             */
+            "bodyInvalid": string;
+            /**
+             * Укажите заголовок рецензии (до 200 символов).
+             */
+            "essayTitleInvalid": string;
+            /**
+             * Средняя оценка
+             */
+            "average": string;
+            /**
+             * Распределение оценок
+             */
+            "distribution": string;
+            /**
+             * Оценок
+             */
+            "ratings": string;
+            /**
+             * Отзывов
+             */
+            "count": string;
+            /**
+             * Один отзыв на тайтл — его можно изменить.
+             */
+            "onePerWork": string;
+            /**
+             * Показать ещё
+             */
+            "more": string;
+            /**
+             * Сбросить фильтры
+             */
+            "resetFilters": string;
+            /**
+             * Формат
+             */
+            "format": string;
+        };
+        /**
          * Пока нет комментариев. Начните обсуждение.
          */
         "commentsEmpty": string;

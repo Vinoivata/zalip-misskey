@@ -4,7 +4,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<MkZalipCommentThread v-if="detail && note" :key="note.id" :note="note" :depth="Math.max(0, depth - 1)" @reply="emit('reply', $event)"/>
+<MkZalipDiscussionCard v-if="contentContext?.isRoot" :context="contentContext"/>
+<MkZalipCommentThread v-else-if="detail && note" :key="note.id" :note="note" :depth="Math.max(0, depth - 1)" @reply="emit('reply', $event)"/>
 <div v-else-if="note == null" :class="$style.deleted">
 	{{ i18n.ts.deletedNote }}
 </div>
@@ -38,7 +39,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import * as Misskey from 'misskey-js';
 import MkNoteHeader from '@/components/MkNoteHeader.vue';
 import MkSubNoteContent from '@/components/MkSubNoteContent.vue';
@@ -48,6 +49,8 @@ import { i18n } from '@/i18n.js';
 import { $i } from '@/i.js';
 import { userPage } from '@/filters/user.js';
 import { checkWordMute } from '@/utility/check-word-mute.js';
+import MkZalipDiscussionCard from '@/components/MkZalipDiscussionCard.vue';
+import { zalipDiscussionContext } from '@/utility/zalip-discussion-context.js';
 
 const props = withDefaults(defineProps<{
 	note: Misskey.entities.Note | null;
@@ -67,6 +70,7 @@ const emit = defineEmits<{
 const muted = ref(props.note && $i ? checkWordMute(props.note, $i, $i.mutedWords) : false);
 
 const showContent = ref(false);
+const contentContext = computed(() => zalipDiscussionContext(props.note));
 </script>
 
 <style lang="scss" module>

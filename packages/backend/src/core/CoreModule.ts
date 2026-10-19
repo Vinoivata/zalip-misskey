@@ -80,6 +80,7 @@ import { RegistryApiService } from './RegistryApiService.js';
 import { ReversiService } from './ReversiService.js';
 import { PageService } from './PageService.js';
 import { ZalipCatalogService } from './ZalipCatalogService.js';
+import { ZalipReviewService } from './ZalipReviewService.js';
 import { ZalipWatchProgressService } from './ZalipWatchProgressService.js';
 import { ZalipNoteViewService } from './ZalipNoteViewService.js';
 import { ZalipImporterService } from './ZalipImporterService.js';
@@ -398,6 +399,7 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		ReversiService,
 		PageService,
 		ZalipCatalogService,
+		ZalipReviewService,
 		ZalipWatchProgressService,
 		ZalipNoteViewService,
 		ZalipImporterService,
@@ -713,6 +715,7 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		ReversiService,
 		PageService,
 		ZalipCatalogService,
+		ZalipReviewService,
 		ZalipWatchProgressService,
 		ZalipNoteViewService,
 		ZalipImporterService,

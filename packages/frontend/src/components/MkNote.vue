@@ -56,7 +56,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<MkZalipFollowButton v-if="!appearNote.isHidden" :user="appearNote.user" :mock="mock"/>
 					<button ref="menuButton" type="button" :class="$style.menuButton" class="_button" :aria-label="i18n.ts.more" @click="showMenu()"><i class="ti ti-dots" aria-hidden="true"></i></button>
 				</div>
-				<MkA v-if="isCommentRepost" :class="$style.commentContext" :to="`/notes/${appearNote.replyId}`"><MkZalipIcon name="reply"/><span>{{ commentContextTitle }}</span></MkA>
+				<MkA v-if="isCommentRepost || contentContext" :class="$style.commentContext" :to="commentContextRoute"><MkZalipIcon name="reply"/><span>{{ commentContextTitle }}</span></MkA>
 				<div :class="$style.body" style="container-type: inline-size;">
 					<p v-if="appearNote.cw != null" :class="$style.cw">
 						<Mfm
@@ -200,6 +200,7 @@ import { prefer } from '@/preferences.js';
 import { i18n } from '@/i18n.js';
 import { userPage } from '@/filters/user.js';
 import { getNoteSummary } from '@/utility/get-note-summary.js';
+import { zalipDiscussionContext, zalipDiscussionRoute } from '@/utility/zalip-discussion-context.js';
 import { isEnabledUrlPreview } from '@/utility/url-preview.js';
 import { focusPrev, focusNext } from '@/utility/focus.js';
 import number from '@/filters/number.js';
@@ -307,9 +308,11 @@ const {
 provide(DI.mfmEmojiReactCallback, reactViaMfmEmoji);
 const summaryReaction = computed(() => $appearNote.myReaction ?? Object.entries($appearNote.reactions).sort((a, b) => b[1] - a[1])[0]?.[0]);
 const isCommentRepost = isRenote && appearNote.replyId != null;
-const commentContextTitle = computed(() => appearNote.reply?.isZalipDiscussionRoot && !appearNote.reply.isHidden && appearNote.reply.cw == null
+const contentContext = computed(() => zalipDiscussionContext(appearNote));
+const commentContextRoute = computed(() => contentContext.value ? zalipDiscussionRoute(contentContext.value) : `/notes/${appearNote.replyId}`);
+const commentContextTitle = computed(() => contentContext.value?.title ?? (appearNote.reply?.isZalipDiscussionRoot && !appearNote.reply.isHidden && appearNote.reply.cw == null
 	? getNoteSummary(appearNote.reply, { showReply: false, showRenote: false })
-	: i18n.ts.zalip.commentContext);
+	: i18n.ts.zalip.commentContext));
 // Only text participates in read-more. Media, polls and linked title cards stay fully reachable.
 const hasLongText = computed(() => shouldCollapsed({ ...appearNote, files: [] }, []));
 const viewCount = useZalipNoteViews(articleEl, () => appearNote, () => !props.mock && !hardMuted.value && !hideByPlugin.value && muted.value === false && !renoteCollapsed.value && (appearNote.cw == null || showContent.value));

@@ -57,6 +57,7 @@ import { IdentifiableError } from '@/misc/identifiable-error.js';
 import { CollapsedQueue } from '@/misc/collapsed-queue.js';
 import { CacheService } from '@/core/CacheService.js';
 import { isQuote, isRenote } from '@/misc/is-renote.js';
+import { isBoundZalipDiscussionRoot } from '@/misc/zalip-note-discussion.js';
 
 type NotificationType = 'reply' | 'renote' | 'quote' | 'mention';
 
@@ -610,7 +611,8 @@ export class NoteCreateService implements OnApplicationShutdown {
 
 		tags = tags.filter(tag => Array.from(tag).length <= 128).splice(0, 32);
 
-		if (data.reply && (user.id !== data.reply.userId) && !mentionedUsers.some(u => u.id === data.reply!.userId)) {
+		const technicalReplyRoot = await isBoundZalipDiscussionRoot(this.db, data.reply);
+		if (data.reply && !technicalReplyRoot && (user.id !== data.reply.userId) && !mentionedUsers.some(u => u.id === data.reply!.userId)) {
 			mentionedUsers.push(await this.usersRepository.findOneByOrFail({ id: data.reply!.userId }));
 		}
 
@@ -623,7 +625,7 @@ export class NoteCreateService implements OnApplicationShutdown {
 				}
 			}
 
-			if (data.reply && !data.visibleUsers.some(x => x.id === data.reply!.userId)) {
+			if (data.reply && !technicalReplyRoot && !data.visibleUsers.some(x => x.id === data.reply!.userId)) {
 				data.visibleUsers.push(await this.usersRepository.findOneByOrFail({ id: data.reply!.userId }));
 			}
 		}
@@ -636,7 +638,7 @@ export class NoteCreateService implements OnApplicationShutdown {
 		const note = await this.insertNote(user, data, tags, emojis, mentionedUsers);
 
 		setImmediate('post created', { signal: this.#shutdownController.signal }).then(
-			() => this.postNoteCreated(note, user, data, silent, tags!, mentionedUsers!),
+			() => this.postNoteCreated(note, user, data, silent, tags!, mentionedUsers!, technicalReplyRoot),
 			() => { /* aborted, ignore this */ },
 		);
 
@@ -752,7 +754,7 @@ export class NoteCreateService implements OnApplicationShutdown {
 		username: MiUser['username'];
 		host: MiUser['host'];
 		isBot: MiUser['isBot'];
-	}, data: Option, silent: boolean, tags: string[], mentionedUsers: MinimumUser[]) {
+	}, data: Option, silent: boolean, tags: string[], mentionedUsers: MinimumUser[], technicalReplyRoot = false) {
 		this.notesChart.update(note, true);
 		if (note.visibility !== 'specified' && (this.meta.enableChartsForRemoteUser || (user.host == null))) {
 			this.perUserNotesChart.update(user, note, true);
@@ -852,7 +854,7 @@ export class NoteCreateService implements OnApplicationShutdown {
 			await this.createMentionedEvents(mentionedUsers, note, nm);
 
 			// If has in reply to note
-			if (data.reply) {
+			if (data.reply && !technicalReplyRoot) {
 				// 通知
 				if (data.reply.userHost === null) {
 					const isThreadMuted = await this.noteThreadMutingsRepository.exists({

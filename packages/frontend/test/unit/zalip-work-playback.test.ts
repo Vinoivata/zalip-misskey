@@ -22,6 +22,7 @@ vi.mock('@/os.js', () => ({ popupMenu: vi.fn(), toast: vi.fn(), post: vi.fn() })
 vi.mock('@/utility/misskey-api.js', () => ({ misskeyApiZalip: vi.fn() }));
 vi.mock('@/utility/please-login.js', () => ({ pleaseLogin: vi.fn().mockResolvedValue(true) }));
 vi.mock('@/components/ZalipDiscussionPanel.vue', () => ({ default: defineComponent({ setup: () => () => null }) }));
+vi.mock('@/components/MkZalipReviewsPanel.vue', () => ({ default: defineComponent({ props: ['workId', 'workTitle', 'personalRating'], setup: props => () => h('div', { 'data-testid': 'work-reviews' }, props.workTitle) }) }));
 vi.mock('@/components/ZalipRatingDialog.vue', () => ({ default: defineComponent({ setup: () => () => null }) }));
 vi.mock('@/components/MkZalipImageGallery.vue', () => ({ default: defineComponent({ setup: () => () => h('div') }) }));
 vi.mock('@/components/MkModal.vue', () => ({ default: defineComponent({ emits: ['closed', 'click', 'esc'], setup(_, { slots, emit, expose }) {
@@ -111,6 +112,18 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('Zalip work playback selection', () => {
+	it('opens reviews as a separate title tab without remounting the active player', async () => {
+		const view = setup(); await play(view);
+		const activePlayer = iframe(view);
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._reviews.reviews }));
+		expect(view.getByTestId('work-reviews').textContent).toBe(serial.title);
+		expect(iframe(view)).toBe(activePlayer);
+		const scope = view.getByRole('group', { name: i18n.ts.zalip.discussionContext });
+		await fireEvent.click(within(scope).getByRole('button', { name: i18n.ts.zalip.comments }));
+		expect(view.queryByTestId('work-reviews')).toBeNull();
+		expect(iframe(view)).toBe(activePlayer);
+	});
+
 	it('keeps the title readable until its exact logo loads and restores text after an artwork error', async () => {
 		Object.assign(workData, { logoPath: '/logo.png', posterPath: '/poster.jpg', backdropPath: '/cover.jpg', countries: ['Россия'], ageRating: 'age18' });
 		const view = setup();

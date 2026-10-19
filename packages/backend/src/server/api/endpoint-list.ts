@@ -462,6 +462,10 @@ export * as 'zalip/discussions/ensure' from './endpoints/zalip/discussions/ensur
 export * as 'zalip/episodes/discussions/ensure' from './endpoints/zalip/episodes/discussions/ensure.js';
 export * as 'zalip/library/list' from './endpoints/zalip/library/list.js';
 export * as 'zalip/library/update' from './endpoints/zalip/library/update.js';
+export * as 'zalip/reviews/list' from './endpoints/zalip/reviews/list.js';
+export * as 'zalip/reviews/upsert' from './endpoints/zalip/reviews/upsert.js';
+export * as 'zalip/reviews/delete' from './endpoints/zalip/reviews/delete.js';
+export * as 'zalip/reviews/vote' from './endpoints/zalip/reviews/vote.js';
 export * as 'zalip/progress/show' from './endpoints/zalip/progress/show.js';
 export * as 'zalip/progress/start' from './endpoints/zalip/progress/start.js';
 export * as 'zalip/progress/update' from './endpoints/zalip/progress/update.js';

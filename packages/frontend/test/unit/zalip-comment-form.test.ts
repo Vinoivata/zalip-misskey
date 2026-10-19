@@ -50,6 +50,15 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe('comment submission context guards', () => {
+	it('addresses a canonical content root, but still addresses the real author of a nested reply', async () => {
+		const root = note('root', { user: { ...note('root').user, id: 'technical-owner', username: 'Admin', name: 'Admin' }, zalipDiscussion: { workId: 'work', slug: 'sample', title: 'A film', posterPath: null, rootNoteId: 'root', isRoot: true, episodeId: null, episodeNumber: null, seasonNumber: null } } as Partial<Misskey.entities.Note>);
+		const view = render(ZalipCommentForm, { props: { rootNote: root, replyTo: root } });
+		expect(view.getByRole('textbox').getAttribute('placeholder')).toBe(i18n.tsx.zalip.contentCommentPlaceholder({ title: 'A film' }));
+		expect(view.queryByText('Admin')).toBeNull();
+		await view.rerender({ rootNote: root, replyTo: note('child', { replyId: 'root' }) });
+		expect(view.getByRole('textbox').getAttribute('placeholder')).toBe(i18n.tsx.zalip.replyPlaceholder({ name: 'Author' }));
+	});
+
 	it('submits a normal reply and emits exactly once without its own global-event echo', async () => {
 		const pending = deferred(); controls.api.mockReturnValueOnce(pending.promise);
 		const emitted = vi.spyOn(globalEvents, 'emit');

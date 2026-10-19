@@ -35,7 +35,7 @@ describe('batched public Zalip note-view counts', () => {
 	});
 	it('passes one batched hint through native timeline packing including unloaded reply/renote identities', async () => {
 		const findCounts = vi.fn(async () => [{ noteId: 'note01', count: '8' }, { noteId: 'parent01', count: '4' }, { noteId: 'quoted01', count: '2' }]);
-		const db = { getRepository: (entity: unknown) => ({ find: entity === MiZalipSharedNote ? vi.fn(async () => []) : findCounts }) };
+		const db = { query: vi.fn().mockResolvedValue([]), getRepository: (entity: unknown) => ({ find: entity === MiZalipSharedNote ? vi.fn(async () => []) : findCounts }) };
 		const service = new NoteEntityService({} as never, db as never, { enableReactionsBuffering: false } as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never);
 		Object.assign(service, { customEmojiService: { prefetchEmojis: vi.fn(async () => undefined) }, userEntityService: { packMany: vi.fn(async () => []) } });
 		vi.spyOn(service, 'aggregateNoteEmojis').mockReturnValue([]);

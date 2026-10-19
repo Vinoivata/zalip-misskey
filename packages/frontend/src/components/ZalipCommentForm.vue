@@ -40,6 +40,7 @@ import { globalEvents, useGlobalEvent } from '@/events.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { pleaseLogin } from '@/utility/please-login.js';
 import * as os from '@/os.js';
+import { zalipDiscussionContext } from '@/utility/zalip-discussion-context.js';
 
 const props = defineProps<{ rootNote: Misskey.entities.Note; replyTo: Misskey.entities.Note; floating?: boolean }>();
 const emit = defineEmits<{ (ev: 'posted', note: Misskey.entities.Note): void; (ev: 'cancelReply'): void }>();
@@ -53,7 +54,10 @@ let submission = 0;
 let alive = true;
 const maxLength = computed(() => instance?.maxNoteTextLength ?? 1000);
 const isReply = computed(() => props.replyTo.id !== props.rootNote.id);
-const placeholder = computed(() => i18n.tsx.zalip.replyPlaceholder({ name: props.replyTo.user.name ?? props.replyTo.user.username }));
+const placeholder = computed(() => {
+	const context = zalipDiscussionContext(props.replyTo);
+	return context?.isRoot ? i18n.tsx.zalip.contentCommentPlaceholder({ title: context.title }) : i18n.tsx.zalip.replyPlaceholder({ name: props.replyTo.user.name ?? props.replyTo.user.username });
+});
 const canSubmit = computed(() => text.value.trim().length > 0 && text.value.length <= maxLength.value && !posting.value);
 
 onMounted(() => { replySlot.value = window.document.getElementById('zalip-reply-slot'); });

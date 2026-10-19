@@ -20,6 +20,7 @@ import { IdService } from '@/core/IdService.js';
 import { shouldHideNoteByTime } from '@/misc/should-hide-note-by-time.js';
 import { zalipDiscussionRootMarker } from '@/misc/zalip-discussion-root.js';
 import { packZalipNoteViewCounts } from '@/misc/zalip-note-view-counts.js';
+import { packZalipNoteDiscussions, type PackedZalipNoteDiscussion } from '@/misc/zalip-note-discussion.js';
 import { ReactionsBufferingService } from '@/core/ReactionsBufferingService.js';
 import { CacheService } from '@/core/CacheService.js';
 import type { OnModuleInit } from '@nestjs/common';
@@ -229,6 +230,7 @@ export class NoteEntityService implements OnModuleInit {
 		packedNote.cw = null;
 		packedNote.isHidden = true;
 		packedNote.zalipViewCount = undefined;
+		packedNote.zalipDiscussion = undefined;
 		// TODO: hiddenReason みたいなのを提供しても良さそう
 	}
 
@@ -396,6 +398,7 @@ export class NoteEntityService implements OnModuleInit {
 				packedUsers: Map<MiUser['id'], Packed<'UserLite'>>;
 				zalipShares: Map<MiNote['id'], PackedZalipShare>;
 				zalipViewCounts?: Map<MiNote['id'], number>;
+				zalipDiscussions?: Map<MiNote['id'], PackedZalipNoteDiscussion>;
 			};
 		},
 	): Promise<Packed<'Note'>> {
@@ -409,6 +412,7 @@ export class NoteEntityService implements OnModuleInit {
 		const note = typeof src === 'object' ? src : await this.noteLoader.load(src);
 		const zalipShares = opts._hint_?.zalipShares ?? await this.packZalipShares([note.id]);
 		const zalipViewCounts = opts._hint_?.zalipViewCounts ?? await packZalipNoteViewCounts(this.db, [note.id]);
+		const zalipDiscussions = opts._hint_?.zalipDiscussions ?? await packZalipNoteDiscussions(this.db, [note.id]);
 		const host = note.userHost;
 
 		const bufferedReactions = opts._hint_?.bufferedReactions != null
@@ -448,6 +452,7 @@ export class NoteEntityService implements OnModuleInit {
 			visibility: note.visibility,
 			localOnly: note.localOnly,
 			isZalipDiscussionRoot: note.name === zalipDiscussionRootMarker || undefined,
+			zalipDiscussion: zalipDiscussions.get(note.id),
 			// Unknown deep quote IDs outside the finite batch omit the optional metric, never invent zero.
 			zalipViewCount: zalipViewCounts.get(note.id),
 			reactionAcceptance: note.reactionAcceptance,
@@ -603,6 +608,7 @@ export class NoteEntityService implements OnModuleInit {
 		const zalipShares = await this.packZalipShares(relatedNoteIds);
 		const viewNoteIds = notes.flatMap(note => [note.id, note.replyId, note.renoteId].filter((id): id is string => id != null));
 		const zalipViewCounts = await packZalipNoteViewCounts(this.db, viewNoteIds);
+		const zalipDiscussions = await packZalipNoteDiscussions(this.db, viewNoteIds);
 
 		return await Promise.all(notes.map(n => this.pack(n, me, {
 			...options,
@@ -613,6 +619,7 @@ export class NoteEntityService implements OnModuleInit {
 				packedUsers,
 				zalipShares,
 				zalipViewCounts,
+				zalipDiscussions,
 			},
 		})));
 	}

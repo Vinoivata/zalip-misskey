@@ -2328,6 +2328,13 @@ declare namespace entities {
         ZalipReleasesListResponse,
         ZalipReleasesSubscribedRequest,
         ZalipReleasesSubscribedResponse,
+        ZalipReviewsDeleteRequest,
+        ZalipReviewsListRequest,
+        ZalipReviewsListResponse,
+        ZalipReviewsUpsertRequest,
+        ZalipReviewsUpsertResponse,
+        ZalipReviewsVoteRequest,
+        ZalipReviewsVoteResponse,
         ZalipSeasonsEpisodesRequest,
         ZalipSeasonsEpisodesResponse,
         ZalipSharesCreateRequest,
@@ -4296,6 +4303,27 @@ type ZalipReleasesSubscribedRequest = operations['zalip___releases___subscribed'
 
 // @public (undocumented)
 type ZalipReleasesSubscribedResponse = operations['zalip___releases___subscribed']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipReviewsDeleteRequest = operations['zalip___reviews___delete']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipReviewsListRequest = operations['zalip___reviews___list']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipReviewsListResponse = operations['zalip___reviews___list']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipReviewsUpsertRequest = operations['zalip___reviews___upsert']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipReviewsUpsertResponse = operations['zalip___reviews___upsert']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipReviewsVoteRequest = operations['zalip___reviews___vote']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipReviewsVoteResponse = operations['zalip___reviews___vote']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
 type ZalipSeasonsEpisodesRequest = operations['zalip___seasons___episodes']['requestBody']['content']['application/json'];

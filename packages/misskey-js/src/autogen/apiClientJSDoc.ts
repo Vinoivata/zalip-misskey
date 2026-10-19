@@ -5606,6 +5606,53 @@ declare module '../api.js' {
     ): Promise<SwitchCaseResponseType<E, P>>;
 
     /**
+     * Soft-delete your review, or moderate a review. Native title rating and all library states remain unchanged.
+     *
+     * **Internal Endpoint**: This endpoint is an API for the misskey mainframe and is not intended for use by third parties.
+     * **Credential required**: *Yes*
+     */
+    request<E extends 'zalip/reviews/delete', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * List public title reviews and native rating statistics, respecting blocks and mutes. Rating totals include all public title scores, not a second review vote.
+     *
+     * **Credential required**: *No*
+     */
+    request<E extends 'zalip/reviews/list', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * Create or edit your one public opinion for a published title. An omitted rating preserves your native library score; null clears only that score. No other library state is modified.
+     *
+     * **Internal Endpoint**: This endpoint is an API for the misskey mainframe and is not intended for use by third parties.
+     * **Credential required**: *Yes*
+     */
+    request<E extends 'zalip/reviews/upsert', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * Toggle helpfulness on another visible review. Repeating the selected value removes the vote; null explicitly clears it.
+     *
+     * **Internal Endpoint**: This endpoint is an API for the misskey mainframe and is not intended for use by third parties.
+     * **Credential required**: *Yes*
+     */
+    request<E extends 'zalip/reviews/vote', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
      * List canonical episode metadata for one published Zalip season. Playback sources are not included.
      *
      * **Credential required**: *No*

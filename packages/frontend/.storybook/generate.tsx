@@ -478,6 +478,8 @@ function toStories(component: string): Promise<string> {
 		globSync('src/components/MkZalipAccentPicker.vue'),
 		globSync('src/components/MkZalipSectionHeader.vue'),
 		globSync('src/components/MkZalipBookmarkTabs.vue'),
+		globSync('src/components/MkZalipReviewsPanel.vue'),
+		globSync('src/components/MkZalipDiscussionCard.vue'),
 		globSync('src/components/MkRoleSelectDialog.vue'),
 		globSync('src/components/grid/MkGrid.vue'),
 		globSync('src/components/ZalipRatingDialog.vue'),

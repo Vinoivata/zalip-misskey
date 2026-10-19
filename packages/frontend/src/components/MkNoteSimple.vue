@@ -4,7 +4,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div v-if="note" :class="$style.root">
+<MkZalipDiscussionCard v-if="contentContext?.isRoot" :context="contentContext"/>
+<div v-else-if="note" :class="$style.root">
 	<MkAvatar :class="[$style.avatar, prefer.s.useStickyIcons ? $style.useSticky : null]" :user="note.user" link preview/>
 	<div :class="$style.main">
 		<MkNoteHeader :class="$style.header" :note="note" :mini="true"/>
@@ -25,19 +26,22 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import * as Misskey from 'misskey-js';
 import MkNoteHeader from '@/components/MkNoteHeader.vue';
 import MkSubNoteContent from '@/components/MkSubNoteContent.vue';
 import MkCwButton from '@/components/MkCwButton.vue';
 import { i18n } from '@/i18n.js';
 import { prefer } from '@/preferences.js';
+import MkZalipDiscussionCard from '@/components/MkZalipDiscussionCard.vue';
+import { zalipDiscussionContext } from '@/utility/zalip-discussion-context.js';
 
 const props = defineProps<{
 	note: Misskey.entities.Note | null;
 }>();
 
 const showContent = ref(false);
+const contentContext = computed(() => zalipDiscussionContext(props.note));
 </script>
 
 <style lang="scss" module>

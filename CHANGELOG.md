@@ -77,6 +77,8 @@
 - Enhance: Show post albums with natural-proportion adjacent photos and compact title-frame previews, improve keyboard and edge navigation, and make fullscreen galleries resilient, accessible and lazy-loaded.
 - Fix: Keep reposted comments and their attachments visible with clear discussion context, guard comment actions against stale requests, align reply previews and social controls, and simplify post menus without changing privacy or federation settings.
 - Fix: Open mobile post menus as full-width bottom sheets and reduce follow symbols and visible badges while retaining accessible touch targets.
+- Feat: Add title-linked viewer reviews and essays with native 1–10 ratings, spoiler controls, sentiment filters, helpful votes, and editing without restarting playback.
+- Fix: Present cinema discussions as title or episode contexts instead of replies to their importing administrator, including quoted threads and full comment composition.
 
 ### Server
 - Fix: Reuse canonical provider bindings when refreshing Zalip titles and limit scheduled Kodik refreshes to bound materials so an unrelated discovery response cannot abort the whole profile.
@@ -113,6 +115,8 @@
 - Fix: Allow verified Alloha and Collaps time-based watch progress in the database constraint without rewriting existing viewing history.
 - Enhance: Expose existing native Drive poster thumbnails in public Zalip catalogue responses using bounded batch lookups without rewriting original artwork.
 - Feat: Count authenticated local note views after a visible dwell, with durable aggregates, native visibility checks and rolling daily Redis deduplication without IP or device tracking.
+- Feat: Store Zalip reviews and helpful votes against canonical titles and signed-in authors, with unique opinions, protected moderation, and shared atomic library ratings.
+- Fix: Resolve title discussion context for nested comments and reposts, use system-owned new discussion roots, and avoid implicit notifications to technical root authors.
 
 ## 2026.7.0
 

@@ -133,12 +133,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<button type="button" class="_button" :class="$style.episodeDiscussButton" @click="selectDiscussionScope('episode')"><i class="ti ti-messages" aria-hidden="true"></i> {{ selectedEpisode.discussionNoteId ? i18n.ts.zalip.episodeComments : i18n.ts.zalip.discussEpisode }}</button>
 						</div>
 					</section>
-					<section ref="discussionSection" :class="$style.discussionArea">
-						<div v-if="work.seasons.length" :class="$style.discussionScope" role="group" :aria-label="i18n.ts.zalip.discussionContext">
-							<button type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionScope === 'work' }]" :aria-pressed="discussionScope === 'work'" @click="selectDiscussionScope('work')"><i class="ti ti-movie" aria-hidden="true"></i> {{ i18n.ts.zalip.workDiscussionScope }}</button>
-							<button v-if="selectedEpisode" type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionScope === 'episode' }]" :aria-pressed="discussionScope === 'episode'" @click="selectDiscussionScope('episode')"><i class="ti ti-device-tv" aria-hidden="true"></i> {{ episodeLabel(selectedEpisode) }}</button>
+					<section id="discussion" ref="discussionSection" :class="$style.discussionArea">
+						<div :class="$style.discussionScope" role="group" :aria-label="i18n.ts.zalip.discussionContext">
+							<button type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionTab === 'comments' && discussionScope === 'work' }]" :aria-pressed="discussionTab === 'comments' && discussionScope === 'work'" @click="selectDiscussionScope('work')"><i class="ti ti-messages" aria-hidden="true"></i> {{ i18n.ts.zalip.comments }}</button>
+							<button v-if="selectedEpisode" type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionTab === 'comments' && discussionScope === 'episode' }]" :aria-pressed="discussionTab === 'comments' && discussionScope === 'episode'" @click="selectDiscussionScope('episode')"><i class="ti ti-device-tv" aria-hidden="true"></i> {{ episodeLabel(selectedEpisode) }}</button>
+							<button type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionTab === 'reviews' }]" :aria-pressed="discussionTab === 'reviews'" @click="discussionTab = 'reviews'"><i class="ti ti-message-star" aria-hidden="true"></i> {{ i18n.ts.zalip._reviews.reviews }}</button>
 						</div>
-						<ZalipDiscussionPanel v-if="activeDiscussionNoteId" :noteId="activeDiscussionNoteId" :heading="activeDiscussionHeading"/>
+						<MkZalipReviewsPanel v-if="discussionTab === 'reviews'" :workId="work.id" :workTitle="work.title" :personalRating="personalRating" @ratingChanged="reviewRatingChanged"/>
+						<ZalipDiscussionPanel v-else-if="activeDiscussionNoteId" :noteId="activeDiscussionNoteId" :heading="activeDiscussionHeading"/>
 						<section v-else :class="$style.discussionPending">
 							<p v-if="!discussionError"><i class="ti ti-messages" aria-hidden="true"></i> {{ activeDiscussionEmptyText }}</p>
 							<button v-if="$i" type="button" class="_button" :class="$style.openDiscussion" :disabled="openingDiscussionScope != null" @click="openActiveDiscussion"><i :class="openingDiscussionScope != null ? 'ti ti-loader-2 ti-spin' : 'ti ti-message-plus'" aria-hidden="true"></i> {{ openingDiscussionScope != null ? i18n.ts.zalip.openingDiscussion : i18n.ts.zalip.startDiscussion }}</button>
@@ -237,6 +239,7 @@ import { i18n } from '@/i18n.js';
 import * as os from '@/os.js';
 import { definePage } from '@/page.js';
 import ZalipDiscussionPanel from '@/components/ZalipDiscussionPanel.vue';
+import MkZalipReviewsPanel from '@/components/MkZalipReviewsPanel.vue';
 import ZalipRatingDialog from '@/components/ZalipRatingDialog.vue';
 import { useZalipHorizontalDrag } from '@/composables/use-zalip-horizontal-drag.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
@@ -308,6 +311,7 @@ type LibraryEntry = {
 };
 
 type LibraryUpdate = Pick<LibraryEntry, 'status' | 'episodesWatched' | 'personalRating' | 'isFavorite' | 'isReleaseSubscribed'>;
+type PersonalStateContext = { request: number; workId: string | undefined; accountId: string | undefined };
 
 const playbackSources = ref<PlaybackSource[]>([]);
 const playbackProviders = ref<PlaybackProviderSetting[]>();
@@ -396,6 +400,11 @@ const libraryLoadFailed = ref(false);
 const personalActionsDisabled = computed(() => saving.value || (!!$i && !libraryReady.value));
 let workRequest = 0;
 let discussionRequest = 0;
+let reviewRatingRequest = 0;
+let personalRatingRevision = 0;
+let pendingQuickRating: PersonalStateContext | null = null;
+let pendingReviewRating: PersonalStateContext | null = null;
+let reviewRatingRefreshNeeded: PersonalStateContext | null = null;
 let libraryWriteRequest = 0;
 const libraryStatus = ref<LibraryStatus | null>(null);
 const saved = computed(() => libraryStatus.value != null);
@@ -425,6 +434,7 @@ const selectedVoiceLabel = computed(() => {
 const discussionNoteId = ref<string | null>(null);
 const discussionError = ref<string | null>(null);
 const discussionScope = ref<'work' | 'episode'>('work');
+const discussionTab = ref<'comments' | 'reviews'>('comments');
 const openingDiscussionScope = ref<'work' | 'episode' | null>(null);
 const discussionSection = ref<HTMLElement | null>(null);
 const playerSection = ref<HTMLElement | null>(null);
@@ -575,6 +585,10 @@ async function load(): Promise<void> {
 	const request = ++workRequest;
 	discussionRequest++;
 	libraryWriteRequest++;
+	reviewRatingRequest++;
+	pendingQuickRating = null;
+	pendingReviewRating = null;
+	reviewRatingRefreshNeeded = null;
 	saving.value = false;
 	workMenuOpen.value = false;
 	ratingDialogOpen.value = false;
@@ -605,6 +619,7 @@ async function load(): Promise<void> {
 	selectedTranslationId.value = null;
 	discussionError.value = null;
 	discussionScope.value = 'work';
+	discussionTab.value = 'comments';
 	openingDiscussionScope.value = null;
 	selectedSeasonNumber.value = null;
 	episodes.value = [];
@@ -643,6 +658,15 @@ async function load(): Promise<void> {
 		const initialSeason = loadedWork.seasons.find(season => season.seasonNumber === requestedSeason)
 			?? loadedWork.seasons.find(season => season.seasonNumber > 0) ?? loadedWork.seasons[0];
 		if (initialSeason != null) await loadSeason(initialSeason, initialSeason.seasonNumber === requestedSeason ? zalipEpisodeQuery(props.initialEpisode, 0) : null);
+		if (request === workRequest && window.location.hash.startsWith('#review')) {
+			discussionTab.value = 'reviews';
+			await nextTick();
+			focusDiscussion();
+		} else if (request === workRequest && window.location.hash === '#discussion') {
+			if (requestedSeason != null && selectedEpisode.value) discussionScope.value = 'episode';
+			await nextTick();
+			focusDiscussion();
+		}
 	} catch {
 		if (request === workRequest) {
 			work.value = null;
@@ -865,13 +889,37 @@ function openSelectedPlayer(): void {
 
 async function selectDiscussionScope(scope: 'work' | 'episode'): Promise<void> {
 	if (scope === 'episode' && selectedEpisode.value == null) return;
+	discussionTab.value = 'comments';
 	discussionScope.value = scope;
 	await nextTick();
 	focusDiscussion();
 }
 
 function focusDiscussion(): void {
+	// Keep this tab selection in callers: opening reviews must not remount the player.
 	discussionSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function reviewRatingChanged(): Promise<void> {
+	if (!work.value || !$i) return;
+	const context = personalStateContext();
+	const ratingRequest = ++reviewRatingRequest;
+	const ratingRevision = ++personalRatingRevision;
+	pendingReviewRating = context;
+	if (samePersonalState(pendingQuickRating, context)) reviewRatingRefreshNeeded = context;
+	try {
+		const [current, entries] = await Promise.all([
+			misskeyApiZalip<ZalipWork>('zalip/works/show', { slug: work.value.slug }),
+			misskeyApiZalip<LibraryEntry[]>('zalip/library/list'),
+		]);
+		if (!isCurrentPersonalState(context) || ratingRequest !== reviewRatingRequest) return;
+		work.value.communityRating = current.communityRating;
+		work.value.ratingCount = current.ratingCount;
+		if (samePersonalState(pendingQuickRating, context)) reviewRatingRefreshNeeded = context;
+		else if (ratingRevision === personalRatingRevision) personalRating.value = entries.find(entry => entry.work.id === context.workId)?.personalRating ?? null;
+	} catch { /* The saved personal rating remains valid if the public summary is unavailable. */ } finally {
+		if (pendingReviewRating === context) pendingReviewRating = null;
+	}
 }
 
 function focusPlayer(): void {
@@ -925,10 +973,6 @@ async function openActiveDiscussion(): Promise<void> {
 	}
 }
 
-function normalizedEpisodesWatched(): number {
-	return Number.isFinite(episodesWatched.value) ? Math.max(0, Math.trunc(episodesWatched.value)) : 0;
-}
-
 function applyLibraryEntry(entry: LibraryEntry): void {
 	libraryStatus.value = entry.status;
 	episodesWatched.value = entry.episodesWatched;
@@ -937,12 +981,16 @@ function applyLibraryEntry(entry: LibraryEntry): void {
 	releaseSubscribed.value = entry.isReleaseSubscribed;
 }
 
-function personalStateContext(): { request: number; workId: string | undefined } {
-	return { request: workRequest, workId: work.value?.id };
+function personalStateContext(): PersonalStateContext {
+	return { request: workRequest, workId: work.value?.id, accountId: $i?.id };
 }
 
-function isCurrentPersonalState(context: ReturnType<typeof personalStateContext>): boolean {
-	return context.workId != null && context.request === workRequest && context.workId === work.value?.id;
+function samePersonalState(first: PersonalStateContext | null, second: PersonalStateContext): boolean {
+	return first != null && first.request === second.request && first.workId === second.workId && first.accountId === second.accountId;
+}
+
+function isCurrentPersonalState(context: PersonalStateContext): boolean {
+	return context.workId != null && samePersonalState(context, personalStateContext());
 }
 
 async function updateLibrary(patch: Partial<LibraryUpdate> = {}): Promise<void> {
@@ -950,18 +998,15 @@ async function updateLibrary(patch: Partial<LibraryUpdate> = {}): Promise<void> 
 	if (!libraryReady.value) throw new Error('Personal library has not been loaded');
 	const context = personalStateContext();
 	const request = ++libraryWriteRequest;
+	const ratingRevision = personalRatingRevision;
 	saving.value = true;
 	try {
 		const entry = await misskeyApiZalip<LibraryEntry>('zalip/library/update', {
 			workId: context.workId,
 			status: libraryStatus.value,
-			episodesWatched: normalizedEpisodesWatched(),
-			personalRating: personalRating.value,
-			isFavorite: isFavorite.value,
-			isReleaseSubscribed: releaseSubscribed.value,
 			...patch,
 		});
-		if (isCurrentPersonalState(context) && request === libraryWriteRequest) applyLibraryEntry(entry);
+		if (isCurrentPersonalState(context) && request === libraryWriteRequest) applyLibraryEntry(patch.personalRating !== undefined || ratingRevision === personalRatingRevision ? entry : { ...entry, personalRating: personalRating.value });
 	} finally {
 		if (isCurrentPersonalState(context) && request === libraryWriteRequest) saving.value = false;
 	}
@@ -1081,13 +1126,25 @@ function closeRatingDialog(): void {
 
 async function savePersonalRating(rating: number): Promise<void> {
 	if (personalActionsDisabled.value) return;
+	personalRatingRevision++;
 	const context = personalStateContext();
+	pendingQuickRating = context;
+	if (samePersonalState(pendingReviewRating, context)) reviewRatingRefreshNeeded = context;
 	ratingError.value = null;
 	try {
 		await updateLibrary({ personalRating: rating });
 		if (isCurrentPersonalState(context)) closeRatingDialog();
 	} catch {
 		if (isCurrentPersonalState(context)) ratingError.value = i18n.ts.zalip.libraryUpdateFailed;
+	} finally {
+		if (pendingQuickRating === context) {
+			pendingQuickRating = null;
+			if (samePersonalState(reviewRatingRefreshNeeded, context)) {
+				reviewRatingRefreshNeeded = null;
+				// Both writers have settled: read their actual commit order, not their response order.
+				if (isCurrentPersonalState(context)) void reviewRatingChanged();
+			}
+		}
 	}
 }
 

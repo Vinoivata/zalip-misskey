@@ -4596,6 +4596,45 @@ export type paths = {
          */
         post: operations['zalip___releases___subscribed'];
     };
+    '/zalip/reviews/delete': {
+        /**
+         * zalip/reviews/delete
+         * @description Soft-delete your review, or moderate a review. Native title rating and all library states remain unchanged.
+         *
+         *     **Internal Endpoint**: This endpoint is an API for the misskey mainframe and is not intended for use by third parties.
+         *     **Credential required**: *Yes*
+         */
+        post: operations['zalip___reviews___delete'];
+    };
+    '/zalip/reviews/list': {
+        /**
+         * zalip/reviews/list
+         * @description List public title reviews and native rating statistics, respecting blocks and mutes. Rating totals include all public title scores, not a second review vote.
+         *
+         *     **Credential required**: *No*
+         */
+        post: operations['zalip___reviews___list'];
+    };
+    '/zalip/reviews/upsert': {
+        /**
+         * zalip/reviews/upsert
+         * @description Create or edit your one public opinion for a published title. An omitted rating preserves your native library score; null clears only that score. No other library state is modified.
+         *
+         *     **Internal Endpoint**: This endpoint is an API for the misskey mainframe and is not intended for use by third parties.
+         *     **Credential required**: *Yes*
+         */
+        post: operations['zalip___reviews___upsert'];
+    };
+    '/zalip/reviews/vote': {
+        /**
+         * zalip/reviews/vote
+         * @description Toggle helpfulness on another visible review. Repeating the selected value removes the vote; null explicitly clears it.
+         *
+         *     **Internal Endpoint**: This endpoint is an API for the misskey mainframe and is not intended for use by third parties.
+         *     **Credential required**: *Yes*
+         */
+        post: operations['zalip___reviews___vote'];
+    };
     '/zalip/seasons/episodes': {
         /**
          * zalip/seasons/episodes
@@ -5162,6 +5201,20 @@ export type components = {
             renote?: components['schemas']['Note'] | null;
             isHidden?: boolean;
             isZalipDiscussionRoot?: boolean;
+            zalipDiscussion?: {
+                /** Format: id */
+                workId: string;
+                slug: string;
+                title: string;
+                posterPath: string | null;
+                /** Format: id */
+                rootNoteId: string;
+                isRoot: boolean;
+                /** Format: id */
+                episodeId: string | null;
+                episodeNumber: number | null;
+                seasonNumber: number | null;
+            };
             zalipViewCount?: number;
             /** @enum {string} */
             visibility: 'public' | 'home' | 'followers' | 'specified';
@@ -43801,6 +43854,441 @@ export interface operations {
             };
             /** @description I'm Ai */
             418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    zalip___reviews___delete: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                    /** Format: misskey:id */
+                    reviewId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (without any results) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    zalip___reviews___list: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                    /** Format: misskey:id */
+                    workId: string;
+                    /** @enum {string} */
+                    format?: 'review' | 'essay';
+                    /** @enum {string} */
+                    sentiment?: 'positive' | 'neutral' | 'negative';
+                    /** @default false */
+                    hideSpoilers?: boolean;
+                    /**
+                     * @default newest
+                     * @enum {string}
+                     */
+                    sort?: 'newest' | 'helpful';
+                    /** @default 10 */
+                    limit?: number;
+                    /** @default 0 */
+                    offset?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        items: {
+                            /** Format: id */
+                            id: string;
+                            /** Format: id */
+                            workId: string;
+                            user: components['schemas']['UserLite'];
+                            /** @enum {string} */
+                            format: 'review' | 'essay';
+                            title: string | null;
+                            body: string;
+                            isSpoiler: boolean;
+                            /** @enum {string} */
+                            sentiment: 'positive' | 'neutral' | 'negative';
+                            rating: number | null;
+                            helpfulCount: number;
+                            unhelpfulCount: number;
+                            /** @enum {string|null} */
+                            myVote: 'helpful' | 'unhelpful' | null;
+                            /** Format: date-time */
+                            createdAt: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                            canEdit: boolean;
+                            canDelete: boolean;
+                        }[];
+                        total: number;
+                        summary: {
+                            reviewCount: number;
+                            positiveCount: number;
+                            neutralCount: number;
+                            negativeCount: number;
+                            averageRating: number | null;
+                            ratingCount: number;
+                            histogram: number[];
+                        };
+                        myReview: {
+                            /** Format: id */
+                            id: string;
+                            /** Format: id */
+                            workId: string;
+                            user: components['schemas']['UserLite'];
+                            /** @enum {string} */
+                            format: 'review' | 'essay';
+                            title: string | null;
+                            body: string;
+                            isSpoiler: boolean;
+                            /** @enum {string} */
+                            sentiment: 'positive' | 'neutral' | 'negative';
+                            rating: number | null;
+                            helpfulCount: number;
+                            unhelpfulCount: number;
+                            /** @enum {string|null} */
+                            myVote: 'helpful' | 'unhelpful' | null;
+                            /** Format: date-time */
+                            createdAt: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                            canEdit: boolean;
+                            canDelete: boolean;
+                        } | null;
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    zalip___reviews___upsert: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                    /** Format: misskey:id */
+                    workId: string;
+                    /** @enum {string} */
+                    format: 'review' | 'essay';
+                    title?: string | null;
+                    body: string;
+                    isSpoiler: boolean;
+                    /** @enum {string} */
+                    sentiment: 'positive' | 'neutral' | 'negative';
+                    rating?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        /** Format: id */
+                        id: string;
+                        /** Format: id */
+                        workId: string;
+                        user: components['schemas']['UserLite'];
+                        /** @enum {string} */
+                        format: 'review' | 'essay';
+                        title: string | null;
+                        body: string;
+                        isSpoiler: boolean;
+                        /** @enum {string} */
+                        sentiment: 'positive' | 'neutral' | 'negative';
+                        rating: number | null;
+                        helpfulCount: number;
+                        unhelpfulCount: number;
+                        /** @enum {string|null} */
+                        myVote: 'helpful' | 'unhelpful' | null;
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        canEdit: boolean;
+                        canDelete: boolean;
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    zalip___reviews___vote: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                    /** Format: misskey:id */
+                    reviewId: string;
+                    /** @enum {string|null} */
+                    value: 'helpful' | 'unhelpful' | null;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        /** Format: id */
+                        id: string;
+                        /** Format: id */
+                        workId: string;
+                        user: components['schemas']['UserLite'];
+                        /** @enum {string} */
+                        format: 'review' | 'essay';
+                        title: string | null;
+                        body: string;
+                        isSpoiler: boolean;
+                        /** @enum {string} */
+                        sentiment: 'positive' | 'neutral' | 'negative';
+                        rating: number | null;
+                        helpfulCount: number;
+                        unhelpfulCount: number;
+                        /** @enum {string|null} */
+                        myVote: 'helpful' | 'unhelpful' | null;
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        canEdit: boolean;
+                        canDelete: boolean;
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

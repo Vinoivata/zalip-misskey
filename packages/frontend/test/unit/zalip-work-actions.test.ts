@@ -11,6 +11,7 @@ import Work from '@/pages/zalip/work.vue';
 import { i18n } from '@/i18n.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import * as os from '@/os.js';
+import { $i } from '@/i.js';
 import type { MenuItem, MenuSwitch } from '@/types/menu.js';
 import type { TaxonomyLink } from '@/utility/zalip-taxonomy.js';
 
@@ -22,7 +23,8 @@ vi.mock('@/os.js', () => ({ popupMenu: vi.fn(), toast: vi.fn(), post: vi.fn() })
 vi.mock('@/utility/misskey-api.js', () => ({ misskeyApiZalip: vi.fn() }));
 vi.mock('@/utility/please-login.js', () => ({ pleaseLogin: vi.fn().mockResolvedValue(true) }));
 vi.mock('@/components/ZalipDiscussionPanel.vue', () => ({ default: defineComponent({ setup: () => () => null }) }));
-vi.mock('@/components/ZalipRatingDialog.vue', () => ({ default: defineComponent({ setup: () => () => null }) }));
+vi.mock('@/components/MkZalipReviewsPanel.vue', () => ({ default: defineComponent({ props: ['personalRating'], emits: ['ratingChanged'], setup: (props, { emit }) => () => h('button', { 'data-testid': 'review-rating', 'data-rating': props.personalRating, onClick: () => emit('ratingChanged', 9) }, 'Review saved') }) }));
+vi.mock('@/components/ZalipRatingDialog.vue', () => ({ default: defineComponent({ emits: ['save'], setup: (_, { emit }) => () => h('button', { 'data-testid': 'quick-rating', onClick: () => emit('save', 7) }, 'Save quick rating') }) }));
 vi.mock('@/components/MkModal.vue', () => ({ default: defineComponent({ emits: ['closed'], setup(_, { slots, emit, expose }) {
 	expose({ close: () => emit('closed') });
 	return () => h('div', slots.default?.({ maxHeight: null }));
@@ -58,6 +60,7 @@ function menuSwitch(): MenuSwitch {
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	$i!.id = 'viewer';
 	(window as unknown as HappyWindow).happyDOM.settings.navigation.disableChildFrameNavigation = true;
 	available = false;
 	failUpdate = false;
@@ -168,7 +171,7 @@ describe('Zalip work actions', () => {
 		expect(view.getByRole('button', { name: `${i18n.ts.zalip.myRating}: 3/10` })).toBeTruthy();
 		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip.libraryPlanned }));
 		menuSwitch().ref.value = false;
-		await waitFor(() => expect(misskeyApiZalip).toHaveBeenLastCalledWith('zalip/library/update', { workId: second.work.id, status: 'planned', episodesWatched: 1, personalRating: 3, isFavorite: false, isReleaseSubscribed: true }));
+		await waitFor(() => expect(misskeyApiZalip).toHaveBeenLastCalledWith('zalip/library/update', { workId: second.work.id, status: 'planned', isFavorite: false }));
 	});
 
 	it('a previous title finally handler cannot clear the saving flag of a current-title write', async () => {
@@ -269,6 +272,110 @@ describe('Zalip work actions', () => {
 		await waitFor(() => expect(entry.isFavorite).toBe(false));
 		expect(entry.personalRating).toBe(8);
 		expect(entry.episodesWatched).toBe(4);
+	});
+
+	it('does not send or restore a stale rating when a favorite response arrives after a saved review', async () => {
+		const oldUpdate = deferred<typeof entry>();
+		const original = vi.mocked(misskeyApiZalip).getMockImplementation()!;
+		vi.mocked(misskeyApiZalip).mockImplementation((endpoint, data) => endpoint === 'zalip/library/update' ? oldUpdate.promise : original(endpoint, data));
+		const view = setup();
+		await fireEvent.click(await view.findByRole('button', { name: i18n.ts.zalip.libraryWatching }));
+		menuSwitch().ref.value = true;
+		await waitFor(() => expect(misskeyApiZalip).toHaveBeenCalledWith('zalip/library/update', { workId: title.id, status: 'watching', isFavorite: true }));
+		const oldEntry = { ...entry, isFavorite: true };
+		entry = { ...entry, personalRating: 9, isFavorite: true };
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._reviews.reviews }));
+		await fireEvent.click(view.getByTestId('review-rating'));
+		await waitFor(() => expect(view.getByTestId('review-rating').getAttribute('data-rating')).toBe('9'));
+		oldUpdate.resolve(oldEntry);
+		await waitFor(() => expect(view.getByRole('button', { name: `${i18n.ts.zalip.myRating}: 9/10` })).toBeTruthy());
+		expect(view.getByTestId('review-rating').getAttribute('data-rating')).toBe('9');
+		expect(entry.personalRating).toBe(9);
+	});
+
+	it.each([false, true])('resynchronizes the true rating after a pending quick save overlaps a late review response (failure: %s)', async failQuick => {
+		const quick = deferred<typeof entry>();
+		const original = vi.mocked(misskeyApiZalip).getMockImplementation()!;
+		vi.mocked(misskeyApiZalip).mockImplementation((endpoint, data) => endpoint === 'zalip/library/update' ? quick.promise : original(endpoint, data));
+		const view = setup();
+		await fireEvent.click(await view.findByRole('button', { name: `${i18n.ts.zalip.myRating}: 8/10` }));
+		await fireEvent.click(view.getByTestId('quick-rating'));
+		await waitFor(() => expect(misskeyApiZalip).toHaveBeenCalledWith('zalip/library/update', { workId: title.id, status: 'watching', personalRating: 7 }));
+		// An earlier review committed 9, but its response arrives while quick-rating 7 still writes.
+		entry = { ...entry, personalRating: 9 };
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._reviews.reviews }));
+		const readsBeforeReview = vi.mocked(misskeyApiZalip).mock.calls.filter(([endpoint]) => endpoint === 'zalip/works/show').length;
+		await fireEvent.click(view.getByTestId('review-rating'));
+		await waitFor(() => expect(vi.mocked(misskeyApiZalip).mock.calls.filter(([endpoint]) => endpoint === 'zalip/works/show')).toHaveLength(readsBeforeReview + 1));
+		await new Promise(resolve => setTimeout(resolve, 0));
+		expect(view.getByTestId('review-rating').getAttribute('data-rating')).toBe('8');
+		if (failQuick) quick.reject(new Error('Quick rating failed'));
+		else { entry = { ...entry, personalRating: 7 }; quick.resolve(entry); }
+		const expected = failQuick ? '9' : '7';
+		await waitFor(() => expect(view.getByTestId('review-rating').getAttribute('data-rating')).toBe(expected));
+		expect(view.getByRole('button', { name: `${i18n.ts.zalip.myRating}: ${expected}/10` })).toBeTruthy();
+		expect(vi.mocked(misskeyApiZalip).mock.calls.filter(([endpoint]) => endpoint === 'zalip/works/show')).toHaveLength(readsBeforeReview + 2);
+	});
+
+	it('does not resynchronize an old account after its overlapping rating requests finish', async () => {
+		const quick = deferred<typeof entry>();
+		const original = vi.mocked(misskeyApiZalip).getMockImplementation()!;
+		vi.mocked(misskeyApiZalip).mockImplementation((endpoint, data) => endpoint === 'zalip/library/update' ? quick.promise : original(endpoint, data));
+		const view = setup();
+		await fireEvent.click(await view.findByRole('button', { name: `${i18n.ts.zalip.myRating}: 8/10` }));
+		await fireEvent.click(view.getByTestId('quick-rating'));
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._reviews.reviews }));
+		await fireEvent.click(view.getByTestId('review-rating'));
+		await new Promise(resolve => setTimeout(resolve, 0));
+		$i!.id = 'new-account';
+		const count = vi.mocked(misskeyApiZalip).mock.calls.length;
+		quick.resolve({ ...entry, personalRating: 7 });
+		await new Promise(resolve => setTimeout(resolve, 0));
+		expect(vi.mocked(misskeyApiZalip).mock.calls).toHaveLength(count);
+		expect(view.getByTestId('review-rating').getAttribute('data-rating')).toBe('8');
+	});
+
+	it('ignores an old review read when quick-rating starts and commits before that read returns', async () => {
+		const reviewRead = deferred<typeof entry[]>();
+		const quick = deferred<typeof entry>();
+		const original = vi.mocked(misskeyApiZalip).getMockImplementation()!;
+		let holdReviewRead = false;
+		vi.mocked(misskeyApiZalip).mockImplementation((endpoint, data) => {
+			if (endpoint === 'zalip/library/update') return quick.promise;
+			if (endpoint === 'zalip/library/list' && holdReviewRead) { holdReviewRead = false; return reviewRead.promise; }
+			return original(endpoint, data);
+		});
+		const view = setup();
+		await view.findByRole('button', { name: `${i18n.ts.zalip.myRating}: 8/10` });
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._reviews.reviews }));
+		entry = { ...entry, personalRating: 9 };
+		const olderEntry = { ...entry };
+		holdReviewRead = true;
+		await fireEvent.click(view.getByTestId('review-rating'));
+		await fireEvent.click(view.getByRole('button', { name: `${i18n.ts.zalip.myRating}: 8/10` }));
+		await fireEvent.click(view.getByTestId('quick-rating'));
+		entry = { ...entry, personalRating: 7 }; quick.resolve(entry);
+		await waitFor(() => expect(view.getByTestId('review-rating').getAttribute('data-rating')).toBe('7'));
+		reviewRead.resolve([olderEntry]);
+		await new Promise(resolve => setTimeout(resolve, 0));
+		expect(view.getByTestId('review-rating').getAttribute('data-rating')).toBe('7');
+	});
+
+	it('cannot resynchronize or apply the previous title after navigating during an overlapping quick save', async () => {
+		const quick = deferred<unknown>();
+		differentWorkResponses(quick.promise);
+		const view = setup();
+		await fireEvent.click(await view.findByRole('button', { name: `${i18n.ts.zalip.myRating}: 8/10` }));
+		await fireEvent.click(view.getByTestId('quick-rating'));
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._reviews.reviews }));
+		await fireEvent.click(view.getByTestId('review-rating'));
+		await view.rerender({ slug: 'second' });
+		await view.findByRole('button', { name: `${i18n.ts.zalip.myRating}: 3/10` });
+		const count = vi.mocked(misskeyApiZalip).mock.calls.length;
+		quick.resolve({ ...entry, personalRating: 7 });
+		await new Promise(resolve => setTimeout(resolve, 0));
+		expect(vi.mocked(misskeyApiZalip).mock.calls).toHaveLength(count);
+		expect(view.getByRole('button', { name: `${i18n.ts.zalip.myRating}: 3/10` })).toBeTruthy();
 	});
 
 	it.each(['planned', 'watching', 'on_hold', 'completed', 'dropped'])('clears the selected %s list status without deleting independent personal state', async (status) => {

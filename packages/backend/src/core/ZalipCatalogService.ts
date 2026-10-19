@@ -8,6 +8,7 @@ import { DataSource, In, IsNull, Not } from 'typeorm';
 import { DI } from '@/di-symbols.js';
 import { IdService } from '@/core/IdService.js';
 import { NoteCreateService } from '@/core/NoteCreateService.js';
+import { SystemAccountService } from '@/core/SystemAccountService.js';
 import { zalipDiscussionRootMarker } from '@/misc/zalip-discussion-root.js';
 import { MiNote } from '@/models/Note.js';
 import { MiDriveFile } from '@/models/DriveFile.js';
@@ -190,6 +191,7 @@ export class ZalipCatalogService {
 		private noteCreateService: NoteCreateService,
 		private notificationService: NotificationService,
 		@Inject(DI.config) private config?: Config,
+		private systemAccountService?: SystemAccountService,
 	) {
 	}
 
@@ -534,28 +536,35 @@ export class ZalipCatalogService {
 			isReleaseSubscribed?: boolean;
 		},
 	): Promise<PackedZalipLibraryEntry | null> {
-		const work = await this.db.getRepository(MiZalipWork).findOneBy({
-			id: workId,
-			publicationState: 'published',
-		});
-		if (work == null) return null;
+		const updated = await this.db.transaction(async manager => {
+			const work = await manager.getRepository(MiZalipWork).findOne({
+				where: { id: workId, publicationState: 'published' },
+				lock: { mode: 'pessimistic_read' },
+			});
+			if (work == null) return null;
+			// Reviews use this same lock when changing a personal rating. Re-read after acquiring it,
+			// never save an old list/progress snapshot over a concurrent review rating (or vice versa).
+			await manager.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`zalip-library:${me.id}:${work.id}`]);
+			const repository = manager.getRepository(MiZalipLibraryEntry);
+			const existing = await repository.findOneBy({ userId: me.id, workId: work.id });
+			const now = new Date();
+			const entry = existing ?? repository.create({
+				userId: me.id,
+				workId: work.id,
+				createdAt: now,
+			});
 
-		const repository = this.db.getRepository(MiZalipLibraryEntry);
-		const existing = await repository.findOneBy({ userId: me.id, workId: work.id });
-		const now = new Date();
-		const entry = existing ?? repository.create({
-			userId: me.id,
-			workId: work.id,
-			createdAt: now,
+			entry.status = input.status;
+			entry.episodesWatched = input.episodesWatched ?? existing?.episodesWatched ?? 0;
+			entry.personalRating = input.personalRating === undefined ? (existing?.personalRating ?? null) : input.personalRating;
+			entry.isFavorite = input.isFavorite ?? existing?.isFavorite ?? false;
+			entry.isReleaseSubscribed = input.isReleaseSubscribed ?? existing?.isReleaseSubscribed ?? false;
+			entry.updatedAt = now;
+			await repository.save(entry);
+			return { entry, work };
 		});
-
-		entry.status = input.status;
-		entry.episodesWatched = input.episodesWatched ?? existing?.episodesWatched ?? 0;
-		entry.personalRating = input.personalRating === undefined ? (existing?.personalRating ?? null) : input.personalRating;
-		entry.isFavorite = input.isFavorite ?? existing?.isFavorite ?? false;
-		entry.isReleaseSubscribed = input.isReleaseSubscribed ?? existing?.isReleaseSubscribed ?? false;
-		entry.updatedAt = now;
-		await repository.save(entry);
+		if (updated == null) return null;
+		const { entry, work } = updated;
 
 		const [packedWork] = await this.packWorksWithCommunityRatings([work]);
 		return {
@@ -1297,7 +1306,9 @@ export class ZalipCatalogService {
 			const existing = await contexts.findOneBy({ workId: work.id });
 			if (existing != null) return { noteId: existing.noteId, created: false };
 
-			const note = await this.noteCreateService.fetchAndCreate(me, {
+			if (this.systemAccountService == null) throw new Error('System account service is required for catalogue discussions.');
+			const actor = await this.systemAccountService.fetch('actor');
+			const note = await this.noteCreateService.fetchAndCreate(actor, {
 				createdAt: new Date(),
 				name: zalipDiscussionRootMarker,
 				replyId: null,
@@ -1343,7 +1354,9 @@ export class ZalipCatalogService {
 			const existing = await contexts.findOneBy({ episodeId: episode.id });
 			if (existing != null) return { noteId: existing.noteId, created: false };
 
-			const note = await this.noteCreateService.fetchAndCreate(me, {
+			if (this.systemAccountService == null) throw new Error('System account service is required for catalogue discussions.');
+			const actor = await this.systemAccountService.fetch('actor');
+			const note = await this.noteCreateService.fetchAndCreate(actor, {
 				createdAt: new Date(),
 				name: zalipDiscussionRootMarker,
 				replyId: null,

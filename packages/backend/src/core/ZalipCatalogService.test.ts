@@ -193,8 +193,9 @@ describe('ZalipCatalogService', () => {
 		const work = { id: 'work-1', publicationState: 'published' };
 		const entry = { userId: 'viewer', workId: work.id, status: 'watching', episodesWatched: 4, personalRating: 8, isFavorite: true, isReleaseSubscribed: true };
 		const library = { findOneBy: vi.fn().mockResolvedValue(entry), save: vi.fn().mockImplementation(async value => value) };
-		const works = { findOneBy: vi.fn().mockResolvedValue(work) };
-		const db = { getRepository: (model: unknown) => model === MiZalipWork ? works : library };
+		const works = { findOne: vi.fn().mockResolvedValue(work) };
+		const manager = { query: vi.fn().mockResolvedValue([]), getRepository: (model: unknown) => model === MiZalipWork ? works : library };
+		const db = { transaction: vi.fn(async action => action(manager)) };
 		const service = new ZalipCatalogService(db as never, {} as never, {} as never, {} as never);
 		vi.spyOn(service as unknown as { packWorksWithCommunityRatings: () => Promise<unknown[]> }, 'packWorksWithCommunityRatings').mockResolvedValue([work]);
 
@@ -202,6 +203,31 @@ describe('ZalipCatalogService', () => {
 		expect(library.findOneBy).toHaveBeenCalledWith({ userId: 'viewer', workId: work.id });
 		expect(result).toMatchObject({ status: null, episodesWatched: 4, personalRating: 8, isFavorite: true, isReleaseSubscribed: true });
 		expect(library.save).toHaveBeenCalledWith(expect.objectContaining({ status: null, personalRating: 8 }));
+		expect(manager.query).toHaveBeenCalledWith('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', ['zalip-library:viewer:work-1']);
+		expect(works.findOne).toHaveBeenCalledWith({ where: { id: work.id, publicationState: 'published' }, lock: { mode: 'pessimistic_read' } });
+		expect(manager.query.mock.invocationCallOrder[0]).toBeLessThan(library.findOneBy.mock.invocationCallOrder[0]);
+	});
+	it('re-reads the library after a concurrent review rating releases the shared lock', async () => {
+		let release!: () => void;
+		const lock = new Promise<void>(resolve => { release = resolve; });
+		const work = { id: 'work-1', publicationState: 'published' };
+		let persisted = { userId: 'viewer', workId: work.id, status: 'watching', episodesWatched: 4, personalRating: 5, isFavorite: true, isReleaseSubscribed: true };
+		const library = { findOneBy: vi.fn(async () => structuredClone(persisted)), save: vi.fn(async entry => { persisted = entry; return entry; }) };
+		const manager = { query: vi.fn(async () => { await lock; }), getRepository: (model: unknown) => model === MiZalipWork ? { findOne: async () => work } : library };
+		const service = new ZalipCatalogService({ transaction: async (action: (value: typeof manager) => Promise<unknown>) => action(manager) } as never, {} as never, {} as never, {} as never);
+		vi.spyOn(service as unknown as { packWorksWithCommunityRatings: () => Promise<unknown[]> }, 'packWorksWithCommunityRatings').mockResolvedValue([work]);
+		const update = service.updateLibrary({ id: 'viewer' } as never, work.id, { status: 'completed', isFavorite: false });
+		await Promise.resolve();
+		expect(library.findOneBy).not.toHaveBeenCalled();
+		persisted.personalRating = 9;
+		release();
+		await expect(update).resolves.toMatchObject({ status: 'completed', personalRating: 9, episodesWatched: 4, isFavorite: false, isReleaseSubscribed: true });
+	});
+	it('does not lock or mutate the library when the work is no longer public', async () => {
+		const manager = { query: vi.fn(), getRepository: () => ({ findOne: async () => null }) };
+		const service = new ZalipCatalogService({ transaction: async (action: (value: typeof manager) => Promise<unknown>) => action(manager) } as never, {} as never, {} as never, {} as never);
+		await expect(service.updateLibrary({ id: 'viewer' } as never, 'draft', { status: 'watching' })).resolves.toBeNull();
+		expect(manager.query).not.toHaveBeenCalled();
 	});
 
 	it('creates a normal local note and stores its canonical Zalip work card', async () => {
@@ -311,22 +337,26 @@ describe('ZalipCatalogService', () => {
 			transaction: async (callback: (transactionManager: typeof manager) => Promise<unknown>) => await callback(manager),
 		};
 		const noteCreateService = { fetchAndCreate: vi.fn().mockResolvedValue({ id: 'note-1' }) };
+		const systemAccountService = { fetch: vi.fn().mockResolvedValue({ id: 'system-actor' }) };
 		const service = new ZalipCatalogService(
 			dataSource as never,
 			{} as never,
 			noteCreateService as never,
 			{} as never,
+			undefined,
+			systemAccountService as never,
 		);
 
 		await expect(service.createDiscussion({ id: 'user-1' } as never, work.id, null)).resolves.toEqual({ noteId: 'note-1', created: true });
 
 		expect(workQuery.setLock).toHaveBeenCalledWith('pessimistic_write');
-		expect(noteCreateService.fetchAndCreate).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }), expect.objectContaining({
+		expect(systemAccountService.fetch).toHaveBeenCalledExactlyOnceWith('actor');
+		expect(noteCreateService.fetchAndCreate).toHaveBeenCalledWith(expect.objectContaining({ id: 'system-actor' }), expect.objectContaining({
 			name: 'zalip:discussion-root',
 			visibility: 'home',
 			localOnly: true,
 		}));
-		expect(contextsRepository.save).toHaveBeenCalledWith(expect.objectContaining({ workId: work.id, noteId: 'note-1' }));
+		expect(contextsRepository.save).toHaveBeenCalledWith(expect.objectContaining({ workId: work.id, noteId: 'note-1', createdById: 'user-1' }));
 	});
 
 	it('locks an episode before creating its first discussion root', async () => {
@@ -359,17 +389,22 @@ describe('ZalipCatalogService', () => {
 			transaction: async (callback: (transactionManager: typeof manager) => Promise<unknown>) => await callback(manager),
 		};
 		const noteCreateService = { fetchAndCreate: vi.fn().mockResolvedValue({ id: 'note-1' }) };
+		const systemAccountService = { fetch: vi.fn().mockResolvedValue({ id: 'system-actor' }) };
 		const service = new ZalipCatalogService(
 			dataSource as never,
 			{} as never,
 			noteCreateService as never,
 			{} as never,
+			undefined,
+			systemAccountService as never,
 		);
 
 		await expect(service.createEpisodeDiscussion({ id: 'user-1' } as never, episode.id, null)).resolves.toEqual({ noteId: 'note-1', created: true });
 
 		expect(episodeQuery.setLock).toHaveBeenCalledWith('pessimistic_write');
-		expect(contextsRepository.save).toHaveBeenCalledWith(expect.objectContaining({ episodeId: episode.id, noteId: 'note-1' }));
+		expect(systemAccountService.fetch).toHaveBeenCalledExactlyOnceWith('actor');
+		expect(noteCreateService.fetchAndCreate).toHaveBeenCalledWith(expect.objectContaining({ id: 'system-actor' }), expect.objectContaining({ name: 'zalip:discussion-root' }));
+		expect(contextsRepository.save).toHaveBeenCalledWith(expect.objectContaining({ episodeId: episode.id, noteId: 'note-1', createdById: 'user-1' }));
 	});
 
 	it('filters the public catalogue by an exact normalized genre tag in PostgreSQL', async () => {

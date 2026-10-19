@@ -70,6 +70,21 @@ export const packedNoteSchema = {
 			type: 'boolean',
 			optional: true, nullable: false,
 		},
+		zalipDiscussion: {
+			type: 'object',
+			optional: true, nullable: false,
+			properties: {
+				workId: { type: 'string', optional: false, nullable: false, format: 'id' },
+				slug: { type: 'string', optional: false, nullable: false },
+				title: { type: 'string', optional: false, nullable: false },
+				posterPath: { type: 'string', optional: false, nullable: true },
+				rootNoteId: { type: 'string', optional: false, nullable: false, format: 'id' },
+				isRoot: { type: 'boolean', optional: false, nullable: false },
+				episodeId: { type: 'string', optional: false, nullable: true, format: 'id' },
+				episodeNumber: { type: 'integer', optional: false, nullable: true, minimum: 0 },
+				seasonNumber: { type: 'integer', optional: false, nullable: true, minimum: 0 },
+			},
+		},
 		zalipViewCount: {
 			type: 'integer',
 			optional: true, nullable: false,

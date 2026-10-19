@@ -85,6 +85,14 @@ beforeEach(() => { vi.clearAllMocks(); actions.previewVisible = false; actions.v
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('Zalip compact note presentation', () => {
+	it('renders a bound technical root as its cinema title without an administrator header', () => {
+		const context = { workId: 'work', slug: 'cinema-title', title: 'Canonical cinema title', posterPath: null, rootNoteId: 'root', isRoot: true, episodeId: null, episodeNumber: null, seasonNumber: null };
+		const view = setup(MkNoteDetailed, note({ id: 'root', isZalipDiscussionRoot: true, zalipDiscussion: context }));
+		expect(view.getByRole('link', { name: /Canonical cinema title/u }).getAttribute('href')).toBe('/zalip/cinema-title#discussion');
+		expect(view.queryByText('Fixture Author')).toBeNull();
+		expect(view.queryByRole('button', { name: i18n.ts.more })).toBeNull();
+	});
+
 	it.each([MkNote, MkNoteDetailed])('uses a native click target for the repost menu, including keyboard activation in %s', async component => {
 		const original = note();
 		const view = setup(component, note({ id: 'repost', text: null, renoteId: original.id, renote: original }));

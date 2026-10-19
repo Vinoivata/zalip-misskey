@@ -793,6 +793,13 @@ import type {
 	ZalipReleasesListResponse,
 	ZalipReleasesSubscribedRequest,
 	ZalipReleasesSubscribedResponse,
+	ZalipReviewsDeleteRequest,
+	ZalipReviewsListRequest,
+	ZalipReviewsListResponse,
+	ZalipReviewsUpsertRequest,
+	ZalipReviewsUpsertResponse,
+	ZalipReviewsVoteRequest,
+	ZalipReviewsVoteResponse,
 	ZalipSeasonsEpisodesRequest,
 	ZalipSeasonsEpisodesResponse,
 	ZalipSharesCreateRequest,
@@ -1316,6 +1323,10 @@ export type Endpoints = {
 	'zalip/progress/update': { req: ZalipProgressUpdateRequest; res: ZalipProgressUpdateResponse };
 	'zalip/releases/list': { req: ZalipReleasesListRequest; res: ZalipReleasesListResponse };
 	'zalip/releases/subscribed': { req: ZalipReleasesSubscribedRequest; res: ZalipReleasesSubscribedResponse };
+	'zalip/reviews/delete': { req: ZalipReviewsDeleteRequest; res: EmptyResponse };
+	'zalip/reviews/list': { req: ZalipReviewsListRequest; res: ZalipReviewsListResponse };
+	'zalip/reviews/upsert': { req: ZalipReviewsUpsertRequest; res: ZalipReviewsUpsertResponse };
+	'zalip/reviews/vote': { req: ZalipReviewsVoteRequest; res: ZalipReviewsVoteResponse };
 	'zalip/seasons/episodes': { req: ZalipSeasonsEpisodesRequest; res: ZalipSeasonsEpisodesResponse };
 	'zalip/shares/create': { req: ZalipSharesCreateRequest; res: ZalipSharesCreateResponse };
 	'zalip/taxonomy/list': { req: ZalipTaxonomyListRequest; res: ZalipTaxonomyListResponse };
