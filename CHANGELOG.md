@@ -4,6 +4,8 @@
 -
 
 ### Client
+- Fix: Keep Zalip title artwork fallbacks and mobile watch actions usable, preserve compact age/country facts, move discussions nearer the player, and align cinema rails and touch controls across screen sizes.
+- Fix: Wrap narrow Zalip discussion headers, keep deleted replies removed with current local counters, and support keyboard activation of repost menus.
 - Fix: Restore Zalip Alloha movie timestamps and accept sparse Collaps resume samples and matching episode announcements without mixing changed cuts or stale iframe sessions.
 - Enhance: Save and restore Zalip playback time for fixed Alloha episodes and Collaps clips with verified voice coverage, excluding ad time and invalidated player contexts; keep unsupported editions in episode-only mode.
 - Fix: Reconcile chat unread badges against current server state so delayed message/read events and out-of-order refreshes cannot restore a stale badge.
@@ -77,6 +79,7 @@
 - Fix: Open mobile post menus as full-width bottom sheets and reduce follow symbols and visible badges while retaining accessible touch targets.
 
 ### Server
+- Fix: Reuse canonical provider bindings when refreshing Zalip titles and limit scheduled Kodik refreshes to bound materials so an unrelated discovery response cannot abort the whole profile.
 - Fix: Retain existing Kinopoisk photos through one validated image-CDN redirect during original-only artwork localization without enabling redirect chains or broadening image limits.
 - Fix: Preserve Kinopoisk's existing static PNG placeholder through one exact same-origin redirect during original-only artwork localization without allowing GIF images or general redirects.
 - Fix: Localize rejected oversized TMDB logo originals through a bounded same-image w1280 variant without raising image limits or changing editorial locks.

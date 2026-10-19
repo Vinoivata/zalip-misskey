@@ -20,6 +20,24 @@ export function zalipHeroImageNearby(index: number, active: number): boolean {
 
 export function useZalipImages() {
 	const broken = ref<ReadonlySet<string>>(new Set());
+	const successful = ref<ReadonlySet<string>>(new Set());
+
+	function source(path: string | null | undefined, size = 'w500'): string | null {
+		const url = importerImageUrl(path, size);
+		return url && !broken.value.has(url) ? url : null;
+	}
+
+	function ready(path: string | null | undefined, size = 'w500'): boolean {
+		const url = source(path, size);
+		return url != null && successful.value.has(url);
+	}
+
+	function loaded(event: Event): void {
+		const image = event.currentTarget;
+		if (!(image instanceof HTMLImageElement)) return;
+		const url = image.getAttribute('src');
+		if (url) successful.value = new Set([...successful.value, url]);
+	}
 
 	function poster(work: ZalipPosterImage, size = 'w342'): string | null {
 		return zalipPosterCandidates(work, size).find(value => !broken.value.has(value)) ?? null;
@@ -32,5 +50,5 @@ export function useZalipImages() {
 		if (source) broken.value = new Set([...broken.value, source]);
 	}
 
-	return { poster, failed };
+	return { poster, source, ready, loaded, failed };
 }

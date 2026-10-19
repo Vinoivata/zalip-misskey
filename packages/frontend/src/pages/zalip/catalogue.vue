@@ -460,7 +460,7 @@ definePage(() => ({ title: i18n.ts.zalip.catalogueHeading, icon: 'ti ti-layout-g
 .pagination { display: grid; justify-items: center; gap: 12px; margin-top: 24px; }
 .pagination > p { margin: 0; }
 .pagination > button { display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; border-radius: var(--MI-radius); background: var(--MI_THEME-panelHighlight); color: var(--MI_THEME-fg); }
-.filters { grid-area: filters; position: sticky; top: 20px; min-width: 0; padding: 18px; border: 1px solid var(--zalip-social-border); border-radius: 20px; background: var(--zalip-social-panel); }
+.filters { grid-area: filters; position: sticky; top: 20px; min-width: 0; max-height: calc(100dvh - 108px); box-sizing: border-box; overflow-y: auto; overscroll-behavior-y: contain; padding: 18px; border: 1px solid var(--zalip-social-border); border-radius: 20px; background: var(--zalip-social-panel); }
 .filtersHeading, .toolbar, .filterLabel, .toolbarActions { display: flex; align-items: center; gap: 10px; }
 .filtersHeading { justify-content: space-between; }
 .filtersHeading p, .toolbar .eyebrow { display: none; }
@@ -495,7 +495,7 @@ definePage(() => ({ title: i18n.ts.zalip.catalogueHeading, icon: 'ti ti-layout-g
 .activeFilters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
 .activeFilters button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid var(--zalip-accent-border); border-radius: 99px; background: var(--zalip-accent-soft); font-size: 12px; }
 .viewSwitch { display: flex; padding: 3px; border: 1px solid var(--zalip-social-border); border-radius: 99px; background: var(--zalip-social-panel); }
-.viewSwitch button { width: 36px; height: 34px; border-radius: 99px; color: var(--zalip-social-muted); font-size: 19px; }
+.viewSwitch button { width: 44px; height: 44px; border-radius: 99px; color: var(--zalip-social-muted); font-size: 19px; }
 .viewSwitch button[aria-pressed="true"] { color: var(--MI_THEME-accent); background: var(--zalip-accent-soft); }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(136px, 1fr)); gap: 26px 18px; }
 .card { min-width: 0; color: var(--zalip-social-fg); text-decoration: none; }
@@ -528,7 +528,7 @@ definePage(() => ({ title: i18n.ts.zalip.catalogueHeading, icon: 'ti ti-layout-g
 @container (max-width: 900px) {
 	.catalogueLayout { display: flex; flex-direction: column; gap: 20px; }
 	.results { width: 100%; }
-	.filters { position: static; display: none; width: 100%; box-sizing: border-box; }
+	.filters { position: static; display: none; width: 100%; max-height: none; overflow: visible; overscroll-behavior-y: auto; }
 	.filtersOpen { display: block; }
 	.closeFilters, .openFilters { display: inline-flex; }
 	.kindGrid, .genreOptions { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }

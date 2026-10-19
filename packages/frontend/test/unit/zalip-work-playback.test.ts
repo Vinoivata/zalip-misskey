@@ -23,6 +23,7 @@ vi.mock('@/utility/misskey-api.js', () => ({ misskeyApiZalip: vi.fn() }));
 vi.mock('@/utility/please-login.js', () => ({ pleaseLogin: vi.fn().mockResolvedValue(true) }));
 vi.mock('@/components/ZalipDiscussionPanel.vue', () => ({ default: defineComponent({ setup: () => () => null }) }));
 vi.mock('@/components/ZalipRatingDialog.vue', () => ({ default: defineComponent({ setup: () => () => null }) }));
+vi.mock('@/components/MkZalipImageGallery.vue', () => ({ default: defineComponent({ setup: () => () => h('div') }) }));
 vi.mock('@/components/MkModal.vue', () => ({ default: defineComponent({ emits: ['closed', 'click', 'esc'], setup(_, { slots, emit, expose }) {
 	expose({ close: () => emit('closed') });
 	return () => h('div', slots.default?.({ maxHeight: null }));
@@ -110,6 +111,38 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('Zalip work playback selection', () => {
+	it('keeps the title readable until its exact logo loads and restores text after an artwork error', async () => {
+		Object.assign(workData, { logoPath: '/logo.png', posterPath: '/poster.jpg', backdropPath: '/cover.jpg', countries: ['Россия'], ageRating: 'age18' });
+		const view = setup();
+		await view.findByRole('heading', { name: serial.title, level: 1 });
+		const hero = view.container.querySelector('article > section')!;
+		const logo = hero.querySelector('[class*=titleLogo] img')!;
+		expect(hero.className).not.toContain('hasLogo');
+		await fireEvent.load(logo);
+		expect(hero.className).toContain('hasLogo');
+		await fireEvent.error(logo);
+		expect(hero.className).not.toContain('hasLogo');
+		expect(hero.querySelector('[class*=titleLogo]')).toBeNull();
+		expect(hero.querySelector('[class*=compactFacts]')?.textContent).toContain('Россия');
+		expect(hero.querySelector('[class*=compactFacts]')?.textContent).toContain('18+');
+		await fireEvent.error(hero.querySelector('[class*=mobileArtworkBackdrop] img')!);
+		expect(hero.querySelector('[class*=mobileArtworkBackdrop] img')?.getAttribute('src')).toContain('/poster.jpg');
+		await fireEvent.error(hero.querySelector('[class*=mobileArtworkPoster]')!);
+		expect(hero.querySelector('[class*=missingArtwork]')?.textContent).toContain(serial.title);
+	});
+
+	it('offers mobile primary actions and places discussion before the image gallery', async () => {
+		Object.assign(workData, { galleryPaths: ['/gallery.jpg'] });
+		const view = setup();
+		await view.findByRole('heading', { name: serial.title, level: 1 });
+		const actions = within(view.getByRole('group', { name: i18n.ts.zalip.watchTitle }));
+		expect(actions.getByRole('button', { name: i18n.ts.zalip.watchTitle })).toBeTruthy();
+		expect(actions.getByRole('button', { name: i18n.ts.zalip.discussTitle })).toBeTruthy();
+		const discussion = view.container.querySelector('[class*=discussionArea]')!;
+		const gallery = view.container.querySelector('[class*=gallery]')!;
+		expect(discussion.compareDocumentPosition(gallery) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
 	it('locks a standalone movie clip and claims timestamp progress without invented episode coordinates', async () => {
 		workData = { ...serial, kind: 'movie', seasons: [] };
 		sources = [structuredClone(collaps)];

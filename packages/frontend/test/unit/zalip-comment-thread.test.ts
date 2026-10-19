@@ -96,4 +96,16 @@ describe('lazy direct comment pagination', () => {
 		pager.insert(reply('004')); pager.insert(reply('004')); expect(pager.state.items).toHaveLength(1);
 		pager.remove('004'); expect(pager.state.items).toEqual([]);
 	});
+	it('does not resurrect a deleted reply from an in-flight page or a repeated local event', async () => {
+		let finish!: (notes: Misskey.entities.Note[]) => void;
+		const fetchPage = vi.fn(() => new Promise<Misskey.entities.Note[]>(resolve => { finish = resolve; }));
+		const pager = createCommentReplyPager({ parentId: '000', accountId: () => null, fetchPage });
+		pager.toggle();
+		pager.remove('001');
+		finish([reply('001'), reply('002')]); await settle();
+		pager.insert(reply('001'));
+		expect(pager.state.items.map(note => note.id)).toEqual(['002']);
+		pager.reset(); pager.toggle(); finish([reply('001')]); await settle();
+		expect(pager.state.items.map(note => note.id)).toEqual(['001']);
+	});
 });

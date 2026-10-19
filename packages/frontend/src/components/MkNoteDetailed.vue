@@ -31,8 +31,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</I18n>
 		</span>
 		<div :class="$style.renoteInfo">
-			<button ref="renoteTime" class="_button" :class="$style.renoteTime" @mousedown.prevent="showRenoteMenu()">
-				<i v-if="isMyRenote" class="ti ti-dots" style="margin-right: 4px;"></i>
+			<button ref="renoteTime" type="button" class="_button" :class="$style.renoteTime" :aria-label="i18n.ts.renoteDetails" @click="showRenoteMenu()">
+				<i v-if="isMyRenote" class="ti ti-dots" style="margin-right: 4px;" aria-hidden="true"></i>
 				<MkTime :time="note.createdAt"/>
 			</button>
 			<span v-if="note.visibility !== 'public'" style="margin-left: 0.5em;" :title="i18n.ts._visibility[note.visibility]">
@@ -226,6 +226,7 @@ import type { Keymap } from '@/utility/hotkey.js';
 import { useNote } from '@/composables/use-note.js';
 import { prefer } from '@/preferences.js';
 import { i18n } from '@/i18n.js';
+import { useGlobalEvent } from '@/events.js';
 import { userPage } from '@/filters/user.js';
 import { notePage } from '@/filters/note.js';
 import { isEnabledUrlPreview } from '@/utility/url-preview.js';
@@ -378,6 +379,11 @@ function commentPosted(posted: Misskey.entities.Note): void {
 	commentTarget.value = appearNote;
 	repliesPager.insert(posted);
 }
+
+useGlobalEvent('noteDeleted', id => {
+	repliesPager.remove(id);
+	if (commentTarget.value.id === id) commentTarget.value = appearNote;
+});
 
 watch(() => [appearNote.id, $i?.id], () => {
 	repliesPager.reset(appearNote.id, oldestFirst.value);

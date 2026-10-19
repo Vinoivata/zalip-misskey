@@ -153,11 +153,23 @@ export class ZalipImporterService {
 		}
 	}
 
+	private async boundImportIdentities(workId?: string): Promise<ExternalIdentity[]> {
+		if (!workId) return [];
+		const work = await this.db.getRepository(MiZalipWork).findOneBy({ id: workId });
+		if (!work) throw new Error('NO_SUCH_WORK');
+		const identities: ExternalIdentity[] = await this.db.getRepository(MiZalipExternalIdentity).find({ where: { workId }, select: { provider: true, externalId: true, entityType: true } });
+		if (work.tmdbId && work.tmdbMediaType && !identities.some(identity => identity.provider === 'tmdb' && identity.entityType === work.tmdbMediaType)) {
+			identities.push({ provider: 'tmdb', externalId: String(work.tmdbId), entityType: work.tmdbMediaType });
+		}
+		return identities;
+	}
+
 	private async fetchRecord(ref: ImportRef, availabilityOnly = false, inputOptions?: ImportOptions, workId?: string) {
 		const providers = await this.getProviders();
 		const options = normalizeImportOptions(inputOptions);
 		const selectedSources = selectedImportSources(ref.source, options);
 		const fields = availabilityOnly ? ['players'] as const : options.fields;
+		const boundIdentities = await this.boundImportIdentities(workId);
 		let primary: ImportRecord;
 		try {
 			primary = await providers[ref.source].fetch(ref, fields);
@@ -165,10 +177,7 @@ export class ZalipImporterService {
 			// Refresh recovery uses only previously bound exact IDs, never a title search.
 			// Authentication, quota and transport errors must retain their original handling.
 			if (!(error instanceof ImportProviderError) || error.code !== 'not-found' || !workId) throw error;
-			const work = await this.db.getRepository(MiZalipWork).findOneBy({ id: workId });
-			if (!work) throw new Error('NO_SUCH_WORK');
-			const identities: ExternalIdentity[] = await this.db.getRepository(MiZalipExternalIdentity).findBy({ workId });
-			if (work.tmdbId && work.tmdbMediaType && !identities.some(identity => identity.provider === 'tmdb')) identities.push({ provider: 'tmdb', externalId: String(work.tmdbId), entityType: work.tmdbMediaType });
+			const identities = boundIdentities;
 			let fallback: ImportRecord | null = null;
 			for (const source of selectedSources) {
 				const provider = providers[source];
@@ -190,6 +199,8 @@ export class ZalipImporterService {
 			fallback.complete = false;
 			primary = fallback;
 		}
+		this.assertCompatibleIdentities(primary, boundIdentities, ref.mediaType);
+		if (workId && kodikAnimeSeason(primary) && !exactKodikSeasonBinding(primary, boundIdentities)) throw new Error('IMPORT_IDENTITY_CONFLICT');
 		const records = [primary];
 		const visited = new Set<ImportSource>([ref.source, primary.ref.source]);
 		// A second pass permits TMDB discovery from IMDb obtained from Kinopoisk/Collaps.
@@ -198,7 +209,9 @@ export class ZalipImporterService {
 				if (visited.has(source) || !providers[source].status().configured || (availabilityOnly && source !== 'alloha' && source !== 'collaps' && source !== 'kodik')) continue;
 				const provider = providers[source];
 				try {
-					const identities = records.flatMap(record => record.identities);
+					// A refresh already owns exact provider bindings. Reuse those rather than
+					// rediscovering a saved Collaps/Kodik resource through weaker IMDb/KP lookups.
+					const identities = [...boundIdentities, ...records.flatMap(record => record.identities)];
 					const extra = await provider.lookup?.(identities, ref.mediaType, fields);
 					if (extra) {
 						const scoped = records.find(kodikAnimeSeason);
@@ -269,20 +282,9 @@ export class ZalipImporterService {
 				targets.push({ workId: work.id, ref: { source: 'alloha', externalId: `tmdb:${work.tmdbMediaType}:${work.tmdbId}`, mediaType: work.tmdbMediaType } });
 				continue;
 			}
-			if (source === 'kodik' && providers.kodik.status().configured) {
-				const bindings = identities.filter(item => item.workId === work.id);
-				const mediaTypes = [...new Set(bindings.map(item => item.entityType))];
-				const mediaType = work.tmdbMediaType ?? (mediaTypes.length === 1 ? mediaTypes[0] : null);
-				if (mediaType === 'movie' || mediaType === 'tv') {
-					const record = await providers.kodik.lookup?.(bindings, mediaType, ['players']);
-					if (record) {
-						if (kodikAnimeSeason(record) && !exactKodikSeasonBinding(record, bindings)) throw new ImportProviderError('invalid-ref');
-						this.assertCompatibleIdentities(record, bindings, mediaType);
-						targets.push({ workId: work.id, ref: record.ref });
-						continue;
-					}
-				}
-			}
+			// Refresh profiles do not discover new Kodik bindings while dispatching a page.
+			// One ambiguous lookup for an unrelated title must not block all known resources;
+			// their actual provider errors are recorded later on the individual queued items.
 			throw new ImportProviderError('invalid-ref');
 		}
 		return targets;

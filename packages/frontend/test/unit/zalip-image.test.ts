@@ -38,4 +38,20 @@ describe('Zalip small artwork sources', () => {
 		expect([0, 1, 2, 3, 4].filter(index => zalipHeroImageNearby(index, 1))).toEqual([0, 1, 2]);
 		expect([0, 1, 2, 3, 4].filter(index => zalipHeroImageNearby(index, 4))).toEqual([3, 4]);
 	});
+	it('only hides the text fallback for the exact successfully loaded logo, and restores it on failure', () => {
+		const images = useZalipImages();
+		const image = document.createElement('img');
+		image.addEventListener('load', images.loaded);
+		image.addEventListener('error', images.failed);
+		image.src = images.source('/logo.png')!;
+		expect(images.ready('/logo.png')).toBe(false);
+		image.dispatchEvent(new Event('load'));
+		expect(images.ready('/logo.png')).toBe(true);
+		expect(images.ready('/another-logo.png')).toBe(false);
+		image.dispatchEvent(new Event('error'));
+		expect(images.ready('/logo.png')).toBe(false);
+		expect(images.source('/logo.png')).toBeNull();
+		expect(images.source('/logo.png', 'original')).toContain('/original/logo.png');
+		expect(images.source('javascript:alert(1)')).toBeNull();
+	});
 });

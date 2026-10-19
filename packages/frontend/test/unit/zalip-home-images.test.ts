@@ -45,7 +45,7 @@ describe('home image request budget', () => {
 		expect(images[1].getAttribute('loading')).toBe('eager');
 		expect(images[1].getAttribute('fetchpriority')).toBe('high');
 		expect(images.every(image => image.getAttribute('decoding') === 'async')).toBe(true);
-		expect(view.container.querySelectorAll('picture source')).toHaveLength(3);
+		expect(view.container.querySelectorAll('picture source')).toHaveLength(0);
 		expect(view.container.querySelectorAll('img[src*="logo-"]')).toHaveLength(3);
 		expect(view.container.querySelector('img[src*="onboarding/"]')).toBeNull();
 		await fireEvent.click(view.getByRole('button', { name: i18n.tsx.zalip.onboardingDot({ number: '5' }) }));
@@ -58,6 +58,27 @@ describe('home image request budget', () => {
 		const view = render(Home, { global: { stubs } });
 		await waitFor(() => expect(view.container.querySelectorAll('picture img[src]')).toHaveLength(3));
 		expect(view.container.querySelector('img[src*="onboarding/"]')).toBeTruthy();
+	});
+	it('restores a title when its logo fails and uses the poster when the cover fails', async () => {
+		const view = render(Home, { global: { stubs } });
+		await waitFor(() => expect(view.container.querySelectorAll('picture img')).toHaveLength(5));
+		const card = view.container.querySelectorAll('article')[1];
+		await fireEvent.error(card.querySelector('img[src*="logo-"]')!);
+		expect(view.getByRole('heading', { name: works[1].title })).toBeTruthy();
+		const cover = card.querySelector('picture img')!;
+		await fireEvent.error(cover);
+		expect(cover.getAttribute('src')).toBe('https://image.tmdb.org/t/p/w500/poster-1.jpg');
+	});
+	it('selects portrait hero artwork by component width rather than the desktop viewport', async () => {
+		vi.stubGlobal('ResizeObserver', class {
+			constructor(private callback: ResizeObserverCallback) {}
+			observe(target: Element) { this.callback([{ target, contentRect: { width: 390 } } as ResizeObserverEntry], this as unknown as ResizeObserver); }
+			disconnect() {}
+		});
+		try {
+			const view = render(Home, { global: { stubs } });
+			await waitFor(() => expect(view.container.querySelector('picture img')?.getAttribute('src')).toBe('https://image.tmdb.org/t/p/w500/poster-0.jpg'));
+		} finally { vi.unstubAllGlobals(); }
 	});
 	it('keeps a failed initial catalogue request usable with the real fallback carousel', async () => {
 		vi.mocked(misskeyApiZalip).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce([]);

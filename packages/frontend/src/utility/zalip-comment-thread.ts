@@ -35,6 +35,7 @@ export function createCommentReplyPager(options: {
 }) {
 	const state = reactive({ items: [] as Misskey.entities.Note[], expanded: false, loaded: false, pending: false, error: false, hasMore: false, limited: false });
 	const blocked = new Set([options.parentId, ...options.ancestors ?? []]);
+	const removed = new Set<string>();
 	const budget = options.budget ?? createCommentThreadBudget();
 	// Native IDs are alphanumeric; this minimal accepted sentinel requests ASC
 	// without excluding federated replies timestamped before their parent.
@@ -42,7 +43,7 @@ export function createCommentReplyPager(options: {
 	let generation = 0;
 
 	function accept(note: Misskey.entities.Note): boolean {
-		if (note.replyId !== options.parentId || blocked.has(note.id) || note.isHidden || note.deletedAt) return false;
+		if (note.replyId !== options.parentId || blocked.has(note.id) || removed.has(note.id) || note.isHidden || note.deletedAt) return false;
 		if (options.allowNote && !options.allowNote(note)) return false;
 		if (state.items.some(item => item.id === note.id)) return false;
 		if (!budget.take(note)) { state.limited = true; return false; }
@@ -86,10 +87,14 @@ export function createCommentReplyPager(options: {
 	function reset(): void {
 		generation++;
 		cursor = '0';
+		removed.clear();
 		Object.assign(state, { items: [], expanded: false, loaded: false, pending: false, error: false, hasMore: false, limited: false });
 	}
 
-	function remove(noteId: string): void { state.items = state.items.filter(note => note.id !== noteId); }
+	function remove(noteId: string): void {
+		removed.add(noteId);
+		state.items = state.items.filter(note => note.id !== noteId);
+	}
 
 	return { state, toggle, loadNext, insert, reset, remove };
 }

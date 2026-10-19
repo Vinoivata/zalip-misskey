@@ -6,7 +6,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <section :class="$style.root">
 	<header :class="$style.header">
-		<div>
+		<div :class="$style.heading">
 			<p :class="$style.eyebrow"><i class="ti ti-messages"></i> {{ i18n.ts.zalip.discussion }}</p>
 			<h2>{{ heading }}</h2>
 		</div>
@@ -16,8 +16,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</header>
 
-	<div v-if="pending || pager.state.pending" :class="$style.state"><MkLoading/></div>
-	<div v-if="error || pager.state.error" :class="$style.state"><span>{{ i18n.ts.zalip.commentsError }}</span><button class="_textButton" type="button" @click="retry">{{ i18n.ts.retry }}</button></div>
+	<div v-if="pending || pager.state.pending" :class="$style.state" role="status" :aria-label="i18n.ts.loading"><MkLoading/></div>
+	<div v-if="error || pager.state.error" :class="$style.state"><span role="alert">{{ i18n.ts.zalip.commentsError }}</span><button class="_textButton" type="button" @click="retry">{{ i18n.ts.retry }}</button></div>
 	<template v-if="rootNote">
 		<div v-if="pager.state.items.length" :class="$style.comments">
 			<MkZalipCommentThread v-for="comment in pager.state.items" :key="comment.id" :note="comment" :ancestors="[noteId]" @reply="replyTo = $event"/>
@@ -38,6 +38,7 @@ import { misskeyApi } from '@/utility/misskey-api.js';
 import { createZalipDiscussionPager } from '@/utility/zalip-discussion-pager.js';
 import { $i } from '@/i.js';
 import { i18n } from '@/i18n.js';
+import { useGlobalEvent } from '@/events.js';
 
 const props = defineProps<{
 	noteId: string;
@@ -93,6 +94,20 @@ function commentPosted(note: Misskey.entities.Note): void {
 	replyTo.value = rootNote.value;
 }
 
+useGlobalEvent('noteDeleted', id => {
+	if (id === props.noteId) {
+		requestId++;
+		rootNote.value = null;
+		replyTo.value = null;
+		pending.value = false;
+		error.value = true;
+		pager.reset('');
+		return;
+	}
+	pager.remove(id);
+	if (replyTo.value?.id === id) replyTo.value = rootNote.value;
+});
+
 watch(() => [props.noteId, $i?.id], () => {
 	void load();
 }, { immediate: true });
@@ -111,12 +126,15 @@ onBeforeUnmount(() => { requestId++; pager.reset(''); });
 
 .header {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
 	justify-content: space-between;
 	gap: 16px;
 	padding: 20px 28px 16px;
 	border-bottom: 1px solid var(--MI_THEME-divider);
 }
+
+.heading { flex: 1 1 160px; min-width: 0; }
 
 .eyebrow {
 	display: flex;
@@ -133,17 +151,21 @@ onBeforeUnmount(() => { requestId++; pager.reset(''); });
 .header h2 {
 	margin: 0;
 	font-size: 1.08em;
+	overflow-wrap: anywhere;
 }
 
-.controls { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.sort { max-width: 180px; padding: 8px; border: 1px solid var(--MI_THEME-divider); border-radius: 8px; color: var(--MI_THEME-fgTransparentWeak); background: var(--zalip-social-panel); font: inherit; font-size: 12px; }
+.controls { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; margin-inline-start: auto; }
+.sort { min-width: 0; max-width: 180px; min-height: 44px; padding: 8px; border: 1px solid var(--MI_THEME-divider); border-radius: 8px; color: var(--MI_THEME-fgTransparentWeak); background: var(--zalip-social-panel); font: inherit; font-size: 12px; }
 
 .threadLink {
 	display: inline-flex;
 	align-items: center;
 	gap: 5px;
 	flex: 0 0 auto;
-	padding: 7px 10px;
+	justify-content: center;
+	box-sizing: border-box;
+	width: 44px;
+	height: 44px;
 	font-size: 0.84em;
 	font-weight: 700;
 	color: var(--MI_THEME-accent);

@@ -5,7 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/vue';
-import { defineComponent, h, ref } from 'vue';
+import { defineComponent, h, nextTick, ref } from 'vue';
 import ContinueRail from '@/pages/zalip/continue-rail.vue';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { i18n } from '@/i18n.js';
@@ -84,7 +84,9 @@ describe('continue watching rail', () => {
 		const previous = vi.mocked(misskeyApiZalip).getMockImplementation()!;
 		vi.mocked(misskeyApiZalip).mockImplementation((endpoint, params) => endpoint === 'zalip/progress/reset' ? new Promise(resolve => { finishReset = resolve; }) : previous(endpoint, params));
 		const view = setup();
-		await fireEvent.click(await view.findByRole('button', { name: i18n.tsx.zalip._progress.removeTitle({ title: item.work.title }) }));
+		const reset = await view.findByRole('button', { name: i18n.tsx.zalip._progress.removeTitle({ title: item.work.title }) });
+		await nextTick();
+		await fireEvent.click(reset);
 		await fireEvent.click(view.getByRole('button', { name: 'refresh-history' }));
 		expect(vi.mocked(misskeyApiZalip).mock.calls.filter(call => call[0] === 'zalip/progress/continue')).toHaveLength(1);
 		finishReset({ cleared: true });

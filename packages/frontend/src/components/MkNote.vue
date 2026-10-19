@@ -27,8 +27,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</template>
 		</I18n>
 		<div :class="$style.renoteInfo">
-			<button ref="renoteTime" :class="$style.renoteTime" class="_button" @mousedown.prevent="showRenoteMenu()">
-				<i class="ti ti-dots" :class="$style.renoteMenu"></i>
+			<button ref="renoteTime" type="button" :class="$style.renoteTime" class="_button" :aria-label="i18n.ts.renoteDetails" @click="showRenoteMenu()">
+				<i class="ti ti-dots" :class="$style.renoteMenu" aria-hidden="true"></i>
 				<MkTime :time="note.createdAt"/>
 			</button>
 			<span v-if="note.visibility !== 'public'" style="margin-left: 0.5em;" :title="i18n.ts._visibility[note.visibility]">

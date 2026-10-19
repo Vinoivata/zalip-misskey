@@ -8,6 +8,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<component :is="prefer.s.enablePullToRefresh ? MkPullToRefresh : 'div'" :refresher="refreshHome">
 		<div :class="$style.page">
 			<section
+				ref="onboarding"
 				:class="$style.onboarding"
 				aria-roledescription="carousel"
 				:aria-label="i18n.ts.zalip.onboardingLabel"
@@ -21,13 +22,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<div ref="heroRail" :class="$style.heroRail" @scroll.passive="updateOnboardingPosition" @pointerdown="beginOnboardingSwipe" @pointermove="heroDrag.onPointerMove" @pointerup="heroDrag.onPointerUp" @pointercancel="heroDrag.onPointerCancel" @click.capture="heroDrag.onClickCapture">
 						<article v-for="(slide, index) in onboardingSlides" :key="`${slide.to}-${index}`" :class="[$style.onboardingCard, { [$style.onboardingCardActive]: index === activeOnboardingIndex }]" role="group" aria-roledescription="slide" :aria-label="i18n.tsx.zalip.onboardingSlideCounter({ current: (index + 1).toString(), total: onboardingSlides.length.toString() })">
 							<picture :class="$style.onboardingBackdrop">
-								<source v-if="slide.posterPath && zalipHeroImageNearby(index, activeOnboardingIndex)" media="(max-width: 767px)" :srcset="tmdbImage(slide.posterPath)">
-								<img :src="zalipHeroImageNearby(index, activeOnboardingIndex) ? slide.backdropPath ? tmdbBackdrop(slide.backdropPath) : slide.posterPath ? tmdbImage(slide.posterPath) : slide.image : undefined" alt="" draggable="false" :loading="index === activeOnboardingIndex ? 'eager' : 'lazy'" :fetchpriority="index === activeOnboardingIndex ? 'high' : 'auto'" decoding="async" width="1280" height="720">
+								<img :src="zalipHeroImageNearby(index, activeOnboardingIndex) ? heroArtwork(slide) : undefined" alt="" draggable="false" :loading="index === activeOnboardingIndex ? 'eager' : 'lazy'" :fetchpriority="index === activeOnboardingIndex ? 'high' : 'auto'" decoding="async" width="1280" height="720" @error="images.failed">
 							</picture>
 							<div :class="$style.onboardingShade"></div>
 							<p :class="$style.onboardingEyebrow">{{ slide.eyebrow }}</p>
 							<div :class="$style.onboardingCopy">
-								<img v-if="slide.logoPath" :class="$style.onboardingLogo" :src="zalipHeroImageNearby(index, activeOnboardingIndex) ? tmdbLogo(slide.logoPath) : undefined" :alt="slide.title" draggable="false" :loading="index === activeOnboardingIndex ? 'eager' : 'lazy'" decoding="async">
+								<img v-if="images.source(slide.logoPath)" :class="$style.onboardingLogo" :src="zalipHeroImageNearby(index, activeOnboardingIndex) ? images.source(slide.logoPath)! : undefined" :alt="slide.title" draggable="false" :loading="index === activeOnboardingIndex ? 'eager' : 'lazy'" decoding="async" @error="images.failed">
 								<h2 v-else>{{ slide.title }}</h2>
 								<div v-if="slide.kind" :class="$style.onboardingMeta">
 									<span>{{ kindLabel(slide.kind) }}</span><span v-if="slide.releaseYear">{{ slide.releaseYear }}</span>
@@ -53,6 +53,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<div><p :class="$style.eyebrow">{{ showcaseEyebrow }}</p><h2>{{ showcaseTitle }}</h2></div>
 					<div :class="$style.releaseControls">
 						<span :class="$style.count">{{ showcaseItems.length }} {{ isEpisodeShowcase ? i18n.ts.zalip.updatesLabel : i18n.ts.zalip.titlesLabel }}</span>
+						<MkA to="/catalog" :class="$style.catalogueLink">{{ i18n.ts.zalip.catalogueHeading }}<i class="ti ti-chevron-right" aria-hidden="true"></i></MkA>
 					</div>
 				</div>
 				<div :class="$style.releaseRail" role="list" :aria-label="showcaseTitle" @pointerdown="releaseDrag.onPointerDown" @pointermove="releaseDrag.onPointerMove" @pointerup="releaseDrag.onPointerUp" @pointercancel="releaseDrag.onPointerCancel" @click.capture="releaseDrag.onClickCapture">
@@ -79,7 +80,6 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, wa
 import { definePage } from '@/page.js';
 import { i18n } from '@/i18n.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
-import { importerImageUrl } from '@/utility/zalip-importer.js';
 import { useZalipImages, zalipHeroImageNearby } from '@/utility/zalip-image.js';
 import { zalipWorkRoute } from '@/utility/zalip-work-route.js';
 import { useZalipHorizontalDrag } from '@/composables/use-zalip-horizontal-drag.js';
@@ -193,6 +193,8 @@ const onboardingFallbackSlides: ZalipHeroSlide[] = [
 
 const works = ref<ZalipWork[]>([]);
 const images = useZalipImages();
+const onboarding = useTemplateRef('onboarding');
+const heroNarrow = ref(window.matchMedia('(max-width: 700px)').matches);
 const homeLoaded = ref(false);
 const feed = useTemplateRef('feed');
 const continueRail = useTemplateRef('continueRail');
@@ -259,16 +261,9 @@ const showcaseItems = computed<ZalipShowcaseItem[]>(() => {
 const showcaseEyebrow = computed(() => isEpisodeShowcase.value ? i18n.ts.zalip.freshEpisodes : i18n.ts.zalip.newCatalogue);
 const showcaseTitle = computed(() => isEpisodeShowcase.value ? i18n.ts.zalip.freshEpisodesTitle : i18n.ts.zalip.newCatalogueTitle);
 
-function tmdbImage(path: string): string | undefined {
-	return importerImageUrl(path) ?? undefined;
-}
-
-function tmdbBackdrop(path: string): string | undefined {
-	return importerImageUrl(path, 'w1280') ?? undefined;
-}
-
-function tmdbLogo(path: string): string | undefined {
-	return importerImageUrl(path) ?? undefined;
+function heroArtwork(slide: ZalipHeroSlide): string | undefined {
+	return (heroNarrow.value ? images.source(slide.posterPath) : images.source(slide.backdropPath, 'w1280'))
+		?? images.source(slide.backdropPath, 'w1280') ?? images.source(slide.posterPath) ?? slide.image;
 }
 
 function kindLabel(kind: WorkKind): string {
@@ -393,15 +388,18 @@ function beginOnboardingSwipe(event: PointerEvent): void {
 watch(onboardingSlides, async () => {
 	await nextTick();
 	scrollToOnboarding(Math.min(1, onboardingSlides.value.length - 1), false);
-	if (heroRail.value) heroResizeObserver?.observe(heroRail.value);
 	startOnboardingAutoplay();
 });
 
 onMounted(() => {
 	void loadHome();
 	startOnboardingAutoplay();
-	heroResizeObserver = new ResizeObserver(() => scrollToOnboarding(activeOnboardingIndex.value, false));
-	if (heroRail.value) heroResizeObserver.observe(heroRail.value);
+	heroResizeObserver = new ResizeObserver(entries => {
+		const entry = entries.find(value => value.target === onboarding.value);
+		if (entry) heroNarrow.value = entry.contentRect.width <= 700;
+		scrollToOnboarding(activeOnboardingIndex.value, false);
+	});
+	if (onboarding.value) heroResizeObserver.observe(onboarding.value);
 });
 
 onBeforeUnmount(() => {
@@ -416,7 +414,7 @@ definePage(() => ({
 </script>
 
 <style lang="scss" module>
-.page { min-width: 0; margin: 0 auto; padding: 14px 0 30px; }
+.page { min-width: 0; max-width: 960px; margin: 0 auto; padding: 14px 0 30px; }
 .onboarding { container-type: inline-size; min-width: 0; }
 .heroPlaceholder { display: flex; align-items: center; justify-content: center; gap: 10px; height: 402px; color: var(--MI_THEME-fgTransparentWeak); background: var(--MI_THEME-panel); border-radius: var(--MI-radius); }
 .heroRail {
@@ -487,7 +485,8 @@ definePage(() => ({
 .sectionHeader h2 { margin: 0; font-size: 1.35rem; }
 .eyebrow { margin: 0 0 7px; color: var(--MI_THEME-accent); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .count { color: var(--zalip-social-muted); font-size: 12px; }
-.releaseControls { display: flex; align-items: center; }
+.releaseControls { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 12px; }
+.catalogueLink { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; color: var(--MI_THEME-accent); font-size: 12px; white-space: nowrap; &:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; border-radius: var(--MI-radius); } }
 .releaseRail { display: flex; gap: 12px; overflow-x: auto; overflow-y: hidden; padding: 1px; scroll-snap-type: none; scrollbar-width: none; cursor: grab; user-select: none; &::-webkit-scrollbar { display: none; } &[data-dragging='true'] { cursor: grabbing; } }
 .releaseListItem { flex: 0 0 158px; }
 .releaseCard { display: block; height: 100%; color: var(--MI_THEME-fg); text-decoration: none; &:hover { text-decoration: none; } &:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; } }

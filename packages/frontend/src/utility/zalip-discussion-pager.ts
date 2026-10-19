@@ -18,12 +18,14 @@ export function createZalipDiscussionPager(options: {
 	let ascending = false;
 	let cursor: string | undefined;
 	let epoch = 0;
+	const removed = new Set<string>();
 
 	function reset(noteId: string, oldestFirst = false): void {
 		epoch++;
 		parentId = noteId;
 		ascending = oldestFirst;
 		cursor = undefined;
+		removed.clear();
 		Object.assign(state, { items: [], pending: false, loaded: false, error: false, hasMore: false });
 	}
 
@@ -51,10 +53,15 @@ export function createZalipDiscussionPager(options: {
 	}
 
 	function insert(note: Misskey.entities.Note): void {
-		if (note.replyId !== parentId || note.id === parentId || note.isHidden || note.deletedAt || state.items.some(item => item.id === note.id)) return;
+		if (note.replyId !== parentId || note.id === parentId || removed.has(note.id) || note.isHidden || note.deletedAt || state.items.some(item => item.id === note.id)) return;
 		state.items.push(note);
 		state.items.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) * (ascending ? 1 : -1));
 	}
 
-	return { state, reset, load, insert };
+	function remove(noteId: string): void {
+		removed.add(noteId);
+		state.items = state.items.filter(note => note.id !== noteId);
+	}
+
+	return { state, reset, load, insert, remove };
 }

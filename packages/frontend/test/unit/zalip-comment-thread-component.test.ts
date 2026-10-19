@@ -177,4 +177,25 @@ describe('shared Threads-style comments', () => {
 		expect(view.getByText('Comment 003')).toBeTruthy(); expect(controls.api).toHaveBeenCalledTimes(1);
 		globalEvents.emit('noteDeleted', '003'); await settle(); expect(view.queryByText('Comment 003')).toBeNull();
 	});
+	it('counts multiple new direct replies once and clears the count when they are deleted', async () => {
+		const view = setup(note('000', { repliesCount: 0 }));
+		const first = note('001', { userId: 'viewer', replyId: '000', repliesCount: 0 });
+		const second = note('002', { userId: 'viewer', replyId: '000', repliesCount: 0 });
+		globalEvents.emit('notePosted', first); globalEvents.emit('notePosted', first); globalEvents.emit('notePosted', second); await settle();
+		expect(view.getByRole('button', { name: i18n.ts.reply }).textContent).toBe('2');
+		globalEvents.emit('noteDeleted', '001'); await settle();
+		expect(view.getByRole('button', { name: i18n.ts.reply }).textContent).toBe('1');
+		globalEvents.emit('noteDeleted', '002'); globalEvents.emit('notePosted', second); await settle();
+		expect(view.getByRole('button', { name: i18n.ts.reply }).textContent).toBe('0');
+		expect(view.queryByRole('button', { name: i18n.ts.loadReplies })).toBeNull();
+	});
+	it('does not apply a local count delta again after a refreshed server count', async () => {
+		const view = setup(note('000', { repliesCount: 0 }));
+		const own = note('001', { userId: 'viewer', replyId: '000', repliesCount: 0 });
+		globalEvents.emit('notePosted', own); await settle();
+		expect(view.getByRole('button', { name: i18n.ts.reply }).textContent).toBe('1');
+		await view.rerender({ note: note('000', { repliesCount: 1 }) }); await settle();
+		globalEvents.emit('notePosted', own); await settle();
+		expect(view.getByRole('button', { name: i18n.ts.reply }).textContent).toBe('1');
+	});
 });

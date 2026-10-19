@@ -91,21 +91,29 @@ const budget = inject(commentThreadBudgetKey, null) ?? createCommentThreadBudget
 budget.take(appearNote);
 provide(commentThreadBudgetKey, budget);
 const pager = createCommentReplyPager({ parentId: appearNote.id, ancestors: props.ancestors, accountId: () => $i?.id ?? null, budget, allowNote: note => !$i || !checkWordMute(note, $i, $i.hardMutedWords), fetchPage: params => misskeyApi('notes/replies', params, $i?.token ?? null) });
-const localReply = ref(false);
+const localReplies = ref(new Set<string>());
+const removedReplies = ref(new Set<string>());
+const seenLocalReplies = new Set<string>();
 const atDepthLimit = computed(() => props.depth >= COMMENT_THREAD_MAX_DEPTH);
-const replyCount = computed(() => Math.max(props.note.repliesCount, pager.state.items.length, localReply.value ? 1 : 0));
+// useNote captures this card's snapshot; local deltas belong to that same baseline.
+const replyCount = computed(() => Math.max(0, appearNote.repliesCount + localReplies.value.size - removedReplies.value.size, pager.state.items.length));
 const hasReplies = computed(() => replyCount.value > 0);
 const expandedChildren = computed(() => pager.state.expanded && pager.state.items.length > 0);
 const hasLongText = computed(() => shouldCollapsed({ ...appearNote, files: [] }, []));
 const summaryReaction = computed(() => $appearNote.myReaction ?? Object.entries($appearNote.reactions).sort((a, b) => b[1] - a[1])[0]?.[0]);
-watch(() => $i?.id, () => pager.reset());
+watch(() => $i?.id, () => { pager.reset(); localReplies.value.clear(); removedReplies.value.clear(); seenLocalReplies.clear(); });
 onBeforeUnmount(pager.reset);
 useGlobalEvent('notePosted', created => {
-	if (created.userId !== $i?.id || created.replyId !== appearNote.id) return;
-	localReply.value = true;
+	if (created.userId !== $i?.id || created.replyId !== appearNote.id || created.isHidden || created.deletedAt || removedReplies.value.has(created.id) || seenLocalReplies.has(created.id)) return;
+	seenLocalReplies.add(created.id);
+	if (!pager.state.items.some(note => note.id === created.id)) localReplies.value.add(created.id);
 	pager.insert(created);
 });
-useGlobalEvent('noteDeleted', id => pager.remove(id));
+useGlobalEvent('noteDeleted', id => {
+	const wasLocal = localReplies.value.delete(id);
+	if (!wasLocal && pager.state.items.some(note => note.id === id)) removedReplies.value.add(id);
+	pager.remove(id);
+});
 </script>
 
 <style lang="scss" module>

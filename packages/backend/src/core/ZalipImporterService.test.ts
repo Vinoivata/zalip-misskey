@@ -240,34 +240,64 @@ describe('Kodik importer service boundaries', () => {
 		expect(preview.warnings.includes('kodik-anime-scope-unmapped')).toBe(!proven);
 	});
 
-	test('Kodik refresh profile resolves only an exact existing binding', async () => {
-		const context = fixture({ profiles: [profile({ source: 'kodik' })], works: [work()], identities: [{ id: 'kp', workId: 'canonical', provider: 'kinopoisk', externalId: '1', entityType: 'movie' }] });
-		enable(context, 'kodik');
+	test('Kodik refresh profile queues exact existing bindings without discovering unrelated catalogue titles', async () => {
 		const movieRef: ImportRef = { source: 'kodik', externalId: 'kinopoisk-1', mediaType: 'movie' };
-		context.providers.kodik.lookup.mockResolvedValueOnce(record({ ref: movieRef, identities: [{ provider: 'kodik', externalId: 'kinopoisk-1', entityType: 'movie' }, { provider: 'kinopoisk', externalId: '1', entityType: 'movie' }] }));
+		const context = fixture({ profiles: [profile({ source: 'kodik' })], works: [work(), work({ id: 'unmapped', tmdbId: 101 })], identities: [{ id: 'kodik', workId: 'canonical', provider: 'kodik', externalId: movieRef.externalId, entityType: 'movie' }, { id: 'other-kp', workId: 'unmapped', provider: 'kinopoisk', externalId: '2', entityType: 'movie' }] });
+		enable(context, 'kodik');
+		context.providers.kodik.lookup.mockRejectedValue(new ImportProviderError('malformed-response'));
 		await context.service.runProfile('profile');
-		expect(context.providers.kodik.lookup).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ provider: 'kinopoisk', externalId: '1' })]), 'movie', ['players']);
+		expect(context.providers.kodik.lookup).not.toHaveBeenCalled();
+		expect(context.providers.kodik.fetch).not.toHaveBeenCalled();
+		expect(context.items.rows).toHaveLength(1);
 		expect(context.items.rows[0]).toMatchObject({ workId: 'canonical', ref: movieRef });
 	});
 
-	test.each(['quota-exceeded', 'rate-limited', 'upstream-failure', 'malformed-response'] as const)('profile lookup %s preserves the cursor and records a retryable failure', async code => {
-		const context = fixture({ profiles: [profile({ source: 'kodik', cursor: 100 })], works: [work()], identities: [{ id: 'kp', workId: 'canonical', provider: 'kinopoisk', externalId: '1', entityType: 'movie' }] });
+	test.each(['quota-exceeded', 'rate-limited', 'upstream-failure', 'malformed-response'] as const)('an exact Kodik refresh keeps provider %s visible on its queued run rather than aborting dispatch', async code => {
+		const context = fixture({ profiles: [profile({ source: 'kodik', options: { sources: ['kodik'] } })], works: [work()], identities: [{ id: 'kodik', workId: 'canonical', provider: 'kodik', externalId: 'kinopoisk-1', entityType: 'movie' }] });
 		enable(context, 'kodik');
-		context.works.find.mockResolvedValueOnce([work() as unknown as Row]);
-		context.providers.kodik.lookup.mockRejectedValueOnce(new ImportProviderError(code));
-		await expect(context.service.runProfile('profile')).rejects.toThrow(code);
-		expect(context.profiles.rows[0]).toMatchObject({ cursor: 100, lastError: code });
-		expect(context.runs.rows).toHaveLength(0);
-		expect(context.queue.add).not.toHaveBeenCalled();
+		context.providers.kodik.fetch.mockRejectedValueOnce(new ImportProviderError(code));
+		const dispatched = await context.service.runProfile('profile');
+		expect(context.runs.rows[0]).toMatchObject({ id: dispatched.id, state: 'queued' });
+		expect(context.queue.add).toHaveBeenCalledOnce();
+		await context.service.processRun(dispatched.id);
+		const quota = code === 'quota-exceeded' || code === 'rate-limited';
+		expect(context.items.rows[0]).toMatchObject({ state: quota ? 'pending' : 'failed', error: code });
+		expect(context.runs.rows[0]).toMatchObject({ state: quota ? 'paused' : 'failed', error: quota ? code : 'some-items-failed' });
+		expect(isolated.apply).not.toHaveBeenCalled();
 	});
 
-	test('weak anime-season lookup is skipped without attaching to a whole-series work', async () => {
+	test('a Kodik refresh does not guess an anime-season binding from a whole-series KP identity', async () => {
 		const context = fixture({ profiles: [profile({ source: 'kodik' })], works: [work({ tmdbMediaType: 'tv' })], identities: [{ id: 'kp', workId: 'canonical', provider: 'kinopoisk', externalId: '4786341', entityType: 'tv' }] });
 		enable(context, 'kodik');
 		context.providers.kodik.lookup.mockResolvedValueOnce(seasonRecord());
 		await context.service.runProfile('profile');
+		expect(context.providers.kodik.lookup).not.toHaveBeenCalled();
 		expect(context.items.rows).toHaveLength(0);
 		expect(context.runs.rows[0].state).toBe('completed');
+	});
+
+	test('one failed exact Kodik title does not prevent refreshing another known resource', async () => {
+		const first = { source: 'kodik', externalId: 'kinopoisk-1', mediaType: 'movie' } as const;
+		const second = { source: 'kodik', externalId: 'kinopoisk-2', mediaType: 'movie' } as const;
+		const context = fixture({ profiles: [profile({ source: 'kodik', options: { sources: ['kodik'], fields: ['players', 'seasons'] } })], works: [work(), work({ id: 'second', tmdbId: 101 })], identities: [
+			{ workId: 'canonical', provider: 'kodik', externalId: first.externalId, entityType: 'movie' },
+			{ workId: 'second', provider: 'kodik', externalId: second.externalId, entityType: 'movie' },
+		] });
+		enable(context, 'kodik');
+		context.providers.kodik.fetch.mockImplementation(async (selected: ImportRef) => {
+			if (selected.externalId === first.externalId) throw new ImportProviderError('malformed-response');
+			return record({ ref: second, identities: [{ provider: 'kodik', externalId: second.externalId, entityType: 'movie' }] });
+		});
+		isolated.apply.mockResolvedValueOnce({ work: work({ id: 'second', tmdbId: 101 }), created: false, protectedFields: [] });
+		const dispatched = await context.service.runProfile('profile');
+		await context.service.processRun(dispatched.id);
+		expect(context.items.rows).toEqual(expect.arrayContaining([
+			expect.objectContaining({ workId: 'canonical', state: 'failed', error: 'malformed-response' }),
+			expect.objectContaining({ workId: 'second', ref: second, state: 'completed' }),
+		]));
+		expect(context.runs.rows[0]).toMatchObject({ state: 'failed', error: 'some-items-failed' });
+		expect(isolated.apply).toHaveBeenCalledOnce();
+		expect(isolated.apply.mock.calls[0][4]).toMatchObject({ workId: 'second', mode: 'sync' });
 	});
 
 	test('public voice projection keeps per-voice coverage and subtitles without API credentials or rejected URLs', async () => {
@@ -646,6 +676,73 @@ describe('Zalip importer orchestration', () => {
 		expect(isolated.apply.mock.calls[0][2]).toMatchObject({ complete: false, warnings: ['tmdb:not-found'] });
 		expect(isolated.apply.mock.calls[0][4].workId).toBe('canonical');
 		expect(context.items.rows[0].state).toBe('completed');
+	});
+
+	test('a successful TMDB refresh reuses its exact saved Collaps ID instead of rediscovering through IMDb', async () => {
+		const selectedFields = ['seasons', 'players'] as const;
+		const original = work({ importData: { locks: ['title', 'posterUrl'], values: { title: 'Imported title', players: [] }, localArtwork: { posterUrl: '/files/editorial.webp' } } });
+		const context = fixture({ runs: [run({ mode: 'sync', lockedFields: ['description'], options: { sources: ['tmdb', 'collaps'], fields: [...selectedFields] } })], items: [item({ workId: 'canonical' })], works: [original], identities: [
+			{ workId: 'canonical', provider: 'collaps', externalId: '50', entityType: 'movie' },
+			{ workId: 'canonical', provider: 'imdb', externalId: 'tt1234567', entityType: 'movie' },
+			{ workId: 'unrelated', provider: 'collaps', externalId: '999', entityType: 'movie' },
+		] });
+		enable(context, 'collaps');
+		context.providers.tmdb.fetch.mockResolvedValueOnce(record({ identities: [{ provider: 'tmdb', externalId: '100', entityType: 'movie' }, { provider: 'imdb', externalId: 'tt1234567', entityType: 'movie' }] }));
+		const providerModule = await vi.importActual<typeof import('./zalip-importer/providers.js')>('./zalip-importer/providers.js');
+		const requests: URL[] = [];
+		const actualCollaps = providerModule.createImportProviders({ collapsApiToken: 'fixture' }, async url => {
+			const request = new URL(url); requests.push(request);
+			if (request.searchParams.get('id') !== '50') throw new ImportProviderError('not-found');
+			return { id: 50, name: 'Saved player title', type: 'films', imdb_id: 'tt1234567', genres: ['Drama'], iframe_url: 'https://api.nextembed.ws/embed/movie/50', voiceActing: ['Studio'] };
+		}).collaps;
+		context.providers.collaps.lookup.mockImplementation(actualCollaps.lookup!);
+		isolated.apply.mockResolvedValueOnce({ work: original, created: false, protectedFields: ['title', 'posterUrl'] });
+		await context.service.processRun('run');
+		expect(requests).toHaveLength(1);
+		expect(requests[0].pathname).toBe('/franchise/details');
+		expect(requests[0].searchParams.get('id')).toBe('50');
+		expect(requests[0].searchParams.has('imdb_id')).toBe(false);
+		expect(requests[0].searchParams.has('kinopoisk_id')).toBe(false);
+		expect(context.providers.collaps.lookup).toHaveBeenCalledWith(expect.arrayContaining([
+			expect.objectContaining({ provider: 'collaps', externalId: '50', entityType: 'movie' }),
+			expect.objectContaining({ provider: 'tmdb', externalId: '100', entityType: 'movie' }),
+		]), 'movie', selectedFields);
+		expect(context.providers.collaps.lookup.mock.calls[0][0]).not.toEqual(expect.arrayContaining([expect.objectContaining({ externalId: '999' })]));
+		expect(isolated.apply.mock.calls[0][2]).toMatchObject({ players: [expect.objectContaining({ source: 'collaps', externalId: '50' })], warnings: [] });
+		expect(isolated.apply.mock.calls[0][4]).toMatchObject({ workId: 'canonical', mode: 'sync', lockedFields: ['description'], options: { fields: [...selectedFields] } });
+		expect(context.items.rows[0]).toMatchObject({ state: 'completed', warnings: [] });
+		expect(context.works.rows).toEqual([original]);
+		expect(context.works.save).not.toHaveBeenCalled();
+		expect(context.works.update).not.toHaveBeenCalled();
+	});
+
+	test.each(['primary', 'enrichment'] as const)('a saved provider binding cannot be overridden by contradictory %s identities', async stage => {
+		const original = work();
+		const context = fixture({ runs: [run({ mode: 'sync', options: { sources: ['tmdb', 'collaps'] } })], items: [item({ workId: 'canonical' })], works: [original], identities: [{ workId: 'canonical', provider: 'collaps', externalId: '50', entityType: 'movie' }] });
+		enable(context, 'collaps');
+		const foreign = { provider: 'collaps', externalId: '51', entityType: 'movie' } as const;
+		if (stage === 'primary') context.providers.tmdb.fetch.mockResolvedValueOnce(record({ identities: [{ provider: 'tmdb', externalId: '100', entityType: 'movie' }, foreign] }));
+		else context.providers.collaps.lookup.mockResolvedValueOnce(record({ ref: { source: 'collaps', externalId: '51', mediaType: 'movie' }, identities: [foreign], title: 'Do not replace', description: 'Foreign title', players: [] }));
+		await context.service.processRun('run');
+		expect(context.items.rows[0]).toMatchObject({ state: 'failed', error: 'IMPORT_IDENTITY_CONFLICT' });
+		expect(isolated.apply).not.toHaveBeenCalled();
+		expect(context.taxonomy.syncImportedWork).not.toHaveBeenCalled();
+		expect(context.works.rows).toEqual([original]);
+	});
+
+	test('refreshing a bound anime season cannot replace its exact Shikimori season identity', async () => {
+		const selected: ImportRef = { source: 'kodik', externalId: 'shikimori-46569', mediaType: 'tv' };
+		const original = work({ kind: 'anime', tmdbId: null, tmdbMediaType: null });
+		const context = fixture({ runs: [run({ mode: 'sync', options: { sources: ['kodik'] } })], items: [item({ workId: 'canonical', ref: selected })], works: [original], identities: [
+			{ workId: 'canonical', provider: 'kodik', externalId: selected.externalId, entityType: 'tv' },
+			{ workId: 'canonical', provider: 'shikimori', externalId: '46569', entityType: 'tv' },
+		] });
+		enable(context, 'kodik');
+		context.providers.kodik.fetch.mockResolvedValueOnce(record({ ref: { ...selected, externalId: 'shikimori-100' }, kind: 'anime', identities: [{ provider: 'kodik', externalId: 'shikimori-100', entityType: 'tv' }, { provider: 'shikimori', externalId: '100', entityType: 'tv' }] }));
+		await context.service.processRun('run');
+		expect(context.items.rows[0]).toMatchObject({ state: 'failed', error: 'IMPORT_IDENTITY_CONFLICT' });
+		expect(isolated.apply).not.toHaveBeenCalled();
+		expect(context.works.rows).toEqual([original]);
 	});
 
 	test.each(['quota-exceeded', 'not-configured', 'upstream-failure'] as const)('primary %s never triggers alternate source recovery', async code => {

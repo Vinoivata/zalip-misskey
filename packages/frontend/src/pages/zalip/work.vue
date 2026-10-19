@@ -10,19 +10,19 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div v-if="pending" :class="$style.state"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i> Загружаем тайтл…</div>
 			<div v-else-if="work == null" :class="$style.state"><i class="ti ti-movie-off" aria-hidden="true"></i> Тайтл не найден или ещё не опубликован.</div>
 			<article v-else :class="$style.work">
-				<section :class="[$style.hero, { [$style.hasLogo]: work.logoPath, [$style.hasMobilePoster]: work.posterPath }]">
-					<div v-if="work.backdropPath" :class="$style.heroBackground" aria-hidden="true"><img :src="tmdbBackdrop(work.backdropPath)" alt="" decoding="async" width="1280" height="720"></div>
+				<section :class="[$style.hero, { [$style.hasLogo]: images.ready(work.logoPath), [$style.hasMobilePoster]: images.source(work.posterPath) }]">
+					<div v-if="images.source(work.backdropPath, 'w1280')" :class="$style.heroBackground" aria-hidden="true"><img :src="images.source(work.backdropPath, 'w1280')!" alt="" decoding="async" width="1280" height="720" @error="images.failed"></div>
 					<div :class="$style.mobileArtwork">
-						<div v-if="work.backdropPath || work.posterPath" :class="$style.mobileArtworkBackdrop" aria-hidden="true"><img :src="work.backdropPath ? tmdbBackdrop(work.backdropPath) : tmdbImage(work.posterPath!)" alt="" decoding="async" width="1280" height="720"></div>
-						<img v-if="work.posterPath" :class="$style.mobileArtworkPoster" :src="tmdbImage(work.posterPath)" :alt="work.title" width="500" height="750" fetchpriority="high" decoding="async">
-						<div v-else-if="!work.backdropPath" :class="$style.missingArtwork"><i class="ti ti-movie" aria-hidden="true"></i><span>{{ work.title }}</span></div>
+						<div v-if="mobileArtworkSource" :class="$style.mobileArtworkBackdrop" aria-hidden="true"><img :src="mobileArtworkSource" alt="" decoding="async" width="1280" height="720" @error="images.failed"></div>
+						<img v-if="images.source(work.posterPath)" :class="$style.mobileArtworkPoster" :src="images.source(work.posterPath)!" :alt="work.title" width="500" height="750" fetchpriority="high" decoding="async" @error="images.failed">
+						<div v-else-if="!mobileArtworkSource" :class="$style.missingArtwork"><i class="ti ti-movie" aria-hidden="true"></i><span>{{ work.title }}</span></div>
 					</div>
 					<div :class="$style.heroInner">
 						<nav :class="$style.breadcrumb" :aria-label="i18n.ts.zalip.catalogueHeading"><MkA to="/catalog">{{ i18n.ts.zalip.catalogueHeading }}</MkA><i class="ti ti-chevron-right" aria-hidden="true"></i><span>{{ work.title }}</span></nav>
-						<div v-if="work.logoPath" :class="$style.titleLogo"><img :src="tmdbImage(work.logoPath)" :alt="work.title" decoding="async"></div>
+						<div v-if="images.source(work.logoPath)" :class="$style.titleLogo"><img :key="work.logoPath!" :src="images.source(work.logoPath)!" :alt="work.title" decoding="async" @load="images.loaded" @error="images.failed"></div>
 						<div :class="$style.heroContent">
 							<aside :class="$style.sidebar">
-								<div :class="$style.poster"><img v-if="work.posterPath" :src="tmdbImage(work.posterPath)" :alt="work.title" width="500" height="750" decoding="async"><i v-else class="ti ti-movie" aria-hidden="true"></i></div>
+								<div :class="$style.poster"><img v-if="images.source(work.posterPath)" :src="images.source(work.posterPath)!" :alt="work.title" width="500" height="750" decoding="async" @error="images.failed"><i v-else class="ti ti-movie" aria-hidden="true"></i></div>
 								<div :class="$style.sidebarActions">
 									<button type="button" class="_button" :class="$style.watchButton" @click="openPlayer"><i class="ti ti-player-play-filled" aria-hidden="true"></i>{{ i18n.ts.zalip.watchTitle }}</button>
 									<button type="button" class="_button" :class="$style.sideButton" @click="focusDiscussion">{{ i18n.ts.zalip.discussTitle }}</button>
@@ -37,17 +37,21 @@ SPDX-License-Identifier: AGPL-3.0-only
 									<span v-for="rating in work.externalRatings ?? []" :key="rating.source" :class="$style.original">{{ rating.source.toUpperCase() }} {{ rating.value.toFixed(1) }}</span>
 									<span v-if="work.originalTitle && work.originalTitle !== work.title" :class="$style.original">{{ work.originalTitle }}</span>
 								</div>
-								<div :class="$style.compactFacts"><p>{{ [work.releaseYear, ...work.genres].filter(Boolean).join(', ') }}</p><p>{{ [kindLabel(work.kind), work.runtimeMinutes ? runtimeLabel(work.runtimeMinutes, work.kind) : null].filter(Boolean).join(' · ') }}</p></div>
+								<div :class="$style.compactFacts"><p>{{ [work.releaseYear, ...work.genres].filter(Boolean).join(', ') }}</p><p>{{ [work.countries?.join(', '), work.runtimeMinutes ? runtimeLabel(work.runtimeMinutes, work.kind) : kindLabel(work.kind), zalipAgeRatingLabel(work.ageRating)].filter(Boolean).join(' · ') }}</p></div>
 								<dl :class="$style.facts">
 									<template v-if="work.releaseYear"><dt>{{ i18n.ts.zalip.workYear }}</dt><dd>{{ work.releaseYear }}</dd></template>
 									<dt>{{ i18n.ts.zalip.workType }}</dt><dd>{{ kindLabel(work.kind) }}</dd>
 									<template v-if="work.countries?.length"><dt>{{ i18n.ts.zalip._importer.workCountries }}</dt><dd>{{ work.countries.join(', ') }}</dd></template>
-									<template v-if="work.ageRating"><dt>{{ i18n.ts.zalip._importer.workAgeRating }}</dt><dd>{{ work.ageRating }}</dd></template>
+									<template v-if="work.ageRating"><dt>{{ i18n.ts.zalip._importer.workAgeRating }}</dt><dd>{{ zalipAgeRatingLabel(work.ageRating) }}</dd></template>
 									<template v-if="work.runtimeMinutes"><dt>{{ i18n.ts.zalip.workDuration }}</dt><dd>{{ runtimeLabel(work.runtimeMinutes, work.kind) }}</dd></template>
 									<template v-if="work.seasons.length"><dt>{{ i18n.ts.zalip.workSeasons }}</dt><dd>{{ work.seasons.filter(season => season.seasonNumber > 0).length }}</dd></template>
 									<template v-if="work.genres.length"><dt>{{ i18n.ts.zalip.catalogueGenres }}</dt><dd :class="$style.genres"><MkA v-for="genre in work.genres" :key="genre" :to="genreLink(genre)">{{ genre }}</MkA></dd></template>
 								</dl>
 							</div>
+						</div>
+						<div :class="$style.mobilePrimaryActions" role="group" :aria-label="i18n.ts.zalip.watchTitle">
+							<button type="button" class="_button" :class="$style.watchButton" @click="openPlayer"><i class="ti ti-player-play-filled" aria-hidden="true"></i>{{ i18n.ts.zalip.watchTitle }}</button>
+							<button type="button" class="_button" :class="$style.sideButton" @click="focusDiscussion"><i class="ti ti-message-circle" aria-hidden="true"></i>{{ i18n.ts.zalip.discussTitle }}</button>
 						</div>
 					</div>
 				</section>
@@ -129,6 +133,19 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<button type="button" class="_button" :class="$style.episodeDiscussButton" @click="selectDiscussionScope('episode')"><i class="ti ti-messages" aria-hidden="true"></i> {{ selectedEpisode.discussionNoteId ? i18n.ts.zalip.episodeComments : i18n.ts.zalip.discussEpisode }}</button>
 						</div>
 					</section>
+					<section ref="discussionSection" :class="$style.discussionArea">
+						<div v-if="work.seasons.length" :class="$style.discussionScope" role="group" :aria-label="i18n.ts.zalip.discussionContext">
+							<button type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionScope === 'work' }]" :aria-pressed="discussionScope === 'work'" @click="selectDiscussionScope('work')"><i class="ti ti-movie" aria-hidden="true"></i> {{ i18n.ts.zalip.workDiscussionScope }}</button>
+							<button v-if="selectedEpisode" type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionScope === 'episode' }]" :aria-pressed="discussionScope === 'episode'" @click="selectDiscussionScope('episode')"><i class="ti ti-device-tv" aria-hidden="true"></i> {{ episodeLabel(selectedEpisode) }}</button>
+						</div>
+						<ZalipDiscussionPanel v-if="activeDiscussionNoteId" :noteId="activeDiscussionNoteId" :heading="activeDiscussionHeading"/>
+						<section v-else :class="$style.discussionPending">
+							<p v-if="!discussionError"><i class="ti ti-messages" aria-hidden="true"></i> {{ activeDiscussionEmptyText }}</p>
+							<button v-if="$i" type="button" class="_button" :class="$style.openDiscussion" :disabled="openingDiscussionScope != null" @click="openActiveDiscussion"><i :class="openingDiscussionScope != null ? 'ti ti-loader-2 ti-spin' : 'ti ti-message-plus'" aria-hidden="true"></i> {{ openingDiscussionScope != null ? i18n.ts.zalip.openingDiscussion : i18n.ts.zalip.startDiscussion }}</button>
+							<button v-else type="button" class="_button" :class="$style.openDiscussion" @click="signInForDiscussion"><i class="ti ti-login" aria-hidden="true"></i> {{ i18n.ts.zalip.loginToComment }}</button>
+							<p v-if="discussionError" :class="$style.discussionError">{{ discussionError }}</p>
+						</section>
+					</section>
 					<section v-if="work.galleryPaths.length" :class="$style.gallery">
 						<h2><i class="ti ti-photo" aria-hidden="true"></i> {{ i18n.ts.images }}</h2>
 						<MkZalipImageGallery :images="work.galleryPaths.map(path => ({ url: importerImageUrl(path, 'original') ?? '', thumbnailUrl: tmdbGalleryImage(path), alt: work!.title }))" :label="work.title"/>
@@ -150,19 +167,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 								<p v-else :class="$style.catalogueCaption">{{ taxonomyProfileLabel(card.entry.type) }}</p>
 							</MkA>
 						</div>
-					</section>
-					<section ref="discussionSection" :class="$style.discussionArea">
-						<div v-if="work.seasons.length" :class="$style.discussionScope" role="group" :aria-label="i18n.ts.zalip.discussionContext">
-							<button type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionScope === 'work' }]" :aria-pressed="discussionScope === 'work'" @click="selectDiscussionScope('work')"><i class="ti ti-movie" aria-hidden="true"></i> {{ i18n.ts.zalip.workDiscussionScope }}</button>
-							<button v-if="selectedEpisode" type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionScope === 'episode' }]" :aria-pressed="discussionScope === 'episode'" @click="selectDiscussionScope('episode')"><i class="ti ti-device-tv" aria-hidden="true"></i> {{ episodeLabel(selectedEpisode) }}</button>
-						</div>
-						<ZalipDiscussionPanel v-if="activeDiscussionNoteId" :noteId="activeDiscussionNoteId" :heading="activeDiscussionHeading"/>
-						<section v-else :class="$style.discussionPending">
-							<p v-if="!discussionError"><i class="ti ti-messages" aria-hidden="true"></i> {{ activeDiscussionEmptyText }}</p>
-							<button v-if="$i" type="button" class="_button" :class="$style.openDiscussion" :disabled="openingDiscussionScope != null" @click="openActiveDiscussion"><i :class="openingDiscussionScope != null ? 'ti ti-loader-2 ti-spin' : 'ti ti-message-plus'" aria-hidden="true"></i> {{ openingDiscussionScope != null ? i18n.ts.zalip.openingDiscussion : i18n.ts.zalip.startDiscussion }}</button>
-							<button v-else type="button" class="_button" :class="$style.openDiscussion" @click="signInForDiscussion"><i class="ti ti-login" aria-hidden="true"></i> {{ i18n.ts.zalip.loginToComment }}</button>
-							<p v-if="discussionError" :class="$style.discussionError">{{ discussionError }}</p>
-						</section>
 					</section>
 				</div>
 			</article>
@@ -238,6 +242,8 @@ import { useZalipHorizontalDrag } from '@/composables/use-zalip-horizontal-drag.
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { pleaseLogin } from '@/utility/please-login.js';
 import { importerImageUrl } from '@/utility/zalip-importer.js';
+import { useZalipImages } from '@/utility/zalip-image.js';
+import { zalipAgeRatingLabel } from '@/utility/zalip-work-presentation.js';
 import { playbackEpisodeAvailable, playbackTranslationLabel, selectablePlaybackTranslations, workPlaybackIframe, workPlaybackSources } from '@/utility/zalip-playback.js';
 import { zalipEpisodeQuery } from '@/utility/zalip-work-route.js';
 import { taxonomyCreditCaption, taxonomyLinkSections, taxonomyProfileLabel, taxonomySectionLabel, taxonomyTypeIcon } from '@/utility/zalip-taxonomy.js';
@@ -379,6 +385,8 @@ const voicePanelPosition = ref<{ top: string; left: string; width: string; heigh
 const episodeQuery = ref('');
 const props = defineProps<{ slug: string; initialSeason?: string; initialEpisode?: string }>();
 const work = ref<ZalipWork | null>(null);
+const images = useZalipImages();
+const mobileArtworkSource = computed(() => images.source(work.value?.backdropPath, 'w1280') ?? images.source(work.value?.posterPath));
 const workSubtitle = computed(() => [work.value?.originalTitle, work.value?.releaseYear].filter(Boolean).join(', '));
 const pending = ref(true);
 const saving = ref(false);
@@ -1132,6 +1140,7 @@ definePage(() => ({
 .original { color: var(--zalip-social-muted); font-size: 13px; line-height: 1.5; }
 .ratings { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 20px 0 24px; }
 .compactFacts { display: none; }
+.mobilePrimaryActions { display: none; }
 .mobileArtwork { display: none; }
 .missingArtwork { display: grid; place-content: center; justify-items: center; gap: 14px; width: min(220px, 65%); min-height: 240px; box-sizing: border-box; padding: 20px; border-radius: 16px; background: var(--zalip-social-raised); text-align: center; font-weight: 700; }
 .missingArtwork i { font-size: 48px; color: var(--MI_THEME-accent); }
@@ -1205,7 +1214,7 @@ definePage(() => ({
 .episodeGuideContent { min-width: 0; flex: 1; }
 .guideNavigation { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .guideNavigation span { color: var(--zalip-social-muted); font-size: 11px; }
-.guideNavigation button { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 99px; background: var(--zalip-social-raised); }
+.guideNavigation button { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; border-radius: 99px; background: var(--zalip-social-raised); }
 .guideNavigation button:disabled { opacity: .35; }
 .episodeGuideContent > p:first-child { margin: 0 0 12px; font-weight: 700; font-size: 16px; color: var(--zalip-social-fg); }
 .episodeGuideContent h2 { font-size: 15px; margin: 0 0 8px; }
@@ -1260,7 +1269,7 @@ definePage(() => ({
 .voiceDrawer { position: fixed; width: min(340px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 18px; border-radius: 16px; }
 .voiceDrawer header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .voiceDrawer h2 { margin: 0; font-size: 18px; }
-.voiceDrawer header button { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 12px; background: var(--zalip-social-hover); }
+.voiceDrawer header button { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; border-radius: 12px; background: var(--zalip-social-hover); }
 .providerChoices { display: flex; flex-wrap: wrap; gap: 6px; margin: 18px 0; }
 .voiceDrawer h3 { margin: 0 0 14px; padding-top: 18px; border-top: 1px solid var(--zalip-social-border); font-size: 16px; }
 .voiceList { display: grid; gap: 6px; margin-top: 12px; }
@@ -1270,7 +1279,7 @@ definePage(() => ({
 .voiceList .menuSelected, .episodeChoices .menuSelected { background: var(--zalip-accent-soft); color: var(--MI_THEME-accent); }
 .workSheet { position: relative; box-sizing: border-box; width: min(520px, 100%); max-height: calc(100dvh - 24px); margin: auto; padding: 24px; overflow-y: auto; overscroll-behavior: contain; border-radius: 24px; background: var(--zalip-social-panel); color: var(--zalip-social-fg); box-shadow: 0 12px 50px var(--MI_THEME-shadow); }
 .sheetHandle { width: 36px; height: 4px; margin: -12px auto 22px; border-radius: 99px; background: var(--zalip-social-subtle); }
-.sheetClose { position: absolute; top: 16px; right: 16px; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--zalip-social-raised); color: var(--zalip-social-muted); }
+.sheetClose { position: absolute; top: 12px; right: 12px; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--zalip-social-raised); color: var(--zalip-social-muted); }
 .sheetTitle { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: 18px; padding: 16px 24px 24px 0; }
 .sheetTitle h2 { margin: 0 0 6px; font-size: 21px; line-height: 1.2; overflow-wrap: anywhere; }
 .sheetTitle p { margin: 0; font-size: 13px; color: var(--zalip-social-muted); }
@@ -1304,6 +1313,8 @@ definePage(() => ({
 	.titleLogo { justify-content: center; height: auto; min-height: 56px; margin: 0 0 16px; }
 	.titleLogo img { width: auto; max-width: 86%; max-height: 100px; }
 	.heroContent { display: block; margin-top: 0; }
+	.mobilePrimaryActions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: 20px; }
+	.mobilePrimaryActions button { min-height: 44px; min-width: 0; }
 	.heroBackground { display: none; }
 	.hero::after { display: none; }
 	.info { width: 100%; text-align: center; }

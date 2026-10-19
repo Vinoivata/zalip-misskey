@@ -82,13 +82,14 @@ defineExpose({ refresh });
 </script>
 
 <style lang="scss" module>
-.section { min-width: 0; margin: 24px 0; }
+.section { container-type: inline-size; min-width: 0; margin: 24px 24px; }
 .heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; h2 { margin: 0; font-size: 1.25em; } button { color: var(--MI_THEME-accent); } }
 .rail { display: flex; gap: 14px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; padding: 2px 2px 12px; }
-.card { position: relative; flex: 0 0 clamp(220px, 34vw, 300px); min-width: 0; scroll-snap-align: start; }
+.card { position: relative; flex: 0 0 clamp(min(220px, 100cqw), 72cqw, 300px); min-width: 0; scroll-snap-align: start; }
 .link { display: flex; flex-direction: column; gap: 6px; text-decoration: none; strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; } > span { font-size: .82em; color: var(--MI_THEME-fg); opacity: .7; } &:focus-visible { outline: 2px solid var(--MI_THEME-accent); outline-offset: 3px; border-radius: var(--MI-radius); } progress { width: 100%; height: 4px; accent-color: var(--MI_THEME-accent); } }
 .artwork { position: relative; display: grid; place-items: center; aspect-ratio: 16 / 9; border-radius: var(--MI-radius); overflow: hidden; background: var(--MI_THEME-panelHighlight); > img { width: 100%; height: 100%; object-fit: cover; } > i { font-size: 2.5em; opacity: .4; } }
 .play { position: absolute; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: var(--MI_THEME-panel); color: var(--MI_THEME-fg); }
-.remove { position: absolute; top: 8px; right: 8px; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--MI_THEME-panel); color: var(--MI_THEME-fg); &:focus-visible { outline: 2px solid var(--MI_THEME-accent); outline-offset: 2px; } }
+.remove { position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--MI_THEME-panel); color: var(--MI_THEME-fg); > i { font-size: 16px; } &:focus-visible { outline: 2px solid var(--MI_THEME-accent); outline-offset: 2px; } }
 .error { color: var(--MI_THEME-error); font-size: .85em; }
+@media (max-width: 767px) { .section { margin-inline: 16px; } }
 </style>

@@ -15,7 +15,7 @@ import noteSource from '@/components/MkNote.vue?raw';
 import detailedSource from '@/components/MkNoteDetailed.vue?raw';
 import { i18n } from '@/i18n.js';
 
-const actions = vi.hoisted(() => ({ react: vi.fn(), toggleReact: vi.fn(), renote: vi.fn(), reply: vi.fn(), showMenu: vi.fn(), push: vi.fn(), share: vi.fn(), previewVisible: false, viewBindings: [] as Array<{ target: { readonly value: HTMLElement | null }; enabled: () => boolean }> }));
+const actions = vi.hoisted(() => ({ react: vi.fn(), toggleReact: vi.fn(), renote: vi.fn(), reply: vi.fn(), showMenu: vi.fn(), showRenoteMenu: vi.fn(), push: vi.fn(), share: vi.fn(), previewVisible: false, viewBindings: [] as Array<{ target: { readonly value: HTMLElement | null }; enabled: () => boolean }> }));
 // Vitest's disabled-CSS module proxy stringifies Symbols during circular SFC
 // imports. Keep class names available to these DOM tests without loading CSS.
 vi.mock('@/components/MkNote.vue?vue&type=style&index=0&lang.module.scss', () => ({ default: new Proxy({}, { get: (_, key) => typeof key === 'string' ? `note_${key}` : undefined }) }));
@@ -40,7 +40,7 @@ vi.mock('@/composables/use-note.js', async () => {
 	return { useNote: (props: { note: Misskey.entities.Note }) => {
 		const isRenote = !!props.note.renote && props.note.text == null && (props.note.files?.length ?? 0) === 0 && props.note.poll == null;
 		const appearNote = isRenote ? props.note.renote! : props.note;
-		return { note: props.note, appearNote, $appearNote: reactive(appearNote), hideByPlugin: ref(false), isRenote, showContent: ref(false), isDeleted: ref(false), translating: ref(false), translation: ref(null), muted: ref(false), hardMuted: ref(false), collapsed: ref(true), renoteCollapsed: ref(false), parsed: ref(null), urls: ref(['https://example.org/fixture']), showTicker: ref(false), canRenote: ref(appearNote.visibility !== 'specified'), isMyRenote: ref(false), renote: actions.renote, reply: actions.reply, react: actions.react, reactViaMfmEmoji: vi.fn(), toggleReact: actions.toggleReact, onContextmenu: vi.fn(), showMenu: actions.showMenu, clip: vi.fn(), showRenoteMenu: vi.fn(), blur: vi.fn() };
+		return { note: props.note, appearNote, $appearNote: reactive(appearNote), hideByPlugin: ref(false), isRenote, showContent: ref(false), isDeleted: ref(false), translating: ref(false), translation: ref(null), muted: ref(false), hardMuted: ref(false), collapsed: ref(true), renoteCollapsed: ref(false), parsed: ref(null), urls: ref(['https://example.org/fixture']), showTicker: ref(false), canRenote: ref(appearNote.visibility !== 'specified'), isMyRenote: ref(false), renote: actions.renote, reply: actions.reply, react: actions.react, reactViaMfmEmoji: vi.fn(), toggleReact: actions.toggleReact, onContextmenu: vi.fn(), showMenu: actions.showMenu, clip: vi.fn(), showRenoteMenu: actions.showRenoteMenu, blur: vi.fn() };
 	} };
 });
 vi.mock('@/components/MkMediaList.vue', () => ({ default: { template: '<div data-testid="note-media">Fixture media</div>' } }));
@@ -85,6 +85,17 @@ beforeEach(() => { vi.clearAllMocks(); actions.previewVisible = false; actions.v
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('Zalip compact note presentation', () => {
+	it.each([MkNote, MkNoteDetailed])('uses a native click target for the repost menu, including keyboard activation in %s', async component => {
+		const original = note();
+		const view = setup(component, note({ id: 'repost', text: null, renoteId: original.id, renote: original }));
+		const menu = view.getByRole('button', { name: i18n.ts.renoteDetails });
+		expect(menu.getAttribute('type')).toBe('button');
+		menu.focus(); expect(document.activeElement).toBe(menu);
+		// Keyboard activation dispatches the native button click without mousedown.
+		await fireEvent.click(menu, { detail: 0 });
+		expect(actions.showRenoteMenu).toHaveBeenCalledTimes(1);
+		expect(actions.showMenu).not.toHaveBeenCalled();
+	});
 	it('limits read-more to text and never clips media, title shares, polls, URLs or quotes', async () => {
 		const fixture = note({ text: 'Long fixture text. '.repeat(50), files: [{ id: 'image' } as Misskey.entities.DriveFile], poll: { multiple: false, expiresAt: null, choices: [] }, renoteId: 'quoted', renote: note({ id: 'quoted' }), zalipShare: { slug: 'fixture', title: 'Fixture', kind: 'movie', description: null, releaseYear: null, genres: [], posterPath: null } });
 		const view = setup(MkNote, fixture);

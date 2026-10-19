@@ -92,4 +92,17 @@ describe('shared post/title/episode discussion pager', () => {
 		expect(fetchPage).toHaveBeenCalledTimes(2); expect(pager.state.hasMore).toBe(false);
 		expect(new Set(pager.state.items.map(item => item.id)).size).toBe(30);
 	});
+	it('removes deleted comments without moving the raw pagination cursor or accepting stale in-flight rows', async () => {
+		let finish!: (rows: Misskey.entities.Note[]) => void;
+		const fetchPage = vi.fn().mockResolvedValueOnce(page()).mockImplementationOnce(() => new Promise<Misskey.entities.Note[]>(resolve => { finish = resolve; }));
+		const pager = createZalipDiscussionPager({ accountId: () => 'reader', fetchPage });
+		pager.reset('parent'); await pager.load();
+		pager.remove('031');
+		const pending = pager.load();
+		expect(fetchPage).toHaveBeenLastCalledWith({ noteId: 'parent', limit: 30, untilId: '031' });
+		pager.remove('030'); finish([note('030'), note('029')]); await pending;
+		pager.insert(note('030'));
+		expect(pager.state.items.some(item => item.id === '031' || item.id === '030')).toBe(false);
+		expect(pager.state.items.at(-1)?.id).toBe('029');
+	});
 });
