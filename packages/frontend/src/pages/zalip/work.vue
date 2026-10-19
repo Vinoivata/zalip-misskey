@@ -450,8 +450,8 @@ const episodeWatched = computed(() => selectedEpisodeProgress.value != null && e
 
 const kodikEpisodeContextBlocked = computed(() => activePlayback.value?.source === 'kodik' && (selectedSeasonNumber.value != null || !!work.value?.seasons.length) && (episodesPending.value || selectedEpisode.value == null));
 const selectedEpisodeAvailable = computed(() => !kodikEpisodeContextBlocked.value && playbackEpisodeAvailable(activePlayback.value, selectedTranslationId.value, selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null));
-// A standalone animated film is still a single clip; the server checks its canonical movie identity.
-const fixedPlayerClip = computed(() => selectedEpisode.value != null || (!!work.value && !episodic.value && !activePlayback.value?.episodes.length));
+// Unknown anime/animation serials may have no cached coverage yet; retain their native selectors.
+const fixedPlayerClip = computed(() => selectedEpisode.value != null || (!!work.value && !episodic.value && work.value.kind === 'movie'));
 const activePlayerIframe = computed(() => selectedEpisodeAvailable.value ? workPlaybackIframe(activePlayback.value, selectedTranslationId.value, selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null, fixedPlayerClip.value) : null);
 const resumeIframeUrl = ref<string | null>(null);
 const resumeFrameRevision = ref(0);

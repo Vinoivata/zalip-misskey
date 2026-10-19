@@ -110,8 +110,8 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('Zalip work playback selection', () => {
-	it.each(['animation', 'anime'])('locks a standalone %s movie clip and claims timestamp progress without invented episode coordinates', async kind => {
-		workData = { ...serial, kind, seasons: [] };
+	it('locks a standalone movie clip and claims timestamp progress without invented episode coordinates', async () => {
+		workData = { ...serial, kind: 'movie', seasons: [] };
 		sources = [structuredClone(collaps)];
 		const view = setup();
 		await play(view);
@@ -121,6 +121,12 @@ describe('Zalip work playback selection', () => {
 		expect(url.searchParams.has('season')).toBe(false);
 		expect(url.searchParams.has('episode')).toBe(false);
 		await waitFor(() => expect(misskeyApiZalip).toHaveBeenCalledWith('zalip/progress/start', expect.objectContaining({ workId: 'work', episodeId: null, provider: 'collaps', translationId: 'studio-one', expectedResourceFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/u) })));
+	});
+	it.each(['animation', 'anime'])('does not hide native selectors for an ambiguous %s title without cached episodes', async kind => {
+		workData = { ...serial, kind, seasons: [] };
+		sources = [structuredClone(collaps)];
+		const view = setup(); await play(view);
+		expect(new URL(iframe(view).src).searchParams.has('showMenu')).toBe(false);
 	});
 	it.each(['series', 'anime'])('keeps an unbound %s serial playable without inventing a canonical progress target', async kind => {
 		workData = { ...serial, kind, seasons: [] };

@@ -4,7 +4,7 @@
 -
 
 ### Client
-- Fix: Restore Zalip Alloha movie timestamps, accept sparse Collaps resume samples and matching episode announcements, and track standalone animated films without mixing changed cuts or stale iframe sessions.
+- Fix: Restore Zalip Alloha movie timestamps and accept sparse Collaps resume samples and matching episode announcements without mixing changed cuts or stale iframe sessions.
 - Enhance: Save and restore Zalip playback time for fixed Alloha episodes and Collaps clips with verified voice coverage, excluding ad time and invalidated player contexts; keep unsupported editions in episode-only mode.
 - Fix: Reconcile chat unread badges against current server state so delayed message/read events and out-of-order refreshes cannot restore a stale badge.
 - Enhance: Add per-source and per-field Zalip import settings, exact work locks, provider checks, profile controls, person enrichment and bounded category recalculation.
