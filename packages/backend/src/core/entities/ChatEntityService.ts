@@ -15,6 +15,8 @@ import { UserEntityService } from './UserEntityService.js';
 import { DriveFileEntityService } from './DriveFileEntityService.js';
 import { In } from 'typeorm';
 
+type MessageContext = Pick<Packed<'ChatMessage'>, 'updatedAt' | 'replyId' | 'reply' | 'forwardedFromUser'>;
+
 @Injectable()
 export class ChatEntityService {
 	constructor(
@@ -36,6 +38,45 @@ export class ChatEntityService {
 	) {
 	}
 
+	private async packMessageContext(message: MiChatMessage): Promise<MessageContext> {
+		const reply = message.replyId ? (message.reply ?? await this.chatMessagesRepository.findOne({ where: { id: message.replyId }, relations: { fromUser: true, file: true } })) : null;
+		const sameConversation = reply != null && (message.toRoomId != null
+			? reply.toRoomId === message.toRoomId
+			: reply.toRoomId == null && reply.toUserId != null && message.toUserId != null && (
+				(reply.fromUserId === message.fromUserId && reply.toUserId === message.toUserId) ||
+				(reply.fromUserId === message.toUserId && reply.toUserId === message.fromUserId)
+			));
+		return {
+			updatedAt: message.updatedAt?.toISOString() ?? null,
+			replyId: sameConversation ? reply.id : null,
+			reply: sameConversation ? {
+				id: reply.id,
+				text: reply.text == null ? null : Array.from(reply.text).slice(0, 240).join(''),
+				fromUser: await this.userEntityService.pack(reply.fromUser ?? reply.fromUserId),
+				fileName: reply.file?.name ?? null,
+			} : null,
+			forwardedFromUser: message.forwardedFromUserId ? await this.userEntityService.pack(message.forwardedFromUser ?? message.forwardedFromUserId).catch(() => null) : null,
+		};
+	}
+
+	/** Bounded bulk loading prevents a reply/forward query for every timeline row. */
+	private async packMessageContexts(messages: MiChatMessage[], me?: { id: MiUser['id'] }): Promise<Map<string, MessageContext>> {
+		const replyIds = [...new Set(messages.flatMap(message => message.replyId ? [message.replyId] : []))];
+		const replies = replyIds.length > 0 ? await this.chatMessagesRepository.find({ where: { id: In(replyIds) }, relations: { fromUser: true, file: true } }) : [];
+		const replyMap = new Map(replies.map(reply => [reply.id, reply]));
+		const authors = new Map<string, MiUser | string>();
+		for (const reply of replies) authors.set(reply.fromUserId, reply.fromUser ?? reply.fromUserId);
+		for (const message of messages) if (message.forwardedFromUserId) authors.set(message.forwardedFromUserId, message.forwardedFromUser ?? message.forwardedFromUserId);
+		const packedUsers = new Map((await this.userEntityService.packMany([...authors.values()], me)).map(user => [user.id, user]));
+		return new Map(messages.map(message => {
+			const reply = message.replyId ? replyMap.get(message.replyId) : undefined;
+			const sameConversation = reply != null && (message.toRoomId != null ? reply.toRoomId === message.toRoomId : reply.toRoomId == null && reply.toUserId != null && message.toUserId != null && ((reply.fromUserId === message.fromUserId && reply.toUserId === message.toUserId) || (reply.fromUserId === message.toUserId && reply.toUserId === message.fromUserId)));
+			const replyAuthor = reply ? packedUsers.get(reply.fromUserId) : undefined;
+			const validReply = sameConversation && replyAuthor != null;
+			return [message.id, { updatedAt: message.updatedAt?.toISOString() ?? null, replyId: validReply ? reply.id : null, reply: validReply ? { id: reply.id, text: reply.text == null ? null : Array.from(reply.text).slice(0, 240).join(''), fromUser: replyAuthor, fileName: reply.file?.name ?? null } : null, forwardedFromUser: message.forwardedFromUserId ? packedUsers.get(message.forwardedFromUserId) ?? null : null }];
+		}));
+	}
+
 	@bindThis
 	public async packMessageDetailed(
 		src: MiChatMessage['id'] | MiChatMessage,
@@ -45,6 +86,7 @@ export class ChatEntityService {
 				packedFiles?: Map<MiChatMessage['fileId'], Packed<'DriveFile'> | null>;
 				packedUsers?: Map<MiChatMessage['id'], Packed<'UserLite'>>;
 				packedRooms?: Map<MiChatMessage['toRoomId'], Packed<'ChatRoom'> | null>;
+				contexts?: Map<string, MessageContext>;
 			};
 		},
 	): Promise<Packed<'ChatMessage'>> {
@@ -55,11 +97,12 @@ export class ChatEntityService {
 		const message = typeof src === 'object' ? src : await this.chatMessagesRepository.findOneByOrFail({ id: src });
 
 		// userは削除されている可能性があるのでnull許容
-		const reactions: { user: Packed<'UserLite'> | null; reaction: string; }[] = [];
+		const reactions: { userId: string; user: Packed<'UserLite'> | null; reaction: string; }[] = [];
 
 		for (const record of message.reactions) {
 			const [userId, reaction] = record.split('/');
 			reactions.push({
+				userId,
 				user: packedUsers?.get(userId) ?? (await this.userEntityService.pack(userId).catch(() => null)),
 				reaction,
 			});
@@ -67,6 +110,7 @@ export class ChatEntityService {
 
 		return {
 			id: message.id,
+			...(options?._hint_?.contexts?.get(message.id) ?? await this.packMessageContext(message)),
 			createdAt: this.idService.parse(message.id).date.toISOString(),
 			text: message.text,
 			fromUserId: message.fromUserId,
@@ -77,7 +121,7 @@ export class ChatEntityService {
 			toRoom: message.toRoomId ? (packedRooms?.get(message.toRoomId) ?? (await this.packRoom(message.toRoom ?? message.toRoomId, me))) : undefined,
 			fileId: message.fileId,
 			file: message.fileId ? (packedFiles?.get(message.fileId) ?? (await this.driveFileEntityService.pack(message.file ?? message.fileId))) : null,
-			reactions: reactions.filter((r): r is { user: Packed<'UserLite'>; reaction: string; } => r.user != null),
+			reactions: reactions.filter((r): r is { userId: string; user: Packed<'UserLite'>; reaction: string; } => r.user != null),
 		};
 	}
 
@@ -110,16 +154,17 @@ export class ChatEntityService {
 		}
 
 		// TODO: packedUsersに削除されたユーザーもnullとして含める
-		const [packedUsers, packedFiles, packedRooms] = await Promise.all([
+		const [packedUsers, packedFiles, packedRooms, contexts] = await Promise.all([
 			this.userEntityService.packMany(users, me)
 				.then(users => new Map(users.map(u => [u.id, u]))),
 			this.driveFileEntityService.packMany(messages.map(m => m.file).filter(x => x != null))
 				.then(files => new Map(files.map(f => [f.id, f]))),
 			this.packRooms(messages.map(m => m.toRoom ?? m.toRoomId).filter(x => x != null), me)
 				.then(rooms => new Map(rooms.map(r => [r.id, r]))),
+			this.packMessageContexts(messages, me),
 		]);
 
-		return Promise.all(messages.map(message => this.packMessageDetailed(message, me, { _hint_: { packedUsers, packedFiles, packedRooms } })));
+		return Promise.all(messages.map(message => this.packMessageDetailed(message, me, { _hint_: { packedUsers, packedFiles, packedRooms, contexts } })));
 	}
 
 	@bindThis
@@ -128,6 +173,7 @@ export class ChatEntityService {
 		options?: {
 			_hint_?: {
 				packedFiles: Map<MiChatMessage['fileId'], Packed<'DriveFile'> | null>;
+				contexts?: Map<string, MessageContext>;
 			};
 		},
 	): Promise<Packed<'ChatMessageLiteFor1on1'>> {
@@ -135,17 +181,19 @@ export class ChatEntityService {
 
 		const message = typeof src === 'object' ? src : await this.chatMessagesRepository.findOneByOrFail({ id: src });
 
-		const reactions: { reaction: string; }[] = [];
+		const reactions: { userId: string; reaction: string; }[] = [];
 
 		for (const record of message.reactions) {
-			const [, reaction] = record.split('/');
+			const [userId, reaction] = record.split('/');
 			reactions.push({
+				userId,
 				reaction,
 			});
 		}
 
 		return {
 			id: message.id,
+			...(options?._hint_?.contexts?.get(message.id) ?? await this.packMessageContext(message)),
 			createdAt: this.idService.parse(message.id).date.toISOString(),
 			text: message.text,
 			fromUserId: message.fromUserId,
@@ -162,12 +210,13 @@ export class ChatEntityService {
 	) {
 		if (messages.length === 0) return [];
 
-		const [packedFiles] = await Promise.all([
+		const [packedFiles, contexts] = await Promise.all([
 			this.driveFileEntityService.packMany(messages.map(m => m.file).filter(x => x != null))
 				.then(files => new Map(files.map(f => [f.id, f]))),
+			this.packMessageContexts(messages),
 		]);
 
-		return Promise.all(messages.map(message => this.packMessageLiteFor1on1(message, { _hint_: { packedFiles } })));
+		return Promise.all(messages.map(message => this.packMessageLiteFor1on1(message, { _hint_: { packedFiles, contexts } })));
 	}
 
 	@bindThis
@@ -177,6 +226,7 @@ export class ChatEntityService {
 			_hint_?: {
 				packedFiles: Map<MiChatMessage['fileId'], Packed<'DriveFile'> | null>;
 				packedUsers: Map<MiUser['id'], Packed<'UserLite'>>;
+				contexts?: Map<string, MessageContext>;
 			};
 		},
 	): Promise<Packed<'ChatMessageLiteForRoom'>> {
@@ -186,11 +236,12 @@ export class ChatEntityService {
 		const message = typeof src === 'object' ? src : await this.chatMessagesRepository.findOneByOrFail({ id: src });
 
 		// userは削除されている可能性があるのでnull許容
-		const reactions: { user: Packed<'UserLite'> | null; reaction: string; }[] = [];
+		const reactions: { userId: string; user: Packed<'UserLite'> | null; reaction: string; }[] = [];
 
 		for (const record of message.reactions) {
 			const [userId, reaction] = record.split('/');
 			reactions.push({
+				userId,
 				user: packedUsers?.get(userId) ?? (await this.userEntityService.pack(userId).catch(() => null)),
 				reaction,
 			});
@@ -198,6 +249,7 @@ export class ChatEntityService {
 
 		return {
 			id: message.id,
+			...(options?._hint_?.contexts?.get(message.id) ?? await this.packMessageContext(message)),
 			createdAt: this.idService.parse(message.id).date.toISOString(),
 			text: message.text,
 			fromUserId: message.fromUserId,
@@ -205,7 +257,7 @@ export class ChatEntityService {
 			toRoomId: message.toRoomId!,
 			fileId: message.fileId,
 			file: message.fileId ? (packedFiles?.get(message.fileId) ?? (await this.driveFileEntityService.pack(message.file ?? message.fileId))) : null,
-			reactions: reactions.filter((r): r is { user: Packed<'UserLite'>; reaction: string; } => r.user != null),
+			reactions: reactions.filter((r): r is { userId: string; user: Packed<'UserLite'>; reaction: string; } => r.user != null),
 		};
 	}
 
@@ -224,14 +276,15 @@ export class ChatEntityService {
 			}
 		}
 
-		const [packedUsers, packedFiles] = await Promise.all([
+		const [packedUsers, packedFiles, contexts] = await Promise.all([
 			this.userEntityService.packMany(users)
 				.then(users => new Map(users.map(u => [u.id, u]))),
 			this.driveFileEntityService.packMany(messages.map(m => m.file).filter(x => x != null))
 				.then(files => new Map(files.map(f => [f.id, f]))),
+			this.packMessageContexts(messages),
 		]);
 
-		return Promise.all(messages.map(message => this.packMessageLiteForRoom(message, { _hint_: { packedFiles, packedUsers } })));
+		return Promise.all(messages.map(message => this.packMessageLiteForRoom(message, { _hint_: { packedFiles, packedUsers, contexts } })));
 	}
 
 	@bindThis

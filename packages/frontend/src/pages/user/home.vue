@@ -35,6 +35,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<span v-if="$i && $i.id != user.id && user.isFollowed" class="followed">{{ i18n.ts.followsYou }}</span>
 							<div class="actions">
 								<MkA v-if="$i?.id === user.id" to="/settings/profile" :class="$style.editProfile"><i class="ti ti-pencil"></i>{{ i18n.ts.editProfile }}</MkA>
+								<button v-if="$i && $i.id !== user.id && $i.policies.chatAvailability === 'available' && user.host == null && user.canChat" type="button" class="_button" :class="$style.chatProfile" :aria-label="i18n.ts.zalip._chatUi.openMessages" @click="openZalipChat({ userId: user.id, title: user.name ?? user.username })"><i class="ti ti-message-circle" aria-hidden="true"></i></button>
 								<button class="menu _button" :aria-label="i18n.ts.more" @click="menu"><i class="ti ti-dots"></i></button>
 								<MkFollowButton v-if="$i?.id != user.id" v-model:user="user" :inline="true" :transparent="false" :full="true" class="koudoku"/>
 							</div>
@@ -173,6 +174,7 @@ import MkOmit from '@/components/MkOmit.vue';
 import MkInfo from '@/components/MkInfo.vue';
 import MkButton from '@/components/MkButton.vue';
 import { getUserMenu } from '@/utility/get-user-menu.js';
+import { openZalipChat } from '@/utility/zalip-chat.js';
 import number from '@/filters/number.js';
 import { userPage } from '@/filters/user.js';
 import * as os from '@/os.js';
@@ -765,6 +767,7 @@ onDeactivated(disposeBannerParallaxResizeObserver);
 </style>
 
 <style lang="scss" module>
+.chatProfile { display: inline-grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--MI_THEME-divider); border-radius: 50%; background: var(--MI_THEME-panel); color: var(--MI_THEME-fg); font-size: 20px; &:hover { background: var(--MI_THEME-buttonHoverBg); } &:focus-visible { outline: 2px solid var(--MI_THEME-accent); outline-offset: 3px; } }
 .editProfile {
 	display: inline-flex;
 	align-items: center;

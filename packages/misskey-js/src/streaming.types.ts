@@ -51,6 +51,7 @@ export type Channels = {
 			notificationFlushed: () => void;
 			unreadAntenna: (payload: Antenna) => void;
 			newChatMessage: (payload: ChatMessage) => void;
+			chatUnreadState: (payload: { hasUnread: boolean }) => void;
 			readAllChatMessages: () => void;
 			readAllAnnouncements: () => void;
 			myTokenRegenerated: () => void;
@@ -249,22 +250,31 @@ export type Channels = {
 		};
 		events: {
 			message: (payload: ChatMessageLite) => void;
+			updated: (payload: ChatMessageLite) => void;
+			read: (payload: { userId: string; messageId: string }) => void;
+			typing: (payload: { userId: string; typing: boolean }) => void;
+			unavailable: (payload: null) => void;
 			deleted: (payload: ChatMessageLite['id']) => void;
 			react: (payload: {
 				reaction: string;
+				userId: string;
 				user?: UserLite;
 				messageId: ChatMessageLite['id'];
 			}) => void;
 			unreact: (payload: {
 				reaction: string;
+				userId: string;
 				user?: UserLite;
 				messageId: ChatMessageLite['id'];
 			}) => void;
 		};
 		receives: {
 			read: {
-				id: ChatMessageLite['id'];
+				/** Legacy id is retained; new clients send the visible messageId explicitly. */
+				id?: ChatMessageLite['id'];
+				messageId?: ChatMessageLite['id'];
 			};
+			typing: { typing: boolean };
 		};
 	};
 	chatRoom: {
@@ -273,22 +283,30 @@ export type Channels = {
 		};
 		events: {
 			message: (payload: ChatMessageLite) => void;
+			updated: (payload: ChatMessageLite) => void;
+			read: (payload: { userId: string; messageId: string }) => void;
+			typing: (payload: { userId: string; typing: boolean }) => void;
+			unavailable: (payload: null) => void;
 			deleted: (payload: ChatMessageLite['id']) => void;
 			react: (payload: {
 				reaction: string;
+				userId: string;
 				user?: UserLite;
 				messageId: ChatMessageLite['id'];
 			}) => void;
 			unreact: (payload: {
 				reaction: string;
+				userId: string;
 				user?: UserLite;
 				messageId: ChatMessageLite['id'];
 			}) => void;
 		};
 		receives: {
 			read: {
-				id: ChatMessageLite['id'];
+				id?: ChatMessageLite['id'];
+				messageId?: ChatMessageLite['id'];
 			};
+			typing: { typing: boolean };
 		};
 	};
 };

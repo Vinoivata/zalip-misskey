@@ -11,6 +11,7 @@ import { DI } from '@/di-symbols.js';
 import { ApiError } from '@/server/api/error.js';
 import { ChatService } from '@/core/ChatService.js';
 import type { DriveFilesRepository, MiUser } from '@/models/_.js';
+import { chatActionErrors, throwChatActionError } from './action-errors.js';
 
 export const meta = {
 	tags: ['chat'],
@@ -33,6 +34,7 @@ export const meta = {
 	},
 
 	errors: {
+		...chatActionErrors,
 		noSuchRoom: {
 			message: 'No such room.',
 			code: 'NO_SUCH_ROOM',
@@ -59,6 +61,7 @@ export const paramDef = {
 		text: { type: 'string', nullable: true, maxLength: 2000 },
 		fileId: { type: 'string', format: 'misskey:id' },
 		toRoomId: { type: 'string', format: 'misskey:id' },
+		replyId: { type: 'string', format: 'misskey:id', nullable: true, maxLength: 32 },
 	},
 	required: ['toRoomId'],
 } as const;
@@ -93,14 +96,17 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			}
 
 			// テキストが無いかつ添付ファイルも無かったらエラー
-			if (ps.text == null && file == null) {
+			if (!ps.text?.trim() && file == null) {
 				throw new ApiError(meta.errors.contentRequired);
 			}
 
-			return await this.chatService.createMessageToRoom(me, room, {
-				text: ps.text,
-				file: file,
-			});
+			try {
+				return await this.chatService.createMessageToRoom(me, room, {
+					text: ps.text,
+					file: file,
+					replyId: ps.replyId,
+				});
+			} catch (error) { throwChatActionError(error); }
 		});
 	}
 }

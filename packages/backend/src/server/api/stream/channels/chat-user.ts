@@ -33,27 +33,42 @@ export class ChatUserChannel extends Channel {
 		if (typeof params.otherId !== 'string') return false;
 		if (!this.user) return false;
 		if (params.otherId === this.user.id) return false;
+		if (!/^[A-Za-z0-9]{1,32}$/u.test(params.otherId)) return false;
+		if (!await this.chatService.canViewUserConversation(this.user.id, params.otherId)) return false;
 
 		this.otherId = params.otherId;
 
 		this.subscriber.on(`chatUserStream:${this.user.id}-${this.otherId}`, this.onEvent);
+		for (const receipt of await this.chatService.getConversationReadReceipts(this.user.id, { userId: this.otherId })) this.send('read', receipt);
 
 		return true;
 	}
 
 	@bindThis
 	private async onEvent(data: GlobalEvents['chatUser']['payload']) {
+		const allowed = this.user != null && await this.chatService.canViewUserConversation(this.user.id, this.otherId).catch(() => false);
+		if (!allowed) {
+			this.send('unavailable', null);
+			this.connection.disconnectChannel(this.id);
+			return;
+		}
 		this.send(data.type, data.body);
 	}
 
 	@bindThis
-	public onMessage(type: string, body: any) {
-		switch (type) {
-			case 'read':
-				if (this.otherId) {
-					this.chatService.readUserChatMessage(this.user!.id, this.otherId);
-				}
-				break;
+	public async onMessage(type: string, body: unknown) {
+		if (!this.user || !this.otherId) return;
+		try {
+			if (type === 'read') {
+				const messageId = body && typeof body === 'object' && 'messageId' in body && typeof body.messageId === 'string' ? body.messageId : body && typeof body === 'object' && 'id' in body && typeof body.id === 'string' ? body.id : undefined;
+				await this.chatService.markConversationRead(this.user.id, { userId: this.otherId }, messageId);
+			} else if (type === 'typing' && (!this.connection.token || this.connection.token.permission.includes('write:chat'))) {
+				if (body && typeof body === 'object' && 'typing' in body && typeof body.typing === 'boolean') await this.chatService.typing(this.user.id, { userId: this.otherId }, body.typing);
+			}
+		} catch {
+			// A denied/revoked channel must not produce an unhandled promise or private error payload.
+			this.send('unavailable', null);
+			this.connection.disconnectChannel(this.id);
 		}
 	}
 

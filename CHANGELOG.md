@@ -79,8 +79,10 @@
 - Fix: Open mobile post menus as full-width bottom sheets and reduce follow symbols and visible badges while retaining accessible touch targets.
 - Feat: Add title-linked viewer reviews and essays with native 1–10 ratings, spoiler controls, sentiment filters, helpful votes, and editing without restarting playback.
 - Fix: Present cinema discussions as title or episode contexts instead of replies to their importing administrator, including quoted threads and full comment composition.
+- Feat: Add a responsive Zalip messenger and opt-in cinema mini-chats with conversation search, personal archive, pinning and mute controls, message replies, editing, forwarding, voice recording and visible-message read receipts.
 
 ### Server
+- Feat: Add personal chat organisation and durable read frontiers, canonical replies, editing and forwarding, with strict participant access and revocable scoped realtime delivery.
 - Fix: Reuse canonical provider bindings when refreshing Zalip titles and limit scheduled Kodik refreshes to bound materials so an unrelated discovery response cannot abort the whole profile.
 - Fix: Retain existing Kinopoisk photos through one validated image-CDN redirect during original-only artwork localization without enabling redirect chains or broadening image limits.
 - Fix: Preserve Kinopoisk's existing static PNG placeholder through one exact same-origin redirect during original-only artwork localization without allowing GIF images or general redirects.

@@ -678,6 +678,9 @@ export type Channels = {
             notificationFlushed: () => void;
             unreadAntenna: (payload: Antenna) => void;
             newChatMessage: (payload: ChatMessage) => void;
+            chatUnreadState: (payload: {
+                hasUnread: boolean;
+            }) => void;
             readAllChatMessages: () => void;
             readAllAnnouncements: () => void;
             myTokenRegenerated: () => void;
@@ -895,21 +898,37 @@ export type Channels = {
         };
         events: {
             message: (payload: ChatMessageLite) => void;
+            updated: (payload: ChatMessageLite) => void;
+            read: (payload: {
+                userId: string;
+                messageId: string;
+            }) => void;
+            typing: (payload: {
+                userId: string;
+                typing: boolean;
+            }) => void;
+            unavailable: (payload: null) => void;
             deleted: (payload: ChatMessageLite['id']) => void;
             react: (payload: {
                 reaction: string;
+                userId: string;
                 user?: UserLite;
                 messageId: ChatMessageLite['id'];
             }) => void;
             unreact: (payload: {
                 reaction: string;
+                userId: string;
                 user?: UserLite;
                 messageId: ChatMessageLite['id'];
             }) => void;
         };
         receives: {
             read: {
-                id: ChatMessageLite['id'];
+                id?: ChatMessageLite['id'];
+                messageId?: ChatMessageLite['id'];
+            };
+            typing: {
+                typing: boolean;
             };
         };
     };
@@ -919,21 +938,37 @@ export type Channels = {
         };
         events: {
             message: (payload: ChatMessageLite) => void;
+            updated: (payload: ChatMessageLite) => void;
+            read: (payload: {
+                userId: string;
+                messageId: string;
+            }) => void;
+            typing: (payload: {
+                userId: string;
+                typing: boolean;
+            }) => void;
+            unavailable: (payload: null) => void;
             deleted: (payload: ChatMessageLite['id']) => void;
             react: (payload: {
                 reaction: string;
+                userId: string;
                 user?: UserLite;
                 messageId: ChatMessageLite['id'];
             }) => void;
             unreact: (payload: {
                 reaction: string;
+                userId: string;
                 user?: UserLite;
                 messageId: ChatMessageLite['id'];
             }) => void;
         };
         receives: {
             read: {
-                id: ChatMessageLite['id'];
+                id?: ChatMessageLite['id'];
+                messageId?: ChatMessageLite['id'];
+            };
+            typing: {
+                typing: boolean;
             };
         };
     };
@@ -1114,7 +1149,25 @@ type ChatMessagesCreateToUserResponse = operations['chat___messages___create-to-
 type ChatMessagesDeleteRequest = operations['chat___messages___delete']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
+type ChatMessagesEditRequest = operations['chat___messages___edit']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ChatMessagesEditResponse = operations['chat___messages___edit']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ChatMessagesForwardRequest = operations['chat___messages___forward']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ChatMessagesForwardResponse = operations['chat___messages___forward']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
 type ChatMessagesReactRequest = operations['chat___messages___react']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ChatMessagesReadRequest = operations['chat___messages___read']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ChatMessagesReadResponse = operations['chat___messages___read']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
 type ChatMessagesRoomTimelineRequest = operations['chat___messages___room-timeline']['requestBody']['content']['application/json'];
@@ -1770,7 +1823,13 @@ declare namespace entities {
         ChatMessagesCreateToUserRequest,
         ChatMessagesCreateToUserResponse,
         ChatMessagesDeleteRequest,
+        ChatMessagesEditRequest,
+        ChatMessagesEditResponse,
+        ChatMessagesForwardRequest,
+        ChatMessagesForwardResponse,
         ChatMessagesReactRequest,
+        ChatMessagesReadRequest,
+        ChatMessagesReadResponse,
         ChatMessagesRoomTimelineRequest,
         ChatMessagesRoomTimelineResponse,
         ChatMessagesSearchRequest,
@@ -2298,6 +2357,12 @@ declare namespace entities {
         ZalipAdminWorksUpdateResponse,
         ZalipAdminWorksUpdateStateRequest,
         ZalipAdminWorksUpdateStateResponse,
+        ZalipChatConversationsRequest,
+        ZalipChatConversationsResponse,
+        ZalipChatPreferencesShowRequest,
+        ZalipChatPreferencesShowResponse,
+        ZalipChatPreferencesUpdateRequest,
+        ZalipChatPreferencesUpdateResponse,
         ZalipDiscussionsEnsureRequest,
         ZalipDiscussionsEnsureResponse,
         ZalipDiscussionsShowRequest,
@@ -4215,6 +4280,24 @@ type ZalipAdminWorksUpdateStateRequest = operations['zalip___admin___works___upd
 type ZalipAdminWorksUpdateStateResponse = operations['zalip___admin___works___update-state']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
+type ZalipChatConversationsRequest = operations['zalip___chat___conversations']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipChatConversationsResponse = operations['zalip___chat___conversations']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipChatPreferencesShowRequest = operations['zalip___chat___preferences___show']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipChatPreferencesShowResponse = operations['zalip___chat___preferences___show']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipChatPreferencesUpdateRequest = operations['zalip___chat___preferences___update']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipChatPreferencesUpdateResponse = operations['zalip___chat___preferences___update']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
 type ZalipDiscussionsEnsureRequest = operations['zalip___discussions___ensure']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
@@ -4376,8 +4459,8 @@ type ZalipWorksShowResponse = operations['zalip___works___show']['responses']['2
 // Warnings were encountered during analysis:
 //
 // src/streaming.ts:57:3 - (ae-forgotten-export) The symbol "ReconnectingWebSocket" needs to be exported by the entry point index.d.ts
-// src/streaming.types.ts:227:4 - (ae-forgotten-export) The symbol "ReversiUpdateKey" needs to be exported by the entry point index.d.ts
-// src/streaming.types.ts:242:4 - (ae-forgotten-export) The symbol "ReversiUpdateSettings" needs to be exported by the entry point index.d.ts
+// src/streaming.types.ts:228:4 - (ae-forgotten-export) The symbol "ReversiUpdateKey" needs to be exported by the entry point index.d.ts
+// src/streaming.types.ts:243:4 - (ae-forgotten-export) The symbol "ReversiUpdateSettings" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

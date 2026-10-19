@@ -233,7 +233,13 @@ import type {
 	ChatMessagesCreateToUserRequest,
 	ChatMessagesCreateToUserResponse,
 	ChatMessagesDeleteRequest,
+	ChatMessagesEditRequest,
+	ChatMessagesEditResponse,
+	ChatMessagesForwardRequest,
+	ChatMessagesForwardResponse,
 	ChatMessagesReactRequest,
+	ChatMessagesReadRequest,
+	ChatMessagesReadResponse,
 	ChatMessagesRoomTimelineRequest,
 	ChatMessagesRoomTimelineResponse,
 	ChatMessagesSearchRequest,
@@ -763,6 +769,12 @@ import type {
 	ZalipAdminWorksUpdateResponse,
 	ZalipAdminWorksUpdateStateRequest,
 	ZalipAdminWorksUpdateStateResponse,
+	ZalipChatConversationsRequest,
+	ZalipChatConversationsResponse,
+	ZalipChatPreferencesShowRequest,
+	ZalipChatPreferencesShowResponse,
+	ZalipChatPreferencesUpdateRequest,
+	ZalipChatPreferencesUpdateResponse,
 	ZalipDiscussionsEnsureRequest,
 	ZalipDiscussionsEnsureResponse,
 	ZalipDiscussionsShowRequest,
@@ -975,7 +987,10 @@ export type Endpoints = {
 	'chat/messages/create-to-room': { req: ChatMessagesCreateToRoomRequest; res: ChatMessagesCreateToRoomResponse };
 	'chat/messages/create-to-user': { req: ChatMessagesCreateToUserRequest; res: ChatMessagesCreateToUserResponse };
 	'chat/messages/delete': { req: ChatMessagesDeleteRequest; res: EmptyResponse };
+	'chat/messages/edit': { req: ChatMessagesEditRequest; res: ChatMessagesEditResponse };
+	'chat/messages/forward': { req: ChatMessagesForwardRequest; res: ChatMessagesForwardResponse };
 	'chat/messages/react': { req: ChatMessagesReactRequest; res: EmptyResponse };
+	'chat/messages/read': { req: ChatMessagesReadRequest; res: ChatMessagesReadResponse };
 	'chat/messages/room-timeline': { req: ChatMessagesRoomTimelineRequest; res: ChatMessagesRoomTimelineResponse };
 	'chat/messages/search': { req: ChatMessagesSearchRequest; res: ChatMessagesSearchResponse };
 	'chat/messages/show': { req: ChatMessagesShowRequest; res: ChatMessagesShowResponse };
@@ -1307,6 +1322,9 @@ export type Endpoints = {
 	'zalip/admin/works/sync-tmdb-media': { req: ZalipAdminWorksSyncTmdbMediaRequest; res: ZalipAdminWorksSyncTmdbMediaResponse };
 	'zalip/admin/works/update': { req: ZalipAdminWorksUpdateRequest; res: ZalipAdminWorksUpdateResponse };
 	'zalip/admin/works/update-state': { req: ZalipAdminWorksUpdateStateRequest; res: ZalipAdminWorksUpdateStateResponse };
+	'zalip/chat/conversations': { req: ZalipChatConversationsRequest; res: ZalipChatConversationsResponse };
+	'zalip/chat/preferences/show': { req: ZalipChatPreferencesShowRequest; res: ZalipChatPreferencesShowResponse };
+	'zalip/chat/preferences/update': { req: ZalipChatPreferencesUpdateRequest; res: ZalipChatPreferencesUpdateResponse };
 	'zalip/discussions/ensure': { req: ZalipDiscussionsEnsureRequest; res: ZalipDiscussionsEnsureResponse };
 	'zalip/discussions/show': { req: ZalipDiscussionsShowRequest; res: ZalipDiscussionsShowResponse };
 	'zalip/episodes/discussions/ensure': { req: ZalipEpisodesDiscussionsEnsureRequest; res: ZalipEpisodesDiscussionsEnsureResponse };

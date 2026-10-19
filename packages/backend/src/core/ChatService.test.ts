@@ -32,14 +32,15 @@ function setup() {
 		return transaction;
 	});
 	const afterEval = vi.fn();
-	const evalScript = vi.fn(async (_script: string, keyCount: number, key: string, userPrefix: string, roomPrefix: string) => {
+	const evalScript = vi.fn(async (_script: string, keyCount: number, key: string, userPrefix: string, roomPrefix: string, encoded: string) => {
 		expect(keyCount).toBe(1);
 		expect(key).toBe('newChatMessagesExists:reader01');
-		for (const member of unread) {
-			if (member.startsWith('user:')) markers.delete(userPrefix + member.slice(5));
-			if (member.startsWith('room:')) markers.delete(roomPrefix + member.slice(5));
+		for (const frontier of JSON.parse(encoded) as { conversationKey: string; readThroughId: string }[]) {
+			const member = frontier.conversationKey;
+			const markerKey = member.startsWith('user:') ? userPrefix + member.slice(5) : roomPrefix + member.slice(5);
+			const marker = markers.get(markerKey);
+			if (marker && marker <= frontier.readThroughId) { markers.delete(markerKey); unread.delete(member); }
 		}
-		unread.clear();
 		afterEval();
 		return 2;
 	});
@@ -51,12 +52,36 @@ function setup() {
 	const redisClient = { multi, pipeline, get: vi.fn(async (key: string) => markers.get(key) ?? null), eval: evalScript, scard: vi.fn(async () => unread.size) };
 	const packMessageDetailed = vi.fn().mockResolvedValue({ id: 'message01' });
 	const pushNotification = vi.fn();
+	const query = vi.fn(async (sql: string, params: string[]) => sql.startsWith('INSERT') ? [{ conversationKey: 'user:sender01', readThroughId: 'message01' }, { conversationKey: 'room:room01', readThroughId: 'message02' }].filter(row => params.length === 1 || row.conversationKey === params[1]) : []);
 	const service = Object.create(ChatService.prototype) as ChatService;
-	Object.assign(service, { redisClient, globalEventService: { publishMainStream }, chatEntityService: { packMessageDetailed }, pushNotificationService: { pushNotification } });
-	return { service, unread, markers, publishMainStream, exec, multi, evalScript, afterEval, redisClient, packMessageDetailed, pushNotification };
+	Object.assign(service, {
+		redisClient,
+		db: { query },
+		globalEventService: { publishMainStream },
+		chatEntityService: { packMessageDetailed },
+		pushNotificationService: { pushNotification },
+		chatMessagesRepository: { findOneBy: async ({ id }: { id: string }) => ({ id }), existsBy: async () => true },
+		roleService: { getUserPolicies: async () => ({ chatAvailability: 'available' }) },
+		userBlockingService: { checkBlocked: async () => false },
+		zalipChatConversationService: { isConversationMuted: async () => false },
+		chatRoomsRepository: { findOne: async () => ({ id: 'room01', ownerId: 'reader01' }) },
+		chatRoomMembershipsRepository: { findOneBy: async () => ({ id: 'membership01' }) },
+	});
+	return { service, unread, markers, publishMainStream, exec, multi, evalScript, afterEval, redisClient, packMessageDetailed, pushNotification, query };
 }
 
 describe('Chat unread state synchronization', () => {
+	test('types aggregate read-frontier parameters explicitly for PostgreSQL INSERT SELECT', async () => {
+		const { service, query } = setup();
+		await service.readUserChatMessage('reader01', 'sender01');
+		await service.readRoomChatMessage('reader01', 'room01');
+		await service.readAllChatMessages('reader01');
+		const statements = query.mock.calls.map(([sql]) => sql).filter(sql => sql.startsWith('INSERT'));
+		expect(statements).toHaveLength(3);
+		expect(statements[0]).toContain('SELECT $1::varchar(32), $2::varchar(64), MAX(m."id")');
+		expect(statements[1]).toContain('SELECT $1::varchar(32), $2::varchar(64), MAX(m."id")');
+		expect(statements[2]).toContain('SELECT $1::varchar(32), scoped.key, MAX(scoped.id)');
+	});
 	test('emits a delayed message only while its current unread marker still exists', async () => {
 		const h = setup();
 		await (h.service as unknown as { notifyUnreadUserMessage: (message: unknown, recipient: unknown) => Promise<void> }).notifyUnreadUserMessage({ id: 'message01', fromUserId: 'sender01' }, { id: 'reader01' });
@@ -113,18 +138,15 @@ describe('Chat unread state synchronization', () => {
 		expect(h.pushNotification).not.toHaveBeenCalled();
 	});
 
-	test('rejects Redis command-error tuples and null EXEC results without publishing successful read state', async () => {
-		for (const result of [null, [[new Error('Redis command failed'), null]]]) {
-			const h = setup();
-			h.exec.mockResolvedValueOnce(result);
-			await expect(h.service.readUserChatMessage('reader01', 'sender01')).rejects.toThrow('CHAT_REDIS_OPERATION_FAILED');
-			expect(h.publishMainStream).not.toHaveBeenCalled();
-		}
+	test('rejects Redis compare-and-clear errors without publishing successful read state', async () => {
+		const h = setup(); h.evalScript.mockRejectedValueOnce(new Error('Redis command failed'));
+		await expect(h.service.readUserChatMessage('reader01', 'sender01')).rejects.toThrow('Redis command failed');
+		expect(h.publishMainStream).not.toHaveBeenCalled();
 	});
 	test('reading one dialog retains the badge while a different dialog is unread', async () => {
-		const { service, markers, unread, publishMainStream, multi } = setup();
+		const { service, markers, unread, publishMainStream, evalScript } = setup();
 		await service.readUserChatMessage('reader01', 'sender01');
-		expect(multi).toHaveBeenCalledOnce();
+		expect(evalScript).toHaveBeenCalledOnce();
 		expect(markers.has('newUserChatMessageExists:reader01:sender01')).toBe(false);
 		expect(unread).toEqual(new Set(['room:room01']));
 		expect(publishMainStream).not.toHaveBeenCalled();
@@ -153,6 +175,15 @@ describe('Chat unread state synchronization', () => {
 		await service.readAllChatMessages('reader01');
 		expect(unread.has('user:newSender')).toBe(true);
 		expect(publishMainStream).not.toHaveBeenCalled();
+	});
+
+	test('newer markers arriving after SQL snapshots survive both single and all read acknowledgement', async () => {
+		for (const all of [false, true]) {
+			const { service, markers, unread } = setup();
+			markers.set('newUserChatMessageExists:reader01:sender01', 'message99');
+			if (all) await service.readAllChatMessages('reader01'); else await service.readUserChatMessage('reader01', 'sender01');
+			expect(markers.get('newUserChatMessageExists:reader01:sender01')).toBe('message99'); expect(unread.has('user:sender01')).toBe(true);
+		}
 	});
 
 	test('never claims successful read synchronization after a Redis failure', async () => {

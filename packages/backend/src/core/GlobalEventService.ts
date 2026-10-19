@@ -70,6 +70,8 @@ export interface MainEventTypes {
 	unreadNotification: Packed<'Notification'>;
 	unreadAntenna: MiAntenna;
 	newChatMessage: Packed<'ChatMessage'>;
+	/** Safe badge state without private message contents. */
+	chatUnreadState: { hasUnread: boolean };
 	readAllChatMessages: undefined;
 	readAllAnnouncements: undefined;
 	myTokenRegenerated: undefined;
@@ -161,14 +163,20 @@ export interface AdminEventTypes {
 
 export interface ChatEventTypes {
 	message: Packed<'ChatMessageLite'>;
+	updated: Packed<'ChatMessageLite'>;
+	read: { userId: MiUser['id']; messageId: MiChatMessage['id'] };
+	typing: { userId: MiUser['id']; typing: boolean };
+	unavailable: undefined;
 	deleted: Packed<'ChatMessageLite'>['id'];
 	react: {
 		reaction: string;
+		userId: MiUser['id'];
 		user?: Packed<'UserLite'>;
 		messageId: MiChatMessage['id'];
 	};
 	unreact: {
 		reaction: string;
+		userId: MiUser['id'];
 		user?: Packed<'UserLite'>;
 		messageId: MiChatMessage['id'];
 	};

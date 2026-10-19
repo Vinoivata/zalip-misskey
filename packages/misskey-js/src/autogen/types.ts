@@ -1419,6 +1419,24 @@ export type paths = {
          */
         post: operations['chat___messages___delete'];
     };
+    '/chat/messages/edit': {
+        /**
+         * chat/messages/edit
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:chat*
+         */
+        post: operations['chat___messages___edit'];
+    };
+    '/chat/messages/forward': {
+        /**
+         * chat/messages/forward
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:chat*
+         */
+        post: operations['chat___messages___forward'];
+    };
     '/chat/messages/react': {
         /**
          * chat/messages/react
@@ -1427,6 +1445,15 @@ export type paths = {
          *     **Credential required**: *Yes* / **Permission**: *write:chat*
          */
         post: operations['chat___messages___react'];
+    };
+    '/chat/messages/read': {
+        /**
+         * chat/messages/read
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *read:chat*
+         */
+        post: operations['chat___messages___read'];
     };
     '/chat/messages/room-timeline': {
         /**
@@ -4451,6 +4478,33 @@ export type paths = {
          */
         post: operations['zalip___admin___works___update-state'];
     };
+    '/zalip/chat/conversations': {
+        /**
+         * zalip/chat/conversations
+         * @description Page only your accessible conversations with server-side search and personal archive filters. This read never marks messages read. unread describes your incoming state, not recipient read receipts.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *read:chat*
+         */
+        post: operations['zalip___chat___conversations'];
+    };
+    '/zalip/chat/preferences/show': {
+        /**
+         * zalip/chat/preferences/show
+         * @description Read only your personal pin, archive and notification settings for an accessible existing conversation. No read markers change.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *read:chat*
+         */
+        post: operations['zalip___chat___preferences___show'];
+    };
+    '/zalip/chat/preferences/update': {
+        /**
+         * zalip/chat/preferences/update
+         * @description Partially update only your conversation settings. Omitted fields are preserved; null clears your personal pinned message. Pinning does not pin a message for other room members, and muting does not mark anything read.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:chat*
+         */
+        post: operations['zalip___chat___preferences___update'];
+    };
     '/zalip/discussions/ensure': {
         /**
          * zalip/discussions/ensure
@@ -6416,6 +6470,16 @@ export type components = {
             systemWebhook?: components['schemas']['SystemWebhook'];
         };
         ChatMessage: {
+            /** Format: date-time */
+            updatedAt: string | null;
+            replyId: string | null;
+            reply: {
+                id: string;
+                text: string | null;
+                fromUser: components['schemas']['UserLite'];
+                fileName: string | null;
+            } | null;
+            forwardedFromUser: components['schemas']['UserLite'] | null;
             id: string;
             /** Format: date-time */
             createdAt: string;
@@ -6431,10 +6495,21 @@ export type components = {
             isRead?: boolean;
             reactions: {
                 reaction: string;
+                userId: string;
                 user: components['schemas']['UserLite'];
             }[];
         };
         ChatMessageLite: {
+            /** Format: date-time */
+            updatedAt: string | null;
+            replyId: string | null;
+            reply: {
+                id: string;
+                text: string | null;
+                fromUser: components['schemas']['UserLite'];
+                fileName: string | null;
+            } | null;
+            forwardedFromUser: components['schemas']['UserLite'] | null;
             id: string;
             /** Format: date-time */
             createdAt: string;
@@ -6447,10 +6522,21 @@ export type components = {
             file?: components['schemas']['DriveFile'] | null;
             reactions: {
                 reaction: string;
+                userId: string;
                 user?: components['schemas']['UserLite'] | null;
             }[];
         };
         ChatMessageLiteFor1on1: {
+            /** Format: date-time */
+            updatedAt: string | null;
+            replyId: string | null;
+            reply: {
+                id: string;
+                text: string | null;
+                fromUser: components['schemas']['UserLite'];
+                fileName: string | null;
+            } | null;
+            forwardedFromUser: components['schemas']['UserLite'] | null;
             id: string;
             /** Format: date-time */
             createdAt: string;
@@ -6461,9 +6547,20 @@ export type components = {
             file?: components['schemas']['DriveFile'] | null;
             reactions: {
                 reaction: string;
+                userId: string;
             }[];
         };
         ChatMessageLiteForRoom: {
+            /** Format: date-time */
+            updatedAt: string | null;
+            replyId: string | null;
+            reply: {
+                id: string;
+                text: string | null;
+                fromUser: components['schemas']['UserLite'];
+                fileName: string | null;
+            } | null;
+            forwardedFromUser: components['schemas']['UserLite'] | null;
             id: string;
             /** Format: date-time */
             createdAt: string;
@@ -6475,6 +6572,7 @@ export type components = {
             file?: components['schemas']['DriveFile'] | null;
             reactions: {
                 reaction: string;
+                userId: string;
                 user: components['schemas']['UserLite'];
             }[];
         };
@@ -17801,6 +17899,8 @@ export interface operations {
                     fileId?: string;
                     /** Format: misskey:id */
                     toRoomId: string;
+                    /** Format: misskey:id */
+                    replyId?: string | null;
                 };
             };
         };
@@ -17879,6 +17979,8 @@ export interface operations {
                     fileId?: string;
                     /** Format: misskey:id */
                     toUserId: string;
+                    /** Format: misskey:id */
+                    replyId?: string | null;
                 };
             };
         };
@@ -18011,6 +18113,163 @@ export interface operations {
             };
         };
     };
+    chat___messages___edit: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                    /** Format: misskey:id */
+                    messageId: string;
+                    text: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['ChatMessage'];
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    chat___messages___forward: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                    /** Format: misskey:id */
+                    messageId: string;
+                    /** Format: misskey:id */
+                    toUserId?: string;
+                    /** Format: misskey:id */
+                    toRoomId?: string;
+                } & (unknown | unknown);
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['ChatMessage'];
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
     chat___messages___react: {
         requestBody: {
             content: {
@@ -18064,6 +18323,98 @@ export interface operations {
                     'application/json': components['schemas']['Error'];
                 };
             };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    chat___messages___read: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                    /** Format: misskey:id */
+                    messageId: string;
+                    /** Format: misskey:id */
+                    userId?: string;
+                    /** Format: misskey:id */
+                    roomId?: string;
+                } & (unknown | unknown);
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        readThroughId: string | null;
+                        hasUnread: boolean;
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
             /** @description Internal server error */
             500: {
                 headers: {
@@ -18089,6 +18440,8 @@ export interface operations {
                     untilDate?: number;
                     /** Format: misskey:id */
                     roomId: string;
+                    /** @default true */
+                    markAsRead?: boolean;
                 };
             };
         };
@@ -18339,6 +18692,15 @@ export interface operations {
                     'application/json': components['schemas']['Error'];
                 };
             };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
             /** @description Internal server error */
             500: {
                 headers: {
@@ -18364,6 +18726,8 @@ export interface operations {
                     untilDate?: number;
                     /** Format: misskey:id */
                     userId: string;
+                    /** @default true */
+                    markAsRead?: boolean;
                 };
             };
         };
@@ -42519,6 +42883,280 @@ export interface operations {
             };
             /** @description I'm Ai */
             418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    zalip___chat___conversations: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                    /**
+                     * @default all
+                     * @enum {string}
+                     */
+                    filter?: 'all' | 'unread' | 'people' | 'groups' | 'archived';
+                    query?: string;
+                    /** @default 20 */
+                    limit?: number;
+                    cursor?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        items: {
+                            key: string;
+                            /** @enum {string} */
+                            kind: 'user' | 'room';
+                            user: components['schemas']['UserLite'] | null;
+                            room: components['schemas']['ChatRoom'] | null;
+                            lastMessage: components['schemas']['ChatMessage'] | null;
+                            unread: boolean;
+                            preferences: {
+                                isPinned: boolean;
+                                isArchived: boolean;
+                                isMuted: boolean;
+                                /** Format: id */
+                                pinnedMessageId: string | null;
+                            };
+                        }[];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    zalip___chat___preferences___show: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                    /** Format: misskey:id */
+                    userId?: string;
+                    /** Format: misskey:id */
+                    roomId?: string;
+                } & (unknown | unknown);
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        isPinned: boolean;
+                        isArchived: boolean;
+                        isMuted: boolean;
+                        /** Format: id */
+                        pinnedMessageId: string | null;
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    zalip___chat___preferences___update: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                    /** Format: misskey:id */
+                    userId?: string;
+                    /** Format: misskey:id */
+                    roomId?: string;
+                    isPinned?: boolean;
+                    isArchived?: boolean;
+                    isMuted?: boolean;
+                    /** Format: misskey:id */
+                    pinnedMessageId?: string | null;
+                } & (unknown | unknown);
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        isPinned: boolean;
+                        isArchived: boolean;
+                        isMuted: boolean;
+                        /** Format: id */
+                        pinnedMessageId: string | null;
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

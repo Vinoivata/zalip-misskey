@@ -6,6 +6,7 @@
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { isInstanceMuted, isUserFromMutedInstance } from '@/misc/is-instance-muted.js';
 import { NoteEntityService } from '@/core/entities/NoteEntityService.js';
+import { ChatService } from '@/core/ChatService.js';
 import { bindThis } from '@/decorators.js';
 import type { JsonObject } from '@/misc/json-value.js';
 import Channel, { type ChannelRequest } from '../channel.js';
@@ -23,6 +24,7 @@ export class MainChannel extends Channel {
 		request: ChannelRequest,
 
 		private noteEntityService: NoteEntityService,
+		private chatService: ChatService,
 	) {
 		super(request);
 	}
@@ -33,6 +35,15 @@ export class MainChannel extends Channel {
 
 		this.subscriber.on(`mainStream:${this.user.id}`, async data => {
 			switch (data.type) {
+				case 'newChatMessage': {
+					// The main channel only requires read:account. Chat contents additionally
+					// require their own OAuth scope and the current native read policy.
+					if (this.connection.token && !this.connection.token.permission.includes('read:chat')) return;
+					if (!this.user || !await this.chatService.getChatAvailability(this.user.id).then(policy => policy.read).catch(() => false)) return;
+					const message = await this.chatService.findMessageById(data.body.id).catch(() => null);
+					if (!message || !await this.chatService.canViewMessage(this.user.id, message).catch(() => false)) return;
+					break;
+				}
 				case 'notification': {
 					// Ignore notifications from instances the user has muted
 					if (isUserFromMutedInstance(data.body, new Set<string>(this.userProfile?.mutedInstances ?? []))) return;

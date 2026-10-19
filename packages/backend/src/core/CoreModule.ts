@@ -76,6 +76,7 @@ import { FeaturedService } from './FeaturedService.js';
 import { FanoutTimelineService } from './FanoutTimelineService.js';
 import { ChannelFollowingService } from './ChannelFollowingService.js';
 import { ChatService } from './ChatService.js';
+import { ZalipChatConversationService } from './ZalipChatConversationService.js';
 import { RegistryApiService } from './RegistryApiService.js';
 import { ReversiService } from './ReversiService.js';
 import { PageService } from './PageService.js';
@@ -395,6 +396,7 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		ChannelFollowingService,
 		ChannelMutingService,
 		ChatService,
+		ZalipChatConversationService,
 		RegistryApiService,
 		ReversiService,
 		PageService,
@@ -711,6 +713,7 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		ChannelFollowingService,
 		ChannelMutingService,
 		ChatService,
+		ZalipChatConversationService,
 		RegistryApiService,
 		ReversiService,
 		PageService,

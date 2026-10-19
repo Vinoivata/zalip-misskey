@@ -357,6 +357,9 @@ export async function mainBoot() {
 				() => { sound.playMisskeySfx('chatMessage'); },
 			);
 			main.on('newChatMessage', () => { void reconcileChatUnread(true); });
+			// Quiet unread changes (including muted dialogs and another device reading)
+			// still update badges, without playing the incoming-message sound.
+			main.on('chatUnreadState', () => { void reconcileChatUnread(); });
 			main.on('readAllChatMessages', () => { void reconcileChatUnread(); });
 
 			main.on('readAllAnnouncements', () => {

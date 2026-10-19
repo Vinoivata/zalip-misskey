@@ -20,6 +20,7 @@ import { mainRouter } from '@/router.js';
 import { genEmbedCode } from '@/utility/get-embed-code.js';
 import { prefer } from '@/preferences.js';
 import { getPluginHandlers } from '@/plugin.js';
+import { openZalipChat } from '@/utility/zalip-chat.js';
 
 export function getUserMenu(user: Misskey.entities.UserDetailed, router: Router = mainRouter) {
 	const meId = $i ? $i.id : null;
@@ -391,10 +392,9 @@ export function getUserMenu(user: Misskey.entities.UserDetailed, router: Router 
 
 		if ($i.policies.chatAvailability === 'available' && user.canChat && user.host == null) {
 			menuItems.push({
-				type: 'link',
 				icon: 'ti ti-messages',
 				text: i18n.ts._chat.chatWithThisUser,
-				to: `/chat/user/${user.id}`,
+				action: () => openZalipChat({ userId: user.id, title: user.name ?? user.username }),
 			});
 		}
 

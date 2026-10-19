@@ -3155,6 +3155,248 @@ export interface Locale extends ILocale {
          * Обсуждение серии {episode} · сезон {season}
          */
         "contentEpisodeDiscussionLabel": ParameterizedString<"episode" | "season">;
+        "_chatUi": {
+            /**
+             * Диалоги
+             */
+            "conversations": string;
+            /**
+             * Все
+             */
+            "all": string;
+            /**
+             * Непрочитанные
+             */
+            "unread": string;
+            /**
+             * Личные
+             */
+            "people": string;
+            /**
+             * Группы
+             */
+            "rooms": string;
+            /**
+             * Архив
+             */
+            "archived": string;
+            /**
+             * Найти диалог
+             */
+            "searchPeople": string;
+            /**
+             * Новый диалог
+             */
+            "newChat": string;
+            /**
+             * Выберите диалог
+             */
+            "chooseConversation": string;
+            /**
+             * Общайтесь, не отрываясь от просмотра.
+             */
+            "chooseConversationHint": string;
+            /**
+             * Не удалось загрузить сообщения.
+             */
+            "loadError": string;
+            /**
+             * Сообщение не отправлено. Повторите попытку.
+             */
+            "sendError": string;
+            /**
+             * Не удалось прикрепить файл.
+             */
+            "uploadError": string;
+            /**
+             * Сообщение не должно превышать 2000 символов.
+             */
+            "textTooLong": string;
+            /**
+             * Ответ на сообщение
+             */
+            "replyTo": string;
+            /**
+             * Редактирование сообщения
+             */
+            "editing": string;
+            /**
+             * Пересланное сообщение
+             */
+            "forwarded": string;
+            /**
+             * Переслать
+             */
+            "forward": string;
+            /**
+             * Кому переслать сообщение?
+             */
+            "forwardChoose": string;
+            /**
+             * Сообщение переслано.
+             */
+            "forwardSuccess": string;
+            /**
+             * Не удалось выполнить действие.
+             */
+            "actionError": string;
+            /**
+             * Удалить это сообщение?
+             */
+            "deleteConfirm": string;
+            /**
+             * Печатает…
+             */
+            "typing": string;
+            /**
+             * Прочитано
+             */
+            "read": string;
+            /**
+             * Отправлено
+             */
+            "sent": string;
+            /**
+             * Новые сообщения
+             */
+            "newMessages": string;
+            /**
+             * Открыть профиль
+             */
+            "openProfile": string;
+            /**
+             * Поиск в диалоге
+             */
+            "searchInConversation": string;
+            /**
+             * Диалогов пока нет.
+             */
+            "noConversations": string;
+            /**
+             * Ничего не найдено.
+             */
+            "noMatches": string;
+            /**
+             * Закреплённые
+             */
+            "pinned": string;
+            /**
+             * Не уведомлять
+             */
+            "muteConversation": string;
+            /**
+             * Включить уведомления
+             */
+            "unmuteConversation": string;
+            /**
+             * В архив
+             */
+            "archive": string;
+            /**
+             * Из архива
+             */
+            "unarchive": string;
+            /**
+             * Закрепить
+             */
+            "pin": string;
+            /**
+             * Открепить
+             */
+            "unpin": string;
+            /**
+             * Закрепить для меня
+             */
+            "pinMessageForMe": string;
+            /**
+             * Отметить прочитанным
+             */
+            "markRead": string;
+            /**
+             * Начните разговор
+             */
+            "empty": string;
+            /**
+             * Идёт запись…
+             */
+            "recording": string;
+            /**
+             * Голосовое сообщение
+             */
+            "recordVoice": string;
+            /**
+             * Завершить запись
+             */
+            "stopRecording": string;
+            /**
+             * Отменить запись
+             */
+            "cancelRecording": string;
+            /**
+             * Не удалось записать голосовое сообщение.
+             */
+            "recordingError": string;
+            /**
+             * Запись голоса недоступна в этом браузере.
+             */
+            "voiceUnsupported": string;
+            /**
+             * Вложение
+             */
+            "attachment": string;
+            /**
+             * Изменено
+             */
+            "edited": string;
+            /**
+             * К диалогам
+             */
+            "back": string;
+            /**
+             * Настройки диалога
+             */
+            "preferences": string;
+            /**
+             * Отправка сообщений недоступна.
+             */
+            "readOnly": string;
+            /**
+             * Участники
+             */
+            "members": string;
+            /**
+             * О группе
+             */
+            "roomInfo": string;
+            /**
+             * Свернуть диалог
+             */
+            "minimize": string;
+            /**
+             * Развернуть диалог
+             */
+            "restore": string;
+            /**
+             * Открыть на всю страницу
+             */
+            "openFullPage": string;
+            /**
+             * Быстрые сообщения
+             */
+            "miniChats": string;
+            /**
+             * Открыть сообщения
+             */
+            "openMessages": string;
+            /**
+             * Закрыть диалог
+             */
+            "closeConversation": string;
+            /**
+             * Прикрепляйте только файлы, ссылками на которые можно делиться.
+             */
+            "privateFilesHint": string;
+        };
         "_reviews": {
             /**
              * Отзывы и рецензии

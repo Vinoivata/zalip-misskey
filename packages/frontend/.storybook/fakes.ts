@@ -50,6 +50,10 @@ export function chatMessage(room = false, id = 'somechatmessageid', text = 'Hell
 	const toUser = userLite('touserid');
 	return {
 		id,
+		updatedAt: null,
+		replyId: null,
+		reply: null,
+		forwardedFromUser: null,
 		createdAt: '2016-12-28T22:49:51.000Z',
 		fromUserId: fromUser.id,
 		fromUser,

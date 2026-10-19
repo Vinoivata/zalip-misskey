@@ -9,6 +9,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div :class="[$style.body, message.file != null ? $style.fullWidth : null]" @contextmenu.stop="onContextmenu">
 		<div :class="$style.header"><MkUserName v-if="!isMe && prefer.s['chat.showSenderName'] && message.fromUser != null" :user="message.fromUser"/></div>
 		<div :class="$style.fukidashi">
+			<div v-if="message.forwardedFromUser" :class="$style.forwarded"><i class="ti ti-arrow-forward-up"></i> {{ i18n.ts.zalip._chatUi.forwarded }} · {{ message.forwardedFromUser.name || message.forwardedFromUser.username }}</div>
+			<MkA v-if="message.reply" :to="`/chat/messages/${message.reply.id}`" :class="$style.replyPreview"><strong>{{ message.reply.fromUser.name || message.reply.fromUser.username }}</strong><span>{{ message.reply.text || message.reply.fileName || i18n.ts.zalip._chatUi.attachment }}</span></MkA>
 			<Mfm
 				v-if="message.text"
 				ref="text"
@@ -23,8 +25,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 		<MkUrlPreview v-for="url in urls" :key="url" :url="url" style="margin: 8px 0;"/>
 		<div :class="$style.footer">
-			<button class="_textButton" style="color: currentColor;" @click="showMenu"><i class="ti ti-dots-circle-horizontal"></i></button>
+			<button type="button" class="_button" :class="$style.menuButton" :aria-label="i18n.ts.more" @click="showMenu"><i class="ti ti-dots"></i></button>
 			<MkTime :class="$style.time" :time="message.createdAt"/>
+			<span v-if="message.updatedAt" :class="$style.time">{{ i18n.ts.zalip._chatUi.edited }}</span>
+			<span v-if="isMe && !isSearchResult" :class="[$style.receipt, { [$style.read]: isReadByRecipient }]" :aria-label="isReadByRecipient ? i18n.ts.zalip._chatUi.read : i18n.ts.zalip._chatUi.sent" :title="isReadByRecipient ? i18n.ts.zalip._chatUi.read : i18n.ts.zalip._chatUi.sent"><i :class="isReadByRecipient ? 'ti ti-checks' : 'ti ti-check'"></i></span>
 			<MkA v-if="isSearchResult && 'toRoom' in message && message.toRoom != null" :to="`/chat/room/${message.toRoomId}`">{{ message.toRoom.name }}</MkA>
 			<MkA v-if="isSearchResult && 'toUser' in message && message.toUser != null && isMe" :to="`/chat/user/${message.toUserId}`">@{{ message.toUser.username }}</MkA>
 		</div>
@@ -36,7 +40,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			:moveClass="prefer.s.animation ? $style.transition_reaction_move : ''"
 			tag="div" :class="$style.reactions"
 		>
-			<div v-for="record in message.reactions" :key="record.reaction + record.user.id" :class="[$style.reaction, record.user.id === $i.id ? $style.reactionMy : null]" @click="onReactionClick(record)">
+			<button v-for="record in message.reactions" :key="record.reaction + record.user.id" type="button" class="_button" :class="[$style.reaction, record.user.id === $i.id ? $style.reactionMy : null]" :aria-label="record.reaction" :aria-pressed="record.user.id === $i.id" @click="onReactionClick(record)">
 				<MkAvatar :user="record.user" :link="false" :class="$style.reactionAvatar"/>
 				<MkReactionIcon
 					:withTooltip="true"
@@ -44,20 +48,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 					:noStyle="true"
 					:class="$style.reactionIcon"
 				/>
-			</div>
+			</button>
 		</TransitionGroup>
+		<p v-if="actionError" role="alert" :class="$style.error">{{ actionError }}</p>
 	</div>
 </div>
 </template>
 
 <script lang="ts" setup>
-import { computed, defineAsyncComponent, provide } from 'vue';
+import { computed, onBeforeUnmount, provide, ref } from 'vue';
 import * as mfm from 'mfm-js';
-import * as Misskey from 'misskey-js';
 import { url } from '@@/js/config.js';
 import { isLink } from '@@/js/is-link.js';
 import type { MenuItem } from '@/types/menu.js';
-import type { NormalizedChatMessage } from './room.vue';
+import type { ChatUiMessage } from '@/utility/zalip-chat-types.js';
 import { extractUrlFromMfm } from '@/utility/extract-url-from-mfm.js';
 import MkUrlPreview from '@/components/MkUrlPreview.vue';
 import { ensureSignin } from '@/i.js';
@@ -76,22 +80,29 @@ import { getHTMLElementOrNull } from '@/utility/get-dom-node-or-null.js';
 const $i = ensureSignin();
 
 const props = defineProps<{
-	message: NormalizedChatMessage | Misskey.entities.ChatMessage;
+	message: ChatUiMessage;
 	isSearchResult?: boolean;
+	isReadByRecipient?: boolean;
 }>();
+const emit = defineEmits<{ (ev: 'reply', message: ChatUiMessage): void; (ev: 'edit', message: ChatUiMessage): void; (ev: 'forward', message: ChatUiMessage): void; (ev: 'pin', message: ChatUiMessage): void }>();
+const actionError = ref('');
+const deleting = ref(false);
+const reacting = ref(false);
+let alive = true;
+onBeforeUnmount(() => { alive = false; });
 
 const isMe = computed(() => props.message.fromUserId === $i.id);
 const urls = computed(() => props.message.text ? extractUrlFromMfm(mfm.parse(props.message.text)) : []);
 
 provide(DI.mfmEmojiReactCallback, (reaction) => {
-	if ($i.policies.chatAvailability !== 'available') return;
-
-	sound.playMisskeySfx('reaction');
-	misskeyApi('chat/messages/react', {
-		messageId: props.message.id,
-		reaction: reaction,
-	});
+	void changeReaction(reaction);
 });
+
+async function changeReaction(reaction: string, remove = false): Promise<void> {
+	if (!alive || reacting.value || $i.policies.chatAvailability !== 'available') return;
+	const account = $i.id; const messageId = props.message.id; reacting.value = true; actionError.value = '';
+	try { await misskeyApi(remove ? 'chat/messages/unreact' : 'chat/messages/react', { messageId, reaction }); if (alive && account === $i.id && !remove) sound.playMisskeySfx('reaction'); } catch { if (alive && account === $i.id && props.message.id === messageId) actionError.value = i18n.ts.zalip._chatUi.actionError; } finally { if (alive && account === $i.id && props.message.id === messageId) reacting.value = false; }
+}
 
 function react(ev: PointerEvent) {
 	if ($i.policies.chatAvailability !== 'available') return;
@@ -99,30 +110,18 @@ function react(ev: PointerEvent) {
 	const targetEl = getHTMLElementOrNull(ev.currentTarget ?? ev.target);
 	if (!targetEl) return;
 
-	reactionPicker.show(targetEl, null, async (reaction) => {
-		sound.playMisskeySfx('reaction');
-		misskeyApi('chat/messages/react', {
-			messageId: props.message.id,
-			reaction: reaction,
-		});
-	});
+	const account = $i.id; const messageId = props.message.id;
+	reactionPicker.show(targetEl, null, reaction => { if (alive && account === $i.id && messageId === props.message.id) void changeReaction(reaction); });
 }
 
-function onReactionClick(record: Misskey.entities.ChatMessage['reactions'][0]) {
+function onReactionClick(record: ChatUiMessage['reactions'][number]) {
 	if ($i.policies.chatAvailability !== 'available') return;
 
 	if (record.user.id === $i.id) {
-		misskeyApi('chat/messages/unreact', {
-			messageId: props.message.id,
-			reaction: record.reaction,
-		});
+		void changeReaction(record.reaction, true);
 	} else {
 		if (!props.message.reactions.some(r => r.user.id === $i.id && r.reaction === record.reaction)) {
-			sound.playMisskeySfx('reaction');
-			misskeyApi('chat/messages/react', {
-				messageId: props.message.id,
-				reaction: record.reaction,
-			});
+			void changeReaction(record.reaction);
 		}
 	}
 }
@@ -135,14 +134,22 @@ function onContextmenu(ev: PointerEvent) {
 }
 
 function showMenu(ev: PointerEvent, contextmenu = false) {
+	const account = $i.id; const messageId = props.message.id;
+	const valid = () => alive && account === $i.id && messageId === props.message.id;
 	const menu: MenuItem[] = [];
+	if (!props.isSearchResult && $i.policies.chatAvailability === 'available') {
+		menu.push({ text: i18n.ts.reply, icon: 'ti ti-corner-up-left', action: () => { if (valid()) emit('reply', props.message); } });
+		if (isMe.value) menu.push({ text: i18n.ts.edit, icon: 'ti ti-pencil', action: () => { if (valid()) emit('edit', props.message); } });
+		menu.push({ text: i18n.ts.zalip._chatUi.forward, icon: 'ti ti-arrow-forward-up', action: () => { if (valid()) emit('forward', props.message); } });
+		menu.push({ text: i18n.ts.zalip._chatUi.pinMessageForMe, icon: 'ti ti-pin', action: () => { if (valid()) emit('pin', props.message); } });
+	}
 
 	if (!isMe.value && $i.policies.chatAvailability === 'available') {
 		menu.push({
 			text: i18n.ts.reaction,
 			icon: 'ti ti-mood-plus',
 			action: (ev) => {
-				react(ev);
+				if (valid()) react(ev);
 			},
 		});
 
@@ -155,7 +162,7 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 		text: i18n.ts.copyContent,
 		icon: 'ti ti-copy',
 		action: () => {
-			copyToClipboard(props.message.text ?? '');
+			if (valid()) copyToClipboard(props.message.text ?? '');
 		},
 	});
 
@@ -168,10 +175,10 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 			text: i18n.ts.delete,
 			icon: 'ti ti-trash',
 			danger: true,
-			action: () => {
-				misskeyApi('chat/messages/delete', {
-					messageId: props.message.id,
-				});
+			action: async () => {
+				if (deleting.value || !valid()) return;
+				deleting.value = true;
+				try { const { canceled } = await os.confirm({ type: 'warning', text: i18n.ts.zalip._chatUi.deleteConfirm }); if (!canceled && valid()) await misskeyApi('chat/messages/delete', { messageId }); } catch { if (valid()) actionError.value = i18n.ts.zalip._chatUi.actionError; } finally { if (valid()) deleting.value = false; }
 			},
 		});
 	}
@@ -181,6 +188,7 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 			text: i18n.ts.reportAbuse,
 			icon: 'ti ti-exclamation-circle',
 			action: async () => {
+				if (!valid()) return;
 				const localUrl = `${url}/chat/messages/${props.message.id}`;
 				const { dispose } = await os.popupAsyncWithDialog(import('@/components/MkAbuseReportWindow.vue').then(x => x.default), {
 					user: props.message.fromUser!,
@@ -299,7 +307,13 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 	gap: 0.5em;
 	margin-top: 4px;
 	font-size: 75%;
+	align-items: center;
 }
+.menuButton { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; font-size: 19px; }
+.receipt { display: inline-flex; align-items: center; font-size: 15px; color: var(--MI_THEME-fgTransparentWeak); &.read { color: var(--MI_THEME-accent); } }
+.forwarded { font-size: 12px; color: var(--MI_THEME-accent); margin-bottom: 8px; }
+.replyPreview { display: grid; gap: 4px; padding: 8px 10px; margin-bottom: 8px; border-inline-start: 3px solid var(--MI_THEME-accent); border-radius: 8px; background: var(--MI_THEME-accentedBg); font-size: 12px; > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
+.error { color: var(--MI_THEME-error); font-size: 12px; }
 
 .time {
 	opacity: 0.5;
@@ -323,6 +337,8 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 	border: solid 1px var(--MI_THEME-divider);
 	border-radius: 999px;
 	padding: 8px;
+	min-height: 44px;
+	box-sizing: border-box;
 
 	&.reactionMy {
 		border-color: var(--MI_THEME-accent);

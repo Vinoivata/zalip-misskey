@@ -4,365 +4,153 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div
-	:class="$style.root"
-	@dragover.stop="onDragover"
-	@drop.stop="onDrop"
->
-	<textarea
-		ref="textareaEl"
-		v-model="text"
-		:class="$style.textarea"
-		:aria-label="i18n.ts.inputMessageHere"
-		:placeholder="i18n.ts.inputMessageHere"
-		:readonly="textareaReadOnly"
-		@keydown="onKeydown"
-		@paste="onPaste"
-	></textarea>
-	<footer :class="$style.footer">
-		<button v-if="file" type="button" class="_button" :class="$style.file" :aria-label="i18n.ts.remove" @click="file = null">{{ file.name }} ×</button>
-		<div :class="$style.buttons">
-			<button type="button" class="_button" :class="$style.button" :aria-label="i18n.ts.attachFile" @click="chooseFile"><i class="ti ti-photo-plus"></i></button>
-			<button type="button" class="_button" :class="$style.button" :aria-label="i18n.ts.emoji" @click="insertEmoji"><i class="ti ti-mood-happy"></i></button>
-			<button type="button" class="_button" :class="[$style.button, $style.send]" :disabled="!canSend || sending" :aria-label="i18n.ts.send" @click="send">
-				<template v-if="!sending"><i class="ti ti-send"></i></template><template v-if="sending"><MkLoading :em="true"/></template>
-			</button>
-		</div>
-	</footer>
-	<input ref="fileEl" style="display: none;" type="file" @change="onChangeFile"/>
+<div :class="$style.root" @dragover.prevent="onDragover" @drop.prevent.stop="onDrop">
+	<div v-if="editingMessage || replyTo" :class="$style.context"><i :class="editingMessage ? 'ti ti-pencil' : 'ti ti-corner-up-left'"></i><div><strong>{{ editingMessage ? i18n.ts.zalip._chatUi.editing : i18n.ts.zalip._chatUi.replyTo }}</strong><span>{{ (editingMessage || replyTo)?.text || i18n.ts.zalip._chatUi.attachment }}</span></div><button type="button" class="_button" :class="$style.button" :aria-label="i18n.ts.cancel" :disabled="sending" @click="cancelContext"><i class="ti ti-x"></i></button></div>
+	<textarea ref="textareaEl" v-model="text" :class="$style.textarea" :aria-label="i18n.ts.inputMessageHere" :placeholder="i18n.ts.inputMessageHere" :disabled="!allowed || sending || recording" :readonly="pickerOpen" maxlength="4000" rows="1" @keydown="onKeydown" @paste="onPaste" @input="emit('typing', text.length > 0)"></textarea>
+	<div v-if="file && !editingMessage" :class="$style.attachment"><i class="ti ti-paperclip"></i><span>{{ file.name }}</span><button type="button" class="_button" :class="$style.button" :aria-label="i18n.ts.remove" :disabled="sending" @click="file = null"><i class="ti ti-x"></i></button></div>
+	<p v-if="file || editingMessage?.file" :class="$style.hint">{{ i18n.ts.zalip._chatUi.privateFilesHint }}</p>
+	<div v-if="recording" :class="$style.recording" role="status"><i class="ti ti-microphone"></i>{{ i18n.ts.zalip._chatUi.recording }}<button type="button" class="_button" :class="$style.button" :aria-label="i18n.ts.zalip._chatUi.cancelRecording" @click="cancelRecording"><i class="ti ti-x"></i></button><button type="button" class="_button" :class="$style.button" :aria-label="i18n.ts.zalip._chatUi.stopRecording" @click="stopRecording"><i class="ti ti-player-stop"></i></button></div>
+	<footer :class="$style.footer"><button type="button" class="_button" :class="$style.button" :aria-label="i18n.ts.attachFile" :disabled="!allowed || busy || !!editingMessage" @click="chooseFile"><i class="ti ti-photo-plus"></i></button><button type="button" class="_button" :class="$style.button" :aria-label="i18n.ts.emoji" :disabled="!allowed || busy" @click="insertEmoji"><i class="ti ti-mood-happy"></i></button><button v-if="voiceSupported" type="button" class="_button" :class="$style.button" :aria-label="i18n.ts.zalip._chatUi.recordVoice" :disabled="!allowed || busy || !!editingMessage" @click="recordVoice"><i class="ti ti-microphone"></i></button><small :class="$style.counter">{{ Array.from(text).length }} / 2000</small><button type="button" class="_button" :class="[$style.button, $style.send]" :disabled="!canSend" :aria-label="editingMessage ? i18n.ts.save : i18n.ts.send" @click="send"><i :class="sending || uploading ? 'ti ti-loader-2 ti-spin' : editingMessage ? 'ti ti-check' : 'ti ti-send'"></i></button></footer>
+	<p v-if="error" :class="$style.error" role="alert">{{ error }}</p><p v-if="!allowed" :class="$style.hint">{{ i18n.ts.zalip._chatUi.readOnly }}</p>
 </div>
 </template>
 
-<script lang="ts" setup>
-import { onMounted, watch, ref, shallowRef, computed, nextTick, readonly, onBeforeUnmount } from 'vue';
-import * as Misskey from 'misskey-js';
-//import insertTextAtCursor from 'insert-text-at-cursor';
-import { formatTimeString } from '@/utility/format-time-string.js';
+<script setup lang="ts">
+import { computed, nextTick, onBeforeUnmount, ref, useTemplateRef, watch } from 'vue';
+import type * as Misskey from 'misskey-js';
+import type { ChatUiMessage } from '@/utility/zalip-chat-types.js';
+import { chatDraftKey, readChatDrafts } from '@/utility/zalip-chat-types.js';
 import { selectFile } from '@/utility/drive.js';
-import * as os from '@/os.js';
-import { i18n } from '@/i18n.js';
-import { miLocalStorage } from '@/local-storage.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
+import { miLocalStorage } from '@/local-storage.js';
+import { ensureSignin } from '@/i.js';
 import { prefer } from '@/preferences.js';
-import { Autocomplete } from '@/utility/autocomplete.js';
+import { i18n } from '@/i18n.js';
 import { emojiPicker } from '@/utility/emoji-picker.js';
-import { checkDragDataType, getDragData } from '@/drag-and-drop.js';
+import { Autocomplete } from '@/utility/autocomplete.js';
+import { getDragData } from '@/drag-and-drop.js';
+import * as os from '@/os.js';
 
-const props = defineProps<{
-	user?: Misskey.entities.UserDetailed | null;
-	room?: Misskey.entities.ChatRoom | null;
-}>();
+const props = withDefaults(defineProps<{ user?: Misskey.entities.UserDetailed | null; room?: Misskey.entities.ChatRoom | null; active?: boolean; replyTo?: ChatUiMessage | null; editingMessage?: ChatUiMessage | null }>(), { active: true });
+const emit = defineEmits<{ (ev: 'sent', message: Misskey.entities.ChatMessageLite): void; (ev: 'cancelReply'): void; (ev: 'cancelEdit'): void; (ev: 'typing', typing: boolean): void }>();
+const me = ensureSignin();
+const textareaEl = useTemplateRef('textareaEl');
+const text = ref(''); const file = ref<Misskey.entities.DriveFile | null>(null);
+const sending = ref(false); const uploading = ref(false); const pickerOpen = ref(false); const recording = ref(false); const voicePending = ref(false); const error = ref('');
+const allowed = computed(() => props.active && me.policies.chatAvailability === 'available' && (!!props.room || (!!props.user && props.user.host == null && props.user.canChat)));
+const busy = computed(() => sending.value || uploading.value || recording.value || voicePending.value);
+const canSend = computed(() => allowed.value && !busy.value && (text.value.trim().length > 0 || file.value != null || props.editingMessage?.file != null) && Array.from(text.value).length <= 2000);
+const voiceSupported = typeof MediaRecorder !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
+let epoch = 0; let alive = true; let restoring = false; let draftVersion = 0; let voiceGeneration = 0;
+let autocomplete: Autocomplete | null = null;
+let recorder: MediaRecorder | null = null; let microphone: MediaStream | null = null;
+let recordingTimer: number | null = null;
 
-const textareaEl = shallowRef<HTMLTextAreaElement>();
-const fileEl = shallowRef<HTMLInputElement>();
+function key(): string { return chatDraftKey(me.id, { userId: props.user?.id, roomId: props.room?.id }); }
 
-const text = ref<string>('');
-const file = ref<Misskey.entities.DriveFile | null>(null);
-const sending = ref(false);
-const textareaReadOnly = ref(false);
-let autocompleteInstance: Autocomplete | null = null;
+function current(request: number, account: string): boolean { return alive && request === epoch && account === me.id; }
 
-const canSend = computed(() => (text.value != null && text.value !== '') || file.value != null);
-
-function getDraftKey() {
-	return props.user ? 'user:' + props.user.id : 'room:' + props.room?.id;
+function saveDraft(): void {
+	if (restoring || props.editingMessage || (!props.user && !props.room)) return;
+	try { const drafts = readChatDrafts(miLocalStorage.getItem('chatMessageDrafts')); if (text.value || file.value) drafts[key()] = { text: text.value, file: file.value }; else delete drafts[key()]; miLocalStorage.setItem('chatMessageDrafts', JSON.stringify(Object.fromEntries(Object.entries(drafts).slice(-100)))); } catch { /* A full or disabled device store must not prevent sending. */ }
 }
 
-watch([text, file], saveDraft);
+function restore(): void { restoring = true; try { const draft = readChatDrafts(miLocalStorage.getItem('chatMessageDrafts'))[key()]; text.value = draft?.text ?? ''; file.value = draft?.file ?? null; } catch { text.value = ''; file.value = null; } finally { restoring = false; } }
 
-async function onPaste(ev: ClipboardEvent) {
-	if (!ev.clipboardData) return;
+watch([text, file], () => { draftVersion++; saveDraft(); }, { flush: 'sync' });
+watch(() => [props.user?.id, props.room?.id, me.id], () => { epoch++; cancelRecording(); sending.value = false; uploading.value = false; error.value = ''; restore(); }, { immediate: true });
+watch(() => props.editingMessage?.id, () => { error.value = ''; if (props.editingMessage) text.value = props.editingMessage.text ?? ''; else restore(); void nextTick(() => textareaEl.value?.focus()); });
+watch(() => props.active, active => { if (!active) { cancelRecording(); emit('typing', false); } });
+watch(textareaEl, element => { autocomplete?.detach(); autocomplete = element ? new Autocomplete(element, text) : null; });
 
-	const pastedFileName = 'yyyy-MM-dd HH-mm-ss [{{number}}]';
+function cancelContext(): void { if (props.editingMessage) emit('cancelEdit'); else emit('cancelReply'); }
 
-	const clipboardData = ev.clipboardData;
-	const items = clipboardData.items;
-
-	if (items.length === 1) {
-		if (items[0].kind === 'file') {
-			const pastedFile = items[0].getAsFile();
-			if (!pastedFile) return;
-			const lio = pastedFile.name.lastIndexOf('.');
-			const ext = lio >= 0 ? pastedFile.name.slice(lio) : '';
-			const formattedName = formatTimeString(new Date(pastedFile.lastModified), pastedFileName).replace(/{{number}}/g, '1') + ext;
-			const renamedFile = new File([pastedFile], formattedName, { type: pastedFile.type });
-			os.launchUploader([renamedFile], { multiple: false }).then(driveFiles => {
-				file.value = driveFiles[0];
-			});
-		}
-	} else {
-		if (items[0].kind === 'file') {
-			os.alert({
-				type: 'error',
-				text: i18n.ts.onlyOneFileCanBeAttached,
-			});
-		}
-	}
+function onKeydown(event: KeyboardEvent): void {
+	if (event.isComposing || event.key === 'Process' || event.keyCode === 229 || event.key !== 'Enter') return;
+	const submit = prefer.s['chat.sendOnEnter'] ? !(event.ctrlKey || event.metaKey || event.shiftKey) : event.ctrlKey || event.metaKey;
+	if (submit) { event.preventDefault(); void send(); }
 }
 
-function onDragover(ev: DragEvent) {
-	if (!ev.dataTransfer) return;
-
-	const isFile = ev.dataTransfer.items[0].kind === 'file';
-	if (isFile || checkDragDataType(ev, ['driveFiles'])) {
-		ev.preventDefault();
-		switch (ev.dataTransfer.effectAllowed) {
-			case 'all':
-			case 'uninitialized':
-			case 'copy':
-			case 'copyLink':
-			case 'copyMove':
-				ev.dataTransfer.dropEffect = 'copy';
-				break;
-			case 'linkMove':
-			case 'move':
-				ev.dataTransfer.dropEffect = 'move';
-				break;
-			default:
-				ev.dataTransfer.dropEffect = 'none';
-				break;
-		}
-	}
+async function send(): Promise<void> {
+	if (!canSend.value || sending.value) return;
+	const request = epoch; const account = me.id;
+	const version = draftVersion;
+	const snapshot = { text: text.value || null, fileId: file.value?.id, ...(props.replyTo ? { replyId: props.replyTo.id } : {}) };
+	sending.value = true; error.value = ''; emit('typing', false);
+	try {
+		const message = props.editingMessage ? await misskeyApi('chat/messages/edit', { messageId: props.editingMessage.id, text: snapshot.text })
+			: props.user ? await misskeyApi('chat/messages/create-to-user', { toUserId: props.user.id, ...snapshot })
+			: await misskeyApi('chat/messages/create-to-room', { toRoomId: props.room!.id, ...snapshot });
+		if (!current(request, account)) return;
+		if (version === draftVersion) { if (props.editingMessage) emit('cancelEdit'); else { text.value = ''; file.value = null; saveDraft(); emit('cancelReply'); } }
+		emit('sent', message);
+	} catch { if (current(request, account)) error.value = i18n.ts.zalip._chatUi.sendError; } finally { if (current(request, account)) sending.value = false; }
 }
 
-function onDrop(ev: DragEvent): void {
-	if (!ev.dataTransfer) return;
-
-	// ファイルだったら
-	if (ev.dataTransfer.files.length === 1) {
-		ev.preventDefault();
-		os.launchUploader([Array.from(ev.dataTransfer.files)[0]], { multiple: false });
-		return;
-	} else if (ev.dataTransfer.files.length > 1) {
-		ev.preventDefault();
-		os.alert({
-			type: 'error',
-			text: i18n.ts.onlyOneFileCanBeAttached,
-		});
-		return;
-	}
-
-	//#region ドライブのファイル
-	{
-		const droppedData = getDragData(ev, 'driveFiles');
-		if (droppedData != null) {
-			file.value = droppedData[0];
-			ev.preventDefault();
-		}
-	}
-	//#endregion
+async function upload(files: File[]): Promise<void> {
+	if (!allowed.value || busy.value || props.editingMessage) return;
+	if (files.length !== 1) { error.value = i18n.ts.onlyOneFileCanBeAttached; return; }
+	const request = epoch; const account = me.id; uploading.value = true; error.value = '';
+	try { const result = await os.launchUploader(files, { multiple: false }); if (current(request, account)) file.value = result[0] ?? null; } catch { if (current(request, account)) error.value = i18n.ts.zalip._chatUi.uploadError; } finally { if (current(request, account)) uploading.value = false; }
 }
 
-function onKeydown(ev: KeyboardEvent) {
-	if (ev.isComposing || ev.key === 'Process' || ev.keyCode === 229) return;
-	if (ev.key === 'Enter') {
-		if (prefer.s['chat.sendOnEnter']) {
-			if (!(ev.ctrlKey || ev.metaKey || ev.shiftKey)) {
-				send();
-			}
-		} else {
-			if ((ev.ctrlKey || ev.metaKey)) {
-				send();
-			}
-		}
-	}
+function onPaste(event: ClipboardEvent): void { const files = Array.from(event.clipboardData?.files ?? []); if (files.length) { event.preventDefault(); void upload(files); } }
+
+function onDragover(event: DragEvent): void { if (event.dataTransfer && allowed.value && !busy.value) event.dataTransfer.dropEffect = 'copy'; }
+
+function onDrop(event: DragEvent): void { if (!allowed.value || busy.value || props.editingMessage || !event.dataTransfer) return; const files = Array.from(event.dataTransfer.files); if (files.length) { void upload(files); return; } const selected = getDragData(event, 'driveFiles'); if (selected?.length) file.value = selected[0]; }
+
+async function chooseFile(event: MouseEvent): Promise<void> {
+	if (!allowed.value || busy.value || props.editingMessage) return;
+	const request = epoch; const account = me.id;
+	try { const selected = await selectFile({ anchorElement: event.currentTarget, multiple: false, label: i18n.ts.selectFile }); if (current(request, account)) file.value = selected; } catch { /* Canceling a picker is not a failed upload. */ }
 }
 
-function chooseFile(ev: PointerEvent) {
-	selectFile({
-		anchorElement: ev.currentTarget ?? ev.target,
-		multiple: false,
-		label: i18n.ts.selectFile,
-	}).then(selectedFile => {
-		file.value = selectedFile;
-	});
+function insertEmoji(event: MouseEvent): void {
+	if (!allowed.value || busy.value || !(event.currentTarget instanceof HTMLElement)) return;
+	const request = epoch; const account = me.id;
+	let position = textareaEl.value?.selectionStart ?? text.value.length; let end = textareaEl.value?.selectionEnd ?? position; pickerOpen.value = true;
+	emojiPicker.show(event.currentTarget, emoji => { if (!current(request, account)) return; text.value = text.value.slice(0, position) + emoji + text.value.slice(end); position += emoji.length; end = position; }, () => { pickerOpen.value = false; void nextTick(() => textareaEl.value?.focus()); });
 }
 
-function onChangeFile() {
-	if (fileEl.value == null || fileEl.value.files == null) return;
+function releaseMicrophone(): void { microphone?.getTracks().forEach(track => track.stop()); microphone = null; if (recordingTimer) window.clearTimeout(recordingTimer); recordingTimer = null; }
 
-	if (fileEl.value.files[0]) {
-		os.launchUploader(Array.from(fileEl.value.files), { multiple: false }).then(driveFiles => {
-			file.value = driveFiles[0];
-		});
-	}
+function cancelRecording(): void { voiceGeneration++; if (recorder?.state === 'recording') recorder.stop(); recorder = null; releaseMicrophone(); recording.value = false; voicePending.value = false; }
+
+function stopRecording(): void { if (recorder?.state === 'recording') recorder.stop(); }
+
+async function recordVoice(): Promise<void> {
+	if (!allowed.value || busy.value || !voiceSupported || props.editingMessage) return;
+	const request = epoch; const account = me.id;
+	const generation = ++voiceGeneration; voicePending.value = true;
+	try {
+		const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+		if (!current(request, account) || !props.active || generation !== voiceGeneration) { stream.getTracks().forEach(track => track.stop()); return; }
+		microphone = stream; voicePending.value = false; recording.value = true;
+		const capture = new MediaRecorder(stream); recorder = capture; const chunks: Blob[] = [];
+		capture.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
+		capture.onstop = () => { stream.getTracks().forEach(track => track.stop()); if (generation !== voiceGeneration) return; releaseMicrophone(); recorder = null; recording.value = false; if (current(request, account) && chunks.length) { const mime = capture.mimeType || 'audio/webm'; void upload([new File(chunks, `voice-${Date.now()}.${mime.includes('mp4') ? 'm4a' : 'webm'}`, { type: mime })]); } };
+		capture.onerror = () => { if (generation !== voiceGeneration) return; cancelRecording(); if (current(request, account)) error.value = i18n.ts.zalip._chatUi.recordingError; };
+		capture.start(); recordingTimer = window.setTimeout(stopRecording, 120000);
+	} catch { if (generation === voiceGeneration) { releaseMicrophone(); recording.value = false; if (current(request, account)) error.value = i18n.ts.zalip._chatUi.recordingError; } } finally { if (generation === voiceGeneration) voicePending.value = false; }
 }
 
-function send() {
-	if (!canSend.value) return;
-
-	sending.value = true;
-
-	if (props.user) {
-		misskeyApi('chat/messages/create-to-user', {
-			toUserId: props.user.id,
-			text: text.value ? text.value : undefined,
-			fileId: file.value ? file.value.id : undefined,
-		}).then(message => {
-			clear();
-		}).catch(err => {
-			console.error(err);
-		}).then(() => {
-			sending.value = false;
-		});
-	} else if (props.room) {
-		misskeyApi('chat/messages/create-to-room', {
-			toRoomId: props.room.id,
-			text: text.value ? text.value : undefined,
-			fileId: file.value ? file.value.id : undefined,
-		}).then(message => {
-			clear();
-		}).catch(err => {
-			console.error(err);
-		}).then(() => {
-			sending.value = false;
-		});
-	}
-}
-
-function clear() {
-	text.value = '';
-	file.value = null;
-	deleteDraft();
-}
-
-function saveDraft() {
-	const drafts = JSON.parse(miLocalStorage.getItem('chatMessageDrafts') || '{}');
-
-	drafts[getDraftKey()] = {
-		updatedAt: new Date(),
-		data: {
-			text: text.value,
-			file: file.value,
-		},
-	};
-
-	miLocalStorage.setItem('chatMessageDrafts', JSON.stringify(drafts));
-}
-
-function deleteDraft() {
-	const drafts = JSON.parse(miLocalStorage.getItem('chatMessageDrafts') || '{}');
-
-	delete drafts[getDraftKey()];
-
-	miLocalStorage.setItem('chatMessageDrafts', JSON.stringify(drafts));
-}
-
-async function insertEmoji(ev: MouseEvent) {
-	textareaReadOnly.value = true;
-	const target = ev.currentTarget ?? ev.target;
-	if (target == null) return;
-
-	// emojiPickerはダイアログが閉じずにtextareaとやりとりするので、
-	// focustrapをかけているとinsertTextAtCursorが効かない
-	// そのため、投稿フォームのテキストに直接注入する
-	// See: https://github.com/misskey-dev/misskey/pull/14282
-	//      https://github.com/misskey-dev/misskey/issues/14274
-
-	let pos = textareaEl.value?.selectionStart ?? 0;
-	let posEnd = textareaEl.value?.selectionEnd ?? text.value.length;
-	emojiPicker.show(
-		target as HTMLElement,
-		emoji => {
-			const textBefore = text.value.substring(0, pos);
-			const textAfter = text.value.substring(posEnd);
-			text.value = textBefore + emoji + textAfter;
-			pos += emoji.length;
-			posEnd += emoji.length;
-		},
-		() => {
-			textareaReadOnly.value = false;
-			nextTick(() => focus());
-		},
-	);
-}
-
-onMounted(() => {
-	if (textareaEl.value != null) {
-		autocompleteInstance = new Autocomplete(textareaEl.value, text);
-	}
-
-	// 書きかけの投稿を復元
-	const draft = JSON.parse(miLocalStorage.getItem('chatMessageDrafts') || '{}')[getDraftKey()];
-	if (draft) {
-		text.value = draft.data.text;
-		file.value = draft.data.file;
-	}
-});
-
-onBeforeUnmount(() => {
-	if (autocompleteInstance) {
-		autocompleteInstance.detach();
-		autocompleteInstance = null;
-	}
-});
+onBeforeUnmount(() => { saveDraft(); alive = false; epoch++; cancelRecording(); autocomplete?.detach(); emit('typing', false); });
 </script>
 
 <style lang="scss" module>
-.root {
-	position: relative;
-	border: 1px solid var(--zalip-social-border);
-	border-radius: 24px;
-	background: var(--zalip-glass);
-	-webkit-backdrop-filter: blur(20px);
-	backdrop-filter: blur(20px);
-	box-shadow: 0 6px 24px var(--zalip-glass-shadow);
-	overflow: clip;
-	&:focus-within { border-color: var(--zalip-accent-border); }
-}
-
-.textarea {
-	cursor: auto;
-	display: block;
-	width: 100%;
-	min-width: 100%;
-	max-width: 100%;
-	min-height: 56px;
-	max-height: 160px;
-	margin: 0;
-	padding: 16px 16px 0 16px;
-	resize: none;
-	font-size: 1em;
-	font-family: inherit;
-	outline: none;
-	border: none;
-	border-radius: 0;
-	box-shadow: none;
-	box-sizing: border-box;
-	color: var(--MI_THEME-fg);
-	background: transparent;
-	field-sizing: content;
-}
-
-.footer {
-	position: sticky;
-	bottom: 0;
-	background: transparent;
-}
-
-.file {
-	padding: 8px;
-	cursor: pointer;
-}
-
-.buttons {
-	display: flex;
-	padding: 0 8px 8px;
-}
-
-.button {
-	height: 40px;
-	border-radius: 50%;
-	font-size: 20px;
-	aspect-ratio: 1;
-
-	&:hover {
-		color: var(--MI_THEME-accent);
-	}
-}
-.send {
-	margin-left: auto;
-	color: var(--MI_THEME-fgOnAccent);
-	background: var(--MI_THEME-accent);
-}
+.root { padding: 8px; border: 1px solid var(--MI_THEME-divider); border-radius: 20px; background: var(--MI_THEME-panel); }
+.root:focus-within { border-color: var(--MI_THEME-accent); }
+.textarea { display: block; box-sizing: border-box; width: 100%; min-height: 44px; max-height: 160px; resize: vertical; field-sizing: content; padding: 10px; border: 0; color: var(--MI_THEME-fg); background: transparent; font: inherit; line-height: 1.5; }
+.textarea:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: -2px; border-radius: 12px; }
+.footer, .attachment, .recording, .context { display: flex; align-items: center; gap: 6px; }
+.attachment, .context { padding: 6px 10px; border-radius: 12px; background: var(--MI_THEME-accentedBg); > span, > div { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
+.context > div { display: grid; gap: 4px; font-size: 12px; > span { overflow: hidden; text-overflow: ellipsis; } strong { color: var(--MI_THEME-accent); } }
+.button { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; border-radius: 50%; font-size: 21px; &:hover:not(:disabled) { background: var(--MI_THEME-buttonHoverBg); } &:focus-visible { outline: 2px solid var(--MI_THEME-accent); outline-offset: 2px; } &:disabled { opacity: .45; } }
+.send { background: var(--MI_THEME-accent); color: var(--MI_THEME-fgOnAccent); }
+.counter { flex: 1; text-align: end; font-size: 10px; color: var(--MI_THEME-fgTransparentWeak); }
+.error, .hint { margin: 6px 10px; font-size: 12px; color: var(--MI_THEME-error); }
+.hint { color: var(--MI_THEME-fgTransparentWeak); }
+.recording { padding: 6px; font-size: 13px; color: var(--MI_THEME-error); }
+@media (prefers-reduced-motion: reduce) { .root :global(.ti-spin) { animation: none; } }
 </style>

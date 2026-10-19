@@ -37,6 +37,8 @@ export class ChatRoomChannel extends Channel {
 	public async init(params: JsonObject): Promise<boolean> {
 		if (typeof params.roomId !== 'string') return false;
 		if (!this.user) return false;
+		if (!/^[A-Za-z0-9]{1,32}$/u.test(params.roomId)) return false;
+		if (!(await this.chatService.getChatAvailability(this.user.id)).read) return false;
 
 		this.roomId = params.roomId;
 
@@ -45,26 +47,43 @@ export class ChatRoomChannel extends Channel {
 		});
 
 		if (room == null) return false;
-		if (!(await this.chatService.hasPermissionToViewRoomTimeline(this.user.id, room))) return false;
+		if (!(await this.chatService.isRoomMember(room, this.user.id))) return false;
 
 		this.subscriber.on(`chatRoomStream:${this.roomId}`, this.onEvent);
+		for (const receipt of await this.chatService.getConversationReadReceipts(this.user.id, { roomId: this.roomId })) this.send('read', receipt);
 
 		return true;
 	}
 
 	@bindThis
 	private async onEvent(data: GlobalEvents['chatRoom']['payload']) {
+		if (!await this.isCurrentlyAllowed().catch(() => false)) {
+			this.send('unavailable', null);
+			this.connection.disconnectChannel(this.id);
+			return;
+		}
 		this.send(data.type, data.body);
 	}
 
+	private async isCurrentlyAllowed(): Promise<boolean> {
+		if (!this.user || !(await this.chatService.getChatAvailability(this.user.id)).read) return false;
+		const room = await this.chatRoomsRepository.findOneBy({ id: this.roomId });
+		return room != null && await this.chatService.isRoomMember(room, this.user.id);
+	}
+
 	@bindThis
-	public onMessage(type: string, body: any) {
-		switch (type) {
-			case 'read':
-				if (this.roomId) {
-					this.chatService.readRoomChatMessage(this.user!.id, this.roomId);
-				}
-				break;
+	public async onMessage(type: string, body: unknown) {
+		try {
+			if (!await this.isCurrentlyAllowed()) throw new Error('CHANNEL_UNAVAILABLE');
+			if (type === 'read') {
+				const messageId = body && typeof body === 'object' && 'messageId' in body && typeof body.messageId === 'string' ? body.messageId : body && typeof body === 'object' && 'id' in body && typeof body.id === 'string' ? body.id : undefined;
+				await this.chatService.markConversationRead(this.user!.id, { roomId: this.roomId }, messageId);
+			} else if (type === 'typing' && (!this.connection.token || this.connection.token.permission.includes('write:chat'))) {
+				if (body && typeof body === 'object' && 'typing' in body && typeof body.typing === 'boolean') await this.chatService.typing(this.user!.id, { roomId: this.roomId }, body.typing);
+			}
+		} catch {
+			this.send('unavailable', null);
+			this.connection.disconnectChannel(this.id);
 		}
 	}
 

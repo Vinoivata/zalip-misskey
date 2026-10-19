@@ -10,6 +10,9 @@ import { MiDriveFile } from './DriveFile.js';
 import { MiChatRoom } from './ChatRoom.js';
 
 @Entity('chat_message')
+@Index('IDX_zalip_chat_message_from_to_id', ['fromUserId', 'toUserId', 'id'], { where: '"toRoomId" IS NULL' })
+@Index('IDX_zalip_chat_message_to_from_id', ['toUserId', 'fromUserId', 'id'], { where: '"toRoomId" IS NULL' })
+@Index('IDX_zalip_chat_message_room_id', ['toRoomId', 'id'], { where: '"toRoomId" IS NOT NULL' })
 export class MiChatMessage {
 	@PrimaryColumn(id())
 	public id: string;
@@ -54,6 +57,24 @@ export class MiChatMessage {
 		length: 4096, nullable: true,
 	})
 	public text: string | null;
+
+	@Column('timestamp with time zone', { nullable: true })
+	public updatedAt: Date | null;
+
+	@Index('IDX_chat_message_reply')
+	@Column({ ...id(), nullable: true })
+	public replyId: MiChatMessage['id'] | null;
+
+	@ManyToOne(() => MiChatMessage, { onDelete: 'SET NULL' })
+	@JoinColumn({ name: 'replyId', foreignKeyConstraintName: 'FK_chat_message_reply' })
+	public reply: MiChatMessage | null;
+
+	@Column({ ...id(), nullable: true })
+	public forwardedFromUserId: MiUser['id'] | null;
+
+	@ManyToOne(() => MiUser, { onDelete: 'SET NULL' })
+	@JoinColumn({ name: 'forwardedFromUserId', foreignKeyConstraintName: 'FK_chat_message_forwarded_user' })
+	public forwardedFromUser: MiUser | null;
 
 	@Column('varchar', {
 		length: 512, nullable: true,

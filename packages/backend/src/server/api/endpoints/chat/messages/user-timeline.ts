@@ -47,6 +47,7 @@ export const paramDef = {
 		sinceDate: { type: 'integer' },
 		untilDate: { type: 'integer' },
 		userId: { type: 'string', format: 'misskey:id' },
+		markAsRead: { type: 'boolean', default: true },
 	},
 	required: ['userId'],
 } as const;
@@ -70,9 +71,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				throw err;
 			});
 
+			if (!await this.chatService.canViewUserConversation(me.id, other.id)) throw new ApiError(meta.errors.noSuchUser);
 			const messages = await this.chatService.userTimeline(me.id, other.id, ps.limit, sinceId, untilId);
 
-			this.chatService.readUserChatMessage(me.id, other.id);
+			if (ps.markAsRead) await this.chatService.readUserChatMessage(me.id, other.id);
 
 			return await this.chatEntityService.packMessagesLiteFor1on1(messages);
 		});

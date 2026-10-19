@@ -1737,7 +1737,40 @@ declare module '../api.js' {
      *
      * **Credential required**: *Yes* / **Permission**: *write:chat*
      */
+    request<E extends 'chat/messages/edit', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     *
+     * **Credential required**: *Yes* / **Permission**: *write:chat*
+     */
+    request<E extends 'chat/messages/forward', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     *
+     * **Credential required**: *Yes* / **Permission**: *write:chat*
+     */
     request<E extends 'chat/messages/react', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     *
+     * **Credential required**: *Yes* / **Permission**: *read:chat*
+     */
+    request<E extends 'chat/messages/read', P extends Endpoints[E]['req']>(
       endpoint: E,
       params: P,
       credential?: string | null,
@@ -5423,6 +5456,39 @@ declare module '../api.js' {
      * **Credential required**: *Yes* / **Permission**: *write:account*
      */
     request<E extends 'zalip/admin/works/update-state', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * Page only your accessible conversations with server-side search and personal archive filters. This read never marks messages read. unread describes your incoming state, not recipient read receipts.
+     *
+     * **Credential required**: *Yes* / **Permission**: *read:chat*
+     */
+    request<E extends 'zalip/chat/conversations', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * Read only your personal pin, archive and notification settings for an accessible existing conversation. No read markers change.
+     *
+     * **Credential required**: *Yes* / **Permission**: *read:chat*
+     */
+    request<E extends 'zalip/chat/preferences/show', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * Partially update only your conversation settings. Omitted fields are preserved; null clears your personal pinned message. Pinning does not pin a message for other room members, and muting does not mark anything read.
+     *
+     * **Credential required**: *Yes* / **Permission**: *write:chat*
+     */
+    request<E extends 'zalip/chat/preferences/update', P extends Endpoints[E]['req']>(
       endpoint: E,
       params: P,
       credential?: string | null,

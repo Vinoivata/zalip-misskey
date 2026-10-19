@@ -3,9 +3,12 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import { chatMessageContextProperties } from './chat-message-context.js';
+
 export const packedChatMessageSchema = {
 	type: 'object',
 	properties: {
+		...chatMessageContextProperties,
 		id: {
 			type: 'string',
 			optional: false, nullable: false,
@@ -70,6 +73,7 @@ export const packedChatMessageSchema = {
 						type: 'string',
 						optional: false, nullable: false,
 					},
+					userId: { type: 'string', optional: false, nullable: false },
 					user: {
 						type: 'object',
 						optional: false, nullable: false,
@@ -84,6 +88,7 @@ export const packedChatMessageSchema = {
 export const packedChatMessageLiteSchema = {
 	type: 'object',
 	properties: {
+		...chatMessageContextProperties,
 		id: {
 			type: 'string',
 			optional: false, nullable: false,
@@ -134,6 +139,7 @@ export const packedChatMessageLiteSchema = {
 						type: 'string',
 						optional: false, nullable: false,
 					},
+					userId: { type: 'string', optional: false, nullable: false },
 					user: {
 						type: 'object',
 						optional: true, nullable: true,
@@ -148,6 +154,7 @@ export const packedChatMessageLiteSchema = {
 export const packedChatMessageLiteFor1on1Schema = {
 	type: 'object',
 	properties: {
+		...chatMessageContextProperties,
 		id: {
 			type: 'string',
 			optional: false, nullable: false,
@@ -189,6 +196,7 @@ export const packedChatMessageLiteFor1on1Schema = {
 						type: 'string',
 						optional: false, nullable: false,
 					},
+					userId: { type: 'string', optional: false, nullable: false },
 				},
 			},
 		},
@@ -198,6 +206,7 @@ export const packedChatMessageLiteFor1on1Schema = {
 export const packedChatMessageLiteForRoomSchema = {
 	type: 'object',
 	properties: {
+		...chatMessageContextProperties,
 		id: {
 			type: 'string',
 			optional: false, nullable: false,
@@ -244,6 +253,7 @@ export const packedChatMessageLiteForRoomSchema = {
 						type: 'string',
 						optional: false, nullable: false,
 					},
+					userId: { type: 'string', optional: false, nullable: false },
 					user: {
 						type: 'object',
 						optional: false, nullable: false,

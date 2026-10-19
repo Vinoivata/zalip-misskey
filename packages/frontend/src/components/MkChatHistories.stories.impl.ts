@@ -5,10 +5,9 @@
 
 import { http, HttpResponse } from 'msw';
 import { action } from 'storybook/actions';
-import { chatMessage } from '../../.storybook/fakes';
+import { chatMessage, userLite } from '../../.storybook/fakes';
 import MkChatHistories from './MkChatHistories.vue';
 import type { StoryObj } from '@storybook/vue3';
-import type * as Misskey from 'misskey-js';
 export const Default = {
 	render(args) {
 		return {
@@ -34,10 +33,10 @@ export const Default = {
 		layout: 'centered',
 		msw: {
 			handlers: [
-				http.post('/api/chat/history', async ({ request }) => {
-					const body = await request.json() as Misskey.entities.ChatHistoryRequest;
-					action('POST /api/chat/history')(body);
-					return HttpResponse.json([chatMessage(body.room)]);
+				http.post('*/api/zalip/chat/conversations', async ({ request }) => {
+					const body = await request.json();
+					action('POST /api/zalip/chat/conversations')(body);
+					return HttpResponse.json({ items: [{ key: 'user:demouser', kind: 'user', user: userLite('demouser', 'cinemafan', null, 'Cinema fan'), room: null, lastMessage: chatMessage(), unread: true, preferences: { isPinned: false, isArchived: false, isMuted: false, pinnedMessageId: null } }], nextCursor: null });
 				}),
 			],
 		},
