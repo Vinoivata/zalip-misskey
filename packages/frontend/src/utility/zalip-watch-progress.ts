@@ -59,8 +59,8 @@ export async function balancerResourceFingerprint(provider: 'alloha' | 'collaps'
 		let identity: string | null = null;
 		let selector: string | null = null;
 		if (provider === 'alloha') {
-			// Movie native resume can switch cuts without an identity event. Do not claim a fixed movie cut.
-			if (seasonNumber == null || !one('hidden')?.split(',').every(value => ['episode', 'season', 'translation'].includes(value)) || !['episode', 'season', 'translation'].every(value => one('hidden')?.split(',').includes(value))) return null;
+			// Keep native selectors hidden for films too; a resumed cut must also match its saved duration.
+			if (!one('hidden')?.split(',').every(value => ['episode', 'season', 'translation'].includes(value)) || !['episode', 'season', 'translation'].every(value => one('hidden')?.split(',').includes(value))) return null;
 			identity = one('token_movie'); selector = one('translation');
 			if (!identity || !/^[A-Za-z0-9_-]{8,256}$/u.test(identity) || (translationId != null && selector !== translationId)) return null;
 		} else {

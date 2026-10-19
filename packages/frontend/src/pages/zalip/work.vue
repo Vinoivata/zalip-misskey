@@ -103,6 +103,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 								</div>
 							</div>
 							<p v-if="$i && playerOpen && (watchTracker.mode.value === 'episode' || !watchPlayerContext)" :class="$style.availableNotice">{{ episodeOnlyProgressHint }}</p>
+						<p v-else-if="$i && playerOpen && watchTracker.mode.value === 'time' && selectedProvider === 'collaps'" :class="$style.availableNotice">{{ i18n.ts.zalip._progress.collapsTimingHint }}</p>
 							<div v-if="work.seasons.length" :class="$style.playerEpisodes">
 								<div v-if="work.seasons.length > 1" :class="$style.seasonPicker"><span>{{ i18n.ts.zalip.workSeason }}</span><div><button v-for="season in work.seasons" :key="season.id" type="button" class="_button" :class="{ [$style.selectedSeasonPill]: selectedSeasonNumber === season.seasonNumber }" :aria-pressed="selectedSeasonNumber === season.seasonNumber" @click="selectSeason(season)">{{ season.seasonNumber === 0 ? i18n.ts.zalip.releaseSpecial : season.seasonNumber }}</button></div></div>
 								<p v-if="episodesPending" :class="$style.episodeRailState"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i>{{ i18n.ts.zalip.playerEpisodesLoading }}</p>
@@ -449,7 +450,8 @@ const episodeWatched = computed(() => selectedEpisodeProgress.value != null && e
 
 const kodikEpisodeContextBlocked = computed(() => activePlayback.value?.source === 'kodik' && (selectedSeasonNumber.value != null || !!work.value?.seasons.length) && (episodesPending.value || selectedEpisode.value == null));
 const selectedEpisodeAvailable = computed(() => !kodikEpisodeContextBlocked.value && playbackEpisodeAvailable(activePlayback.value, selectedTranslationId.value, selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null));
-const fixedPlayerClip = computed(() => selectedEpisode.value != null || (!!work.value && !episodic.value && work.value.kind === 'movie'));
+// A standalone animated film is still a single clip; the server checks its canonical movie identity.
+const fixedPlayerClip = computed(() => selectedEpisode.value != null || (!!work.value && !episodic.value && !activePlayback.value?.episodes.length));
 const activePlayerIframe = computed(() => selectedEpisodeAvailable.value ? workPlaybackIframe(activePlayback.value, selectedTranslationId.value, selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null, fixedPlayerClip.value) : null);
 const resumeIframeUrl = ref<string | null>(null);
 const resumeFrameRevision = ref(0);

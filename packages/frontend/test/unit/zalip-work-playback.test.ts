@@ -110,6 +110,29 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('Zalip work playback selection', () => {
+	it.each(['animation', 'anime'])('locks a standalone %s movie clip and claims timestamp progress without invented episode coordinates', async kind => {
+		workData = { ...serial, kind, seasons: [] };
+		sources = [structuredClone(collaps)];
+		const view = setup();
+		await play(view);
+		const url = new URL(iframe(view).src);
+		expect(url.searchParams.get('showMenu')).toBe('false');
+		expect(url.searchParams.get('showPreNext')).toBe('false');
+		expect(url.searchParams.has('season')).toBe(false);
+		expect(url.searchParams.has('episode')).toBe(false);
+		await waitFor(() => expect(misskeyApiZalip).toHaveBeenCalledWith('zalip/progress/start', expect.objectContaining({ workId: 'work', episodeId: null, provider: 'collaps', translationId: 'studio-one', expectedResourceFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/u) })));
+	});
+	it.each(['series', 'anime'])('keeps an unbound %s serial playable without inventing a canonical progress target', async kind => {
+		workData = { ...serial, kind, seasons: [] };
+		sources = [{ ...structuredClone(collaps), episodes: [{ seasonNumber: 2, episodeNumber: 1 }] }];
+		const view = setup();
+		await play(view); await nextTick();
+		expect(iframe(view)).not.toBeNull();
+		expect(new URL(iframe(view).src).searchParams.has('episode')).toBe(false);
+		expect(new URL(iframe(view).src).searchParams.has('showMenu')).toBe(false);
+		expect(vi.mocked(misskeyApiZalip).mock.calls.some(call => call[0] === 'zalip/progress/start')).toBe(false);
+		expect(player(view).getByText(i18n.ts.zalip._progress.episodeHint)).toBeTruthy();
+	});
 	it('offers real saved playback without autoplay and restores the exact available episode and edition only on a resume click', async () => {
 		sources = [structuredClone(kodik)];
 		sources[0].translations[1].providerTranslationId = '719';

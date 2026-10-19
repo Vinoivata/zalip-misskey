@@ -333,33 +333,36 @@ describe('ZalipWatchProgressService private playback state', () => {
 		}
 	});
 
-	it('Alloha movie seconds remain disabled despite a valid selected voice; explicit Collaps movies can track seconds', async () => {
+	it('explicit Alloha and Collaps movies accept seconds only with the exact mounted-resource proof', async () => {
 		for (const provider of ['alloha', 'collaps'] as const) {
 			const f = fixture(); f.work.kind = 'movie'; f.work.tmdbMediaType = 'movie'; const player = lockedPlayer(provider); delete player.translations[0].episodes;
 			f.work.importData = { values: { players: [player] } };
 			const selection = { ...lockedTarget(player), episodeId: null, expectedResourceFingerprint: lockedFingerprint(provider, '246', player.translations[0].iframe!, null, null) };
+			await expect(f.service.start(owner, { ...selection, expectedResourceFingerprint: undefined })).rejects.toThrow('ZALIP_PROGRESS_UNAVAILABLE');
+			await expect(f.service.start(owner, { ...selection, expectedResourceFingerprint: '0'.repeat(64) })).rejects.toThrow('ZALIP_PROGRESS_UNAVAILABLE');
+			expect(f.progress.save).not.toHaveBeenCalled();
 			const result = await f.service.start(owner, selection);
-			expect(result.progress.mode).toBe(provider === 'alloha' ? 'episode' : 'time');
-			if (provider === 'alloha') await expect(f.service.update(owner, { workId: 'work', sessionId: result.sessionId, sequence: 1, positionSeconds: 10, durationSeconds: 100 })).rejects.toThrow('INVALID_ZALIP_PROGRESS');
+			expect(result.progress).toMatchObject({ episodeId: null, seasonNumber: null, episodeNumber: null, mode: 'time' });
+			expect((await f.service.update(owner, { workId: 'work', sessionId: result.sessionId, sequence: 1, positionSeconds: 10, durationSeconds: 100 })).accepted).toBe(true);
 		}
 	});
 
-	it('resumes a Collaps movie with null episode at the saved time only for the same exact voice without library writes', async () => {
+	it.each(['alloha', 'collaps'] as const)('resumes a %s movie with null episode at the saved time only for the same exact voice without library writes', async provider => {
 		const f = fixture(); f.work.kind = 'movie'; f.work.tmdbMediaType = 'movie';
-		const player = lockedPlayer('collaps'); player.episodes = []; delete player.translations[0].episodes;
-		const anotherVoice = new URL(player.iframeUrl); anotherVoice.searchParams.set('oneSound', 'Another Studio');
+		const player = lockedPlayer(provider); player.episodes = []; delete player.translations[0].episodes;
+		const anotherVoice = new URL(player.iframeUrl); anotherVoice.searchParams.set(provider === 'alloha' ? 'translation' : 'oneSound', provider === 'alloha' ? '247' : 'Another Studio');
 		player.translations.push({ id: '247', name: 'Another Studio', iframe: anotherVoice.href });
 		f.work.importData = { ...f.work.importData, values: { players: [player] } };
 		const before = structuredClone(f.work);
 		const repositories = vi.spyOn(f.manager, 'getRepository');
-		const selection: ProgressTarget = { workId: 'work', episodeId: null, provider: 'collaps', translationId: '246', expectedResourceFingerprint: lockedFingerprint('collaps', '246', player.translations[0].iframe!, null, null) };
+		const selection: ProgressTarget = { workId: 'work', episodeId: null, provider, translationId: '246', expectedResourceFingerprint: lockedFingerprint(provider, '246', player.translations[0].iframe!, null, null) };
 		const first = await f.service.start(owner, selection);
 		expect(await f.service.update(owner, { workId: 'work', sessionId: first.sessionId, sequence: 1, positionSeconds: 120, durationSeconds: 7200 })).toMatchObject({ accepted: true, progress: { episodeId: null, seasonNumber: null, episodeNumber: null, mode: 'time', positionSeconds: 120, durationSeconds: 7200, completed: false } });
 		expect(await f.service.show(owner, 'work')).toMatchObject({ progress: { episodeId: null, translationId: '246', positionSeconds: 120, durationSeconds: 7200 } });
 		const resumed = await f.service.start(owner, selection);
 		expect(resumed.sessionId).not.toBe(first.sessionId);
 		expect(resumed).toMatchObject({ sequence: 0, progress: { episodeId: null, seasonNumber: null, episodeNumber: null, translationId: '246', mode: 'time', positionSeconds: 120, durationSeconds: 7200, completed: false } });
-		const otherSelection = { ...selection, translationId: '247', expectedResourceFingerprint: lockedFingerprint('collaps', '247', anotherVoice.href, null, null) };
+		const otherSelection = { ...selection, translationId: '247', expectedResourceFingerprint: lockedFingerprint(provider, '247', anotherVoice.href, null, null) };
 		const switched = await f.service.start(owner, otherSelection);
 		expect(switched.progress).toMatchObject({ episodeId: null, translationId: '247', mode: 'time', positionSeconds: null, durationSeconds: null });
 		expect(await f.service.update(owner, { workId: 'work', sessionId: resumed.sessionId, sequence: 999, positionSeconds: 121, durationSeconds: 7200 })).toMatchObject({ accepted: false, progress: { translationId: '247', positionSeconds: null } });
@@ -367,6 +370,37 @@ describe('ZalipWatchProgressService private playback state', () => {
 		const privateProgressDependencies = new Set<unknown>([MiZalipWork, MiZalipSeason, MiZalipExternalIdentity, MiZalipWatchProgress]);
 		expect(repositories.mock.calls.every(([model]) => privateProgressDependencies.has(model))).toBe(true);
 		expect(f.catalogue.packWork).not.toHaveBeenCalled();
+	});
+
+	it.each(['anime', 'animation'] as const)('accepts a canonical Alloha %s movie while retaining the series boundary', async kind => {
+		const f = fixture(); f.work.kind = kind; f.work.tmdbMediaType = 'movie';
+		const player = lockedPlayer('alloha'); player.episodes = []; delete player.translations[0].episodes;
+		f.work.importData = { values: { players: [player] } };
+		const selection: ProgressTarget = { ...lockedTarget(player), episodeId: null, expectedResourceFingerprint: lockedFingerprint('alloha', '246', player.translations[0].iframe!, null, null) };
+		expect((await f.service.start(owner, selection)).progress).toMatchObject({ episodeId: null, mode: 'time' });
+		f.work.tmdbMediaType = null; f.identities.findBy.mockResolvedValue([{ entityType: 'movie' }]);
+		expect((await f.service.start(owner, selection)).progress.mode).toBe('time');
+		f.identities.findBy.mockResolvedValue([{ entityType: 'tv' }]);
+		await expect(f.service.start(owner, selection)).rejects.toThrow('INVALID_ZALIP_PROGRESS_TARGET');
+	});
+
+	it('an Alloha movie reset or resource replacement cannot inherit or revive an old offset', async () => {
+		const f = fixture(); f.work.kind = 'movie'; f.work.tmdbMediaType = 'movie';
+		const player = lockedPlayer('alloha'); player.episodes = []; delete player.translations[0].episodes;
+		f.work.importData = { values: { players: [player] } };
+		const selection: ProgressTarget = { ...lockedTarget(player), episodeId: null, expectedResourceFingerprint: lockedFingerprint('alloha', '246', player.translations[0].iframe!, null, null) };
+		const first = await f.service.start(owner, selection);
+		await f.service.update(owner, { workId: 'work', sessionId: first.sessionId, sequence: 1, positionSeconds: 120, durationSeconds: 7200 });
+		await f.service.reset(owner, 'work');
+		expect(await f.service.update(owner, { workId: 'work', sessionId: first.sessionId, sequence: 2, positionSeconds: 121 })).toEqual({ accepted: false, progress: null });
+		const second = await f.service.start(owner, selection);
+		expect(second.progress).toMatchObject({ mode: 'time', positionSeconds: null, durationSeconds: null });
+		await f.service.update(owner, { workId: 'work', sessionId: second.sessionId, sequence: 1, positionSeconds: 120, durationSeconds: 7200 });
+		player.translations[0].iframe = player.translations[0].iframe!.replace('title-fixture', 'replaced-fixture');
+		await expect(f.service.update(owner, { workId: 'work', sessionId: second.sessionId, sequence: 2, positionSeconds: 121 })).rejects.toThrow('ZALIP_PROGRESS_UNAVAILABLE');
+		await expect(f.service.start(owner, selection)).rejects.toThrow('ZALIP_PROGRESS_UNAVAILABLE');
+		const replacement = await f.service.start(owner, { ...selection, expectedResourceFingerprint: lockedFingerprint('alloha', '246', player.translations[0].iframe, null, null) });
+		expect(replacement.progress).toMatchObject({ mode: 'time', positionSeconds: null, durationSeconds: null });
 	});
 
 	it('Collaps movie seconds reject ambiguous case-insensitive substring voice matches', async () => {

@@ -98,10 +98,11 @@ describe('continue watching presentation', () => {
 		url.pathname += '/another-cut';
 		expect(await balancerResourceFingerprint(provider, translationId, url.toString(), 2, 1, subtle)).not.toBe(actual);
 	});
-	it('never fingerprints an Alloha movie or an unlocked or mismatched serial', async () => {
+	it('fingerprints a locked Alloha movie by voice and title while rejecting unlocked or mismatched serials', async () => {
 		const subtle = webcrypto.subtle as unknown as SubtleCrypto;
 		const url = 'https://alloha.example/?token_movie=title-fixture&translation=246&hidden=episode,season,translation&season=2&episode=1';
-		expect(await balancerResourceFingerprint('alloha', '246', url, null, null, subtle)).toBeNull();
+		const movie = new URL(url); movie.searchParams.delete('season'); movie.searchParams.delete('episode');
+		expect(await balancerResourceFingerprint('alloha', '246', movie.toString(), null, null, subtle)).toBe(createHash('sha256').update(JSON.stringify(['alloha', 'v1', '246', '/', 'title-fixture', '246', null, null])).digest('hex'));
 		for (const bad of [url.replace('&hidden=episode,season,translation', ''), url.replace('hidden=episode,season,translation', 'hidden=episode,season'), url.replace('translation=246', 'translation=999'), `${url}&translation=246`, `${url}&token_movie=other-fixture`, url.replace('season=2', 'season=3'), url.replace('episode=1', 'episode=2'), url.replace('https:', 'http:'), url.replace('https://', 'https://secret@')]) expect(await balancerResourceFingerprint('alloha', '246', bad, 2, 1, subtle)).toBeNull();
 		expect(await balancerResourceFingerprint('alloha', '246', url, 2, null, subtle)).toBeNull();
 		expect(await balancerResourceFingerprint('alloha', '246', url, 2, 1, null)).toBeNull();

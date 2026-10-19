@@ -64,6 +64,7 @@ export function useZalipWatchProgress(context: Readonly<Ref<WatchPlayerContext |
 		let verified = false;
 		let interrupted = false;
 		let resumeSeconds = value.resumeSeconds;
+		let resumeDuration: number | null = null;
 		let pendingSeek = resumeSeconds != null && resumeSeconds > 0;
 		let sessionReady = false;
 		let seekSent = false;
@@ -86,6 +87,9 @@ export function useZalipWatchProgress(context: Readonly<Ref<WatchPlayerContext |
 		const seekIfReady = () => {
 			if (value.provider === 'collaps') return;
 			if (!sessionReady || !pendingSeek || seekSent || !verified || duration == null || interrupted) return;
+			// A provider can remember a different native movie cut despite the same voice selector.
+			// Do not seek our stored position into a freshly observed, incompatible timeline.
+			if (resumeDuration != null && Math.abs(duration - resumeDuration) > 2) { interrupted = true; state.value = 'unmapped'; return; }
 			if (resumeSeconds == null || resumeSeconds >= duration) { interrupted = true; state.value = 'unmapped'; return; }
 			seekSent = true;
 			if (!command('seek', { seconds: resumeSeconds })) { interrupted = true; state.value = 'failed'; return; }
@@ -94,11 +98,10 @@ export function useZalipWatchProgress(context: Readonly<Ref<WatchPlayerContext |
 		const interrupt = () => { interrupted = true; verified = false; writer?.finish(); state.value = 'unmapped'; };
 		const confirmSeek = (seconds: number) => {
 			if (!pendingSeek) return true;
-			const close = resumeSeconds != null && (value.provider === 'collaps' ? seconds >= resumeSeconds - 1 && seconds <= resumeSeconds + 10 : Math.abs(seconds - resumeSeconds) <= 4);
-			if (!seekSent || !close) {
-				if (value.provider === 'collaps' && seekSent && seekTimer == null) seekTimer = window.setTimeout(() => { if (current() && pendingSeek) { interrupted = true; state.value = 'failed'; } }, 15000);
-				return false;
-			}
+			// Collaps emits progress only after ~60s of stable playback, not an exact seek acknowledgement.
+			// Trust the fresh locked time= frame's positive content sample, including deliberate user seeks.
+			const confirmed = value.provider === 'collaps' ? seconds > 0 : resumeSeconds != null && Math.abs(seconds - resumeSeconds) <= 4;
+			if (!seekSent || !confirmed) return false;
 			pendingSeek = false;
 			if (seekTimer != null) window.clearTimeout(seekTimer);
 			seekTimer = null;
@@ -141,7 +144,13 @@ export function useZalipWatchProgress(context: Readonly<Ref<WatchPlayerContext |
 				}
 				const event = parseCollapsEvent(message, binding, generation);
 				if (!event) return;
-				if (event.type === 'episode') { interrupt(); return; }
+				if (event.type === 'episode') {
+					// The player may announce the already selected episode when loading its clip.
+					// Only a real target change invalidates the app-owned canonical context.
+					if (value.seasonNumber == null || value.episodeNumber == null || event.season !== value.seasonNumber || event.episode !== value.episodeNumber || (collapsId != null && collapsId !== event.id)) { interrupt(); return; }
+					collapsId = event.id;
+					return;
+				}
 				if (event.type === 'adStart') {
 					adActive = true; playing = false; position = null; duration = null; verified = false;
 					if (seekTimer != null) window.clearTimeout(seekTimer);
@@ -166,6 +175,7 @@ export function useZalipWatchProgress(context: Readonly<Ref<WatchPlayerContext |
 				if (collapsId != null && collapsId !== event.id) { interrupt(); return; }
 				collapsId = event.id;
 				if (contentDuration != null && Math.abs(contentDuration - event.durationSeconds) > 2) { interrupt(); return; }
+				if (pendingSeek && resumeDuration != null && Math.abs(event.durationSeconds - resumeDuration) > 2) { interrupt(); return; }
 				contentDuration = event.durationSeconds;
 				duration = event.durationSeconds; position = event.seconds; verified = true; playing = true;
 				if (!confirmSeek(position)) return;
@@ -238,6 +248,7 @@ export function useZalipWatchProgress(context: Readonly<Ref<WatchPlayerContext |
 				if (pendingSeek) {
 					resumeSeconds = start.progress.mode === 'time' && !start.progress.completed ? start.progress.positionSeconds : null;
 					pendingSeek = resumeSeconds != null && resumeSeconds > 0;
+					resumeDuration = pendingSeek ? start.progress.durationSeconds : null;
 				}
 				if (balancerBound && value.provider === 'collaps' && pendingSeek && resumeSeconds != null) {
 					// Recreate the DOM iframe: navigation on the same WindowProxy would accept queued old-load messages.

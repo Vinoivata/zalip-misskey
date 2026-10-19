@@ -103,13 +103,36 @@ describe('secure playback progress lifecycle', () => {
 		expect(post.mock.calls.filter(call => JSON.parse(String(call[0])).api === 'seek')).toHaveLength(1);
 		expect(post.mock.calls.some(call => JSON.parse(String(call[0])).api === 'play')).toBe(false);
 	});
-	it('keeps Alloha movie tracking in episode mode without hash, time writes or seek commands', async () => {
-		const movie = { ...allohaTarget, episodeId: null, seasonNumber: null, episodeNumber: null, resumeSeconds: 120 };
+	it('saves a locked Alloha movie with null coordinates and a mounted resource fingerprint', async () => {
+		const movie = { ...allohaTarget, episodeId: null, seasonNumber: null, episodeNumber: null, iframeUrl: allohaTarget.iframeUrl.replace('&season=2&episode=1', '') };
 		const host = setup(); await host.start(movie);
 		const post = vi.spyOn(host.frame().contentWindow!, 'postMessage').mockImplementation(() => {});
 		content(host, movie);
-		expect(vi.mocked(misskeyApiZalip).mock.calls[0][1]).not.toHaveProperty('expectedResourceFingerprint');
-		expect(host.tracker().mode.value).toBe('episode'); expect(updates()).toHaveLength(0); expect(post).not.toHaveBeenCalled();
+		await waitFor(() => expect(updates()).toHaveLength(1));
+		expect(vi.mocked(misskeyApiZalip).mock.calls[0][1]).toMatchObject({ episodeId: null, expectedResourceFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/u) });
+		expect(host.tracker().mode.value).toBe('time');
+		expect(updates()[0][1]).toMatchObject({ positionSeconds: 25, durationSeconds: 1000 });
+		expect(post.mock.calls.some(call => JSON.parse(String(call[0])).api === 'seek')).toBe(false);
+	});
+	it('restores an Alloha movie only after its saved duration is observed, then saves the confirmed seek', async () => {
+		const movie = { ...allohaTarget, episodeId: null, seasonNumber: null, episodeNumber: null, iframeUrl: allohaTarget.iframeUrl.replace('&season=2&episode=1', '') };
+		vi.mocked(misskeyApiZalip).mockResolvedValueOnce({ sessionId: 'movie-session', sequence: 0, progress: { ...progress, ...movie, positionSeconds: 120, durationSeconds: 1000 } });
+		const host = setup(); await host.start({ ...movie, resumeSeconds: 120 });
+		const post = vi.spyOn(host.frame().contentWindow!, 'postMessage').mockImplementation(() => {});
+		host.alloha('duration', 1000); host.alloha('timeupdate', 1);
+		expect(post).toHaveBeenCalledWith(JSON.stringify({ api: 'seek', value: 120 }), 'https://alloha.example');
+		host.alloha('timeupdate', 121); host.alloha('pause', 121);
+		await waitFor(() => expect(updates()).toHaveLength(1));
+		expect(updates()[0][1]).toMatchObject({ sessionId: 'movie-session', positionSeconds: 121, durationSeconds: 1000 });
+	});
+	it.each([{ ...allohaTarget, episodeId: null, seasonNumber: null, episodeNumber: null, iframeUrl: allohaTarget.iframeUrl.replace('&season=2&episode=1', '') }, collapsMovieTarget])('does not apply a saved offset to a different observed $provider cut', async value => {
+		vi.mocked(misskeyApiZalip).mockResolvedValueOnce({ sessionId: 'session', sequence: 0, progress: { ...progress, ...value, positionSeconds: 120, durationSeconds: 900 } });
+		const host = setup(); await host.start({ ...value, resumeSeconds: 120 });
+		const post = vi.spyOn(host.frame().contentWindow!, 'postMessage').mockImplementation(() => {});
+		content(host, value, 120);
+		expect(host.tracker().state.value).toBe('unmapped');
+		expect(updates()).toHaveLength(0);
+		expect(post.mock.calls.some(call => typeof call[0] === 'string' && JSON.parse(String(call[0])).api === 'seek')).toBe(false);
 	});
 	it('suppresses Collaps ad clocks and resumes saving main-content samples after midroll', async () => {
 		const host = setup(); await host.start(collapsTarget);
@@ -138,10 +161,30 @@ describe('secure playback progress lifecycle', () => {
 		const host = setup(); await host.start(collapsTarget);
 		content(host, collapsTarget, 25); await waitFor(() => expect(updates()).toHaveLength(1));
 		if (changed === 'id') host.collaps('startWatching', { id: 8 });
-		else if (changed === 'episode') host.collaps('changeEpisode', { id: 7, season: 2, episode: 1 });
+		else if (changed === 'episode') host.collaps('changeEpisode', { id: 7, season: 2, episode: 2 });
 		else host.collaps('viewProgress', { id: 7, time: 26, duration: 1100 });
 		host.collaps('viewProgress', { id: 7, time: 30, duration: 1000 }); host.tracker().flush();
 		expect(host.tracker().state.value).toBe('unmapped'); expect(updates()).toHaveLength(1);
+	});
+	it.each(['initial', 'repeated'] as const)('keeps saving when Collaps announces the same canonical episode (%s)', async announcement => {
+		const host = setup(); await host.start(collapsTarget);
+		if (announcement === 'repeated') {
+			content(host, collapsTarget, 25); await waitFor(() => expect(updates()).toHaveLength(1));
+			await nextTick(); await Promise.resolve(); await Promise.resolve();
+		}
+		host.collaps('changeEpisode', { id: 7, season: 2, episode: 1 });
+		if (announcement === 'initial') { host.tracker().flush(); expect(updates()).toHaveLength(0); }
+		host.collaps('viewProgress', { id: 7, time: 30, duration: 1000 }); host.tracker().flush();
+		await waitFor(() => expect(updates()).toHaveLength(announcement === 'initial' ? 1 : 2));
+		expect(updates().at(-1)![1]).toMatchObject({ positionSeconds: 30, durationSeconds: 1000 });
+		expect(host.tracker().state.value).toBe('saved');
+	});
+	it.each(['id', 'season', 'movie'] as const)('rejects a Collaps episode announcement with a changed or unbound %s', async mismatch => {
+		const host = setup(); await host.start(mismatch === 'movie' ? collapsMovieTarget : collapsTarget);
+		host.collaps('startWatching', { id: 7 });
+		host.collaps('changeEpisode', { id: mismatch === 'id' ? 8 : 7, season: mismatch === 'season' ? 3 : 2, episode: 1 });
+		host.collaps('viewProgress', { id: 7, time: 30, duration: 1000 }); host.tracker().flush();
+		expect(host.tracker().state.value).toBe('unmapped'); expect(updates()).toHaveLength(0);
 	});
 	it('retains the Collaps content-duration identity across midroll instead of accepting a new timeline', async () => {
 		const host = setup(); await host.start(collapsTarget);
@@ -217,6 +260,21 @@ describe('secure playback progress lifecycle', () => {
 		await waitFor(() => expect(updates()).toHaveLength(1));
 		expect(updates()[0][1]).toMatchObject({ workId: 'movie315635', sessionId: 'movie-resume-session', sequence: 1, positionSeconds: 120, durationSeconds: 7200, completed: false });
 		expect(host.tracker().state.value).not.toBe('unmapped');
+	});
+	it.each([61, 181, 242, 1000])('accepts a sparse or deliberately sought Collaps movie sample at %s without requiring an invented seek acknowledgement', async seconds => {
+		vi.mocked(misskeyApiZalip).mockResolvedValueOnce({ sessionId: 'sparse-resume', sequence: 0, progress: { ...progress, ...collapsMovieTarget, positionSeconds: 120, durationSeconds: 7200 } });
+		const host = setup(); await host.start({ ...collapsMovieTarget, resumeSeconds: 120 });
+		await waitFor(() => expect(new URL(host.frame().src).searchParams.get('time')).toBe('120'));
+		await waitFor(() => expect(host.tracker().mode.value).toBe('time'));
+		host.collaps('viewProgress', { id: 7, time: 0, duration: 7200 }); host.tracker().flush();
+		expect(updates()).toHaveLength(0);
+		const timeout = vi.spyOn(window, 'setTimeout');
+		host.collaps('viewProgress', { id: 7, time: seconds, duration: 7200 }); host.tracker().flush();
+		await waitFor(() => expect(updates()).toHaveLength(1));
+		expect(updates()[0][1]).toMatchObject({ positionSeconds: seconds, durationSeconds: 7200 });
+		expect(timeout.mock.calls.some(call => call[1] === 15000)).toBe(false);
+		expect(host.tracker().state.value).not.toBe('failed');
+		timeout.mockRestore();
 	});
 	it('fails closed when Collaps resume cannot remount a new iframe window', async () => {
 		vi.mocked(misskeyApiZalip).mockResolvedValueOnce({ sessionId: 'session', sequence: 0, progress: { ...progress, ...collapsTarget, positionSeconds: 120, durationSeconds: 1000 } });

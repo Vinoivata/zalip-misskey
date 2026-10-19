@@ -224,8 +224,8 @@ function lockedProviderTimeline(provider: 'alloha' | 'collaps', iframe: string |
 		const selector = url.searchParams.get(selectorKey);
 		if (url.searchParams.getAll(selectorKey).length > 1 || (selector !== null && (!selector.trim() || selector.length > 256 || /[\u0000-\u001f\u007f-\u009f]/u.test(selector)))) return null;
 		if (provider === 'alloha') {
-			// Movie embeds may silently restore another native type/quality, even with hidden controls.
-			if (!episode) return null;
+			// Movies use the same fixed title/voice identity with null canonical episode coordinates.
+			// The client verifies the freshly observed duration before applying a saved movie offset.
 			identity = url.searchParams.get('token_movie');
 			if (url.searchParams.getAll('token_movie').length !== 1 || !identity || !/^[A-Za-z0-9_-]{8,256}$/u.test(identity) || (translationId !== null && selector !== translationId)) return null;
 		} else {
