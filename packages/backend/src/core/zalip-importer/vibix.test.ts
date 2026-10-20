@@ -76,19 +76,35 @@ describe('Vibix importer boundaries', () => {
 		expect(result.ref.mediaType).toBe('tv'); expect(result.kind).toBe('series'); expect(result.seasons).toEqual([]); expect(result.players[0].episodes).toEqual([]); expect(result.players[0].translations[0]).not.toHaveProperty('episodes'); expect(result.warnings).toContain('vibix-episode-data-unavailable');
 	});
 	test('canonicalizes the raw API serial embed alias without weakening canonical types or media matching', async () => {
-		const embed_code = "<ins data-publisher-id='668741250' data-type='serial' data-id='9308'></ins>";
-		const response = { success: true, data: movie({ name_rus: 'Лучший день в моей жизни', name_original: 'Yu jian ni de nei tian', type: 'serial', kp_id: 6757923, imdb_id: 'tt33044296', voiceovers: [{ id: 113, name: 'ТО Дубляжная' }], embed_code }) };
+		const embed_code = 'data-publisher-id="668741250" data-type="serial" data-id="9308"';
+		const response = { success: true, data: movie({ id: 1064312, name_rus: 'Лучший день в моей жизни', name_original: 'Yu jian ni de nei tian', type: 'serial', kp_id: 6757923, imdb_id: 'tt33044296', voiceovers: [{ id: 113, name: 'ТО Дубляжная' }], embed_code }) };
 		const transport = vi.fn<ImportTransport>(async () => response);
 		const result = await createImportProviders({ vibixApiToken: 'fixture' }, transport).vibix.fetch({ source: 'vibix', externalId: '6757923', mediaType: 'tv' });
 		expect(result.ref).toEqual({ source: 'vibix', externalId: '6757923', mediaType: 'tv' }); expect(result.kind).toBe('series');
 		expect(result.identities).toContainEqual({ provider: 'imdb', externalId: 'tt33044296', entityType: 'tv' });
-		expect(result.players).toEqual([{ source: 'vibix', externalId: '200', iframeUrl: '', vibixEmbed: { publisherId: '668741250', type: 'series', id: '9308' }, translations: [{ id: '113', name: 'ТО Дубляжная' }], quality: 'WEB-DL', episodes: [] }]);
+		expect(result.players).toEqual([{ source: 'vibix', externalId: '1064312', iframeUrl: '', vibixEmbed: { publisherId: '668741250', type: 'series', id: '9308' }, translations: [{ id: '113', name: 'ТО Дубляжная' }], quality: 'WEB-DL', episodes: [] }]);
 		expect(result.warnings).not.toContain('vibix-embed-rejected'); expect(result.warnings).not.toContain('vibix-player-url-missing');
+		expect(normalizeVibixRecord({ ...response.data, embed_code: `<ins ${embed_code}></ins>` }).players).toEqual(result.players);
 		expect(normalizeVibixEmbed({ publisherId: '668741250', type: 'serial', id: '9308' })).toBeNull();
 		const mismatched = normalizeVibixRecord(movie({ embed_code })); expect(mismatched.players).toEqual([]); expect(mismatched.warnings).toContain('vibix-embed-rejected');
 		for (const type of ['Serial', 'SERIAL', ' serial ', 'tv']) {
-			const invalid = normalizeVibixRecord(movie({ type: 'serial', embed_code: embed_code.replace("'serial'", `'${type}'`) })); expect(invalid.players).toEqual([]); expect(invalid.warnings).toContain('vibix-embed-rejected');
+			const invalid = normalizeVibixRecord(movie({ type: 'serial', embed_code: embed_code.replace('"serial"', `"${type}"`) })); expect(invalid.players).toEqual([]); expect(invalid.warnings).toContain('vibix-embed-rejected');
 		}
+	});
+	test('accepts only exact quoted movie attribute fragments without executing HTML or accepting poisoned attributes', () => {
+		const fragment = 'data-publisher-id="10" data-type="movie" data-id="30"';
+		for (const embed_code of [fragment, `  ${fragment}\n`, "data-id='30'\n data-type='movie' data-publisher-id='10'", `<ins ${fragment}></ins>`]) {
+			const result = normalizeVibixRecord(movie({ embed_code })); expect(result.players[0].vibixEmbed).toEqual({ publisherId: '10', type: 'movie', id: '30' });
+		}
+		const invalid = [
+			`<script>bad()</script>${fragment}`, `${fragment}<script>bad()</script>`, `${fragment}>`, `<${fragment}`,
+			`${fragment} onclick="bad()"`, `${fragment} data-extra="1"`, `${fragment} data-id="31"`, `${fragment}data-id="31"`,
+			`junk ${fragment}`, `${fragment} junk`, fragment.replace('data-id=', 'junk-data-id='),
+			fragment.replace('"30"', '30'), fragment.replace(' data-id="30"', ''), fragment.replace('data-publisher-id="10" ', ''), fragment.replace('data-type="movie" ', ''),
+			...['0', '01', '-1', '9007199254740992', 'javascript:alert(1)', '&#51;0', '30" onload="bad()'].map(id => fragment.replace('"30"', `"${id}"`)),
+			fragment.replace('"10"', '"0"'), fragment.replace('"10"', '"&#49;0"'), ' '.repeat(4097) + fragment,
+		];
+		for (const embed_code of invalid) { const result = normalizeVibixRecord(movie({ embed_code })); expect(result.players).toEqual([]); expect(result.warnings).toContain('vibix-embed-rejected'); }
 	});
 	test('bounds projected people and voices and omits nameless or unidentified credits', () => {
 		const result = normalizeVibixRecord(movie({ persons: [{ name: 'No stable identity' }, ...Array.from({ length: 301 }, (_, index) => ({ id: index + 1, name: `Person ${index}`, occupation: 'actor' }))], voiceovers: Array.from({ length: 101 }, (_, index) => ({ id: index + 1, name: `Voice ${index}` })) }));

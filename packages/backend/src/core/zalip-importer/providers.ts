@@ -637,19 +637,21 @@ export function normalizeVibixEmbed(value: unknown): ImportVibixEmbed | null {
 
 function vibixEmbedCode(value: unknown): ImportVibixEmbed | null {
 	if (typeof value !== 'string' || value.length > 4096) return null;
-	const tag = /^<ins\s+([^<>]*)>\s*<\/ins>$/iu.exec(value.trim());
-	if (!tag) return null;
+	const input = value.trim();
+	const tag = /^<ins\s+([^<>]*)>\s*<\/ins>$/iu.exec(input);
+	const fragment = tag?.[1] ?? (!/[<>]/u.test(input) ? input : null);
+	if (fragment == null) return null;
 	const attributes = new Map<string, string>();
 	const pattern = /\s*([a-z][a-z0-9-]*)\s*=\s*(["'])([^"'<>]*)\2/iy;
 	let offset = 0;
-	while (offset < tag[1].trimEnd().length) {
+	while (offset < fragment.trimEnd().length) {
 		pattern.lastIndex = offset;
-		const attribute = pattern.exec(tag[1]);
+		const attribute = pattern.exec(fragment);
 		if (!attribute) return null;
 		const key = attribute[1].toLowerCase();
 		if (!['data-publisher-id', 'data-type', 'data-id'].includes(key) || attributes.has(key)) return null;
 		attributes.set(key, attribute[3]); offset = pattern.lastIndex;
-		if (offset < tag[1].trimEnd().length && !/\s/u.test(tag[1][offset])) return null;
+		if (offset < fragment.trimEnd().length && !/\s/u.test(fragment[offset])) return null;
 	}
 	const type = attributes.get('data-type');
 	return normalizeVibixEmbed({ publisherId: attributes.get('data-publisher-id'), type: type === 'serial' ? 'series' : type, id: attributes.get('data-id') });
