@@ -18,7 +18,7 @@ import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
 import { MiZalipLibraryEntry } from '@/models/ZalipLibraryEntry.js';
 import { MiZalipWatchProgress } from '@/models/ZalipWatchProgress.js';
 import { MiDriveFile } from '@/models/DriveFile.js';
-import { api, castAsError, createAppToken, initTestDb, origin, sendEnvUpdateRequest, signup } from '../utils.js';
+import { api, castAsError, createAppToken, initTestDb, origin, port, sendEnvUpdateRequest, signup } from '../utils.js';
 import type * as misskey from 'misskey-js';
 
 type ImporterTaxonomyEntry = { id: string; name: string; data: Record<string, unknown> };
@@ -483,7 +483,7 @@ describe('Zalip discussions', () => {
 		for (const [workId, role] of [['personmovie2020', 'actor'], ['personmovie2020', 'director'], ['personseries2024', 'actor'], ['persondraft2025', 'director']]) {
 			assert.strictEqual((await api('zalip/admin/importer/taxonomy/link', { entryId, workId, role }, admin)).status, 200);
 		}
-		const path = `${origin}/zalip/taxonomy/person/zalip-person-fixture`;
+		const path = `http://127.0.0.1:${port}/zalip/taxonomy/person/zalip-person-fixture`;
 		const hidden = await fetch(path);
 		assert.strictEqual(hidden.status, 404);
 		assert.ok((await hidden.text()).includes('name="robots" content="noindex"'));
