@@ -25,10 +25,11 @@ function downloadForMode(mode: typeof redirectModes[number], url: URL, agent?: P
 }
 
 describe('bounded local importer artwork', () => {
-	test.each(['tmdb', 'kinopoisk'])('person photos pass the real %s image decoder, compact WebP transform and native Drive pipeline', async provider => {
-		const source = provider === 'tmdb' ? 'https://image.tmdb.org/t/p/w500/portrait.jpg' : 'https://st.kp.yandex.net/images/actor_iphone/20.jpg';
+	test.each(['tmdb', 'kinopoisk', 'kinopoisk-api'])('person photos pass the real %s image decoder, compact WebP transform and native Drive pipeline', async provider => {
+		const source = provider === 'tmdb' ? 'https://image.tmdb.org/t/p/w500/portrait.jpg' : provider === 'kinopoisk' ? 'https://st.kp.yandex.net/images/actor_iphone/20.jpg' : 'https://kinopoiskapiunofficial.tech/images/actor_posters/kp/24139.jpg';
 		const original = await sharp({ create: { width: 960, height: 1440, channels: 3, background: '#789abc' } }).jpeg().toBuffer();
-		if (provider === 'kinopoisk') mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: 'https://avatars.mds.yandex.net/get-kinopoisk-image/123/fixture-person/orig' }) });
+		if (provider === 'kinopoisk-api') mockedFetch.mockResolvedValueOnce({ ok: false, status: 301, headers: new Headers({ location: 'https://st.kp.yandex.net/images/actor_iphone/iphone360_24139.jpg' }) });
+		if (provider !== 'tmdb') mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: 'https://avatars.mds.yandex.net/get-kinopoisk-image/123/fixture-person/orig' }) });
 		mockedFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers({ 'content-type': 'image/jpeg' }), arrayBuffer: async () => original });
 		const files = new Map<string, { url: string }>(); const stored: { uri: string; bytes: Buffer }[] = [];
 		const repository = { findOne: vi.fn().mockResolvedValue(null), findOneBy: vi.fn(async ({ uri }: { uri: string }) => files.get(uri) ?? null) };
@@ -41,7 +42,95 @@ describe('bounded local importer artwork', () => {
 		const processed = stored.find(file => file.uri !== artworkOriginalCacheUri(new URL(source)))!.bytes;
 		expect(await sharp(processed).metadata()).toMatchObject({ format: 'webp', width: 480, height: 720 });
 		expect(drive.addFile).toHaveBeenCalledTimes(2); expect(drive.addFile.mock.calls.every(([input]) => (input as { user?: unknown }).user === null)).toBe(true);
+		expect(mockedFetch).toHaveBeenCalledTimes(provider === 'kinopoisk-api' ? 3 : provider === 'kinopoisk' ? 2 : 1);
 		const requests = mockedFetch.mock.calls.length; await service.cachePersonPhoto(source); expect(mockedFetch).toHaveBeenCalledTimes(requests); expect(drive.addFile).toHaveBeenCalledTimes(2);
+	});
+
+	test.each(redirectModes)('follows only the verified same-person KP API photo chain in %s mode', async mode => {
+		const original = await sharp({ create: { width: 80, height: 120, channels: 3, background: '#789abc' } }).jpeg().toBuffer();
+		const source = 'https://kinopoiskapiunofficial.tech/images/actor_posters/kp/24139.jpg';
+		const intermediate = 'https://st.kp.yandex.net/images/actor_iphone/iphone360_24139.jpg';
+		const destination = 'https://avatars.mds.yandex.net/get-kinopoisk-image/123/fixture-person/orig';
+		const firstDestroy = vi.fn(); const secondDestroy = vi.fn(); const agent = {} as never;
+		mockedFetch.mockResolvedValueOnce({ ok: false, status: 301, headers: new Headers({ location: intermediate }), body: { destroy: firstDestroy } });
+		mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: destination }), body: { destroy: secondDestroy } });
+		mockedFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers({ 'content-type': 'image/jpeg', 'content-length': String(original.length) }), arrayBuffer: async () => original });
+		const result = await downloadForMode(mode, new URL(source), agent);
+		expect(result).toMatchObject({ original, originalExtension: 'jpg', width: 80, height: 120 });
+		if ('processed' in result && Buffer.isBuffer(result.processed)) expect(await sharp(result.processed).metadata()).toMatchObject({ format: 'webp', width: 80, height: 120 });
+		expect(mockedFetch.mock.calls.map(([url, options]) => [url, options.redirect])).toEqual([[source, 'manual'], [intermediate, 'manual'], [destination, 'error']]);
+		const signal = mockedFetch.mock.calls[0][1].signal as AbortSignal;
+		for (const [, options] of mockedFetch.mock.calls) expect(options).toMatchObject({ signal, agent, size: importArtworkLimits.inputBytes });
+		expect(signal.aborted).toBe(true); expect(firstDestroy).toHaveBeenCalledOnce(); expect(secondDestroy).toHaveBeenCalledOnce();
+	});
+
+	test('accepts only literal safe-positive-ID KP API person photo aliases', () => {
+		const source = 'https://kinopoiskapiunofficial.tech/images/actor_posters/kp/24139.jpg';
+		expect(importArtworkUrl(source)?.href).toBe(source);
+		for (const value of [source.replace('https:', 'http:'), source.replace('.tech/', '.tech:443/'), source.replace('.tech/', '.tech:8443/'), source.replace('https://', 'https://user:password@'), source.replace('.tech/', '.tech.evil.org/'), source.replace('24139', '0'), source.replace('24139', '024139'), source.replace('24139', '9007199254740992'), `${source}?`, `${source}?size=1`, `${source}#`, `${source}#fragment`, source.replace('24139', '%32' + '4139'), source.replace('/kp/', '/other/../kp/'), source.replace('/kp/', '/other/%2e%2e/kp/'), source.replace('/kp/', '/other/'), source.replace('.jpg', '.png'), ` ${source}`, `${source}\n`]) expect(importArtworkUrl(value)).toBeNull();
+	});
+
+	test.each(redirectModes)('rejects wrong-person, cross-family and noncanonical first KP photo hops in %s mode', async mode => {
+		const source = new URL('https://kinopoiskapiunofficial.tech/images/actor_posters/kp/24139.jpg');
+		const approved = 'https://st.kp.yandex.net/images/actor_iphone/iphone360_24139.jpg';
+		const invalid = [approved.replace('24139', '24140'), approved.replace('/actor_iphone/iphone360_', '/film_big/'), approved.replace('iphone360_', ''), approved.replace('iphone360_', 'iphone180_'), approved.replace('https:', 'http:'), approved.replace('https:', ''), approved.replace('.net/', '.net:443/'), approved.replace('.net/', '.net:8443/'), approved.replace('https://', 'https://user:password@'), approved.replace('st.kp.yandex.net', '127.0.0.1'), approved.replace('st.kp.yandex.net', 'st.kp.yandex.net.evil.org'), `${approved}?`, `${approved}?token=fixture`, `${approved}#`, `${approved}#fragment`, approved.replace('24139', '%32' + '4139'), approved.replace('/actor_iphone/', '/other/../actor_iphone/'), approved.replace('/actor_iphone/', '/other/%2e%2e/actor_iphone/'), approved.replace('/actor_iphone/', '/actor_iphone/%2f'), '/images/actor_iphone/iphone360_24139.jpg', 'https://avatars.mds.yandex.net/get-kinopoisk-image/123/fixture/orig'];
+		for (const location of invalid) {
+			mockedFetch.mockReset(); const destroy = vi.fn(); mockedFetch.mockResolvedValueOnce({ ok: false, status: 301, headers: new Headers({ location }), body: { destroy } });
+			await expect(downloadForMode(mode, source)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE'); expect(mockedFetch).toHaveBeenCalledOnce(); expect(destroy).toHaveBeenCalledOnce();
+		}
+		for (const status of [302, 303, 307, 308]) {
+			mockedFetch.mockReset(); mockedFetch.mockResolvedValueOnce({ ok: false, status, headers: new Headers({ location: approved }) });
+			await expect(downloadForMode(mode, source)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE'); expect(mockedFetch).toHaveBeenCalledOnce();
+		}
+		mockedFetch.mockReset(); mockedFetch.mockResolvedValueOnce({ ok: false, status: 301, headers: new Headers({ location: approved }) });
+		await expect(downloadForMode(mode, new URL('https://kinopoiskapiunofficial.tech/images/posters/kp/24139.jpg'))).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE'); expect(mockedFetch).toHaveBeenCalledOnce();
+	});
+
+	test.each(redirectModes)('person API aliases retain downstream CDN, MIME, byte, decoder and maximum-hop guards in %s mode', async mode => {
+		const source = new URL('https://kinopoiskapiunofficial.tech/images/actor_posters/kp/24139.jpg');
+		const intermediate = 'https://st.kp.yandex.net/images/actor_iphone/iphone360_24139.jpg';
+		const destination = 'https://avatars.mds.yandex.net/get-kinopoisk-image/123/fixture-person/orig';
+		const alias = () => mockedFetch.mockResolvedValueOnce({ ok: false, status: 301, headers: new Headers({ location: intermediate }) });
+		const redirects = () => { alias(); mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: destination }) }); };
+		for (const location of [destination + '?', destination + '#', destination.replace('/get-kinopoisk-image/', '/other/'), destination.replace('/get-kinopoisk-image/', '/%67et-kinopoisk-image/'), destination.replace('/fixture-person/', '/../fixture-person/'), 'https://127.0.0.1/private', 'https://cloud.solodcdn.com/private']) {
+			mockedFetch.mockReset(); alias(); const destroy = vi.fn(); mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location }), body: { destroy } });
+			await expect(downloadForMode(mode, source)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE'); expect(mockedFetch).toHaveBeenCalledTimes(2); expect(destroy).toHaveBeenCalledOnce();
+		}
+		for (const status of [301, 303, 307, 308]) {
+			mockedFetch.mockReset(); alias(); mockedFetch.mockResolvedValueOnce({ ok: false, status, headers: new Headers({ location: destination }) });
+			await expect(downloadForMode(mode, source)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE'); expect(mockedFetch).toHaveBeenCalledTimes(2);
+		}
+		mockedFetch.mockReset(); redirects(); mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: destination.replace('fixture-person', 'other') }) });
+		await expect(downloadForMode(mode, source)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE'); expect(mockedFetch).toHaveBeenCalledTimes(3); expect(mockedFetch.mock.calls[2][1].redirect).toBe('error');
+		for (const headers of [{ 'content-type': 'text/html' }, { 'content-type': 'image/svg+xml' }, { 'content-type': 'image/jpeg', 'content-length': String(importArtworkLimits.inputBytes + 1) }]) {
+			mockedFetch.mockReset(); redirects(); const body = vi.fn(); mockedFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers(headers), arrayBuffer: body });
+			await expect(downloadForMode(mode, source)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE'); expect(body).not.toHaveBeenCalled();
+		}
+		for (const original of [Buffer.alloc(0), Buffer.alloc(importArtworkLimits.inputBytes + 1), Buffer.from('not-image-pixels')]) {
+			mockedFetch.mockReset(); redirects(); mockedFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers({ 'content-type': 'image/jpeg' }), arrayBuffer: async () => original });
+			await expect(downloadForMode(mode, source)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+		}
+	});
+
+	test.each(redirectModes)('person API photo hops share one timeout and never refresh an expired deadline in %s mode', async mode => {
+		const source = new URL('https://kinopoiskapiunofficial.tech/images/actor_posters/kp/24139.jpg');
+		const first = { ok: false, status: 301, headers: new Headers({ location: 'https://st.kp.yandex.net/images/actor_iphone/iphone360_24139.jpg' }) };
+		const second = { ok: false, status: 302, headers: new Headers({ location: 'https://avatars.mds.yandex.net/get-kinopoisk-image/123/fixture-person/orig' }) };
+		vi.useFakeTimers();
+		mockedFetch.mockImplementationOnce(async () => await new Promise(resolve => setTimeout(() => resolve(first), 4000)));
+		mockedFetch.mockImplementationOnce(async () => await new Promise(resolve => setTimeout(() => resolve(second), 4000)));
+		mockedFetch.mockImplementationOnce(async (_url, options: { signal: AbortSignal }) => await new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => reject(new Error('fixture-aborted')), { once: true })));
+		try {
+			const rejected = expect(downloadForMode(mode, source)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE');
+			await vi.advanceTimersByTimeAsync(8000); expect(mockedFetch).toHaveBeenCalledTimes(3);
+			const signal = mockedFetch.mock.calls[2][1].signal as AbortSignal;
+			expect(signal).toBe(mockedFetch.mock.calls[0][1].signal);
+			await vi.advanceTimersByTimeAsync(3999); expect(signal.aborted).toBe(false);
+			await vi.advanceTimersByTimeAsync(1); await rejected; expect(signal.aborted).toBe(true);
+		} finally { vi.useRealTimers(); }
+		mockedFetch.mockReset(); const clock = vi.spyOn(Date, 'now').mockReturnValue(1000);
+		mockedFetch.mockImplementationOnce(async () => { clock.mockReturnValue(2001); return first; });
+		try { await expect(downloadForMode(mode, source, undefined, 2000)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE'); expect(mockedFetch).toHaveBeenCalledOnce(); } finally { clock.mockRestore(); }
 	});
 
 	test('compact person photos never enlarge a small source image', async () => {

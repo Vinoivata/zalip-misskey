@@ -127,7 +127,7 @@
 - Fix: Resolve title discussion context for nested comments and reposts, use system-owned new discussion roots, and avoid implicit notifications to technical root authors.
 - Feat: Add Vibix metadata and player imports with exact Kinopoisk/IMDb bindings, encrypted administrator credentials, bounded normalization and backward-compatible playback settings.
 - Fix: Download selected Kinopoisk posters through the validated same-title API and image-CDN redirect chain without broadening network or image limits.
-- Feat: Import exact TMDB/Kinopoisk person identities with protected editorial fields, bounded local WebP portraits, scheduled photo processing, distinct-work filmography cursors and public-only Person metadata.
+- Feat: Import exact TMDB/Kinopoisk person identities with protected editorial fields, bounded local WebP portraits, same-ID Kinopoisk portrait redirects, scheduled photo processing, distinct-work filmography cursors and public-only Person metadata.
 
 ## 2026.7.0
 
