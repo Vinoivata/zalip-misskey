@@ -4324,6 +4324,15 @@ export type paths = {
          */
         post: operations['zalip___admin___importer___taxonomy___enrich-person'];
     };
+    '/zalip/admin/importer/taxonomy/import-person': {
+        /**
+         * zalip/admin/importer/taxonomy/import-person
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:account*
+         */
+        post: operations['zalip___admin___importer___taxonomy___import-person'];
+    };
     '/zalip/admin/importer/taxonomy/link': {
         /**
          * zalip/admin/importer/taxonomy/link
@@ -41486,7 +41495,156 @@ export interface operations {
                 };
                 content: {
                     'application/json': {
-                        [key: string]: unknown;
+                        entry: {
+                            /** @enum {string} */
+                            type: 'person';
+                            name: string;
+                            description: string | null;
+                            imageUrl: string | null;
+                            externalIds: {
+                                [key: string]: string;
+                            };
+                            data: {
+                                [key: string]: unknown;
+                            };
+                            id: string;
+                            slug: string;
+                            parentId: string | null;
+                        };
+                        changedFields: string[];
+                        warnings: 'person-photo-local-unavailable'[];
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    'zalip___admin___importer___taxonomy___import-person': {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                    /** @enum {string} */
+                    source: 'tmdb' | 'kinopoisk';
+                    reference: string;
+                    /** @default true */
+                    preview?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        preview: boolean;
+                        /** @enum {string} */
+                        source: 'tmdb' | 'kinopoisk';
+                        externalId: string;
+                        person: {
+                            /** @enum {string} */
+                            type: 'person';
+                            name: string;
+                            description: string | null;
+                            imageUrl: string | null;
+                            externalIds: {
+                                [key: string]: string;
+                            };
+                            data: {
+                                [key: string]: unknown;
+                            };
+                        };
+                        existingEntry: {
+                            /** @enum {string} */
+                            type: 'person';
+                            name: string;
+                            description: string | null;
+                            imageUrl: string | null;
+                            externalIds: {
+                                [key: string]: string;
+                            };
+                            data: {
+                                [key: string]: unknown;
+                            };
+                            id: string;
+                            slug: string;
+                            parentId: string | null;
+                        } | null;
+                        entry: {
+                            /** @enum {string} */
+                            type: 'person';
+                            name: string;
+                            description: string | null;
+                            imageUrl: string | null;
+                            externalIds: {
+                                [key: string]: string;
+                            };
+                            data: {
+                                [key: string]: unknown;
+                            };
+                            id: string;
+                            slug: string;
+                            parentId: string | null;
+                        } | null;
+                        created: boolean;
+                        changedFields: string[];
+                        warnings: 'person-photo-local-unavailable'[];
                     };
                 };
             };
@@ -45130,6 +45288,8 @@ export interface operations {
                     /** @enum {string} */
                     type?: 'person' | 'studio' | 'genre' | 'category' | 'collection';
                     query?: string;
+                    /** @enum {string} */
+                    role?: 'actor' | 'director' | 'writer' | 'producer' | 'composer' | 'cinematographer' | 'editor' | 'designer' | 'creator' | 'participant';
                     /** @default 50 */
                     limit?: number;
                     /** @default 0 */
@@ -45211,6 +45371,14 @@ export interface operations {
                     /** @default 100 */
                     limit?: number;
                     cursor?: string;
+                    /** @enum {string} */
+                    role?: 'actor' | 'director' | 'writer' | 'producer' | 'composer' | 'cinematographer' | 'editor' | 'designer' | 'creator' | 'participant';
+                    /** @enum {string} */
+                    kind?: 'movie' | 'series' | 'anime' | 'animation';
+                    yearFrom?: number;
+                    yearTo?: number;
+                    /** @enum {string} */
+                    sort?: 'newest' | 'oldest' | 'title';
                 } & (unknown | unknown | unknown);
             };
         };

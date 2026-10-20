@@ -24,7 +24,7 @@ function work(id: string, role: string): TaxonomyWork {
 	return { id, slug: id, title: `Title ${id}`, kind: 'movie', posterPath: null, releaseYear: 2026, role };
 }
 
-function setup(props: { type?: string; slug?: string; query?: string } = { type: 'person', slug: 'person' }) {
+function setup(props: { type?: string; slug?: string; query?: string; role?: string; kind?: string; yearFrom?: string; yearTo?: string; sort?: string } = { type: 'person', slug: 'person' }) {
 	return render(Taxonomy, { props, global: { stubs: {
 		PageWithHeader: defineComponent({ setup: (_, { slots }) => () => h('div', slots.default?.()) }),
 		MkA: defineComponent({ props: { to: String }, setup: (props, { slots }) => () => h('a', { href: props.to }, slots.default?.()) }),
@@ -90,5 +90,37 @@ describe('taxonomy public profiles and directory cards', () => {
 		await fireEvent.update(view.getByRole('searchbox'), 'New category');
 		await fireEvent.submit(view.getByRole('searchbox').closest('form')!);
 		expect(router.push).toHaveBeenCalledWith('/zalip/taxonomy', { query: { type: 'category', q: 'New category' } });
+	});
+	it('formats person dates and shows age at death while omitting invalid date facts', async () => {
+		vi.mocked(misskeyApiZalip).mockResolvedValueOnce({ entry: { ...entry(), data: { birthday: '1970-05-10', deathday: '2020-05-09', biography: 'A plain biography' } }, works: [], nextCursor: null });
+		const view = setup();
+		await view.findByText('A plain biography');
+		expect(view.getByText(i18n.tsx.zalip._taxonomyPerson.ageAtDeath({ age: 49 }))).toBeTruthy();
+		expect(view.queryByText('1970-05-10')).toBeNull();
+	});
+	it('keeps all filters on pagination and rejects an old page after the filter scope changes', async () => {
+		let resolveOld!: (value: unknown) => void;
+		vi.mocked(misskeyApiZalip).mockResolvedValueOnce({ entry: entry(), works: [work('first', 'actor')], nextCursor: 'old-cursor' });
+		const view = setup({ type: 'person', slug: 'person', role: 'actor', kind: 'movie', yearFrom: '1990', sort: 'oldest' });
+		await view.findByRole('heading', { name: 'Title first' });
+		vi.mocked(misskeyApiZalip).mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._importer.showMore }));
+		expect(misskeyApiZalip).toHaveBeenLastCalledWith('zalip/taxonomy/show', expect.objectContaining({ role: 'actor', kind: 'movie', yearFrom: 1990, sort: 'oldest', cursor: 'old-cursor' }));
+		vi.mocked(misskeyApiZalip).mockResolvedValueOnce({ entry: entry(), works: [work('current', 'director')], nextCursor: null });
+		await view.rerender({ type: 'person', slug: 'person', role: 'director', kind: '', yearFrom: '', sort: 'title' });
+		await view.findByRole('heading', { name: 'Title current' });
+		resolveOld({ entry: entry(), works: [work('stale', 'actor')], nextCursor: 'wrong-cursor' });
+		await Promise.resolve();
+		expect(view.queryByRole('heading', { name: 'Title stale' })).toBeNull();
+		expect(view.queryByRole('button', { name: i18n.ts.zalip._importer.showMore })).toBeNull();
+		expect(misskeyApiZalip).toHaveBeenLastCalledWith('zalip/taxonomy/show', expect.objectContaining({ role: 'director', sort: 'title' }));
+	});
+	it('submits accessible filmography controls through route query without retaining an old cursor', async () => {
+		vi.mocked(misskeyApiZalip).mockResolvedValueOnce({ entry: entry(), works: [], nextCursor: null });
+		const view = setup(); await view.findByRole('heading', { name: 'Name person', level: 1 });
+		await fireEvent.update(view.getByLabelText(i18n.ts.zalip._taxonomyPerson.roleFilter), 'writer');
+		await fireEvent.update(view.getByLabelText(i18n.ts.zalip._importer.yearFrom), '2001');
+		await fireEvent.submit(view.getByRole('form', { name: i18n.ts.zalip._taxonomyPerson.filtersHeading }));
+		expect(router.push).toHaveBeenCalledWith('/zalip/taxonomy/:type/:slug', { params: { type: 'person', slug: 'person' }, query: { role: 'writer', yearFrom: '2001', sort: 'newest' } });
 	});
 });

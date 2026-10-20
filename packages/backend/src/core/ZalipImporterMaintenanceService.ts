@@ -9,6 +9,7 @@ import { DI } from '@/di-symbols.js';
 import { IdService } from '@/core/IdService.js';
 import { ZalipTaxonomyService } from '@/core/ZalipTaxonomyService.js';
 import { ZalipImporterSourceSettingsService } from '@/core/ZalipImporterSourceSettingsService.js';
+import { ZalipPersonImportService, type PersonImportWarning } from '@/core/ZalipPersonImportService.js';
 import { MiZalipMaintenanceProfile, MiZalipMaintenanceRun } from '@/models/ZalipMaintenanceRun.js';
 import { MiZalipCatalogEntry } from '@/models/ZalipCatalogEntry.js';
 import { MiZalipCatalogRelation } from '@/models/ZalipCatalogRelation.js';
@@ -26,7 +27,7 @@ export type CreateMaintenanceRun = { kind: MaintenanceKind; source: MaintenanceS
 export type SaveMaintenanceProfile = CreateMaintenanceRun & { profileId?: string; name: string; intervalMinutes: number };
 const busyStates = ['queued', 'running', 'paused'] as const;
 const numericId = /^[1-9]\d{0,15}$/u;
-const closedWarnings = new Set(['collection-identity-conflict', 'collection-field-locked', 'person-id-missing']);
+const closedWarnings = new Set(['collection-identity-conflict', 'collection-field-locked', 'person-id-missing', 'person-photo-local-unavailable']);
 
 export function emptyMaintenanceCursor(): MaintenanceCursor {
 	return { page: 1, offset: 0, entryAfterId: null, activeEntryId: null, collectionIndex: 0 };
@@ -69,6 +70,7 @@ export class ZalipImporterMaintenanceService {
 		private idService: IdService,
 		private taxonomy: ZalipTaxonomyService,
 		private sourceSettings: ZalipImporterSourceSettingsService,
+		private personImporter: ZalipPersonImportService,
 	) {}
 
 	private async runtime() {
@@ -275,11 +277,15 @@ export class ZalipImporterMaintenanceService {
 					const personId = entry.externalIds[run.source];
 					if (!personId || !numericId.test(personId)) { this.warn(run, 'person-id-missing'); run.stats.skipped++; } else {
 						try {
-							const result = await this.taxonomy.enrichPerson(entry.id, run.source as 'tmdb' | 'kinopoisk', async id => {
+							const warnings: PersonImportWarning[] = [];
+							const result = await this.taxonomy.enrichPerson(entry.id, run.source as 'tmdb' | 'kinopoisk', async (id, context) => {
 								const person = await fetchImportedPerson(run!.source as 'tmdb' | 'kinopoisk', id, runtime.config, runtime.transport);
 								if (!await this.active(runId)) throw new ImportProviderError('rate-limited', 30000);
-								return person;
+								const localized = await this.personImporter.localizePhoto(person, context.canImportImage, warnings);
+								if (!await this.active(runId)) throw new ImportProviderError('rate-limited', 30000);
+								return localized;
 							});
+							for (const warning of warnings) this.warn(run, warning);
 							if (result.changedFields.length) run.stats.updated++;
 							else run.stats.skipped++;
 						} catch (error) {

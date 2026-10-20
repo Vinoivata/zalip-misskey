@@ -16,6 +16,7 @@ import type { MaintenanceKind, MaintenanceSource } from './zalip-importer/types.
 const isolated = vi.hoisted(() => ({ providers: vi.fn(), person: vi.fn() }));
 vi.mock('@/core/ZalipTaxonomyService.js', () => ({ ZalipTaxonomyService: class {} }));
 vi.mock('@/core/ZalipImporterSourceSettingsService.js', () => ({ ZalipImporterSourceSettingsService: class {} }));
+vi.mock('@/core/ZalipPersonImportService.js', () => ({ ZalipPersonImportService: class {} }));
 vi.mock('./zalip-importer/providers.js', async original => ({ ...await original<typeof import('./zalip-importer/providers.js')>(), createImportProviders: isolated.providers, defaultImportTransport: () => { throw new Error('LIVE_NETWORK_FORBIDDEN'); } }));
 vi.mock('./zalip-importer/persons.js', () => ({ fetchImportedPerson: isolated.person }));
 
@@ -73,13 +74,14 @@ function fixture(seed: { runs?: Row[]; profiles?: Row[]; entries?: Row[]; works?
 	const taxonomy = {
 		upsertImportedEntry: vi.fn(async (input: Row) => { const existing = entries.rows.find(row => row.externalIds?.collaps === input.externalIds.collaps); const row = { id: existing?.id ?? `entry${entries.rows.length}`, ...input, data: { ...input.data, ...existing?.data } }; await entries.save(row); return row; }),
 		linkWork: vi.fn(async (input: Row, source: string) => { if (!await relations.existsBy({ ...input, source })) await relations.save({ id: `relation${relations.rows.length}`, ...input, source }); return true; }),
-		enrichPerson: vi.fn(async (entryId: string, source: string, fetcher: (id: string) => unknown) => { await fetcher(entries.rows.find(row => row.id === entryId)!.externalIds[source]); return { changedFields: ['description'] }; }),
+		enrichPerson: vi.fn(async (entryId: string, source: string, fetcher: (id: string, context: { canImportImage: boolean }) => unknown) => { await fetcher(entries.rows.find(row => row.id === entryId)!.externalIds[source], { canImportImage: true }); return { changedFields: ['description'] }; }),
 	};
 	let nextId = 0;
 	const queue = { add: vi.fn().mockResolvedValue({}) };
 	const sourceSettings = { getRuntime: vi.fn().mockResolvedValue({ apiOrigins: { tmdb: 'https://api.themoviedb.org', kinopoisk: 'https://kinopoiskapiunofficial.tech', alloha: 'https://apbugall.org', collaps: 'https://api.bhcesh.me' }, allohaPlayerOrigin: 'https://ascorbic-as.stravers.live', collapsPlayerOrigin: 'https://api.nextembed.ws' }) };
-	const service = new ZalipImporterMaintenanceService(db as never, {} as never, queue as never, { gen: () => `generated${++nextId}` } as never, taxonomy as never, sourceSettings as never);
-	return { service, runs, profiles, entries, works, identities, relations, providers, taxonomy, queue, db, connection, sourceSettings };
+	const personImporter = { localizePhoto: vi.fn(async (person: Row, _allowed: boolean, _warnings: string[]) => person) };
+	const service = new ZalipImporterMaintenanceService(db as never, {} as never, queue as never, { gen: () => `generated${++nextId}` } as never, taxonomy as never, sourceSettings as never, personImporter as never);
+	return { service, runs, profiles, entries, works, identities, relations, providers, taxonomy, queue, db, connection, sourceSettings, personImporter };
 }
 
 beforeEach(() => { vi.clearAllMocks(); isolated.person.mockResolvedValue({ type: 'person', name: 'Person', externalIds: { tmdb: '1' } }); });
@@ -161,7 +163,23 @@ describe('maintenance orchestration without network or database', () => {
 		await context.service.processRun('run');
 		expect(context.taxonomy.enrichPerson.mock.calls[0].slice(0, 2)).toEqual(['a', 'tmdb']);
 		expect(isolated.person.mock.calls[0].slice(0, 2)).toEqual(['tmdb', '1']);
+		expect(context.personImporter.localizePhoto).toHaveBeenCalledWith(expect.objectContaining({ type: 'person', name: 'Person' }), true, []);
 		expect(context.runs.rows[0]).toMatchObject({ state: 'completed', stats: { updated: 1, skipped: 1, processed: 2 }, warnings: ['person-id-missing'], cursor: { entryAfterId: 'b' } });
+	});
+	test('person photo localization failures are visible as closed maintenance warnings', async () => {
+		const context = fixture({ runs: [run('person-enrichment', 'tmdb')], entries: [{ id: 'a', type: 'person', externalIds: { tmdb: '1' }, data: {} }] });
+		context.personImporter.localizePhoto.mockImplementation(async (person, _allowed, warnings) => { warnings.push('person-photo-local-unavailable'); return person; });
+		await context.service.processRun('run');
+		expect(context.runs.rows[0]).toMatchObject({ state: 'completed', warnings: ['person-photo-local-unavailable'], stats: { processed: 1, updated: 1 } });
+	});
+	test('cancellation after photo processing does not return new person facts to the catalogue writer', async () => {
+		const context = fixture({ runs: [run('person-enrichment', 'tmdb')], entries: [{ id: 'a', type: 'person', externalIds: { tmdb: '1' }, data: {} }] });
+		let committed = false;
+		context.taxonomy.enrichPerson.mockImplementation(async (entryId, source, fetcher) => { await fetcher('1', { canImportImage: true }); committed = true; return { changedFields: ['description'] }; });
+		context.personImporter.localizePhoto.mockImplementation(async person => { await context.service.actionRun('run', 'cancel'); return person; });
+		await context.service.processRun('run');
+		expect(committed).toBe(false);
+		expect(context.runs.rows[0]).toMatchObject({ state: 'cancelled', cursor: { entryAfterId: null } });
 	});
 	test('new profiles stay disabled, enable is explicit, busy reset/delete is rejected', async () => {
 		const context = fixture();

@@ -13,6 +13,47 @@ export type TaxonomyCredit = { role: TaxonomyRole; character: string | null };
 export type TaxonomyCard = { entry: TaxonomyEntry; credits: TaxonomyCredit[]; position: number };
 export type TaxonomySection = { id: TaxonomySectionId; entries: TaxonomyCard[] };
 export type GroupedTaxonomyWork = TaxonomyWork & { credits: TaxonomyCredit[] };
+export const taxonomyRoles: TaxonomyRole[] = ['actor', 'director', 'writer', 'producer', 'composer', 'cinematographer', 'editor', 'designer', 'creator', 'participant'];
+export type TaxonomyWorkFilters = { role?: TaxonomyRole; kind?: 'movie' | 'series' | 'anime' | 'animation'; yearFrom?: number; yearTo?: number; sort?: 'newest' | 'oldest' | 'title' };
+export type PersonImportResult = { preview: boolean; source: 'tmdb' | 'kinopoisk'; externalId: string; person: { type: 'person'; name: string; description: string | null; imageUrl: string | null; externalIds: Record<string, string>; data: Record<string, unknown> }; existingEntry: TaxonomyEntry | null; entry: TaxonomyEntry | null; created: boolean; changedFields: string[]; warnings: string[] };
+
+/** Accept complete real calendar dates only; Date's rollover must not invent a birthday. */
+export function taxonomyPersonDate(value: unknown): Date | null {
+	if (typeof value !== 'string' || !/^[1-2][0-9]{3}-[0-9]{2}-[0-9]{2}$/u.test(value)) return null;
+	const date = new Date(`${value}T00:00:00.000Z`);
+	return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value ? date : null;
+}
+
+/** Never show an age for contradictory, future or incomplete provider dates. */
+export function taxonomyPersonAge(data: Record<string, unknown> | undefined, now = new Date()): { age: number | null; deceased: boolean } {
+	const birthday = taxonomyPersonDate(data?.birthday);
+	const deathday = taxonomyPersonDate(data?.deathday);
+	const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+	const deceased = deathday != null && deathday <= today;
+	if (!birthday || !Number.isFinite(today.getTime()) || birthday > today || (data?.deathday != null && data.deathday !== '' && (!deathday || deathday < birthday || deathday > today))) return { age: null, deceased };
+	const end = deathday ?? today;
+	const anniversaryNotReached = end.getUTCMonth() < birthday.getUTCMonth() || (end.getUTCMonth() === birthday.getUTCMonth() && end.getUTCDate() < birthday.getUTCDate());
+	return { age: end.getUTCFullYear() - birthday.getUTCFullYear() - Number(anniversaryNotReached), deceased };
+}
+
+export function taxonomyPersonDateLabel(value: unknown, locale?: string): string | null {
+	const date = taxonomyPersonDate(value);
+	if (!date) return null;
+	try { return new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(date); } catch { return date.toISOString().slice(0, 10); }
+}
+
+/** Query props are untrusted. Invalid years never become NaN API parameters. */
+export function taxonomyWorkFilters(input: { role?: string; kind?: string; yearFrom?: string; yearTo?: string; sort?: string }, defaultSort?: TaxonomyWorkFilters['sort']): TaxonomyWorkFilters {
+	const year = (value: string | undefined): number | undefined => value && /^[0-9]{4}$/u.test(value) && Number(value) >= 1800 && Number(value) <= 3000 ? Number(value) : undefined;
+	const yearFrom = year(input.yearFrom); const yearTo = year(input.yearTo);
+	return {
+		...(taxonomyRoles.includes(input.role as TaxonomyRole) ? { role: input.role as TaxonomyRole } : {}),
+		...(['movie', 'series', 'anime', 'animation'].includes(input.kind ?? '') ? { kind: input.kind as TaxonomyWorkFilters['kind'] } : {}),
+		...(yearFrom !== undefined && (yearTo === undefined || yearFrom <= yearTo) ? { yearFrom } : {}),
+		...(yearTo !== undefined && (yearFrom === undefined || yearFrom <= yearTo) ? { yearTo } : {}),
+		...(['newest', 'oldest', 'title'].includes(input.sort ?? '') ? { sort: input.sort as TaxonomyWorkFilters['sort'] } : defaultSort ? { sort: defaultSort } : {}),
+	};
+}
 
 /** Providers normalize most roles; manual links and older imports can still use aliases. */
 export function taxonomyRole(value: string | null | undefined): TaxonomyRole {
@@ -57,7 +98,9 @@ export function taxonomyGroupWorks(rows: readonly TaxonomyWork[]): GroupedTaxono
 	const works = new Map<string, GroupedTaxonomyWork>();
 	for (const row of rows) {
 		const work = works.get(row.id) ?? { ...row, credits: [] };
-		if (row.role || row.character) addCredit(work.credits, row.role, row.character);
+		if (row.credits) {
+			for (const credit of row.credits) addCredit(work.credits, credit.role, credit.character);
+		} else if (row.role || row.character) addCredit(work.credits, row.role, row.character);
 		works.set(row.id, work);
 	}
 	return [...works.values()];

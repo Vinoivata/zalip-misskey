@@ -21,6 +21,11 @@ import {
 	normalizeZalipExternalIds,
 	packZalipCatalogFacts,
 	zalipCatalogSlug,
+	decodeZalipFilmographyCursor,
+	encodeZalipFilmographyCursor,
+	normalizeZalipFilmographyFilters,
+	zalipFilmographyScope,
+	zalipPersonRole,
 } from '@/misc/zalip-taxonomy.js';
 
 function entry(values: Partial<MiZalipCatalogEntry> = {}): MiZalipCatalogEntry {
@@ -202,7 +207,7 @@ describe('scoped catalogue cursor pagination', () => {
 		work: { id: `work${i}`, slug: `work-${i}`, title: `Movie ${i}`, releaseYear: 2026, genres: [], publicationState: 'published' },
 	})) as unknown as MiZalipCatalogRelation[];
 
-	function fixture(value = entry()) {
+	function fixture(value = entry({ type: 'collection' })) {
 		let cursor: { cursorPosition: number; cursorId: string } | undefined;
 		let limit = 0;
 		const query = {
@@ -266,6 +271,115 @@ describe('scoped catalogue cursor pagination', () => {
 		for (const value of ['', 'a'.repeat(257), cursor + '=', Buffer.from('{}').toString('base64url'), Buffer.from(JSON.stringify([1, 'entry', true, -1, 'relation01'])).toString('base64url'), Buffer.from(JSON.stringify([1, 'entry', true, 0, 'x; DROP TABLE work'])).toString('base64url')]) expect(() => decodeZalipCatalogCursor(value, 'entry', true)).toThrow('INVALID_CATALOG_CURSOR');
 		expect(() => decodeZalipCatalogCursor(cursor, 'other', true)).toThrow('INVALID_CATALOG_CURSOR');
 		expect(() => decodeZalipCatalogCursor(cursor, 'entry', false)).toThrow('INVALID_CATALOG_CURSOR');
+	});
+});
+
+describe('distinct-work person filmography', () => {
+	const works = [
+		{ id: 'a', title: 'Alpha', releaseYear: 2025, kind: 'movie' },
+		{ id: 'b', title: 'Beta', releaseYear: 2025, kind: 'series' },
+		{ id: 'c', title: 'Gamma', releaseYear: 2020, kind: 'movie' },
+		{ id: 'd', title: 'Delta', releaseYear: null, kind: 'anime' },
+		{ id: 'e', title: 'Echo', releaseYear: null, kind: 'animation' },
+		{ id: 'draft', title: 'Private', releaseYear: 2026, kind: 'movie', publicationState: 'draft' },
+	].map(work => ({ publicationState: 'published', slug: work.id, genres: [], ...work })) as unknown as MiZalipWork[];
+	const links = works.map((work, index) => ({ id: `actor${index}`, entryId: 'entry', workId: work.id, work, role: index === 1 ? 'voice_male' : 'actor', character: 'Character', position: index, source: 'tmdb' }));
+	links.push({ ...links[0], id: 'director', role: 'director', character: 'Creator', position: 10 });
+	links.push({ ...links[0], id: 'editorial', source: 'manual', character: 'Editorial', position: 7 });
+
+	function fixture(visible = true, additional: typeof links = []) {
+		const memberLinks = [...links, ...additional];
+		const queries: Record<string, ReturnType<typeof vi.fn>>[] = []; const memberships: Record<string, ReturnType<typeof vi.fn>>[] = [];
+		const entries = { findOneBy: vi.fn().mockResolvedValue(entry({ data: { biography: 'Public', _zalip: { secret: 'hidden' }, raw: 'hidden' } })) };
+		const repository = (model: unknown) => model === MiZalipCatalogEntry ? entries : { createQueryBuilder: () => {
+			const state: Record<string, unknown> = {}; let take = 0; let sort = 'newest'; let nullAnchor = false;
+			const query: Record<string, ReturnType<typeof vi.fn>> = {};
+			for (const method of ['where', 'andWhere', 'innerJoin', 'addOrderBy']) query[method] = vi.fn((sql, parameters) => { Object.assign(state, parameters); if (String(sql).includes('releaseYear IS NULL AND work.id')) nullAnchor = true; return query; });
+			query.orderBy = vi.fn((column, direction) => { sort = String(column).includes('LOWER') ? 'title' : column === 'work.releaseYear' && direction === 'ASC' ? 'oldest' : 'newest'; return query; });
+			query.take = vi.fn(value => { take = value; return query; });
+			query.getExists = vi.fn(async () => visible);
+			query.getMany = vi.fn(async () => {
+				if (model === MiZalipCatalogRelation) return memberLinks.filter(link => (!state.publicationState || link.work.publicationState === state.publicationState) && (!state.pageWorkIds || (state.pageWorkIds as string[]).includes(link.workId)));
+				const selected = works.filter(work => (!state.publicationState || work.publicationState === state.publicationState) && (!state.filmographyKind || work.kind === state.filmographyKind) && (state.filmographyYearFrom === undefined || work.releaseYear !== null && work.releaseYear >= Number(state.filmographyYearFrom)) && (state.filmographyYearTo === undefined || work.releaseYear !== null && work.releaseYear <= Number(state.filmographyYearTo)) && (!state.filmographyRole || memberLinks.some(link => link.workId === work.id && zalipPersonRole(link.role) === state.filmographyRole)));
+				selected.sort((left, right) => sort === 'title' ? left.title.toLowerCase().localeCompare(right.title.toLowerCase(), 'en') || left.id.localeCompare(right.id) : left.releaseYear === right.releaseYear ? left.id.localeCompare(right.id) : left.releaseYear === null ? 1 : right.releaseYear === null ? -1 : (left.releaseYear - right.releaseYear) * (sort === 'newest' ? -1 : 1));
+				return selected.filter(work => !state.cursorId || sort === 'title' ? !state.cursorId || work.title.toLowerCase() > String(state.cursorValue).toLowerCase() || work.title.toLowerCase() === String(state.cursorValue).toLowerCase() && work.id > String(state.cursorId) : nullAnchor ? work.releaseYear === null && work.id > String(state.cursorId) : work.releaseYear === null || (sort === 'newest' ? Number(work.releaseYear) < Number(state.cursorValue) : Number(work.releaseYear) > Number(state.cursorValue)) || work.releaseYear === state.cursorValue && work.id > String(state.cursorId)).slice(0, take);
+			});
+			(model === MiZalipCatalogRelation ? memberships : queries).push(query); return query;
+		} };
+		const service = new ZalipTaxonomyService({ getRepository: repository } as never, {} as never);
+		return { service, queries, memberships, entries };
+	}
+
+	test('keeps all effective credits on one unique-work page and never repeats works across equal-year boundaries', async () => {
+		const { service, queries } = fixture();
+		const first = await service.showEntry({ entryId: 'entry', limit: 1 });
+		expect(first.works).toHaveLength(1);
+		expect(first.works[0]).toMatchObject({ id: 'a', role: 'actor', character: 'Editorial', credits: [{ role: 'actor', character: 'Editorial' }, { role: 'director', character: 'Creator' }] });
+		expect(first.entry.data).toEqual({ biography: 'Public' });
+		const seen = ['a']; let cursor = first.nextCursor;
+		while (cursor) { const page = await service.showEntry({ entryId: 'entry', limit: 1, cursor }); seen.push(...new Set(page.works.map(work => work.id))); cursor = page.nextCursor; }
+		expect(seen).toEqual(['a', 'b', 'c', 'd', 'e']);
+		expect(queries[0].take).toHaveBeenCalledWith(2);
+		expect(queries[0].orderBy).toHaveBeenCalledWith('work.releaseYear', 'DESC', 'NULLS LAST');
+	});
+
+	test('applies canonical roles, kind and year bounds in SQL before paging unique works', async () => {
+		const { service, queries, memberships } = fixture();
+		const page = await service.showEntry({ entryId: 'entry', role: 'actor', kind: 'series', yearFrom: 2024, yearTo: 2026, sort: 'oldest', limit: 1 });
+		expect(page.works.map(work => work.id)).toEqual(['b']); expect(page.nextCursor).toBeNull();
+		expect(queries[0].where).toHaveBeenCalledWith(expect.stringContaining('CASE WHEN'), { entryId: 'entry', filmographyRole: 'actor' });
+		expect(queries[0].andWhere).toHaveBeenCalledWith('work.kind = :filmographyKind', { filmographyKind: 'series' });
+		expect(queries[0].andWhere).toHaveBeenCalledWith('work.releaseYear >= :filmographyYearFrom', { filmographyYearFrom: 2024 });
+		expect(queries[0].andWhere).toHaveBeenCalledWith('work.releaseYear <= :filmographyYearTo', { filmographyYearTo: 2026 });
+		expect(queries[0].orderBy).toHaveBeenCalledWith('work.releaseYear', 'ASC', 'NULLS LAST');
+		expect(memberships[0].andWhere).toHaveBeenCalledWith(expect.stringContaining('ORDER BY bounded.position ASC, bounded.id ASC LIMIT 300'), { boundedRole: 'actor' });
+		const effective = memberships[0].andWhere.mock.calls.find(([sql]) => String(sql).includes('SELECT bounded.id'))!;
+		expect(effective[0]).toContain("preferred.source = 'manual' AND bounded.source <> 'manual'");
+	});
+
+	test('a person linked only to drafts is not disclosed, while explicit administrator access remains possible', async () => {
+		const hidden = fixture(false);
+		await expect(hidden.service.showEntry({ entryId: 'entry' })).rejects.toThrow('NO_SUCH_CATALOG_ENTRY');
+		expect(hidden.queries).toHaveLength(0);
+		const admin = await hidden.service.showEntry({ entryId: 'entry', publishedOnly: false });
+		expect(admin.works.some(work => work.id === 'draft')).toBe(true);
+	});
+
+	test('bounds large legacy credit sets without repeating the packed work or splitting its credits across pages', async () => {
+		const additional = Array.from({ length: 400 }, (_, i) => ({ ...links[0], id: `extra${i}`, role: `job${i}`, position: 1000 + i }));
+		const { service, memberships } = fixture(true, additional);
+		const page = await service.showEntry({ entryId: 'entry', role: 'participant', limit: 1 });
+		expect(page.works).toHaveLength(1); expect(page.works[0].id).toBe('a'); expect(page.works[0].credits).toHaveLength(300); expect(page.nextCursor).toBeNull();
+		expect(memberships[0].andWhere).toHaveBeenCalledWith(expect.stringContaining('LIMIT 300'), { boundedRole: 'participant' });
+	});
+
+	test('title pages use stable lower-case SQL keys, and filtered-empty persons remain public', async () => {
+		const { service, queries } = fixture();
+		const first = await service.showEntry({ entryId: 'entry', sort: 'title', limit: 2 });
+		expect([...new Set(first.works.map(work => work.id))]).toEqual(['a', 'b']);
+		const second = await service.showEntry({ entryId: 'entry', sort: 'title', limit: 2, cursor: first.nextCursor! });
+		expect([...new Set(second.works.map(work => work.id))]).toEqual(['d', 'e']);
+		expect(queries[0].orderBy).toHaveBeenCalledWith('LOWER(work.title) COLLATE "C"', 'ASC');
+		await expect(service.showEntry({ entryId: 'entry', yearFrom: 2099 })).resolves.toMatchObject({ entry: { id: 'entry' }, works: [], nextCursor: null });
+	});
+
+	test('rejects changed filter/sort/visibility scope, malformed cursors and invalid input before work queries', async () => {
+		const { service, queries, memberships } = fixture();
+		const first = await service.showEntry({ entryId: 'entry', limit: 1 }); const count = queries.length;
+		for (const filters of [{ role: 'actor' }, { kind: 'movie' }, { yearFrom: 2000 }, { yearTo: 2026 }, { sort: 'oldest' }, { publishedOnly: false }] as const) await expect(service.showEntry({ entryId: 'entry', cursor: first.nextCursor!, ...filters })).rejects.toThrow('INVALID_CATALOG_CURSOR');
+		expect(queries).toHaveLength(count);
+		for (const options of [{ role: 'sql' }, { sort: 'private' }, { kind: 'book' }, { yearFrom: 1799 }, { yearTo: 3001 }, { yearFrom: 2025, yearTo: 2020 }, { limit: 201 }]) await expect(service.showEntry({ entryId: 'entry', ...options } as never)).rejects.toThrow('INVALID_CATALOG_LOOKUP');
+		const hidden = fixture(); hidden.memberships.push(...memberships); hidden.entries.findOneBy.mockResolvedValue(null);
+		await expect(hidden.service.showEntry({ entryId: 'missing' })).rejects.toThrow('NO_SUCH_CATALOG_ENTRY');
+	});
+
+	test('cursor codec binds public/private scope and supports long Unicode title keys without accepting extra JSON', () => {
+		const scope = zalipFilmographyScope('entry', true, { sort: 'title' }); const title = '🎬'.repeat(256);
+		const cursor = encodeZalipFilmographyCursor(scope, title, 'work01');
+		expect(cursor.length).toBeGreaterThan(256); expect(decodeZalipFilmographyCursor(cursor, scope, 'title')).toEqual({ value: title, id: 'work01' });
+		for (const value of ['', 'a'.repeat(2049), cursor + '=', encodeZalipFilmographyCursor(scope, title + 'x', 'work01'), encodeZalipFilmographyCursor(scope, 2025, 'work01'), encodeZalipFilmographyCursor(scope, 'Title', 'bad/id')]) expect(() => decodeZalipFilmographyCursor(value, scope, 'title')).toThrow('INVALID_CATALOG_CURSOR');
+		expect(() => decodeZalipFilmographyCursor(cursor, zalipFilmographyScope('entry', false, { sort: 'title' }), 'title')).toThrow('INVALID_CATALOG_CURSOR');
+		expect(normalizeZalipFilmographyFilters({})).toMatchObject({ sort: 'newest' });
 	});
 });
 
@@ -333,7 +447,7 @@ describe('explicit person enrichment', () => {
 		const { service, repository } = fixture(entry(edited));
 		const fetch = vi.fn().mockResolvedValue({ type: 'person', name: 'Provider name', description: 'Biography', externalIds: { tmdb: '10' }, data: { birthday: '1970-01-01', biography: 'Biography', identityQuality: 'verified' } });
 		const result = await service.enrichPerson('entry', 'tmdb', fetch);
-		expect(fetch).toHaveBeenCalledWith('10');
+		expect(fetch).toHaveBeenCalledWith('10', { canImportImage: false });
 		expect(result.entry).toMatchObject({ id: 'entry', name: 'Editorial name', description: 'Biography', data: { birthday: null, biography: 'Biography' } });
 		expect(result.changedFields).toContain('description');
 		expect(result.changedFields).not.toContain('name');
@@ -374,6 +488,78 @@ describe('explicit person enrichment', () => {
 		repository.findOneBy.mockResolvedValueOnce(entry()).mockResolvedValueOnce(null);
 		await expect(service.enrichPerson('entry', 'tmdb', vi.fn().mockResolvedValue({ type: 'person', name: 'Name', externalIds: { tmdb: '10' } }))).rejects.toThrow('NO_SUCH_CATALOG_ENTRY');
 		expect(repository.save).not.toHaveBeenCalled();
+	});
+});
+
+describe('standalone person identity and image ownership', () => {
+	function fixture(initial: MiZalipCatalogEntry[] = []) {
+		const rows = [...initial]; let identities: Record<string, string>[] = [];
+		const query = { where: vi.fn(), setParameter: vi.fn((_key, value) => { identities.push(JSON.parse(value)); return query; }), andWhere: vi.fn(), getMany: vi.fn(async () => rows.filter(row => row.type === 'person' && identities.some(ids => Object.entries(ids).every(([key, value]) => row.externalIds[key] === value)))) };
+		query.where.mockImplementation(() => { identities = []; return query; }); query.andWhere.mockReturnValue(query);
+		const repository = { createQueryBuilder: () => query, create: vi.fn(value => value), findOneBy: vi.fn(async criteria => rows.find(row => Object.entries(criteria).every(([key, value]) => row[key as keyof MiZalipCatalogEntry] === value)) ?? null), save: vi.fn(async value => { const position = rows.findIndex(row => row.id === value.id); if (position < 0) rows.push(value); else rows[position] = value; return value; }) };
+		const manager = { query: vi.fn(), getRepository: () => repository };
+		const db = { manager, getRepository: manager.getRepository, transaction: vi.fn(async action => action(manager)) };
+		const service = new ZalipTaxonomyService(db as never, { gen: () => 'newperson' } as never);
+		return { service, rows, repository, manager, query, db };
+	}
+
+	const incoming = { type: 'person' as const, name: 'Imported', description: 'Imported biography', imageUrl: 'https://image.tmdb.org/t/p/w500/new.jpg', externalIds: { tmdb: '10' }, data: { biography: 'Imported biography', birthday: '1980-01-01' } };
+
+	test('creates a standalone ID-based person and retries update that same identity without creating works', async () => {
+		const context = fixture();
+		expect(await context.service.findImportedPerson('tmdb', '10')).toBeNull();
+		const first = await context.service.importPerson(incoming, 'tmdb');
+		expect(first).toMatchObject({ created: true, entry: { id: 'newperson', slug: 'person-tmdb-10', externalIds: { tmdb: '10' }, data: { biography: 'Imported biography' } } });
+		const second = await context.service.importPerson({ ...incoming, description: 'Updated' }, 'tmdb');
+		expect(second).toMatchObject({ created: false, entry: { id: 'newperson', description: 'Updated' }, changedFields: ['description'] });
+		expect(context.rows).toHaveLength(1); expect(context.manager.query).toHaveBeenCalledWith('SELECT pg_advisory_xact_lock(hashtext($1))', ['zalip-catalog-directories']);
+		expect(context.repository.save.mock.calls.every(([value]) => value.type === 'person')).toBe(true);
+	});
+
+	test('never merges a name or secondary IMDb hint into another source identity', async () => {
+		const context = fixture([entry({ slug: 'person-kinopoisk-20', externalIds: { kinopoisk: '20', imdb: 'nm10' } })]);
+		expect(await context.service.findImportedPerson('tmdb', '10')).toBeNull();
+		await expect(context.service.importPerson({ ...incoming, externalIds: { tmdb: '10', imdb: 'nm10' } }, 'tmdb')).rejects.toThrow('CATALOG_ID_CONFLICT');
+		expect(context.repository.save).not.toHaveBeenCalled(); expect(context.rows[0].externalIds).toEqual({ kinopoisk: '20', imdb: 'nm10' });
+	});
+
+	test('keeps legacy/manual fields and explicit clears while allowing independent missing facts', async () => {
+		const context = fixture([entry({ description: null, data: { birthday: null, _zalip: { manualFields: ['description', 'data.birthday'], fieldSources: {} } } })]);
+		const found = await context.service.findImportedPerson('tmdb', '10'); expect(found?.canImportImage).toBe(false);
+		const result = await context.service.importPerson(incoming, 'tmdb');
+		expect(result.entry).toMatchObject({ name: 'Name', description: null, imageUrl: 'https://example.test/portrait.jpg', data: { birthday: null, biography: 'Imported biography' } });
+		expect(result.entry.data).not.toHaveProperty('_zalip');
+	});
+
+	test('rechecks existing photo protection before applying a localized image and records only actually-applied ownership', async () => {
+		const person = entry({ data: { _zalip: { manualFields: [], fieldSources: { imageUrl: 'tmdb', name: 'tmdb', description: 'tmdb' } } } });
+		const context = fixture([person]); expect((await context.service.findImportedPerson('tmdb', '10'))?.canImportImage).toBe(true);
+		const local = 'https://site.test/files/photo.webp';
+		await context.service.importPerson({ ...incoming, imageUrl: local, localizedImage: local }, 'tmdb');
+		expect(getZalipCatalogEditorialData(context.rows[0].data).localArtwork).toEqual({ imageUrl: local });
+		expect((await context.service.findImportedPerson('tmdb', '10'))?.canImportImage).toBe(false);
+		await context.service.importPerson({ ...incoming, imageUrl: 'https://site.test/files/other.webp', localizedImage: 'https://site.test/files/other.webp' }, 'tmdb');
+		expect(context.rows[0].imageUrl).toBe(local); expect(getZalipCatalogEditorialData(context.rows[0].data).localArtwork).toEqual({ imageUrl: local });
+	});
+
+	test('malformed and duplicate source identities fail before any save or guessed repair', async () => {
+		const context = fixture([entry(), entry({ id: 'duplicate' })]);
+		await expect(context.service.findImportedPerson('tmdb', '10')).rejects.toThrow('CATALOG_ID_CONFLICT');
+		await expect(context.service.importPerson(incoming, 'tmdb')).rejects.toThrow('CATALOG_ID_CONFLICT');
+		for (const id of ['0', '01', '9007199254740992', '../10']) await expect(context.service.findImportedPerson('tmdb', id)).rejects.toMatchObject({ code: 'invalid-ref' });
+		await expect(context.service.importPerson({ ...incoming, type: 'studio' }, 'tmdb')).rejects.toMatchObject({ code: 'invalid-ref' });
+		expect(context.repository.save).not.toHaveBeenCalled();
+	});
+
+	test('enrichment passes image policy and preserves a concurrently-added manual photo lock', async () => {
+		const person = entry({ data: { _zalip: { manualFields: [], fieldSources: { imageUrl: 'tmdb' } } } }); const context = fixture([person]);
+		const fetch = vi.fn(async (_id, policy) => {
+			expect(policy).toEqual({ canImportImage: true });
+			person.data = { _zalip: { manualFields: ['imageUrl'], fieldSources: { imageUrl: 'manual' } } };
+			return { ...incoming, imageUrl: 'https://site.test/new.webp', localizedImage: 'https://site.test/new.webp' };
+		});
+		const result = await context.service.enrichPerson('entry', 'tmdb', fetch);
+		expect(result.entry.imageUrl).toBe(person.imageUrl); expect(getZalipCatalogEditorialData(context.rows[0].data).localArtwork).toBeUndefined();
 	});
 });
 
@@ -564,6 +750,21 @@ describe('Zalip catalogue membership', () => {
 		await service.listEntries({ type: 'person', publishedOnly: false });
 		expect(query.andWhere).not.toHaveBeenCalledWith(expect.stringContaining('isEnabled'), expect.anything());
 		expect(query.andWhere).not.toHaveBeenCalledWith(expect.stringContaining('publicationState'), expect.anything());
+	});
+
+	test('directory search escapes patterns and only reads typed public name/alias facts; profession never matches draft-only credits', async () => {
+		const query = { andWhere: vi.fn(), orderBy: vi.fn(), addOrderBy: vi.fn(), take: vi.fn(), skip: vi.fn(), getMany: vi.fn().mockResolvedValue([]) };
+		for (const key of ['andWhere', 'orderBy', 'addOrderBy', 'take', 'skip'] as const) query[key].mockReturnValue(query);
+		const service = new ZalipTaxonomyService({ getRepository: () => ({ createQueryBuilder: () => query }) } as never, {} as never);
+		await service.listEntries({ type: 'person', query: 'A%_\\B', role: 'director' });
+		const search = query.andWhere.mock.calls.find(([sql]) => String(sql).includes('ILIKE'))!;
+		expect(search[1]).toEqual({ query: '%A\\%\\_\\\\B%' });
+		expect(search[0]).toContain("jsonb_typeof(entry.data->'aliases') = 'array'");
+		expect(search[0]).toContain("jsonb_typeof(alias.value) = 'string'");
+		expect(search[0]).toContain("jsonb_typeof(entry.data->'originalName') = 'string'");
+		expect(search[0]).not.toContain('_zalip');
+		expect(query.andWhere).toHaveBeenCalledWith(expect.stringContaining('linked_work."publicationState" = :professionPublicationState'), { professionRole: 'director', professionPublicationState: 'published' });
+		for (const options of [{ role: 'unknown' }, { role: 'actor', type: 'studio' }, { query: 'x'.repeat(257) }, { limit: 201 }, { offset: 10001 }]) await expect(service.listEntries(options as never)).rejects.toThrow('INVALID_CATALOG_LOOKUP');
 	});
 
 	test('manual role, character and position win over duplicate provider credits', async () => {

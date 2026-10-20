@@ -25,6 +25,34 @@ function downloadForMode(mode: typeof redirectModes[number], url: URL, agent?: P
 }
 
 describe('bounded local importer artwork', () => {
+	test.each(['tmdb', 'kinopoisk'])('person photos pass the real %s image decoder, compact WebP transform and native Drive pipeline', async provider => {
+		const source = provider === 'tmdb' ? 'https://image.tmdb.org/t/p/w500/portrait.jpg' : 'https://st.kp.yandex.net/images/actor_iphone/20.jpg';
+		const original = await sharp({ create: { width: 960, height: 1440, channels: 3, background: '#789abc' } }).jpeg().toBuffer();
+		if (provider === 'kinopoisk') mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: 'https://avatars.mds.yandex.net/get-kinopoisk-image/123/fixture-person/orig' }) });
+		mockedFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers({ 'content-type': 'image/jpeg' }), arrayBuffer: async () => original });
+		const files = new Map<string, { url: string }>(); const stored: { uri: string; bytes: Buffer }[] = [];
+		const repository = { findOne: vi.fn().mockResolvedValue(null), findOneBy: vi.fn(async ({ uri }: { uri: string }) => files.get(uri) ?? null) };
+		const connection = { connect: vi.fn(), release: vi.fn(), query: vi.fn(async () => [{ locked: true }]) };
+		const drive = { addFile: vi.fn(async ({ path, uri, name }: { path: string; uri: string; name: string }) => { stored.push({ uri, bytes: await readFile(path) }); const file = { url: `https://zalip.example.org/files/${name}` }; files.set(uri, file); return file; }) };
+		const service = new ZalipImporterArtworkService({ createQueryRunner: () => connection, getRepository: () => repository } as never, drive as never, { getAgentForHttps: () => undefined } as never);
+		const result = await service.cachePersonPhoto(source);
+		expect(result).toMatch(/^https:\/\/zalip\.example\.org\/files\/zalip-artwork-[a-f0-9]{16}\.webp$/u);
+		expect(stored.find(file => file.uri === artworkOriginalCacheUri(new URL(source)))?.bytes).toEqual(original);
+		const processed = stored.find(file => file.uri !== artworkOriginalCacheUri(new URL(source)))!.bytes;
+		expect(await sharp(processed).metadata()).toMatchObject({ format: 'webp', width: 480, height: 720 });
+		expect(drive.addFile).toHaveBeenCalledTimes(2); expect(drive.addFile.mock.calls.every(([input]) => (input as { user?: unknown }).user === null)).toBe(true);
+		const requests = mockedFetch.mock.calls.length; await service.cachePersonPhoto(source); expect(mockedFetch).toHaveBeenCalledTimes(requests); expect(drive.addFile).toHaveBeenCalledTimes(2);
+	});
+
+	test('compact person photos never enlarge a small source image', async () => {
+		const original = await sharp({ create: { width: 80, height: 120, channels: 3, background: '#789abc' } }).jpeg().toBuffer();
+		mockedFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers({ 'content-type': 'image/jpeg' }), arrayBuffer: async () => original });
+		const stored: Buffer[] = []; const repository = { findOne: vi.fn().mockResolvedValue(null), findOneBy: vi.fn().mockResolvedValue(null) };
+		const connection = { connect: vi.fn(), release: vi.fn(), query: vi.fn(async () => [{ locked: true }]) };
+		const drive = { addFile: vi.fn(async ({ path, name }: { path: string; name: string }) => { stored.push(await readFile(path)); return { url: `https://zalip.example.org/files/${name}` }; }) };
+		await new ZalipImporterArtworkService({ createQueryRunner: () => connection, getRepository: () => repository } as never, drive as never, { getAgentForHttps: () => undefined } as never).cachePersonPhoto('https://image.tmdb.org/t/p/w500/small.jpg');
+		expect(await sharp(stored[1]).metadata()).toMatchObject({ format: 'webp', width: 80, height: 120 });
+	});
 	test.each(redirectModes)('follows the verified KP API poster alias and existing image-family hop in %s mode', async mode => {
 		const original = await sharp({ create: { width: 80, height: 120, channels: 3, background: '#789abc' } }).jpeg().toBuffer();
 		const source = 'https://kinopoiskapiunofficial.tech/images/posters/kp/9253376.jpg';

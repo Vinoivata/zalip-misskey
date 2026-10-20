@@ -10,7 +10,7 @@ import { DI } from '@/di-symbols.js';
 import { IdService } from '@/core/IdService.js';
 import type { PackedZalipWork } from '@/core/ZalipCatalogService.js';
 import type { ImportRecord } from '@/core/zalip-importer/types.js';
-import type { ImportPersonSource } from '@/core/zalip-importer/persons.js';
+import type { ImportPersonInput, ImportPersonSource } from '@/core/zalip-importer/persons.js';
 import { ImportProviderError } from '@/core/zalip-importer/providers.js';
 import { readImportState } from '@/core/zalip-importer/policy.js';
 import { MiZalipCatalogEntry, zalipCatalogEntryTypes, type ZalipCatalogEntryType } from '@/models/ZalipCatalogEntry.js';
@@ -21,6 +21,14 @@ import {
 	getZalipCollectionSettings,
 	decodeZalipCatalogCursor,
 	encodeZalipCatalogCursor,
+	decodeZalipFilmographyCursor,
+	encodeZalipFilmographyCursor,
+	normalizeZalipFilmographyFilters,
+	zalipFilmographyScope,
+	zalipPersonRoleSql,
+	zalipPersonRole,
+	type ZalipFilmographyFilters,
+	type ZalipPersonRole,
 	matchesZalipCategoryRules,
 	mergeZalipCatalogEntry,
 	normalizeZalipCategoryRules,
@@ -62,6 +70,7 @@ export type PackedZalipCatalogLink = {
 	position: number;
 	source?: string;
 };
+export type PackedZalipTaxonomyWork = PackedZalipWork & { role: string; character: string | null; position: number; credits?: { role: string; character: string | null }[] };
 
 export type ZalipCatalogDirectoryOptions = {
 	type?: ZalipCatalogEntryType;
@@ -69,6 +78,7 @@ export type ZalipCatalogDirectoryOptions = {
 	limit?: number;
 	offset?: number;
 	publishedOnly?: boolean;
+	role?: ZalipPersonRole;
 };
 
 const publicFactKeys = new Set(['biography', 'birthday', 'deathday', 'placeOfBirth', 'homepage', 'originalName', 'aliases', 'identityQuality', 'collectionKind']);
@@ -243,18 +253,76 @@ export class ZalipTaxonomyService {
 		});
 	}
 
+	private ownedPerson(entry: MiZalipCatalogEntry): MiZalipCatalogEntry {
+		const metadata = getZalipCatalogEditorialData(entry.data);
+		const manualFields = new Set(metadata.manualFields);
+		for (const field of ['name', 'description', 'imageUrl'] as const) if (entry[field] && !metadata.fieldSources[field]) manualFields.add(field);
+		for (const [key, value] of Object.entries(packZalipCatalogFacts(entry.data))) {
+			if (value !== null && value !== '' && (!Array.isArray(value) || value.length > 0) && !metadata.fieldSources[`data.${key}`] && !metadata.fieldSources.data) manualFields.add(`data.${key}`);
+		}
+		return { ...entry, data: { ...entry.data, _zalip: { ...metadata, manualFields: [...manualFields] } } };
+	}
+
+	private canImportPersonImage(entry: MiZalipCatalogEntry): boolean {
+		const metadata = getZalipCatalogEditorialData(this.ownedPerson(entry).data);
+		return !metadata.manualFields.includes('imageUrl') && !(metadata.localArtwork?.imageUrl && metadata.localArtwork.imageUrl === entry.imageUrl);
+	}
+
+	private personChangedFields(before: MiZalipCatalogEntry, after: MiZalipCatalogEntry): string[] {
+		const fields = ['name', 'description', 'imageUrl', 'externalIds'].filter(field => JSON.stringify(before[field as keyof MiZalipCatalogEntry]) !== JSON.stringify(after[field as keyof MiZalipCatalogEntry]));
+		const oldFacts = packZalipCatalogFacts(before.data); const newFacts = packZalipCatalogFacts(after.data);
+		for (const key of new Set([...Object.keys(oldFacts), ...Object.keys(newFacts)])) if (JSON.stringify(oldFacts[key]) !== JSON.stringify(newFacts[key])) fields.push(`data.${key}`);
+		return fields;
+	}
+
+	private markPersonImage(entry: MiZalipCatalogEntry, input: ImportPersonInput): void {
+		if (!input.localizedImage || input.localizedImage !== input.imageUrl || entry.imageUrl !== input.localizedImage) return;
+		const metadata = getZalipCatalogEditorialData(entry.data);
+		entry.data = { ...entry.data, _zalip: { ...metadata, localArtwork: { ...metadata.localArtwork, imageUrl: input.localizedImage } } };
+	}
+
+	/** Standalone imports reconcile only the selected verified namespace, never a name or IMDb hint. */
+	public async findImportedPerson(source: ImportPersonSource, externalId: string): Promise<{ entry: PackedZalipCatalogEntry; canImportImage: boolean } | null> {
+		if (!['tmdb', 'kinopoisk'].includes(source) || !/^[1-9]\d{0,15}$/u.test(externalId) || !Number.isSafeInteger(Number(externalId))) throw new ImportProviderError('invalid-ref');
+		const matches = await this.findByExternalIds(this.db.manager, 'person', { [source]: externalId });
+		if (matches.length > 1) throw new Error('CATALOG_ID_CONFLICT');
+		const existing = matches[0];
+		return existing ? { entry: this.packEntry(existing, true), canImportImage: this.canImportPersonImage(existing) } : null;
+	}
+
+	public async importPerson(input: ImportPersonInput, source: ImportPersonSource): Promise<{ entry: PackedZalipCatalogEntry; created: boolean; changedFields: string[] }> {
+		const clean = this.validateInput(input); const externalId = clean.externalIds?.[source];
+		if (clean.type !== 'person' || !['tmdb', 'kinopoisk'].includes(source) || !externalId || !/^[1-9]\d{0,15}$/u.test(externalId) || !Number.isSafeInteger(Number(externalId))) throw new ImportProviderError('invalid-ref');
+		return this.db.transaction(async manager => {
+			await this.lockEntries(manager);
+			const matches = await this.findByExternalIds(manager, 'person', { [source]: externalId });
+			if (matches.length > 1) throw new Error('CATALOG_ID_CONFLICT');
+			const existing = matches[0];
+			const entry = existing ?? this.newEntry({ ...clean, slug: `person-${source}-${externalId}` });
+			const repository = manager.getRepository(MiZalipCatalogEntry);
+			const updated = repository.create({ ...entry, ...mergeZalipCatalogEntry(existing ? this.ownedPerson(entry) : entry, { ...clean, slug: undefined }, source), updatedAt: new Date() });
+			this.markPersonImage(updated, input);
+			const conflict = await repository.findOneBy({ type: 'person', slug: updated.slug });
+			if (conflict && conflict.id !== updated.id) throw new Error('CATALOG_SLUG_CONFLICT');
+			await this.assertExternalIds(manager, 'person', updated.externalIds, updated.id);
+			await repository.save(updated);
+			return { entry: this.packEntry(updated, true), created: !existing, changedFields: this.personChangedFields(entry, updated) };
+		});
+	}
+
 	/** One explicitly selected directory record, never a guessed match by a person's name. */
 	public async enrichPerson(
 		entryId: string,
 		source: ImportPersonSource,
-		fetchPerson: (externalId: string) => Promise<ZalipCatalogEntryInput>,
+		fetchPerson: (externalId: string, policy: { canImportImage: boolean }) => Promise<ImportPersonInput>,
 	): Promise<{ entry: PackedZalipCatalogEntry; changedFields: string[] }> {
 		if (!['tmdb', 'kinopoisk'].includes(source)) throw new ImportProviderError('invalid-ref');
 		const before = await this.db.getRepository(MiZalipCatalogEntry).findOneBy({ id: entryId });
 		if (!before) throw new Error('NO_SUCH_CATALOG_ENTRY');
 		const externalId = before.externalIds[source];
 		if (before.type !== 'person' || !externalId || !/^[1-9]\d{0,15}$/.test(externalId)) throw new ImportProviderError('invalid-ref');
-		const incoming = this.validateInput(await fetchPerson(externalId));
+		const fetched = await fetchPerson(externalId, { canImportImage: this.canImportPersonImage(before) });
+		const incoming = this.validateInput(fetched);
 		if (incoming.type !== 'person' || incoming.externalIds?.[source] !== externalId) throw new ImportProviderError('malformed-response');
 		return this.db.transaction(async manager => {
 			await this.lockEntries(manager);
@@ -262,26 +330,12 @@ export class ZalipTaxonomyService {
 			const current = await repository.findOneBy({ id: entryId });
 			if (!current) throw new Error('NO_SUCH_CATALOG_ENTRY');
 			if (current.type !== 'person' || current.externalIds[source] !== externalId) throw new Error('CATALOG_ID_CONFLICT');
-			const metadata = getZalipCatalogEditorialData(current.data);
-			const manualFields = new Set(metadata.manualFields);
-			// Legacy nonempty values without provenance are editorial, not safe to overwrite.
-			for (const field of ['name', 'description', 'imageUrl'] as const) {
-				if (current[field] && !metadata.fieldSources[field]) manualFields.add(field);
-			}
-			for (const [key, value] of Object.entries(packZalipCatalogFacts(current.data))) {
-				if (value !== null && value !== '' && (!Array.isArray(value) || value.length > 0) && !metadata.fieldSources[`data.${key}`] && !metadata.fieldSources.data) manualFields.add(`data.${key}`);
-			}
-			const owned = { ...current, data: { ...current.data, _zalip: { ...metadata, manualFields: [...manualFields] } } };
+			const owned = this.ownedPerson(current);
 			const updated = repository.create({ ...current, ...mergeZalipCatalogEntry(owned, incoming, source), updatedAt: new Date() });
+			this.markPersonImage(updated, fetched);
 			await this.assertExternalIds(manager, updated.type, updated.externalIds, updated.id);
 			await repository.save(updated);
-			const oldFacts = packZalipCatalogFacts(current.data);
-			const newFacts = packZalipCatalogFacts(updated.data);
-			const changedFields: string[] = ['name', 'description', 'imageUrl', 'externalIds'].filter(field => JSON.stringify(current[field as keyof MiZalipCatalogEntry]) !== JSON.stringify(updated[field as keyof MiZalipCatalogEntry]));
-			for (const key of new Set([...Object.keys(oldFacts), ...Object.keys(newFacts)])) {
-				if (JSON.stringify(oldFacts[key]) !== JSON.stringify(newFacts[key])) changedFields.push(`data.${key}`);
-			}
-			return { entry: this.packEntry(updated, true), changedFields };
+			return { entry: this.packEntry(updated, true), changedFields: this.personChangedFields(current, updated) };
 		});
 	}
 
@@ -320,10 +374,18 @@ export class ZalipTaxonomyService {
 
 	public async listEntries(options: ZalipCatalogDirectoryOptions = {}): Promise<PackedZalipCatalogEntry[]> {
 		const publishedOnly = options.publishedOnly ?? true;
+		if (options.type !== undefined && !zalipCatalogEntryTypes.includes(options.type) || options.query !== undefined && (typeof options.query !== 'string' || options.query.length > 256) || options.limit !== undefined && (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > 200) || options.offset !== undefined && (!Number.isInteger(options.offset) || options.offset < 0 || options.offset > 10000)) throw new Error('INVALID_CATALOG_LOOKUP');
+		const role = normalizeZalipFilmographyFilters({ role: options.role }).role;
+		if (role && options.type && options.type !== 'person') throw new Error('INVALID_CATALOG_LOOKUP');
 		const query = this.db.getRepository(MiZalipCatalogEntry).createQueryBuilder('entry');
 		if (options.type) query.andWhere('entry.type = :type', { type: options.type });
+		else if (role) query.andWhere('entry.type = :type', { type: 'person' });
 		const text = options.query?.trim();
-		if (text) query.andWhere('entry.name ILIKE :query', { query: `%${text.replace(/[\\%_]/gu, '\\$&')}%` });
+		if (text) query.andWhere(`(entry.name ILIKE :query OR (CASE WHEN jsonb_typeof(entry.data->'originalName') = 'string' THEN entry.data->>'originalName' ELSE NULL END) ILIKE :query OR EXISTS (
+			SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(entry.data->'aliases') = 'array' THEN entry.data->'aliases' ELSE '[]'::jsonb END) alias(value)
+			WHERE jsonb_typeof(alias.value) = 'string' AND (alias.value #>> '{}') ILIKE :query))`, { query: `%${text.replace(/[\\%_]/gu, '\\$&')}%` });
+		if (role) query.andWhere(`EXISTS (SELECT 1 FROM "zalip_catalog_relation" profession INNER JOIN "zalip_work" linked_work ON linked_work.id = profession."workId"
+			WHERE profession."entryId" = entry.id AND ${zalipPersonRoleSql('profession')} = :professionRole${publishedOnly ? ' AND linked_work."publicationState" = :professionPublicationState' : ''})`, { professionRole: role, ...(publishedOnly ? { professionPublicationState: 'published' } : {}) });
 		if (publishedOnly) {
 			query.andWhere('(entry.type <> :collectionType OR entry.data->\'isEnabled\' IS DISTINCT FROM \'false\'::jsonb)', { collectionType: 'collection' });
 			query.andWhere('EXISTS (SELECT 1 FROM "zalip_catalog_relation" relation INNER JOIN "zalip_work" work ON work.id = relation."workId" WHERE relation."entryId" = entry.id AND work."publicationState" = :publicationState)', { publicationState: 'published' });
@@ -340,11 +402,15 @@ export class ZalipTaxonomyService {
 		publishedOnly?: boolean;
 		limit?: number;
 		cursor?: string;
-	}): Promise<{ entry: PackedZalipCatalogEntry; works: (PackedZalipWork & { role: string; character: string | null; position: number })[]; nextCursor: string | null }> {
+	} & ZalipFilmographyFilters): Promise<{ entry: PackedZalipCatalogEntry; works: PackedZalipTaxonomyWork[]; nextCursor: string | null }> {
 		if (!options.entryId && (!options.slug || !options.type)) throw new Error('INVALID_CATALOG_LOOKUP');
+		const filters = normalizeZalipFilmographyFilters(options);
+		if (options.limit !== undefined && (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > 200)) throw new Error('INVALID_CATALOG_LOOKUP');
 		const publishedOnly = options.publishedOnly ?? true;
 		const entry = await this.db.getRepository(MiZalipCatalogEntry).findOneBy(options.entryId ? { id: options.entryId } : { type: options.type, slug: options.slug });
 		if (!entry || (publishedOnly && entry.type === 'collection' && !getZalipCollectionSettings(entry.data).isEnabled)) throw new Error('NO_SUCH_CATALOG_ENTRY');
+		if (filters.role && entry.type !== 'person') throw new Error('INVALID_CATALOG_LOOKUP');
+		if (entry.type === 'person' || options.sort !== undefined || options.kind !== undefined || options.yearFrom !== undefined || options.yearTo !== undefined) return this.showFilmography(entry, publishedOnly, filters, options.limit ?? 100, options.cursor);
 		const cursor = options.cursor === undefined ? null : decodeZalipCatalogCursor(options.cursor, entry.id, publishedOnly);
 		const limit = Math.min(200, Math.max(1, options.limit ?? 100));
 		const query = this.db.getRepository(MiZalipCatalogRelation).createQueryBuilder('relation')
@@ -368,6 +434,52 @@ export class ZalipTaxonomyService {
 			...this.packWork(relation.work), role: relation.role, character: relation.character, position: relation.position,
 		}] : []);
 		return { entry: this.packEntry(entry, !publishedOnly), works, nextCursor: relations.length > limit ? encodeZalipCatalogCursor(entry.id, publishedOnly, page[page.length - 1]) : null };
+	}
+
+	/** Page distinct works, not credit rows. All effective roles for one selected work stay on its page. */
+	private async showFilmography(entry: MiZalipCatalogEntry, publishedOnly: boolean, filters: ReturnType<typeof normalizeZalipFilmographyFilters>, limit: number, cursor?: string) {
+		const memberships = this.db.getRepository(MiZalipCatalogRelation).createQueryBuilder('relation')
+			.innerJoin('relation.work', 'work').where('relation.entryId = :entryId', { entryId: entry.id });
+		if (publishedOnly) memberships.andWhere('work.publicationState = :publicationState', { publicationState: 'published' });
+		// Visibility never depends on filters/cursors: a valid public person can have an empty filtered page.
+		if (publishedOnly && !await memberships.getExists()) throw new Error('NO_SUCH_CATALOG_ENTRY');
+		const scope = zalipFilmographyScope(entry.id, publishedOnly, filters);
+		const anchor = cursor === undefined ? null : decodeZalipFilmographyCursor(cursor, scope, filters.sort);
+		const query = this.db.getRepository(MiZalipWork).createQueryBuilder('work');
+		query.where(`EXISTS (SELECT 1 FROM "zalip_catalog_relation" relation WHERE relation."workId" = work.id AND relation."entryId" = :entryId${filters.role ? ` AND ${zalipPersonRoleSql('relation')} = :filmographyRole` : ''})`, { entryId: entry.id, ...(filters.role ? { filmographyRole: filters.role } : {}) });
+		if (publishedOnly) query.andWhere('work.publicationState = :publicationState', { publicationState: 'published' });
+		if (filters.kind) query.andWhere('work.kind = :filmographyKind', { filmographyKind: filters.kind });
+		if (filters.yearFrom !== undefined) query.andWhere('work.releaseYear >= :filmographyYearFrom', { filmographyYearFrom: filters.yearFrom });
+		if (filters.yearTo !== undefined) query.andWhere('work.releaseYear <= :filmographyYearTo', { filmographyYearTo: filters.yearTo });
+		if (anchor) {
+			if (filters.sort === 'title') query.andWhere('(LOWER(work.title) COLLATE "C" > LOWER(CAST(:cursorValue AS text)) COLLATE "C" OR (LOWER(work.title) COLLATE "C" = LOWER(CAST(:cursorValue AS text)) COLLATE "C" AND work.id > :cursorId))', { cursorValue: anchor.value, cursorId: anchor.id });
+			else if (anchor.value === null) query.andWhere('(work.releaseYear IS NULL AND work.id > :cursorId)', { cursorId: anchor.id });
+			else query.andWhere(`(work.releaseYear ${filters.sort === 'newest' ? '<' : '>'} :cursorValue OR (work.releaseYear = :cursorValue AND work.id > :cursorId) OR work.releaseYear IS NULL)`, { cursorValue: anchor.value, cursorId: anchor.id });
+		}
+		if (filters.sort === 'title') query.orderBy('LOWER(work.title) COLLATE "C"', 'ASC');
+		else query.orderBy('work.releaseYear', filters.sort === 'newest' ? 'DESC' : 'ASC', 'NULLS LAST');
+		const found = await query.addOrderBy('work.id', 'ASC').take(limit + 1).getMany();
+		const page = found.slice(0, limit); const ids = page.map(work => work.id);
+		// Provider records contain at most 300 credits per title. Bound legacy/manual
+		// data too, selecting effective source rows in SQL before native hydration.
+		memberships.andWhere(`relation.id IN (SELECT bounded.id FROM "zalip_catalog_relation" bounded
+			WHERE bounded."entryId" = relation."entryId" AND bounded."workId" = relation."workId"
+			${filters.role ? `AND ${zalipPersonRoleSql('bounded')} = :boundedRole` : ''}
+			AND NOT EXISTS (SELECT 1 FROM "zalip_catalog_relation" preferred
+				WHERE preferred."entryId" = bounded."entryId" AND preferred."workId" = bounded."workId" AND preferred.role = bounded.role
+				AND ((preferred.source = 'manual' AND bounded.source <> 'manual')
+					OR ((preferred.source = 'manual') = (bounded.source = 'manual') AND (preferred.position < bounded.position OR (preferred.position = bounded.position AND preferred.id < bounded.id)))))
+			ORDER BY bounded.position ASC, bounded.id ASC LIMIT 300)`, filters.role ? { boundedRole: filters.role } : {});
+		const relations = ids.length ? await memberships.andWhere('relation.workId IN (:...pageWorkIds)', { pageWorkIds: ids })
+			.orderBy('relation.position', 'ASC').addOrderBy('relation.id', 'ASC').getMany() : [];
+		const effective = this.effectiveRelations(relations).filter(relation => !filters.role || zalipPersonRole(relation.role) === filters.role);
+		const works = page.flatMap(work => {
+			const credits = effective.filter(relation => relation.workId === work.id).slice(0, 300);
+			const first = credits[0];
+			return first ? [{ ...this.packWork(work), role: first.role, character: first.character, position: first.position, credits: credits.map(relation => ({ role: relation.role, character: relation.character })) }] : [];
+		});
+		const last = page.at(-1);
+		return { entry: this.packEntry(entry, !publishedOnly), works, nextCursor: found.length > limit && last ? encodeZalipFilmographyCursor(scope, filters.sort === 'title' ? last.title : last.releaseYear, last.id) : null };
 	}
 
 	private packWork(work: MiZalipWork): PackedZalipWork {

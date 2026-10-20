@@ -3,7 +3,65 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import { createHash } from 'node:crypto';
 import type { MiZalipCatalogEntry, ZalipCatalogEntryType } from '@/models/ZalipCatalogEntry.js';
+
+const personRoleAliases = {
+	actor: ['actor', 'actress', 'cast', 'himself', 'herself', 'voice male', 'voice female', 'voice actor', 'актёр', 'актер'],
+	director: ['director', 'режиссёр', 'режиссер'],
+	writer: ['writer', 'screenplay', 'screenwriter', 'writing', 'story', 'сценарист'],
+	producer: ['producer', 'executive producer', 'producer ussr', 'продюсер'],
+	composer: ['composer', 'original music composer', 'music', 'композитор'],
+	cinematographer: ['operator', 'director of photography', 'cinematography', 'cinematographer', 'оператор'],
+	editor: ['editor', 'editing', 'монтажёр', 'монтажер'],
+	designer: ['design', 'designer', 'production design', 'art direction', 'character design', 'художник'],
+	creator: ['creator', 'created by', 'original creator', 'original story', 'author', 'автор'],
+} as const;
+export const zalipPersonRoles = ['actor', 'director', 'writer', 'producer', 'composer', 'cinematographer', 'editor', 'designer', 'creator', 'participant'] as const;
+export type ZalipPersonRole = typeof zalipPersonRoles[number];
+export const zalipFilmographySorts = ['newest', 'oldest', 'title'] as const;
+export type ZalipFilmographySort = typeof zalipFilmographySorts[number];
+export type ZalipFilmographyFilters = { role?: ZalipPersonRole; kind?: 'movie' | 'series' | 'anime' | 'animation'; yearFrom?: number; yearTo?: number; sort?: ZalipFilmographySort };
+
+/** Exactly the presentation classifications; arbitrary stored jobs never become query syntax. */
+export function zalipPersonRole(value: string): ZalipPersonRole {
+	const normalized = value.trim().toLowerCase().replace(/[_-]+/gu, ' ');
+	return (Object.entries(personRoleAliases).find(([, aliases]) => (aliases as readonly string[]).includes(normalized))?.[0] as ZalipPersonRole | undefined) ?? 'participant';
+}
+
+/** Only internal, fixed aliases are accepted. Every interpolated role literal is a source constant. */
+export function zalipPersonRoleSql(alias: 'relation' | 'profession' | 'bounded'): string {
+	const normalized = `LOWER(regexp_replace(TRIM(COALESCE(${alias}.role, '')), '[_-]+', ' ', 'g'))`;
+	return `CASE ${Object.entries(personRoleAliases).map(([role, aliases]) => `WHEN ${normalized} IN (${aliases.map(value => `'${value}'`).join(',')}) THEN '${role}'`).join(' ')} ELSE 'participant' END`;
+}
+
+export function normalizeZalipFilmographyFilters(input: ZalipFilmographyFilters): Required<Pick<ZalipFilmographyFilters, 'sort'>> & Omit<ZalipFilmographyFilters, 'sort'> {
+	if (input.role !== undefined && !zalipPersonRoles.includes(input.role) || input.kind !== undefined && !['movie', 'series', 'anime', 'animation'].includes(input.kind) || input.sort !== undefined && !zalipFilmographySorts.includes(input.sort)) throw new Error('INVALID_CATALOG_LOOKUP');
+	for (const year of [input.yearFrom, input.yearTo]) if (year !== undefined && (!Number.isInteger(year) || year < 1800 || year > 3000)) throw new Error('INVALID_CATALOG_LOOKUP');
+	if (input.yearFrom !== undefined && input.yearTo !== undefined && input.yearFrom > input.yearTo) throw new Error('INVALID_CATALOG_LOOKUP');
+	return { role: input.role, kind: input.kind, yearFrom: input.yearFrom, yearTo: input.yearTo, sort: input.sort ?? 'newest' };
+}
+
+export function zalipFilmographyScope(entryId: string, publishedOnly: boolean, filters: ZalipFilmographyFilters): string {
+	const normalized = normalizeZalipFilmographyFilters(filters);
+	return createHash('sha256').update(JSON.stringify([entryId, publishedOnly, normalized.role ?? null, normalized.kind ?? null, normalized.yearFrom ?? null, normalized.yearTo ?? null, normalized.sort])).digest('hex');
+}
+
+export function encodeZalipFilmographyCursor(scope: string, value: string | number | null, id: string): string {
+	return Buffer.from(JSON.stringify([2, scope, value, id])).toString('base64url');
+}
+
+export function decodeZalipFilmographyCursor(cursor: string, scope: string, sort: ZalipFilmographySort): { value: string | number | null; id: string } {
+	let value: unknown;
+	try {
+		if (!cursor || cursor.length > 2048 || !/^[a-zA-Z0-9_-]+$/u.test(cursor)) throw new Error();
+		const bytes = Buffer.from(cursor, 'base64url');
+		if (bytes.toString('base64url') !== cursor) throw new Error();
+		value = JSON.parse(bytes.toString('utf8'));
+	} catch { throw new Error('INVALID_CATALOG_CURSOR'); }
+	if (!Array.isArray(value) || value.length !== 4 || value[0] !== 2 || value[1] !== scope || typeof value[3] !== 'string' || !/^[a-zA-Z0-9]{1,32}$/u.test(value[3]) || (sort === 'title' ? typeof value[2] !== 'string' || Array.from(value[2]).length > 256 : value[2] !== null && (!Number.isInteger(value[2]) || value[2] < 1800 || value[2] > 3000))) throw new Error('INVALID_CATALOG_CURSOR');
+	return { value: value[2] as string | number | null, id: value[3] };
+}
 
 export type ZalipCatalogEntryInput = {
 	type: ZalipCatalogEntryType;

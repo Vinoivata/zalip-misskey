@@ -3059,6 +3059,116 @@ export interface Locale extends ILocale {
              */
             "repairVoicesUnsavedLocks": string;
         };
+        "_taxonomyPerson": {
+            /**
+             * Импорт персоны
+             */
+            "importHeading": string;
+            /**
+             * Добавьте актёра или создателя по ID либо ссылке TMDB или Кинопоиска. Сначала проверьте предпросмотр. Фильмы автоматически не добавляются.
+             */
+            "importHint": string;
+            /**
+             * ID или ссылка на персону
+             */
+            "reference": string;
+            /**
+             * Например, ссылка /person/ на TMDB или /name/ на Кинопоиске. ID относится к выбранному источнику.
+             */
+            "referenceHint": string;
+            /**
+             * Найти персону
+             */
+            "previewAction": string;
+            /**
+             * Сохранить персону
+             */
+            "importAction": string;
+            /**
+             * Проверьте данные перед сохранением
+             */
+            "importReady": string;
+            /**
+             * Персона уже есть в каталоге. Ручные правки будут сохранены.
+             */
+            "importExisting": string;
+            /**
+             * Новая персона
+             */
+            "importNew": string;
+            /**
+             * Персона сохранена.
+             */
+            "importSaved": string;
+            /**
+             * Укажите корректный ID или ссылку на персону выбранного источника. Ссылки на фильмы не подходят.
+             */
+            "invalidReference": string;
+            /**
+             * Не удалось получить или сохранить персону. Проверьте источник и повторите попытку.
+             */
+            "importFailed": string;
+            /**
+             * Источник или ссылка изменились. Обновите предпросмотр.
+             */
+            "previewStale": string;
+            /**
+             * Профессии
+             */
+            "professions": string;
+            /**
+             * Возраст
+             */
+            "age": string;
+            /**
+             * {age}
+             */
+            "ageValue": ParameterizedString<"age">;
+            /**
+             * {age} (на момент смерти)
+             */
+            "ageAtDeath": ParameterizedString<"age">;
+            /**
+             * Фильтры фильмографии
+             */
+            "filtersHeading": string;
+            /**
+             * Участие
+             */
+            "roleFilter": string;
+            /**
+             * Все профессии
+             */
+            "allRoles": string;
+            /**
+             * Тип контента
+             */
+            "kindFilter": string;
+            /**
+             * Все типы
+             */
+            "allKinds": string;
+            /**
+             * Порядок в каталоге
+             */
+            "sortPosition": string;
+            /**
+             * В нашем каталоге нет опубликованных тайтлов по выбранным фильтрам.
+             */
+            "filmographyEmpty": string;
+            /**
+             * Сбросить фильтры
+             */
+            "resetFilters": string;
+            /**
+             * Фото не удалось сохранить на сервер. Проверьте загрузку изображения и повторите обновление.
+             */
+            "photoLocalUnavailable": string;
+            /**
+             * Публичная страница появится после привязки к опубликованному тайтлу.
+             */
+            "unpublishedHint": string;
+        };
         "_taxonomy": {
             /**
              * В ролях

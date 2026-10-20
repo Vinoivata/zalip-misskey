@@ -6,6 +6,7 @@
 import { describe, expect, test, vi } from 'vitest';
 import type { RoleService } from '@/core/RoleService.js';
 import type { ZalipTaxonomyService } from '@/core/ZalipTaxonomyService.js';
+import type { ZalipPersonImportService } from '@/core/ZalipPersonImportService.js';
 import type { MiLocalUser } from '@/models/User.js';
 import PublicShow from '../../../taxonomy/show.js';
 import EnrichPerson, { meta as enrichMeta } from './enrich-person.js';
@@ -13,10 +14,12 @@ import Recalculate, { meta as recalculateMeta } from './recalculate.js';
 import Delete, { meta as deleteMeta } from './delete.js';
 import Show from './show.js';
 import Save from './save.js';
+import ImportPerson, { meta as personMeta } from './import-person.js';
 
 vi.mock('@/core/RoleService.js', () => ({ RoleService: class {} }));
 vi.mock('@/core/ZalipTaxonomyService.js', () => ({ ZalipTaxonomyService: class {} }));
 vi.mock('@/core/ZalipImporterSourceSettingsService.js', () => ({ ZalipImporterSourceSettingsService: class {} }));
+vi.mock('@/core/ZalipPersonImportService.js', () => ({ ZalipPersonImportService: class {}, personImportWarnings: ['person-photo-local-unavailable'] }));
 
 const user = { id: 'admin01' } as MiLocalUser;
 
@@ -26,9 +29,11 @@ function taxonomy() { return { enrichPerson: vi.fn().mockResolvedValue({ entry: 
 
 function asService(service: ReturnType<typeof taxonomy>): ZalipTaxonomyService { return service as unknown as ZalipTaxonomyService; }
 
+function persons(service: object): ZalipPersonImportService { return service as ZalipPersonImportService; }
+
 describe('taxonomy administration workflows', () => {
 	test('all workflows require credentials and write permission', () => {
-		for (const meta of [enrichMeta, recalculateMeta, deleteMeta]) {
+		for (const meta of [enrichMeta, personMeta, recalculateMeta, deleteMeta]) {
 			expect(meta.requireCredential).toBe(true);
 			expect(meta.kind).toBe('write:account');
 			expect(meta.prohibitMoved).toBe(true);
@@ -38,25 +43,41 @@ describe('taxonomy administration workflows', () => {
 
 	test('ordinary users cannot enrich, recalculate or delete before any service or Redis access', async () => {
 		const service = taxonomy();
-		const settings = { getRuntime: vi.fn().mockResolvedValue({ apiOrigins: { kinopoisk: 'https://kinopoiskapiunofficial.tech' } }) };
 		const cases = [
-			[new EnrichPerson(role(false), asService(service), {} as never, settings as never), { entryId: 'entry01', source: 'tmdb' }],
+			[new EnrichPerson(role(false), persons(service)), { entryId: 'entry01', source: 'tmdb' }],
+			[new ImportPerson(role(false), persons(service)), { source: 'tmdb', reference: '10' }],
 			[new Recalculate(role(false), asService(service)), { entryId: 'entry01' }],
 			[new Delete(role(false), asService(service)), { entryId: 'entry01' }],
 		] as const;
 		for (const [endpoint, params] of cases) await expect(endpoint.exec(params, user, null)).rejects.toMatchObject({ code: 'ZALIP_ADMIN_REQUIRED', httpStatusCode: 403 });
 		for (const method of Object.values(service)) expect(method).not.toHaveBeenCalled();
-		expect(settings.getRuntime).not.toHaveBeenCalled();
 	});
 
 	test('enrichment forwards only canonical source and selected record ID', async () => {
 		const service = taxonomy();
-		const settings = { getRuntime: vi.fn().mockResolvedValue({ apiOrigins: { kinopoisk: 'https://kinopoiskapiunofficial.tech' } }) };
-		const endpoint = new EnrichPerson(role(true), asService(service), {} as never, settings as never);
+		const endpoint = new EnrichPerson(role(true), persons(service));
 		await endpoint.exec({ entryId: 'entry01', source: 'tmdb', i: 'auth-placeholder' }, user, null);
-		expect(service.enrichPerson).toHaveBeenCalledWith('entry01', 'tmdb', expect.any(Function));
-		expect(settings.getRuntime).toHaveBeenCalledOnce();
+		expect(service.enrichPerson).toHaveBeenCalledWith('entry01', 'tmdb');
 		for (const params of [{ entryId: 'entry01', source: 'collaps' }, { entryId: 'entry01', source: 'tmdb', externalId: '10' }, { entryId: 'entry01', source: 'tmdb', token: 'unexpected' }]) await expect(endpoint.exec(params, user, null)).rejects.toMatchObject({ code: 'INVALID_PARAM' });
+	});
+
+	test('standalone person import defaults to preview and only forwards bounded explicit identities', async () => {
+		const service = { importPerson: vi.fn().mockResolvedValue({ preview: true }) };
+		const endpoint = new ImportPerson(role(true), persons(service));
+		await endpoint.exec({ source: 'tmdb', reference: 'https://www.themoviedb.org/person/10-name', i: 'auth-placeholder' }, user, null);
+		expect(service.importPerson).toHaveBeenLastCalledWith('tmdb', 'https://www.themoviedb.org/person/10-name', true);
+		await endpoint.exec({ source: 'kinopoisk', reference: '20', preview: false }, user, null);
+		expect(service.importPerson).toHaveBeenLastCalledWith('kinopoisk', '20', false);
+		for (const params of [{ source: 'collaps', reference: '10' }, { source: 'tmdb', reference: '' }, { source: 'tmdb', reference: 'a'.repeat(1025) }, { source: 'tmdb', reference: '10', preview: 'false' }, { source: 'tmdb', reference: '10', imageUrl: 'https://example.com/image.jpg' }, { source: 'tmdb', reference: '10', token: 'unexpected' }]) await expect(endpoint.exec(params, user, null)).rejects.toMatchObject({ code: 'INVALID_PARAM' });
+		expect(service.importPerson).toHaveBeenCalledTimes(2);
+	});
+
+	test('person import upstream failures use the closed native error contract', async () => {
+		const service = { importPerson: vi.fn().mockRejectedValue(new Error('https://example.com/?api_key=fixture-secret')) };
+		const error = await new ImportPerson(role(true), persons(service)).exec({ source: 'tmdb', reference: '10' }, user, null).catch(value => value);
+		expect(error).toMatchObject({ code: 'ZALIP_IMPORT_UNAVAILABLE' });
+		expect(JSON.stringify(error)).not.toContain('fixture-secret');
+		expect(personMeta.res.properties.warnings.items.enum).toEqual(['person-photo-local-unavailable']);
 	});
 
 	test('recalculation bounds batches and rejects ambiguous work selection', async () => {
@@ -92,7 +113,7 @@ describe('taxonomy administration workflows', () => {
 	test('cursor payloads are bounded and disallowed on work membership lookups, before service access', async () => {
 		const service = taxonomy();
 		for (const endpoint of [new PublicShow(asService(service)), new Show(role(true), asService(service))]) {
-			for (const params of [{ entryId: 'entry01', cursor: '' }, { entryId: 'entry01', cursor: 'a'.repeat(257) }, { entryId: 'entry01', cursor: 'not/valid' }, { workId: 'work01', cursor: 'opaque' }, { entryId: 'entry01', workId: 'work01', cursor: 'opaque' }, { entryId: 'entry01', limit: 101 }]) await expect(endpoint.exec(params, user, null)).rejects.toMatchObject({ code: 'INVALID_PARAM' });
+			for (const params of [{ entryId: 'entry01', cursor: '' }, { entryId: 'entry01', cursor: 'a'.repeat(2049) }, { entryId: 'entry01', cursor: 'not/valid' }, { workId: 'work01', cursor: 'opaque' }, { entryId: 'entry01', workId: 'work01', cursor: 'opaque' }, { entryId: 'entry01', limit: 101 }]) await expect(endpoint.exec(params, user, null)).rejects.toMatchObject({ code: 'INVALID_PARAM' });
 		}
 		expect(service.showEntry).not.toHaveBeenCalled();
 		expect(service.listWorkEntries).not.toHaveBeenCalled();

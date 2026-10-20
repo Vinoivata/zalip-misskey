@@ -11,6 +11,7 @@ import Importer from '@/pages/zalip/importer.vue';
 import { i18n } from '@/i18n.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { importerFields, importerSources } from '@/utility/zalip-importer.js';
+import type { PersonImportResult } from '@/utility/zalip-taxonomy.js';
 
 vi.mock('@/i.js', () => ({ iAmAdmin: true }));
 vi.mock('@/page.js', () => ({ definePage: vi.fn() }));
@@ -48,6 +49,70 @@ beforeEach(() => {
 		if (endpoint === 'zalip/admin/importer/search') return { items: [{ ref, title: 'Fixture title', originalTitle: null, releaseYear: 2026, posterUrl: null }], page: 1, hasMore: false };
 		if (endpoint === 'zalip/admin/importer/work-state/show') return { workId: 'work1', title: 'Imported fixture', locks: [], fields: [] };
 		throw new Error('Unexpected fixture endpoint');
+	});
+});
+
+function personPreview(name = 'Provider person'): PersonImportResult {
+	return { preview: true, source: 'tmdb', externalId: '31', person: { type: 'person', name, description: 'Provider biography', imageUrl: 'https://images.example/person.jpg', externalIds: { tmdb: '31' }, data: { biography: 'Provider biography' } }, existingEntry: null, entry: null, created: false, changedFields: [], warnings: [] };
+}
+
+describe('explicit person import preview', () => {
+	it('does not write during preview, imports only on confirmation and shows the saved local photo', async () => {
+		const original = vi.mocked(misskeyApiZalip).getMockImplementation()!;
+		const result = personPreview();
+		const saved = { id: 'person1', type: 'person' as const, slug: 'saved-person', name: 'Saved person', description: 'Saved biography', imageUrl: 'https://social.example/files/person.webp', parentId: null, externalIds: { tmdb: '31' }, data: {} };
+		vi.mocked(misskeyApiZalip).mockImplementation(async (endpoint, params) => {
+			if (endpoint === 'zalip/admin/importer/taxonomy/import-person') return params?.preview ? result : { ...result, preview: false, entry: saved, created: true, changedFields: ['name', 'imageUrl'] };
+			if (endpoint === 'zalip/admin/importer/taxonomy/show') return { entry: saved, works: [], nextCursor: null };
+			return original(endpoint, params);
+		});
+		const view = setup();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._importer.directories }));
+		await fireEvent.update(view.getByLabelText(i18n.ts.zalip._taxonomyPerson.reference), 'https://www.themoviedb.org/person/31-example');
+		await waitFor(() => expect(view.getByRole('button', { name: i18n.ts.zalip._taxonomyPerson.previewAction }).hasAttribute('disabled')).toBe(false));
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._taxonomyPerson.previewAction }));
+		await view.findByRole('heading', { name: 'Provider person' });
+		expect(misskeyApiZalip).toHaveBeenCalledWith('zalip/admin/importer/taxonomy/import-person', { source: 'tmdb', reference: 'https://www.themoviedb.org/person/31-example', preview: true });
+		expect(vi.mocked(misskeyApiZalip).mock.calls.some(([endpoint, params]) => endpoint === 'zalip/admin/importer/taxonomy/import-person' && params?.preview === false)).toBe(false);
+		expect(view.getByText(i18n.ts.zalip._taxonomyPerson.unpublishedHint)).toBeTruthy();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._taxonomyPerson.importAction }));
+		await view.findByRole('heading', { name: 'Saved person' });
+		expect(view.getByRole('img', { name: 'Saved person' }).getAttribute('src')).toBe(saved.imageUrl);
+		expect(view.queryByRole('button', { name: i18n.ts.zalip._taxonomyPerson.importAction })).toBeNull();
+		expect(vi.mocked(misskeyApiZalip).mock.calls.filter(([endpoint, params]) => endpoint === 'zalip/admin/importer/taxonomy/import-person' && params?.preview === false)).toHaveLength(1);
+	});
+	it('invalidates the preview immediately on reference changes and ignores a late old preview', async () => {
+		const original = vi.mocked(misskeyApiZalip).getMockImplementation()!;
+		let resolveOld!: (result: PersonImportResult) => void;
+		vi.mocked(misskeyApiZalip).mockImplementation(async (endpoint, params) => {
+			if (endpoint === 'zalip/admin/importer/taxonomy/import-person') return params?.reference === '31' ? new Promise<PersonImportResult>(resolve => { resolveOld = resolve; }) : personPreview('Current person');
+			return original(endpoint, params);
+		});
+		const view = setup(); await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._importer.directories }));
+		const input = view.getByLabelText(i18n.ts.zalip._taxonomyPerson.reference);
+		await fireEvent.update(input, '31');
+		await waitFor(() => expect(view.getByRole('button', { name: i18n.ts.zalip._taxonomyPerson.previewAction }).hasAttribute('disabled')).toBe(false));
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._taxonomyPerson.previewAction }));
+		await fireEvent.update(input, '32');
+		expect(view.queryByRole('button', { name: i18n.ts.zalip._taxonomyPerson.importAction })).toBeNull();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._taxonomyPerson.previewAction }));
+		await view.findByRole('heading', { name: 'Current person' });
+		resolveOld(personPreview('Stale person'));
+		await new Promise(resolve => setTimeout(resolve, 0));
+		expect(view.queryByRole('heading', { name: 'Stale person' })).toBeNull();
+		expect(view.getByRole('heading', { name: 'Current person' })).toBeTruthy();
+		await fireEvent.update(input, '33');
+		expect(view.queryByRole('button', { name: i18n.ts.zalip._taxonomyPerson.importAction })).toBeNull();
+	});
+	it('shows only the closed photo-localization warning, never provider warning text', async () => {
+		const original = vi.mocked(misskeyApiZalip).getMockImplementation()!;
+		vi.mocked(misskeyApiZalip).mockImplementation(async (endpoint, params) => endpoint === 'zalip/admin/importer/taxonomy/import-person' ? { ...personPreview(), warnings: ['person-photo-local-unavailable', 'https://private.example/secret'] } : original(endpoint, params));
+		const view = setup(); await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._importer.directories }));
+		await fireEvent.update(view.getByLabelText(i18n.ts.zalip._taxonomyPerson.reference), '31');
+		await waitFor(() => expect(view.getByRole('button', { name: i18n.ts.zalip._taxonomyPerson.previewAction }).hasAttribute('disabled')).toBe(false));
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._taxonomyPerson.previewAction }));
+		await view.findByText(i18n.ts.zalip._taxonomyPerson.photoLocalUnavailable);
+		expect(view.queryByText('https://private.example/secret')).toBeNull();
 	});
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });

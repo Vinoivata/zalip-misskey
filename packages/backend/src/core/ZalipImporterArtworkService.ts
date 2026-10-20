@@ -28,6 +28,14 @@ export class ZalipImporterArtworkService {
 		private http: HttpRequestService,
 	) {}
 
+	/** Compact provider portraits use the same bounded decoder, original cache and native Drive derivatives. */
+	public async cachePersonPhoto(value: string): Promise<string> {
+		const native = await this.db.getRepository(MiDriveFile).findOne({ where: [{ url: value, isLink: false }, { webpublicUrl: value, isLink: false }, { thumbnailUrl: value, isLink: false }] });
+		if (native) return value;
+		const settings = normalizeImportArtworkSettings({ format: 'webp', quality: 82, keepOriginal: true, sizes: { posterUrl: { width: 480, height: 720, fit: 'inside' } } });
+		return this.cache(value, 'posterUrl', settings, false, { deadlineAt: Date.now() + importArtworkLimits.batchTimeoutMs, remainingBytes: importArtworkLimits.batchBytes });
+	}
+
 	/** Existing-catalogue localization is byte-preserving, never a new provider image selection. */
 	public async cacheOriginal(value: string, budget: ArtworkBudget = { deadlineAt: Date.now() + importArtworkLimits.batchTimeoutMs, remainingBytes: importArtworkLimits.batchBytes }): Promise<string> {
 		const url = importArtworkUrl(value);

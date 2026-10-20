@@ -7,6 +7,8 @@ import type { ZalipCatalogEntryInput } from '@/misc/zalip-taxonomy.js';
 import { createImportRequest, defaultImportTransport, ImportProviderError, pacedImportTransport, safeImportUrl, type ImportProviderConfig, type ImportTransport } from './providers.js';
 
 export type ImportPersonSource = 'tmdb' | 'kinopoisk';
+/** Server-only cache result; never accepted from HTTP or copied from provider JSON. */
+export type ImportPersonInput = ZalipCatalogEntryInput & { localizedImage?: string };
 
 function object(value: unknown): Record<string, unknown> {
 	return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -26,7 +28,21 @@ function date(value: unknown): string | null {
 
 function externalId(value: unknown): string | null {
 	const candidate = typeof value === 'number' && Number.isSafeInteger(value) ? String(value) : value;
-	return typeof candidate === 'string' && /^[1-9]\d{0,15}$/.test(candidate) ? candidate : null;
+	return typeof candidate === 'string' && /^[1-9]\d{0,15}$/.test(candidate) && Number.isSafeInteger(Number(candidate)) ? candidate : null;
+}
+
+/** A pasted official page is an identity, never an arbitrary URL to request. */
+export function parseImportPersonReference(source: ImportPersonSource, value: string): string {
+	if (!['tmdb', 'kinopoisk'].includes(source) || typeof value !== 'string' || value.length > 1024 || /[\u0000-\u001f\u007f]/u.test(value)) throw new ImportProviderError('invalid-ref');
+	const reference = value.trim();
+	const direct = externalId(reference);
+	if (direct) return direct;
+	const match = source === 'tmdb'
+		? /^https:\/\/(?:www\.)?themoviedb\.org\/person\/([1-9]\d{0,15})(?:-[\p{L}\p{N}-]{1,256})?\/?$/u.exec(reference)
+		: /^https:\/\/(?:www\.)?kinopoisk\.ru\/name\/([1-9]\d{0,15})\/?$/u.exec(reference);
+	const id = externalId(match?.[1]);
+	if (!id) throw new ImportProviderError('invalid-ref');
+	return id;
 }
 
 function url(value: unknown): string | null {

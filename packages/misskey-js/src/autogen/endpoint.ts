@@ -736,6 +736,8 @@ import type {
 	ZalipAdminImporterTaxonomyDeleteResponse,
 	ZalipAdminImporterTaxonomyEnrichPersonRequest,
 	ZalipAdminImporterTaxonomyEnrichPersonResponse,
+	ZalipAdminImporterTaxonomyImportPersonRequest,
+	ZalipAdminImporterTaxonomyImportPersonResponse,
 	ZalipAdminImporterTaxonomyLinkRequest,
 	ZalipAdminImporterTaxonomyLinkResponse,
 	ZalipAdminImporterTaxonomyListRequest,
@@ -1305,6 +1307,7 @@ export type Endpoints = {
 	'zalip/admin/importer/sources/settings/show': { req: ZalipAdminImporterSourcesSettingsShowRequest; res: ZalipAdminImporterSourcesSettingsShowResponse };
 	'zalip/admin/importer/taxonomy/delete': { req: ZalipAdminImporterTaxonomyDeleteRequest; res: ZalipAdminImporterTaxonomyDeleteResponse };
 	'zalip/admin/importer/taxonomy/enrich-person': { req: ZalipAdminImporterTaxonomyEnrichPersonRequest; res: ZalipAdminImporterTaxonomyEnrichPersonResponse };
+	'zalip/admin/importer/taxonomy/import-person': { req: ZalipAdminImporterTaxonomyImportPersonRequest; res: ZalipAdminImporterTaxonomyImportPersonResponse };
 	'zalip/admin/importer/taxonomy/link': { req: ZalipAdminImporterTaxonomyLinkRequest; res: ZalipAdminImporterTaxonomyLinkResponse };
 	'zalip/admin/importer/taxonomy/list': { req: ZalipAdminImporterTaxonomyListRequest; res: ZalipAdminImporterTaxonomyListResponse };
 	'zalip/admin/importer/taxonomy/recalculate': { req: ZalipAdminImporterTaxonomyRecalculateRequest; res: ZalipAdminImporterTaxonomyRecalculateResponse };

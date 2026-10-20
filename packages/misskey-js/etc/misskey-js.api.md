@@ -2324,6 +2324,8 @@ declare namespace entities {
         ZalipAdminImporterTaxonomyDeleteResponse,
         ZalipAdminImporterTaxonomyEnrichPersonRequest,
         ZalipAdminImporterTaxonomyEnrichPersonResponse,
+        ZalipAdminImporterTaxonomyImportPersonRequest,
+        ZalipAdminImporterTaxonomyImportPersonResponse,
         ZalipAdminImporterTaxonomyLinkRequest,
         ZalipAdminImporterTaxonomyLinkResponse,
         ZalipAdminImporterTaxonomyListRequest,
@@ -4179,6 +4181,12 @@ type ZalipAdminImporterTaxonomyEnrichPersonRequest = operations['zalip___admin__
 
 // @public (undocumented)
 type ZalipAdminImporterTaxonomyEnrichPersonResponse = operations['zalip___admin___importer___taxonomy___enrich-person']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterTaxonomyImportPersonRequest = operations['zalip___admin___importer___taxonomy___import-person']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterTaxonomyImportPersonResponse = operations['zalip___admin___importer___taxonomy___import-person']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
 type ZalipAdminImporterTaxonomyLinkRequest = operations['zalip___admin___importer___taxonomy___link']['requestBody']['content']['application/json'];

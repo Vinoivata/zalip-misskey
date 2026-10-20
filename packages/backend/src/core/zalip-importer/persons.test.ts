@@ -4,8 +4,23 @@
  */
 
 import { describe, expect, test, vi } from 'vitest';
-import { fetchImportedPerson, normalizeKinopoiskPerson, normalizeTmdbPerson } from './persons.js';
+import { fetchImportedPerson, normalizeKinopoiskPerson, normalizeTmdbPerson, parseImportPersonReference } from './persons.js';
 import { ImportProviderError } from './providers.js';
+
+describe('explicit person references', () => {
+	test('accepts bounded IDs and official person pages without fetching their URLs', () => {
+		for (const reference of ['10', ' 10 ', 'https://www.themoviedb.org/person/10-name', 'https://themoviedb.org/person/10/', 'https://www.themoviedb.org/person/10-Имя']) expect(parseImportPersonReference('tmdb', reference)).toBe('10');
+		for (const reference of ['20', 'https://www.kinopoisk.ru/name/20/', 'https://kinopoisk.ru/name/20']) expect(parseImportPersonReference('kinopoisk', reference)).toBe('20');
+	});
+
+	test('rejects other media, authorities, credentials, encoded or ambiguous references', () => {
+		for (const source of ['tmdb', 'kinopoisk'] as const) {
+			for (const reference of ['', '0', '01', '9007199254740992', '-10', '1e2', '10\n', 'a'.repeat(1025), 'https://127.0.0.1/person/10', 'https://api.themoviedb.org/3/person/10', 'https://www.themoviedb.org/movie/10', 'https://www.kinopoisk.ru/film/20/', 'https://www.kinopoisk.ru/name/20/?token=fixture', 'https://www.themoviedb.org/person/10?language=ru', 'https://www.themoviedb.org/person/10#', 'http://www.themoviedb.org/person/10', 'https://www.themoviedb.org:443/person/10', 'https://user:password@www.themoviedb.org/person/10', 'https://www.themoviedb.org.evil.org/person/10', 'https://www.themoviedb.org/person/%31%30', 'https://www.themoviedb.org/person/x/../10', '//www.themoviedb.org/person/10']) expect(() => parseImportPersonReference(source, reference)).toThrow('invalid-ref');
+		}
+		expect(() => parseImportPersonReference('kinopoisk', 'https://www.themoviedb.org/person/10')).toThrow('invalid-ref');
+		expect(() => parseImportPersonReference('tmdb', 'https://www.kinopoisk.ru/name/20/')).toThrow('invalid-ref');
+	});
+});
 
 describe('person import projection', () => {
 	test('TMDB prefers Russian biography and uses English only for missing details', () => {

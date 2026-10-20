@@ -520,6 +520,7 @@ export * as 'zalip/admin/importer/taxonomy/show' from './endpoints/zalip/admin/i
 export * as 'zalip/admin/importer/taxonomy/save' from './endpoints/zalip/admin/importer/taxonomy/save.js';
 export * as 'zalip/admin/importer/taxonomy/link' from './endpoints/zalip/admin/importer/taxonomy/link.js';
 export * as 'zalip/admin/importer/taxonomy/enrich-person' from './endpoints/zalip/admin/importer/taxonomy/enrich-person.js';
+export * as 'zalip/admin/importer/taxonomy/import-person' from './endpoints/zalip/admin/importer/taxonomy/import-person.js';
 export * as 'zalip/admin/importer/taxonomy/recalculate' from './endpoints/zalip/admin/importer/taxonomy/recalculate.js';
 export * as 'zalip/admin/importer/taxonomy/delete' from './endpoints/zalip/admin/importer/taxonomy/delete.js';
 export * as 'zalip/admin/importer/schedules/list' from './endpoints/zalip/admin/importer/schedules/list.js';

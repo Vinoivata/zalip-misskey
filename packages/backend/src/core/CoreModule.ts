@@ -92,6 +92,7 @@ import { ZalipArtworkLocalizationService } from './ZalipArtworkLocalizationServi
 import { ZalipPlaybackSettingsService } from './ZalipPlaybackSettingsService.js';
 import { ZalipImporterSourceSettingsService } from './ZalipImporterSourceSettingsService.js';
 import { ZalipTaxonomyService } from './ZalipTaxonomyService.js';
+import { ZalipPersonImportService } from './ZalipPersonImportService.js';
 import { ZalipAllohaService } from './ZalipAllohaService.js';
 import { ZalipTmdbImportService } from './ZalipTmdbImportService.js';
 
@@ -412,6 +413,7 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		ZalipPlaybackSettingsService,
 		ZalipImporterSourceSettingsService,
 		ZalipTaxonomyService,
+		ZalipPersonImportService,
 		ZalipAllohaService,
 		ZalipTmdbImportService,
 
@@ -729,6 +731,7 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		ZalipPlaybackSettingsService,
 		ZalipImporterSourceSettingsService,
 		ZalipTaxonomyService,
+		ZalipPersonImportService,
 		ZalipAllohaService,
 		ZalipTmdbImportService,
 

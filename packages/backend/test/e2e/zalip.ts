@@ -258,6 +258,7 @@ describe('Zalip discussions', () => {
 			['zalip/admin/importer/taxonomy/link', { entryId: 'entry01', workId: 'work01' }],
 			['zalip/admin/importer/taxonomy/delete', { entryId: 'entry01' }],
 			['zalip/admin/importer/taxonomy/enrich-person', { entryId: 'entry01', source: 'tmdb' }],
+			['zalip/admin/importer/taxonomy/import-person', { source: 'tmdb', reference: '63', preview: true }],
 			['zalip/admin/importer/taxonomy/recalculate', { entryId: 'entry01', workIds: ['work01'] }],
 		];
 		for (const [endpoint, params] of cases) {
@@ -466,6 +467,53 @@ describe('Zalip discussions', () => {
 		assert.strictEqual(injection.status, 400);
 		assert.strictEqual(castAsError(injection.body).error.code, 'INVALID_PARAM');
 		assert.deepStrictEqual(await db.getRepository(MiZalipWork).findOneByOrFail({ id: workId }), before);
+	});
+
+	test('person filmographies page unique published works, filter credits and expose only public metadata', async () => {
+		const created = await api('zalip/admin/importer/taxonomy/save', { type: 'person', name: 'Zalip Person Fixture', slug: 'zalip-person-fixture', data: { biography: 'Public biography', originalName: 'Original Person Fixture', aliases: ['AlternatePersonFixture'], birthday: '1960-04-07' } }, admin);
+		assert.strictEqual(created.status, 200);
+		const entryId = (created.body as ImporterTaxonomyEntry).id;
+		const db = await initTestDb(true);
+		const now = new Date();
+		await db.getRepository(MiZalipWork).insert([
+			{ id: 'personmovie2020', slug: 'person-movie-2020', title: 'Person movie', kind: 'movie', releaseYear: 2020 },
+			{ id: 'personseries2024', slug: 'person-series-2024', title: 'Person series', kind: 'series', releaseYear: 2024 },
+			{ id: 'persondraft2025', slug: 'person-draft-2025', title: 'Secret person draft', kind: 'movie', releaseYear: 2025 },
+		].map(work => ({ ...work, kind: work.kind as 'movie' | 'series', publicationState: 'draft' as const, createdAt: now, updatedAt: now })));
+		for (const [workId, role] of [['personmovie2020', 'actor'], ['personmovie2020', 'director'], ['personseries2024', 'actor'], ['persondraft2025', 'director']]) {
+			assert.strictEqual((await api('zalip/admin/importer/taxonomy/link', { entryId, workId, role }, admin)).status, 200);
+		}
+		const path = `${origin}/zalip/taxonomy/person/zalip-person-fixture`;
+		const hidden = await fetch(path);
+		assert.strictEqual(hidden.status, 404);
+		assert.ok((await hidden.text()).includes('name="robots" content="noindex"'));
+		await db.getRepository(MiZalipWork).update(['personmovie2020', 'personseries2024'], { publicationState: 'published', publishedAt: now });
+		type Filmography = { works: { id: string; credits?: { role: string }[] }[]; nextCursor: string | null };
+		const first = await api('zalip/taxonomy/show', { entryId, sort: 'newest', limit: 1 });
+		assert.strictEqual(first.status, 200);
+		const page1 = first.body as Filmography;
+		assert.deepStrictEqual(page1.works.map(work => work.id), ['personseries2024']);
+		assert.ok(page1.nextCursor);
+		const second = await api('zalip/taxonomy/show', { entryId, sort: 'newest', limit: 1, cursor: page1.nextCursor });
+		assert.strictEqual(second.status, 200);
+		const page2 = second.body as Filmography;
+		assert.deepStrictEqual(page2.works.map(work => work.id), ['personmovie2020']);
+		assert.deepStrictEqual(page2.works[0].credits?.map(credit => credit.role).sort(), ['actor', 'director']);
+		assert.strictEqual(page2.nextCursor, null);
+		const filtered = await api('zalip/taxonomy/show', { entryId, role: 'director', kind: 'movie', yearFrom: 2019, yearTo: 2021, sort: 'title' });
+		assert.strictEqual(filtered.status, 200);
+		assert.deepStrictEqual((filtered.body as Filmography).works.map(work => work.id), ['personmovie2020']);
+		assert.strictEqual((await api('zalip/taxonomy/show', { entryId, sort: 'oldest', cursor: page1.nextCursor })).status, 400);
+		const directory = await api('zalip/taxonomy/list', { type: 'person', query: 'AlternatePersonFixture', role: 'director' });
+		assert.strictEqual(directory.status, 200);
+		assert.ok((directory.body as { entries: ImporterTaxonomyEntry[] }).entries.some(person => person.id === entryId));
+		const page = await fetch(path);
+		assert.strictEqual(page.status, 200);
+		const html = await page.text();
+		assert.ok(html.includes('rel="canonical"'));
+		assert.ok(html.includes('type="application/ld+json"'));
+		assert.ok(html.includes('"@type":"Person"'));
+		assert.ok(!html.includes('Secret person draft'));
 	});
 
 	test('taxonomy editorial entries and draft membership stay private until a work is published', async () => {

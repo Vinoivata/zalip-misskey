@@ -22,7 +22,7 @@ export const paramDef = {
 		slug: { type: 'string', minLength: 1, maxLength: 160, pattern: '^[\\p{L}\\p{N}]+(?:-[\\p{L}\\p{N}]+)*$' },
 		type: importerTaxonomyTypeProperty,
 		limit: { type: 'integer', minimum: 1, maximum: 100, default: 100 },
-		cursor: { type: 'string', minLength: 1, maxLength: 256, pattern: '^[a-zA-Z0-9_-]+$' },
+		cursor: { type: 'string', minLength: 1, maxLength: 2048, pattern: '^[a-zA-Z0-9_-]+$' },
 	},
 	required: [],
 	oneOf: [{ required: ['entryId'] }, { required: ['workId'] }, { required: ['slug', 'type'] }],

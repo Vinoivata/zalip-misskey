@@ -178,6 +178,15 @@ function cacheFixture() {
 }
 
 describe('native importer artwork storage', () => {
+	test('a native person photo returns unchanged without attempting a remote cache or decoder', async () => {
+		const repository = { findOne: vi.fn().mockResolvedValue({ id: 'native01' }) };
+		const db = { getRepository: () => repository, createQueryRunner: vi.fn() };
+		const service = new ZalipImporterArtworkService(db as never, {} as never, {} as never);
+		const value = 'https://zalip.example.org/files/manual-portrait.webp';
+		expect(await service.cachePersonPhoto(value)).toBe(value);
+		expect(repository.findOne).toHaveBeenCalledWith({ where: [{ url: value, isLink: false }, { webpublicUrl: value, isLink: false }, { thumbnailUrl: value, isLink: false }] });
+		expect(db.createQueryRunner).not.toHaveBeenCalled();
+	});
 	test('existing-image localization stores only exact original bytes and reuses the retained-original cache', async () => {
 		const { service, drive, stored } = cacheFixture();
 		downloadOriginal.mockReset().mockResolvedValue({ original: Buffer.from('exact-original'), originalExtension: 'png', format: 'png', width: 100, height: 150 });

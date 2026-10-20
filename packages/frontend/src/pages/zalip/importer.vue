@@ -137,6 +137,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</template>
 
 				<template v-else-if="tab === 'taxonomy'">
+					<section v-if="taxonomyType === 'person'" :class="$style.panel">
+						<h2>{{ i18n.ts.zalip._taxonomyPerson.importHeading }}</h2><p :class="$style.hint">{{ i18n.ts.zalip._taxonomyPerson.importHint }}</p>
+						<form :class="$style.searchForm" @submit.prevent="previewPerson">
+							<label><span>{{ i18n.ts.zalip._importer.source }}</span><select v-model="personImportForm.source" :disabled="busy"><option v-for="source in personImportSources" :key="source" :value="source" :disabled="!sourceStatus(source)?.configured">{{ importerSourceLabel(source) }}</option></select></label>
+							<label :class="$style.grow"><span>{{ i18n.ts.zalip._taxonomyPerson.reference }}</span><input v-model.trim="personImportForm.reference" required maxlength="1024" :disabled="busy" :placeholder="i18n.ts.zalip._taxonomyPerson.referenceHint"></label>
+							<button type="submit" class="_button" :class="$style.primary" :disabled="busy || personPreviewLoading || !personImportForm.reference.trim() || !sourceStatus(personImportForm.source)?.configured"><i :class="personPreviewLoading ? 'ti ti-loader-2 ti-spin' : 'ti ti-eye'" aria-hidden="true"></i>{{ i18n.ts.zalip._taxonomyPerson.previewAction }}</button>
+						</form>
+						<p v-if="personImportError" :class="$style.error" role="alert">{{ personImportError }}</p><p v-if="personPreviewInvalidated" :class="$style.hint" role="status">{{ i18n.ts.zalip._taxonomyPerson.previewStale }}</p>
+						<article v-if="personImportResult && personImportDisplay" :class="$style.personImportPreview">
+							<div :class="$style.personImportPhoto"><img v-if="!personPhotoBroken && importerImageUrl(personImportDisplay.imageUrl)" :src="importerImageUrl(personImportDisplay.imageUrl)!" :alt="personImportDisplay.name" width="200" height="300" decoding="async" @error="personPhotoBroken = true"><i v-else class="ti ti-user" aria-hidden="true"></i></div>
+							<div :class="$style.grow"><span :class="$style.badge">{{ personImportResult.preview ? personImportResult.existingEntry ? i18n.ts.zalip._taxonomyPerson.importExisting : i18n.ts.zalip._taxonomyPerson.importNew : i18n.ts.zalip._taxonomyPerson.importSaved }}</span><h3>{{ personImportDisplay.name }}</h3><small>{{ importerSourceLabel(personImportResult.source) }} · {{ personImportResult.externalId }}</small><p v-if="personImportDisplay.description" :class="$style.personImportBiography">{{ personImportDisplay.description }}</p><p v-if="personImportResult.preview && !personImportResult.existingEntry" :class="$style.hint">{{ i18n.ts.zalip._taxonomyPerson.unpublishedHint }}</p><p v-if="personImportResult.preview" :class="$style.hint">{{ i18n.ts.zalip._taxonomyPerson.importReady }}</p><button v-if="personImportResult.preview" type="button" class="_button" :class="$style.primary" :disabled="busy || !personPreviewReady" @click="importPerson"><i class="ti ti-download" aria-hidden="true"></i>{{ i18n.ts.zalip._taxonomyPerson.importAction }}</button></div>
+						</article>
+						<p v-if="personPhotoWarnings" :class="$style.hint" role="status">{{ i18n.ts.zalip._taxonomyPerson.photoLocalUnavailable }}</p>
+					</section>
 					<section :class="$style.panel">
 						<div :class="$style.sectionHeading"><div><h2>{{ i18n.ts.zalip._importer.taxonomyHeading }}</h2><p>{{ i18n.ts.zalip._importer.taxonomyHint }}</p></div><MkA to="/zalip/taxonomy" :class="$style.button"><i class="ti ti-external-link" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.publicPages }}</MkA></div>
 						<form :class="$style.searchForm" @submit.prevent="loadTaxonomy"><label><span>{{ i18n.ts.zalip._importer.directory }}</span><select v-model="taxonomyType" :disabled="busy" @change="loadTaxonomy"><option v-for="type in taxonomyTypes" :key="type" :value="type">{{ taxonomyTypeLabel(type) }}</option></select></label><label :class="$style.grow"><span>{{ i18n.ts.zalip._importer.name }}</span><input v-model.trim="taxonomyQuery" type="search" maxlength="200" :placeholder="i18n.ts.zalip._importer.directorySearch" :disabled="busy"></label><button type="submit" class="_button" :class="$style.button" :disabled="taxonomyLoading">{{ i18n.ts.zalip._importer.find }}</button><button type="button" class="_button" :class="$style.primary" :disabled="busy" @click="resetTaxonomyForm"><i class="ti ti-plus" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.create }}</button></form>
@@ -291,6 +305,7 @@ import { definePage } from '@/page.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import * as os from '@/os.js';
 import { importerVoiceRepairReady } from '@/utility/zalip-importer.js';
+import type { PersonImportResult } from '@/utility/zalip-taxonomy.js';
 
 type Tab = 'import' | 'runs' | 'taxonomy' | 'schedules' | 'maintenance' | 'sources';
 const props = withDefaults(defineProps<{ source?: string; mediaType?: string; externalId?: string; imagesOnly?: string; workId?: string }>(), { source: '', mediaType: '', externalId: '', imagesOnly: '', workId: '' });
@@ -354,6 +369,20 @@ const diagnosticsLoading = ref(false);
 const diagnosticsError = ref('');
 const taxonomyType = ref<TaxonomyType>('person');
 const taxonomyQuery = ref('');
+const personImportSources = ['tmdb', 'kinopoisk'] as const;
+const personImportForm = reactive({ source: 'tmdb' as 'tmdb' | 'kinopoisk', reference: '' });
+const personImportResult = ref<PersonImportResult | null>(null);
+const personImportDisplay = computed(() => personImportResult.value?.entry ?? personImportResult.value?.person ?? null);
+const personImportError = ref('');
+const personPreviewLoading = ref(false);
+const personPreviewInvalidated = ref(false);
+const personPhotoBroken = ref(false);
+const personPhotoWarnings = ref(false);
+const personPreviewKey = ref('');
+const personImportKey = computed(() => JSON.stringify([personImportForm.source, personImportForm.reference.trim()]));
+const personPreviewReady = computed(() => !!personImportResult.value?.preview && personPreviewKey.value === personImportKey.value && !personPreviewLoading.value);
+let personImportRevision = 0;
+let personImportActive = true;
 const taxonomyEntries = ref<TaxonomyEntry[]>([]);
 const taxonomyWorks = ref<TaxonomyWork[]>([]);
 const taxonomyWorksLoading = ref(false);
@@ -770,6 +799,60 @@ async function loadTaxonomy(): Promise<void> {
 	try { const result = await misskeyApiZalip<{ entries: TaxonomyEntry[] }>('zalip/admin/importer/taxonomy/list', { type: taxonomyType.value, query: taxonomyQuery.value, limit: 100 }); if (revision === taxonomyRevision) taxonomyEntries.value = result.entries; } catch (error) { if (revision === taxonomyRevision) taxonomyError.value = errorMessage(error); } finally { if (revision === taxonomyRevision) taxonomyLoading.value = false; }
 }
 
+function invalidatePersonPreview(): void {
+	personPreviewInvalidated.value = personImportResult.value !== null || personPreviewLoading.value;
+	personImportRevision++;
+	personImportResult.value = null;
+	personPreviewLoading.value = false;
+	personImportError.value = '';
+	personPhotoBroken.value = false;
+	personPhotoWarnings.value = false;
+}
+
+function currentPersonImport(revision: number, key: string): boolean { return personImportActive && iAmAdmin && revision === personImportRevision && key === personImportKey.value; }
+
+function personImportErrorMessage(error: unknown): string {
+	const code = typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string' ? error.code : '';
+	if (code === 'ZALIP_IMPORT_INVALID') return i18n.ts.zalip._taxonomyPerson.invalidReference;
+	const message = errorMessage(error);
+	return message === i18n.ts.zalip._importer.errorGeneric ? i18n.ts.zalip._taxonomyPerson.importFailed : message;
+}
+
+async function previewPerson(): Promise<void> {
+	if (busy.value || personPreviewLoading.value || !personImportActive || !sourceStatus(personImportForm.source)?.configured || !personImportForm.reference.trim()) return;
+	const request = { source: personImportForm.source, reference: personImportForm.reference.trim(), preview: true };
+	const key = personImportKey.value; const revision = ++personImportRevision;
+	personPreviewLoading.value = true; personImportError.value = ''; personImportResult.value = null; personPhotoBroken.value = false; personPhotoWarnings.value = false; personPreviewInvalidated.value = false;
+	try {
+		const result = await misskeyApiZalip<PersonImportResult>('zalip/admin/importer/taxonomy/import-person', request);
+		if (!currentPersonImport(revision, key)) return;
+		if (!result.preview || result.source !== request.source || result.person.type !== 'person') throw new Error('INVALID_PERSON_PREVIEW');
+		personImportResult.value = result; personPreviewKey.value = key;
+		personPhotoWarnings.value = result.warnings.includes('person-photo-local-unavailable');
+	} catch (error) { if (currentPersonImport(revision, key)) personImportError.value = personImportErrorMessage(error); } finally { if (currentPersonImport(revision, key)) personPreviewLoading.value = false; }
+}
+
+async function importPerson(): Promise<void> {
+	if (busy.value || !personPreviewReady.value || !personImportActive || !sourceStatus(personImportForm.source)?.configured) return;
+	const request = { source: personImportForm.source, reference: personImportForm.reference.trim(), preview: false };
+	const key = personImportKey.value; const revision = ++personImportRevision;
+	busy.value = true; personImportError.value = '';
+	try {
+		if (taxonomyDirty.value && (taxonomyForm.id || taxonomyForm.name.trim())) {
+			const { canceled } = await os.confirm({ type: 'warning', text: i18n.ts.leaveConfirm });
+			if (canceled || !currentPersonImport(revision, key)) return;
+		}
+		const result = await misskeyApiZalip<PersonImportResult>('zalip/admin/importer/taxonomy/import-person', request);
+		if (!currentPersonImport(revision, key)) return;
+		if (result.preview || result.source !== request.source || !result.entry || result.entry.type !== 'person') throw new Error('INVALID_PERSON_IMPORT');
+		personImportResult.value = result; personPhotoBroken.value = false;
+		personPhotoWarnings.value = result.warnings.includes('person-photo-local-unavailable');
+		message.value = i18n.ts.zalip._taxonomyPerson.importSaved;
+		await editTaxonomy(result.entry, true);
+		if (currentPersonImport(revision, key)) await loadTaxonomy();
+	} catch (error) { if (currentPersonImport(revision, key)) personImportError.value = personImportErrorMessage(error); } finally { busy.value = false; }
+}
+
 function resetRecalculate(): void { recalculateCursor.value = null; recalculateResult.value = null; }
 
 function taxonomySnapshot(): string { return JSON.stringify({ form: taxonomyForm, facts: personFacts, rules: categoryRules, collection: collectionForm }); }
@@ -847,7 +930,7 @@ async function enrichPerson(source: 'tmdb' | 'kinopoisk'): Promise<void> {
 	const entryId = taxonomyForm.id;
 	busy.value = true;
 	actionError.value = '';
-	try { const result = await misskeyApiZalip<{ entry: TaxonomyEntry; changedFields: string[] }>('zalip/admin/importer/taxonomy/enrich-person', { entryId, source }); if (taxonomyForm.id === entryId) await editTaxonomy(result.entry, true); await loadTaxonomy(); message.value = i18n.tsx.zalip._importer.personEnriched({ count: String(result.changedFields.length) }); } catch (error) { actionError.value = errorMessage(error); } finally { busy.value = false; }
+	try { const result = await misskeyApiZalip<{ entry: TaxonomyEntry; changedFields: string[]; warnings?: string[] }>('zalip/admin/importer/taxonomy/enrich-person', { entryId, source }); if (taxonomyForm.id === entryId) await editTaxonomy(result.entry, true); await loadTaxonomy(); personPhotoWarnings.value = result.warnings?.includes('person-photo-local-unavailable') === true; message.value = i18n.tsx.zalip._importer.personEnriched({ count: String(result.changedFields.length) }); } catch (error) { actionError.value = errorMessage(error); } finally { busy.value = false; }
 }
 
 async function recalculateCategory(continuing: boolean): Promise<void> {
@@ -1067,10 +1150,11 @@ function loadInitialReference(): void {
 watch(tab, value => { actionError.value = ''; if (value === 'runs') void loadRuns(); if (value === 'taxonomy') void loadTaxonomy(); if (value === 'schedules') void loadProfiles(); if (value === 'maintenance') void Promise.all([playbackProviders.value.length ? Promise.resolve() : loadPlaybackSettings(), loadMaintenanceRuns(), loadMaintenanceProfiles()]); if (value === 'sources' && !serviceSettings.value) void loadServiceSettings(); });
 watch(() => maintenanceForm.kind, kind => { if (!maintenanceSources(kind).includes(maintenanceForm.source)) maintenanceForm.source = maintenanceSources(kind)[0]; });
 watch(() => maintenanceProfileForm.kind, kind => { if (!maintenanceSources(kind).includes(maintenanceProfileForm.source)) maintenanceProfileForm.source = maintenanceSources(kind)[0]; });
+watch(personImportKey, invalidatePersonPreview, { flush: 'sync' });
 onMounted(() => { if (iAmAdmin) { void Promise.all([loadSources(), loadCategories(), loadRuns(), loadProfiles()]).then(loadInitialReference); startPolling(); } });
-onActivated(startPolling);
-onDeactivated(stopPolling);
-onBeforeUnmount(stopPolling);
+onActivated(() => { personImportActive = true; startPolling(); });
+onDeactivated(() => { personImportActive = false; invalidatePersonPreview(); stopPolling(); });
+onBeforeUnmount(() => { personImportActive = false; invalidatePersonPreview(); stopPolling(); });
 definePage(() => ({ title: i18n.ts.zalip._importer.pageTitle, icon: 'ti ti-database-import' }));
 </script>
 
@@ -1078,6 +1162,13 @@ definePage(() => ({ title: i18n.ts.zalip._importer.pageTitle, icon: 'ti ti-datab
 .page { padding: 24px var(--MI-margin) 64px; }
 .page h1, .page h2, .page h3 { margin: 0 0 12px; }
 .page h1 { font-size: 1.8rem; }
+.personImportPreview { display: flex; align-items: flex-start; gap: 18px; margin-top: 20px; padding: 16px; border: 1px solid var(--MI_THEME-divider); border-radius: var(--MI-radius); background: var(--MI_THEME-bg); }
+.personImportPhoto { display: grid; place-items: center; flex-shrink: 0; width: clamp(84px, 18vw, 120px); aspect-ratio: 2 / 3; overflow: hidden; border-radius: var(--MI-radius); background: var(--MI_THEME-panelHighlight); color: var(--MI_THEME-fgTransparentWeak); }
+.personImportPhoto img { width: 100%; height: 100%; object-fit: cover; }
+.personImportPhoto i { font-size: 2rem; }
+.personImportPreview h3 { margin: 10px 0 6px; overflow-wrap: anywhere; }
+.personImportPreview small { color: var(--MI_THEME-fgTransparentWeak); }
+.personImportBiography { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; font-size: .85rem; line-height: 1.6; white-space: pre-wrap; }
 .page h2 { font-size: 1.2rem; }
 .page h3 { font-size: 1rem; }
 .heading, .sectionHeading, .toolbar, .actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }

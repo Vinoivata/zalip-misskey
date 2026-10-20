@@ -85,6 +85,7 @@
 - Feat: Add isolated Vibix SDK playback with canonical episode and voice selection, retaining episode-only continuation until the provider documents a verified time API.
 - Fix: Wait for account refresh credentials before loading messenger conversations while immediately clearing the previous account's private state.
 - Fix: Drop stale importer gallery selections without turning missing image candidates into an unintended gallery clear.
+- Enhance: Add preview-first person imports, responsive biographies with formatted dates and age, alias search and role/year/type filmography filters without changing existing catalogue identities.
 
 ### Server
 - Feat: Add personal chat organisation and durable read frontiers, canonical replies, editing and forwarding, with strict participant access and revocable scoped realtime delivery.
@@ -126,6 +127,7 @@
 - Fix: Resolve title discussion context for nested comments and reposts, use system-owned new discussion roots, and avoid implicit notifications to technical root authors.
 - Feat: Add Vibix metadata and player imports with exact Kinopoisk/IMDb bindings, encrypted administrator credentials, bounded normalization and backward-compatible playback settings.
 - Fix: Download selected Kinopoisk posters through the validated same-title API and image-CDN redirect chain without broadening network or image limits.
+- Feat: Import exact TMDB/Kinopoisk person identities with protected editorial fields, bounded local WebP portraits, scheduled photo processing, distinct-work filmography cursors and public-only Person metadata.
 
 ## 2026.7.0
 

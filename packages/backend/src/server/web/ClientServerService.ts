@@ -41,6 +41,7 @@ import { bindThis } from '@/decorators.js';
 import { FlashEntityService } from '@/core/entities/FlashEntityService.js';
 import { ReversiGameEntityService } from '@/core/entities/ReversiGameEntityService.js';
 import { AnnouncementEntityService } from '@/core/entities/AnnouncementEntityService.js';
+import { ZalipTaxonomyService } from '@/core/ZalipTaxonomyService.js';
 import { FeedService } from './FeedService.js';
 import { UrlPreviewService } from './UrlPreviewService.js';
 import { ClientLoggerService } from './ClientLoggerService.js';
@@ -56,6 +57,7 @@ import { GalleryPostPage } from './views/gallery-post.js';
 import { ChannelPage } from './views/channel.js';
 import { ReversiGamePage } from './views/reversi-game.js';
 import { AnnouncementPage } from './views/announcement.js';
+import { ZalipPersonPage } from './views/zalip-person.js';
 import { BaseEmbed } from './views/base-embed.js';
 import { InfoCardPage } from './views/info-card.js';
 import { BiosPage } from './views/bios.js';
@@ -123,6 +125,7 @@ export class ClientServerService {
 		private channelEntityService: ChannelEntityService,
 		private reversiGameEntityService: ReversiGameEntityService,
 		private announcementEntityService: AnnouncementEntityService,
+		private zalipTaxonomyService: ZalipTaxonomyService,
 		private urlPreviewService: UrlPreviewService,
 		private feedService: FeedService,
 		private htmlTemplateService: HtmlTemplateService,
@@ -507,6 +510,20 @@ export class ClientServerService {
 		});
 
 		//#region SSR
+		// Person metadata uses the same public-only gate as the catalogue API, regardless of cookies.
+		fastify.get<{ Params: { slug: string } }>('/zalip/taxonomy/person/:slug', async (request, reply) => {
+			try {
+				const result = await this.zalipTaxonomyService.showEntry({ type: 'person', slug: request.params.slug, publishedOnly: true, limit: 12 });
+				reply.header('Cache-Control', 'public, max-age=30');
+				const works = [...new Map(result.works.map(work => [work.id, work])).values()];
+				return await HtmlTemplateService.replyHtml(reply, ZalipPersonPage({ ...(await this.htmlTemplateService.getCommonData()), entry: result.entry, works }));
+			} catch (error) {
+				if (!(error instanceof Error) || error.message !== 'NO_SUCH_CATALOG_ENTRY') throw error;
+				reply.code(404);
+				return await renderBase(reply, { noindex: true });
+			}
+		});
+
 		// User
 		fastify.get<{ Params: { user: string; sub?: string; } }>('/@:user/:sub?', async (request, reply) => {
 			const { username, host } = Acct.parse(request.params.user);
