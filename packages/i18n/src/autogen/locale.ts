@@ -3424,6 +3424,58 @@ export interface Locale extends ILocale {
              * Сегодня
              */
             "today": string;
+            /**
+             * Управление группами
+             */
+            "manageGroups": string;
+            /**
+             * Открепить диалог
+             */
+            "unpinConversation": string;
+            /**
+             * Открепить сообщение
+             */
+            "unpinMessage": string;
+            /**
+             * Найти сообщение
+             */
+            "searchMessages": string;
+            /**
+             * Вступить
+             */
+            "joinGroup": string;
+            /**
+             * Отклонить
+             */
+            "ignoreInvitation": string;
+            /**
+             * Покинуть группу
+             */
+            "leaveGroup": string;
+            /**
+             * Пригласить участника
+             */
+            "inviteParticipant": string;
+            /**
+             * Отправленные приглашения
+             */
+            "sentInvitations": string;
+            /**
+             * Не уведомлять о сообщениях
+             */
+            "muteGroup": string;
+            /**
+             * Удалить группу
+             */
+            "deleteGroup": string;
+            /**
+             * Вас пригласили в эту группу. Для участия нужно принять приглашение.
+             */
+            "invitationNotice": string;
+            /**
+             * Принять приглашение?
+             */
+            "acceptInvitation": string;
         };
         "_reviews": {
             /**

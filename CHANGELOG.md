@@ -4,6 +4,7 @@
 -
 
 ### Client
+- Fix: Remove duplicate mobile and tablet messenger navigation and empty chrome spacing, preserve conversation list navigation, and reconcile message visibility, input sizing and chat actions.
 - Fix: Keep Zalip title artwork fallbacks and mobile watch actions usable, preserve compact age/country facts, move discussions nearer the player, and align cinema rails and touch controls across screen sizes.
 - Fix: Wrap narrow Zalip discussion headers, keep deleted replies removed with current local counters, and support keyboard activation of repost menus.
 - Fix: Restore Zalip Alloha movie timestamps and accept sparse Collaps resume samples and matching episode announcements without mixing changed cuts or stale iframe sessions.

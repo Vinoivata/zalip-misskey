@@ -3,10 +3,10 @@ SPDX-FileCopyrightText: syuilo and misskey-project
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-<PageWithHeader hideHeader>
-	<div :class="[layout.workspace, $style.workspace]">
+<div :class="$style.page">
+	<div :class="layout.workspace">
 		<aside :class="layout.sidebar">
-			<MkZalipChatSidebar :utilityTab="tab" @select="select" @utility="tab = $event">
+			<MkZalipChatSidebar :utilityTab="tab" @select="select" @utility="openUtility">
 				<template v-if="tab !== 'home'" #default>
 					<div :class="$style.roomList">
 						<XSearch v-if="tab === 'search'"/>
@@ -18,7 +18,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</aside>
 		<div :class="$style.empty"><i class="ti ti-messages" aria-hidden="true"></i><h1>{{ i18n.ts.zalip._chatUi.chooseConversation }}</h1><p>{{ i18n.ts.zalip._chatUi.chooseConversationHint }}</p></div>
 	</div>
-</PageWithHeader>
+</div>
 </template>
 <script setup lang="ts">
 import { ref, watch } from 'vue';
@@ -42,11 +42,13 @@ watch(router.currentRef, () => {
 
 function select(target: ChatConversationTarget): void { if (target.userId) router.push('/chat/user/:userId', { params: { userId: target.userId } }); else if (target.roomId) router.push('/chat/room/:roomId', { params: { roomId: target.roomId } }); }
 
+function openUtility(value: 'home' | 'search' | 'invitations' | 'rooms'): void { router.pushByPath(value === 'home' ? '/chat' : `/chat?view=${value}`); }
+
 definePage(() => ({ title: i18n.ts.zalip.messages, icon: 'ti ti-messages' }));
 </script>
 <style lang="scss" module>
+.page { height: 100%; min-height: 0; overflow: hidden; background: var(--zalip-social-panel); }
 .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; text-align: center; color: var(--zalip-social-muted); > i { font-size: 56px; color: var(--zalip-social-subtle); } h1 { margin: 0; font-size: 20px; color: var(--zalip-social-fg); } p { margin: 0; font-size: 14px; } }
 .roomList { padding: 16px; h3 { margin-block: 4px 16px; font-size: 15px; color: var(--zalip-social-fg); } }
-@media (max-width: 1099px) { .workspace { height: calc(100dvh - 165px - env(safe-area-inset-bottom, 0px)); } }
-@media (max-width: 900px) { .empty { display: none; } }
+@media (max-width: 1099px) { .empty { display: none; } }
 </style>

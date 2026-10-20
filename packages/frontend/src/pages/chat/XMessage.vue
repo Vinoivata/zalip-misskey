@@ -5,9 +5,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div :class="[$style.root, { [$style.isMe]: isMe }]">
-	<MkAvatar v-if="message.toRoomId && !isMe" :user="message.fromUser" :class="$style.groupAvatar" :preview="false"/>
+	<MkAvatar v-if="message.toRoomId && !isMe" :user="message.fromUser" :class="$style.groupAvatar" :preview="false" link/>
 	<div :class="[$style.body, message.file != null ? $style.fullWidth : null]" @contextmenu.stop="onContextmenu">
-		<div v-if="!isMe && (message.toRoomId || isSearchResult) && message.fromUser != null" :class="$style.header"><MkUserName :user="message.fromUser"/></div>
+		<div v-if="!isMe && (isSearchResult || message.toRoomId && prefer.s['chat.showSenderName']) && message.fromUser != null" :class="$style.header"><MkA :to="userPage(message.fromUser)" :title="i18n.ts.zalip._chatUi.openProfile"><MkUserName :user="message.fromUser"/></MkA></div>
 		<div :class="$style.fukidashi">
 			<div v-if="message.forwardedFromUser" :class="$style.forwarded"><i class="ti ti-arrow-forward-up"></i> {{ i18n.ts.zalip._chatUi.forwarded }} · {{ message.forwardedFromUser.name || message.forwardedFromUser.username }}</div>
 			<MkA v-if="message.reply" :to="`/chat/messages/${message.reply.id}`" :class="$style.replyPreview"><strong>{{ message.reply.fromUser.name || message.reply.fromUser.username }}</strong><span>{{ message.reply.text || message.reply.fileName || i18n.ts.zalip._chatUi.attachment }}</span></MkA>
@@ -27,7 +27,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<span v-if="message.updatedAt" :class="$style.time">{{ i18n.ts.zalip._chatUi.edited }}</span>
 				<span v-if="isMe && !isSearchResult" :class="[$style.receipt, { [$style.read]: isReadByRecipient }]" :aria-label="isReadByRecipient ? i18n.ts.zalip._chatUi.read : i18n.ts.zalip._chatUi.sent" :title="isReadByRecipient ? i18n.ts.zalip._chatUi.read : i18n.ts.zalip._chatUi.sent"><i :class="isReadByRecipient ? 'ti ti-checks' : 'ti ti-check'"></i></span>
 				<MkA v-if="isSearchResult && 'toRoom' in message && message.toRoom != null" :to="`/chat/room/${message.toRoomId}`">{{ message.toRoom.name }}</MkA>
-				<MkA v-if="isSearchResult && 'toUser' in message && message.toUser != null && isMe" :to="`/chat/user/${message.toUserId}`">@{{ message.toUser.username }}</MkA>
+				<MkA v-if="isSearchResult && conversationPeer" :to="`/chat/user/${conversationPeer.id}`">@{{ conversationPeer.username }}</MkA>
 			</div>
 		</div>
 		<button type="button" class="_button" :class="$style.menuButton" :aria-label="i18n.ts.more" @click="showMenu"><i class="ti ti-dots"></i></button>
@@ -40,14 +40,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 			:moveClass="prefer.s.animation ? $style.transition_reaction_move : ''"
 			tag="div" :class="$style.reactions"
 		>
-			<button v-for="record in message.reactions" :key="record.reaction + record.user.id" type="button" class="_button" :class="[$style.reaction, record.user.id === $i.id ? $style.reactionMy : null]" :aria-label="`${record.user.name || record.user.username}: ${record.reaction}`" :aria-pressed="record.user.id === $i.id" @click="onReactionClick(record)">
-				<MkReactionIcon
-					:withTooltip="true"
-					:reaction="record.reaction.replace(/^:(\w+):$/, ':$1@.:')"
-					:noStyle="true"
-					:class="$style.reactionIcon"
-				/>
-			</button>
+			<div v-for="group in reactionGroups" :key="group.reaction" :class="[$style.reaction, { [$style.reactionMy]: group.mine }]">
+				<button type="button" class="_button" :class="$style.reactionToggle" :aria-label="group.reaction" :aria-pressed="group.mine" :title="group.names" @click="onReactionGroupClick(group)"><MkReactionIcon :reaction="group.reaction.replace(/^:(\w+):$/, ':$1@.:')" :noStyle="true" :class="$style.reactionIcon"/></button>
+				<button type="button" class="_button" :class="$style.reactionPeople" :aria-label="`${i18n.ts.reaction}: ${group.names}`" :title="group.names" @click="showReactionUsers(group, $event)"><MkAvatar :user="group.records[0].user" :link="false" :class="$style.reactionAvatar"/><span>{{ group.records.length }}</span></button>
+			</div>
 		</TransitionGroup>
 		<p v-if="actionError" role="alert" :class="$style.error">{{ actionError }}</p>
 	</div>
@@ -75,6 +71,7 @@ import MkReactionIcon from '@/components/MkReactionIcon.vue';
 import { prefer } from '@/preferences.js';
 import { DI } from '@/di.js';
 import { getHTMLElementOrNull } from '@/utility/get-dom-node-or-null.js';
+import { userPage } from '@/filters/user.js';
 
 const $i = ensureSignin();
 
@@ -91,6 +88,13 @@ let alive = true;
 onBeforeUnmount(() => { alive = false; });
 
 const isMe = computed(() => props.message.fromUserId === $i.id);
+const conversationPeer = computed(() => props.message.toRoomId ? null : isMe.value ? props.message.toUser ?? null : props.message.fromUser);
+type ReactionGroup = { reaction: string; records: ChatUiMessage['reactions']; mine: boolean; names: string };
+const reactionGroups = computed<ReactionGroup[]>(() => {
+	const groups = new Map<string, ChatUiMessage['reactions']>();
+	for (const record of props.message.reactions) { const records = groups.get(record.reaction) ?? []; if (!records.some(existing => existing.user.id === record.user.id)) records.push(record); groups.set(record.reaction, records); }
+	return Array.from(groups, ([reaction, records]) => ({ reaction, records, mine: records.some(record => record.user.id === $i.id), names: records.map(record => `${record.user.name || record.user.username} (@${record.user.username})`).join(', ') }));
+});
 const urls = computed(() => props.message.text ? extractUrlFromMfm(mfm.parse(props.message.text)) : []);
 const messageDate = computed(() => new Date(props.message.createdAt));
 const validDate = computed(() => !Number.isNaN(messageDate.value.getTime()));
@@ -117,16 +121,10 @@ function react(ev: PointerEvent) {
 	reactionPicker.show(targetEl, null, reaction => { if (alive && account === $i.id && messageId === props.message.id) void changeReaction(reaction); });
 }
 
-function onReactionClick(record: ChatUiMessage['reactions'][number]) {
-	if ($i.policies.chatAvailability !== 'available') return;
+function onReactionGroupClick(group: ReactionGroup): void { void changeReaction(group.reaction, group.mine); }
 
-	if (record.user.id === $i.id) {
-		void changeReaction(record.reaction, true);
-	} else {
-		if (!props.message.reactions.some(r => r.user.id === $i.id && r.reaction === record.reaction)) {
-			void changeReaction(record.reaction);
-		}
-	}
+function showReactionUsers(group: ReactionGroup, event: MouseEvent): void {
+	void os.popupMenu(group.records.map(record => ({ type: 'link' as const, text: record.user.name || record.user.username, caption: `@${record.user.username}`, avatar: record.user, to: userPage(record.user) })), event.currentTarget as HTMLElement);
 }
 
 function onContextmenu(ev: PointerEvent) {
@@ -315,24 +313,23 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 }
 
 .reaction {
-	position: relative;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	border: 1px solid var(--MI_THEME-divider);
 	border-radius: 999px;
-	padding: 4px 8px;
+	padding: 0;
 	min-height: 32px;
 	min-width: 36px;
 	box-sizing: border-box;
 	background: var(--MI_THEME-panel);
-	&::before { content: ''; position: absolute; inset: -6px -4px; }
-	&:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; }
 
 	&.reactionMy {
 		border-color: var(--MI_THEME-accent);
 	}
 }
+.reactionToggle, .reactionPeople { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-height: 32px; padding: 4px 7px; border-radius: 999px; font-size: 11px; &::before { content: ''; position: absolute; inset-block: -6px; inset-inline: 0; } &:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; } &:hover { background: var(--MI_THEME-buttonHoverBg); } }
+.reactionAvatar { width: 16px; height: 16px; }
 
 .reactionIcon {
 	width: 20px;

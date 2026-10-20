@@ -5,9 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div class="_gaps">
-	<label :class="$style.search"><i class="ti ti-search" aria-hidden="true"></i><input v-model="searchQuery" type="search" :placeholder="i18n.ts._chat.searchMessages" :aria-label="i18n.ts._chat.searchMessages" @keydown.enter.prevent="search"></label>
-
-	<MkButton primary rounded :disabled="pending || !searchQuery.trim()" @click="search">{{ i18n.ts.search }}</MkButton>
+	<div :class="$style.search"><i class="ti ti-search" aria-hidden="true"></i><input v-model="searchQuery" type="search" :placeholder="i18n.ts.zalip._chatUi.searchMessages" :aria-label="i18n.ts.zalip._chatUi.searchMessages" @keydown.enter.prevent="search"><button type="button" class="_button" :class="$style.submit" :aria-label="i18n.ts.search" :disabled="pending || !searchQuery.trim()" @click="search"><i class="ti ti-arrow-right" aria-hidden="true"></i></button></div>
 	<MkLoading v-if="pending"/>
 	<div v-if="error"><p role="alert">{{ i18n.ts.zalip._chatUi.loadError }}</p><MkButton @click="search">{{ i18n.ts.retry }}</MkButton></div>
 
@@ -59,7 +57,8 @@ onBeforeUnmount(() => { epoch++; });
 </script>
 
 <style lang="scss" module>
-.search { display: flex; align-items: center; gap: 10px; padding: 0 16px; min-height: 48px; border: 1px solid var(--MI_THEME-divider); border-radius: 99px; background: var(--MI_THEME-buttonBg); input { flex: 1; min-width: 0; padding-block: 12px; font: inherit; background: transparent; border: 0; outline: 0; color: var(--MI_THEME-fg); } &:focus-within { outline: 2px solid var(--MI_THEME-focus); } }
+.search { display: flex; align-items: center; gap: 10px; padding: 0 3px 0 16px; min-height: 48px; border: 1px solid var(--MI_THEME-divider); border-radius: 99px; background: var(--MI_THEME-buttonBg); input { flex: 1; min-width: 0; padding-block: 12px; font: inherit; background: transparent; border: 0; outline: 0; color: var(--MI_THEME-fg); } &:focus-within { outline: 2px solid var(--MI_THEME-focus); } }
+.submit { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; border-radius: 50%; color: var(--MI_THEME-accent); &:hover:not(:disabled) { background: var(--MI_THEME-buttonHoverBg); } &:disabled { opacity: .4; } &:focus-visible { outline: 2px solid var(--MI_THEME-focus); } }
 .searchResultItem {
 	padding: 12px;
 	border: solid 1px var(--MI_THEME-divider);

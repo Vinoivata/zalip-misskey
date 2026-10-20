@@ -23,7 +23,7 @@ afterEach(cleanup);
 
 describe('Zalip chat message search', () => {
 	it('gives the real search input an accessible name', async () => {
-		const view = setup(); const input = view.getByRole('searchbox', { name: i18n.ts._chat.searchMessages }); await fireEvent.update(input, 'Cinema'); await fireEvent.click(view.getByRole('button', { name: i18n.ts.search })); await settle();
+		const view = setup(); const input = view.getByRole('searchbox', { name: i18n.ts.zalip._chatUi.searchMessages }); await fireEvent.update(input, 'Cinema'); await fireEvent.click(view.getByRole('button', { name: i18n.ts.search })); await settle();
 		expect(controls.api).toHaveBeenCalledWith('chat/messages/search', { query: 'Cinema', userId: 'peer', roomId: undefined, limit: 50 });
 	});
 	it('does not apply a search result after switching the account or target', async () => {

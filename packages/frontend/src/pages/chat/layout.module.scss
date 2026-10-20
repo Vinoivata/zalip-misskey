@@ -6,7 +6,7 @@
 .workspace {
 	display: grid;
 	grid-template-columns: clamp(280px, 33.333333%, 360px) minmax(0, 1fr);
-	height: calc(100dvh - 68px);
+	height: calc(100% - var(--zalip-chat-bottom-gap, 0px));
 	min-width: 0;
 	overflow: hidden;
 	background: var(--zalip-social-panel);
@@ -20,7 +20,7 @@
 	border-inline-end: 1px solid var(--zalip-social-border);
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1099px) {
 	.workspace {
 		grid-template-columns: minmax(0, 1fr);
 	}

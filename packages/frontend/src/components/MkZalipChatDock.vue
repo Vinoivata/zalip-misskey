@@ -17,7 +17,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div :class="$style.listBody"><ChatSidebar compact @select="restore"/></div>
 		</section>
 		<section v-for="item in expanded" :key="item.key" :class="$style.panel" :aria-label="item.title || i18n.ts.zalip.messages">
-			<header :class="$style.header"><strong>{{ item.title || i18n.ts.zalip.messages }}</strong><button type="button" class="_button" :class="$style.headerAction" :aria-label="i18n.ts.zalip._chatUi.minimize" @click="dock.minimize(item.key)"><i class="ti ti-minus" aria-hidden="true"></i></button><button type="button" class="_button" :class="$style.headerAction" :aria-label="i18n.ts.zalip._chatUi.openFullPage" @click="openFull(item)"><i class="ti ti-arrows-maximize" aria-hidden="true"></i></button><button type="button" class="_button" :class="$style.headerAction" :aria-label="i18n.ts.zalip._chatUi.closeConversation" @click="dock.close(item.key)"><i class="ti ti-x" aria-hidden="true"></i></button></header>
+			<header :class="$style.header"><MkA v-if="metadata[item.key]?.user" :to="userPage(metadata[item.key].user!)" :class="$style.identity" :title="i18n.ts.zalip._chatUi.openProfile"><MkAvatar :user="metadata[item.key].user!" :link="false" :class="$style.avatar"/><span :class="$style.identityText"><strong>{{ item.title || i18n.ts.zalip.messages }}</strong><span>@{{ metadata[item.key].user!.username }}</span></span></MkA><span v-else :class="$style.identity"><i class="ti ti-users-group" :class="$style.avatar" aria-hidden="true"></i><strong>{{ item.title || i18n.ts.zalip.messages }}</strong></span><button type="button" class="_button" :class="$style.headerAction" :aria-label="i18n.ts.zalip._chatUi.minimize" @click="dock.minimize(item.key)"><i class="ti ti-minus" aria-hidden="true"></i></button><button type="button" class="_button" :class="$style.headerAction" :aria-label="i18n.ts.zalip._chatUi.openFullPage" @click="openFull(item)"><i class="ti ti-arrows-maximize" aria-hidden="true"></i></button><button type="button" class="_button" :class="$style.headerAction" :aria-label="i18n.ts.zalip._chatUi.closeConversation" @click="dock.close(item.key)"><i class="ti ti-x" aria-hidden="true"></i></button></header>
 			<div :class="$style.conversation"><ChatConversation :userId="item.userId" :roomId="item.roomId" :active="visible && !modalOpen" compact @loaded="loaded(item.key, $event)" @close="dock.close(item.key)"/></div>
 		</section>
 	</div>
@@ -28,12 +28,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue';
 import type { ZalipChatTarget } from '@/utility/zalip-chat-dock.js';
+import type { ChatConversationMetadata } from '@/utility/zalip-chat-types.js';
 import { $i } from '@/i.js';
 import { i18n } from '@/i18n.js';
 import { mainRouter } from '@/router.js';
 import { popups } from '@/os.js';
 import { deviceKind } from '@/utility/device-kind.js';
 import { zalipChatDock as dock, zalipChatTargetPath } from '@/utility/zalip-chat-dock.js';
+import { hasBlockingChatPopup } from '@/utility/zalip-chat-visibility.js';
+import { userPage } from '@/filters/user.js';
 
 const ChatConversation = defineAsyncComponent(() => import('@/components/MkZalipChatConversation.vue'));
 const ChatSidebar = defineAsyncComponent(() => import('@/components/MkZalipChatSidebar.vue'));
@@ -42,7 +45,8 @@ const visible = ref(window.document.visibilityState === 'visible');
 const enabled = computed(() => !!$i && $i.policies.chatAvailability !== 'unavailable');
 const desktop = computed(() => deviceKind === 'desktop' && width.value > 1099);
 const chatPage = computed(() => /^\/chat(?:\/|$)/u.test(mainRouter.currentRoute.value.path));
-const modalOpen = computed(() => popups.value.length > 0);
+const modalOpen = computed(() => hasBlockingChatPopup(popups.value));
+const metadata = ref<Record<string, ChatConversationMetadata>>({});
 const expanded = computed(() => dock.windows.value.filter(item => !item.collapsed));
 const minimized = computed(() => dock.windows.value.filter(item => item.collapsed));
 
@@ -52,7 +56,7 @@ function openMessages(): void { dock.listOpen.value = false; mainRouter.push('/c
 
 function openFull(target: ZalipChatTarget): void { mainRouter.pushByPath(zalipChatTargetPath(target)); }
 
-function loaded(key: string, metadata: { title: string }): void { dock.setTitle(key, metadata.title); }
+function loaded(key: string, value: ChatConversationMetadata): void { if (!dock.windows.value.some(item => item.key === key)) return; metadata.value = { ...metadata.value, [key]: value }; dock.setTitle(key, value.title); }
 
 function visibilityChanged(): void { visible.value = window.document.visibilityState === 'visible'; }
 
@@ -65,6 +69,8 @@ function resized(): void {
 
 watch(() => $i?.id ?? null, id => dock.setAccount(id), { immediate: true });
 watch(enabled, value => { dock.setAccount(value ? $i?.id ?? null : null); });
+watch(() => dock.ownerId.value, () => { metadata.value = {}; });
+watch(() => dock.windows.value.map(item => item.key).join(','), () => { const keys = new Set(dock.windows.value.map(item => item.key)); metadata.value = Object.fromEntries(Object.entries(metadata.value).filter(([key]) => keys.has(key))); });
 window.addEventListener('resize', resized, { passive: true });
 window.document.addEventListener('visibilitychange', visibilityChanged);
 onBeforeUnmount(() => {
@@ -80,6 +86,9 @@ onBeforeUnmount(() => {
 .list { width: 330px; }
 .header { display: flex; align-items: center; min-height: 52px; padding: 4px 6px 4px 16px; border-bottom: 1px solid var(--MI_THEME-divider); strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; } }
 .headerAction { flex: 0 0 44px; width: 44px; height: 44px; border-radius: 8px; color: var(--MI_THEME-fgTransparentWeak); &:hover { background: var(--MI_THEME-buttonHoverBg); color: var(--MI_THEME-fg); } }
+.identity { display: flex; align-items: center; flex: 1; min-width: 0; min-height: 44px; gap: 8px; }
+.identityText { display: grid; min-width: 0; gap: 2px; > strong, > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } > span { font-size: 11px; color: var(--MI_THEME-fgTransparentWeak); } }
+.avatar { display: grid; place-items: center; flex: 0 0 30px; width: 30px; height: 30px; font-size: 22px; }
 .conversation, .listBody { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
 .conversation { display: flex; > :global(*) { flex: 1; min-width: 0; } }
 .launcher { position: relative; display: grid; place-items: center; width: 52px; height: 52px; border: 1px solid var(--MI_THEME-divider); border-radius: 50%; background: var(--MI_THEME-accent); color: var(--MI_THEME-fgOnAccent); font-size: 25px; pointer-events: auto; box-shadow: 0 6px 20px var(--MI_THEME-shadow); }

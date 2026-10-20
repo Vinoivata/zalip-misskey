@@ -10,7 +10,7 @@ import ChatForm from '@/pages/chat/room.form.vue';
 import { i18n } from '@/i18n.js';
 import { chatDraftKey, readChatDrafts } from '@/utility/zalip-chat-types.js';
 
-const controls = vi.hoisted(() => ({ api: vi.fn(), upload: vi.fn(), selectFile: vi.fn(), account: null as any, store: new Map<string, string>(), get: vi.fn(), set: vi.fn(), media: vi.fn() }));
+const controls = vi.hoisted(() => ({ api: vi.fn(), upload: vi.fn(), selectFile: vi.fn(), account: null as any, store: new Map<string, string>(), get: vi.fn(), set: vi.fn(), media: vi.fn(), observers: [] as any[] }));
 vi.mock('@/i.js', () => ({ ensureSignin: () => controls.account }));
 vi.mock('@/utility/misskey-api.js', () => ({ misskeyApi: controls.api }));
 vi.mock('@/os.js', () => ({ launchUploader: controls.upload }));
@@ -28,13 +28,14 @@ async function settle() { for (let index = 0; index < 8; index++) { await Promis
 function setup(props: Record<string, unknown> = {}) { return render(ChatForm, { props: { user: peer, ...props } }); }
 
 beforeEach(() => {
-	vi.clearAllMocks(); controls.store.clear();
+	vi.clearAllMocks(); controls.store.clear(); controls.observers.length = 0;
 	controls.account = reactive({ id: 'me', policies: { chatAvailability: 'available' } });
 	controls.get.mockImplementation((key: string) => controls.store.get(key) ?? null);
 	controls.set.mockImplementation((key: string, value: string) => { controls.store.set(key, value); });
 	controls.api.mockResolvedValue({ id: 'sent', text: 'Hello', fromUserId: 'me', reactions: [] });
 	controls.upload.mockResolvedValue([file]); controls.selectFile.mockResolvedValue(file);
 	vi.stubGlobal('MediaRecorder', undefined);
+	vi.stubGlobal('ResizeObserver', class { callback: any; disconnect = vi.fn(); observe = vi.fn(); constructor(callback: any) { this.callback = callback; controls.observers.push(this); } });
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -102,6 +103,16 @@ describe('Zalip chat composer', () => {
 		const view = setup(); const input = view.getByRole('textbox'); await fireEvent.update(input, 'Hello'); expect(view.queryByText('5 / 2000')).toBeNull();
 		await fireEvent.update(input, 'x'.repeat(1800)); expect(view.getByText('1800 / 2000')).toBeTruthy(); expect((view.getByRole('button', { name: i18n.ts.send }) as HTMLButtonElement).disabled).toBe(false);
 		await fireEvent.update(input, 'x'.repeat(2001)); expect(view.getByText('2001 / 2000')).toBeTruthy(); expect((view.getByRole('button', { name: i18n.ts.send }) as HTMLButtonElement).disabled).toBe(true);
+	});
+	it('keeps an empty narrow composer one line and resizes real text after width and visibility changes', async () => {
+		const view = setup(); await settle(); const input = view.getByRole('textbox') as HTMLTextAreaElement; const observer = controls.observers[0]; let width = 120; let scrollHeight = 110;
+		Object.defineProperty(input, 'clientWidth', { configurable: true, get: () => width }); Object.defineProperty(input, 'scrollHeight', { configurable: true, get: () => scrollHeight });
+		observer.callback([{ contentRect: { width } }]); expect(input.style.height).toBe('44px');
+		scrollHeight = 88; await fireEvent.update(input, 'First line\nSecond line\nThird line'); await settle(); expect(input.style.height).toBe('88px');
+		width = 280; scrollHeight = 66; observer.callback([{ contentRect: { width } }]); expect(input.style.height).toBe('66px');
+		await view.rerender({ active: false }); width = 0; scrollHeight = 0; observer.callback([{ contentRect: { width } }]); expect(input.style.height).toBe('66px');
+		width = 120; scrollHeight = 132; await view.rerender({ active: true }); await settle(); expect(input.style.height).toBe('132px');
+		await fireEvent.update(input, ''); await settle(); expect(input.style.height).toBe('44px'); view.unmount(); expect(observer.disconnect).toHaveBeenCalled();
 	});
 	it('stops a permission result arriving after collapse without recording or uploading', async () => {
 		const pending = deferred<MediaStream>(); const track = { stop: vi.fn() }; controls.media.mockReturnValue(pending.promise);

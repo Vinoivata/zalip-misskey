@@ -4,7 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div :class="[$style.root, { '_forceShrinkSpacer': isMobile, [$style.mobile]: isMobile, [$style.social]: isSocial, [$style.wide]: pageMetadata?.needWideArea, [$style.chatRoom]: isChatRoom, [$style.withMobileNav]: isMobile && !isThread && !isChatRoom }]">
+<div :class="[$style.root, { '_forceShrinkSpacer': isMobile, [$style.mobile]: isMobile, [$style.social]: isSocial, [$style.wide]: pageMetadata?.needWideArea, [$style.chatRoom]: isChatRoom, [$style.chatWorkspace]: isChatWorkspace, [$style.withMobileNav]: isMobile && !isThread && !isChatRoom }]">
 	<XTitlebar v-if="prefer.r.showTitlebar.value" style="flex-shrink: 0;"/>
 
 	<div :class="$style.nonTitlebarArea">
@@ -18,7 +18,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<XAnnouncements v-if="$i"/>
 				<XStatusBars :class="$style.statusbars"/>
 			</div>
-			<ZalipSiteHeader :mobile="isMobile" :hidden="headerHidden"/>
+			<ZalipSiteHeader v-if="!isMobile || !isChatWorkspace" :mobile="isMobile" :hidden="headerHidden"/>
 			<StackingRouterView v-if="prefer.s['experimental.stackingRouterView']" :class="$style.content"/>
 			<RouterView v-else :class="$style.content"/>
 			<XMobileFooterMenu v-if="isMobile && !isThread && !isChatRoom" :hidden="chromeHidden"/>
@@ -62,6 +62,7 @@ const XAnnouncements = defineAsyncComponent(() => import('@/ui/_common_/announce
 const isRoot = computed(() => mainRouter.currentRoute.value.name === 'index');
 const isThread = computed(() => mainRouter.currentRoute.value.name === 'note');
 const isChatRoom = computed(() => /^\/chat\/(user|room)\//.test(mainRouter.currentRoute.value.path));
+const isChatWorkspace = computed(() => mainRouter.currentRoute.value.path === '/chat' || isChatRoom.value);
 const isSocial = computed(() => isThread.value || ['/', '/timeline', '/my/favorites', '/my/notifications', '/chat'].includes(mainRouter.currentRoute.value.path) || isChatRoom.value);
 const chromeHidden = ref(false);
 const headerHidden = computed(() => chromeHidden.value && !isThread.value);
@@ -244,9 +245,10 @@ function onContextmenu(ev: PointerEvent) {
 	.chromeHidden { --zalip-chrome-top: 0px; }
 }
 .mobile.wide .nonTitlebarArea { max-width: 1200px; }
-.mobile.chatRoom {
-	.content { margin-top: 53px; }
-	.content :global(._pageScrollable) > div, .content :global(._pageScrollableReversed) > div { padding-top: 0; }
+.mobile.chatWorkspace {
+	.nonTitlebarArea { max-width: 100%; }
+	.contents { --zalip-chrome-top: 0px; }
+	&.withMobileNav { --zalip-chat-bottom-gap: calc(112px + env(safe-area-inset-bottom, 0px)); }
 }
 @media (max-width: 700px) { .social .contents { border-inline: 0; } }
 </style>

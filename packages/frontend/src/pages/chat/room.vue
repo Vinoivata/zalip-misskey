@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: syuilo and misskey-project
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-<PageWithHeader hideHeader><div :class="[layout.workspace, $style.workspace]"><aside :class="[layout.sidebar, $style.sidebar]"><MkZalipChatSidebar :selectedKey="userId ? `user:${userId}` : `room:${roomId}`" @select="select" @utility="openUtility"/></aside><MkZalipChatConversation :key="userId || roomId" :userId="userId" :roomId="roomId" @loaded="metadata = $event" @close="router.push('/chat')"/></div></PageWithHeader>
+<div :class="$style.page"><div :class="layout.workspace"><aside :class="[layout.sidebar, $style.sidebar]"><MkZalipChatSidebar :selectedKey="userId ? `user:${userId}` : `room:${roomId}`" @select="select" @utility="openUtility"/></aside><MkZalipChatConversation :key="userId || roomId" :userId="userId" :roomId="roomId" @loaded="metadata = $event" @close="router.replace('/chat')"/></div></div>
 </template>
 <script setup lang="ts">
 import { ref } from 'vue';
@@ -25,6 +25,6 @@ function openUtility(tab: 'home' | 'search' | 'invitations' | 'rooms'): void { r
 definePage(() => ({ title: metadata.value?.title ?? i18n.ts.zalip.messages, icon: 'ti ti-messages' }));
 </script>
 <style lang="scss" module>
-@media (max-width: 1099px) { .workspace { height: calc(100dvh - 53px); } }
-@media (max-width: 900px) { .sidebar { display: none; } }
+.page { height: 100%; min-height: 0; overflow: hidden; background: var(--zalip-social-panel); }
+@media (max-width: 1099px) { .sidebar { display: none; } }
 </style>

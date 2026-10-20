@@ -51,6 +51,7 @@ let epoch = 0; let alive = true; let restoring = false; let draftVersion = 0; le
 let autocomplete: Autocomplete | null = null;
 let recorder: MediaRecorder | null = null; let microphone: MediaStream | null = null;
 let recordingTimer: number | null = null;
+let textareaObserver: ResizeObserver | null = null;
 
 function key(): string { return chatDraftKey(me.id, { userId: props.user?.id, roomId: props.room?.id }); }
 
@@ -66,11 +67,20 @@ function restore(): void { restoring = true; try { const draft = readChatDrafts(
 watch([text, file], () => { draftVersion++; saveDraft(); }, { flush: 'sync' });
 watch(() => [props.user?.id, props.room?.id, me.id], () => { epoch++; cancelRecording(); sending.value = false; uploading.value = false; error.value = ''; restore(); }, { immediate: true });
 watch(() => props.editingMessage?.id, () => { error.value = ''; if (props.editingMessage) text.value = props.editingMessage.text ?? ''; else restore(); void nextTick(() => textareaEl.value?.focus()); });
-watch(() => props.active, active => { if (!active) { cancelRecording(); emit('typing', false); } });
-watch(textareaEl, element => { autocomplete?.detach(); autocomplete = element ? new Autocomplete(element, text) : null; void nextTick(resizeTextarea); });
+watch(() => props.active, active => { if (!active) { cancelRecording(); emit('typing', false); } else void nextTick(resizeTextarea); });
+watch(textareaEl, element => {
+	autocomplete?.detach(); textareaObserver?.disconnect(); textareaObserver = null;
+	autocomplete = element ? new Autocomplete(element, text) : null;
+	if (element && typeof ResizeObserver !== 'undefined') {
+		let previousWidth = -1;
+		textareaObserver = new ResizeObserver(entries => { const width = entries[0]?.contentRect.width ?? 0; if (element !== textareaEl.value || width <= 0 || width === previousWidth) return; previousWidth = width; resizeTextarea(); });
+		textareaObserver.observe(element);
+	}
+	void nextTick(resizeTextarea);
+});
 watch(text, () => { void nextTick(resizeTextarea); });
 
-function resizeTextarea(): void { const element = textareaEl.value; if (!element) return; element.style.height = 'auto'; element.style.height = `${Math.min(Math.max(element.scrollHeight, 44), 144)}px`; }
+function resizeTextarea(): void { const element = textareaEl.value; if (!element) return; if (!text.value) { element.style.height = '44px'; return; } if (!props.active || element.clientWidth <= 0) return; element.style.height = 'auto'; element.style.height = `${Math.min(Math.max(element.scrollHeight, 44), 144)}px`; }
 
 function cancelContext(): void { if (props.editingMessage) emit('cancelEdit'); else emit('cancelReply'); }
 
@@ -144,14 +154,14 @@ async function recordVoice(): Promise<void> {
 	} catch { if (generation === voiceGeneration) { releaseMicrophone(); recording.value = false; if (current(request, account)) error.value = i18n.ts.zalip._chatUi.recordingError; } } finally { if (generation === voiceGeneration) voicePending.value = false; }
 }
 
-onBeforeUnmount(() => { saveDraft(); alive = false; epoch++; cancelRecording(); autocomplete?.detach(); emit('typing', false); });
+onBeforeUnmount(() => { saveDraft(); alive = false; epoch++; cancelRecording(); autocomplete?.detach(); textareaObserver?.disconnect(); emit('typing', false); });
 </script>
 
 <style lang="scss" module>
 .root { min-width: 0; }
 .capsule { display: flex; align-items: flex-end; gap: 2px; min-height: 50px; padding: 3px; box-sizing: border-box; border: 1px solid var(--MI_THEME-divider); border-radius: 28px; background: var(--MI_THEME-panelHighlight); }
 .capsule:focus-within { border-color: var(--MI_THEME-accent); }
-.textarea { display: block; flex: 1; min-width: 0; box-sizing: border-box; width: 100%; min-height: 44px; max-height: 144px; resize: none; field-sizing: content; padding: 11px 4px; border: 0; color: var(--MI_THEME-fg); background: transparent; font: inherit; font-size: 15px; line-height: 22px; }
+.textarea { display: block; flex: 1; min-width: 0; box-sizing: border-box; width: 100%; min-height: 44px; max-height: 144px; resize: none; overflow-y: auto; padding: 11px 4px; border: 0; color: var(--MI_THEME-fg); background: transparent; font: inherit; font-size: 15px; line-height: 22px; &::placeholder { white-space: nowrap; text-overflow: ellipsis; } }
 .textarea:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: -2px; border-radius: 10px; }
 .attachment, .recording, .context { display: flex; align-items: center; gap: 6px; }
 .attachment, .context { padding: 6px 10px; margin-bottom: 8px; border-radius: 16px; background: var(--MI_THEME-accentedBg); > span, > div { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
