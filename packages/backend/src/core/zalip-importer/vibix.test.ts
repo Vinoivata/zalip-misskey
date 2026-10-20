@@ -75,6 +75,21 @@ describe('Vibix importer boundaries', () => {
 		const result = normalizeVibixRecord(movie({ type: 'serial', embed_code: '<ins data-publisher-id="10" data-type="series" data-id="40"></ins>', uploaded_episodes: { 999: { 888: { 777: 1 } } }, seasons: [{ name: 'Season X', series: [{ id: 999, name: 'Opening' }] }] }));
 		expect(result.ref.mediaType).toBe('tv'); expect(result.kind).toBe('series'); expect(result.seasons).toEqual([]); expect(result.players[0].episodes).toEqual([]); expect(result.players[0].translations[0]).not.toHaveProperty('episodes'); expect(result.warnings).toContain('vibix-episode-data-unavailable');
 	});
+	test('canonicalizes the raw API serial embed alias without weakening canonical types or media matching', async () => {
+		const embed_code = "<ins data-publisher-id='668741250' data-type='serial' data-id='9308'></ins>";
+		const response = { success: true, data: movie({ name_rus: 'Лучший день в моей жизни', name_original: 'Yu jian ni de nei tian', type: 'serial', kp_id: 6757923, imdb_id: 'tt33044296', voiceovers: [{ id: 113, name: 'ТО Дубляжная' }], embed_code }) };
+		const transport = vi.fn<ImportTransport>(async () => response);
+		const result = await createImportProviders({ vibixApiToken: 'fixture' }, transport).vibix.fetch({ source: 'vibix', externalId: '6757923', mediaType: 'tv' });
+		expect(result.ref).toEqual({ source: 'vibix', externalId: '6757923', mediaType: 'tv' }); expect(result.kind).toBe('series');
+		expect(result.identities).toContainEqual({ provider: 'imdb', externalId: 'tt33044296', entityType: 'tv' });
+		expect(result.players).toEqual([{ source: 'vibix', externalId: '200', iframeUrl: '', vibixEmbed: { publisherId: '668741250', type: 'series', id: '9308' }, translations: [{ id: '113', name: 'ТО Дубляжная' }], quality: 'WEB-DL', episodes: [] }]);
+		expect(result.warnings).not.toContain('vibix-embed-rejected'); expect(result.warnings).not.toContain('vibix-player-url-missing');
+		expect(normalizeVibixEmbed({ publisherId: '668741250', type: 'serial', id: '9308' })).toBeNull();
+		const mismatched = normalizeVibixRecord(movie({ embed_code })); expect(mismatched.players).toEqual([]); expect(mismatched.warnings).toContain('vibix-embed-rejected');
+		for (const type of ['Serial', 'SERIAL', ' serial ', 'tv']) {
+			const invalid = normalizeVibixRecord(movie({ type: 'serial', embed_code: embed_code.replace("'serial'", `'${type}'`) })); expect(invalid.players).toEqual([]); expect(invalid.warnings).toContain('vibix-embed-rejected');
+		}
+	});
 	test('bounds projected people and voices and omits nameless or unidentified credits', () => {
 		const result = normalizeVibixRecord(movie({ persons: [{ name: 'No stable identity' }, ...Array.from({ length: 301 }, (_, index) => ({ id: index + 1, name: `Person ${index}`, occupation: 'actor' }))], voiceovers: Array.from({ length: 101 }, (_, index) => ({ id: index + 1, name: `Voice ${index}` })) }));
 		expect(result.credits).toHaveLength(299); expect(result.players[0].translations).toHaveLength(100); expect(result.warnings).toEqual(expect.arrayContaining(['vibix-person-limit', 'vibix-voice-limit', 'vibix-people-without-identities']));

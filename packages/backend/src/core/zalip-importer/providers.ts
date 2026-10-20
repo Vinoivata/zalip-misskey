@@ -651,7 +651,8 @@ function vibixEmbedCode(value: unknown): ImportVibixEmbed | null {
 		attributes.set(key, attribute[3]); offset = pattern.lastIndex;
 		if (offset < tag[1].trimEnd().length && !/\s/u.test(tag[1][offset])) return null;
 	}
-	return normalizeVibixEmbed({ publisherId: attributes.get('data-publisher-id'), type: attributes.get('data-type'), id: attributes.get('data-id') });
+	const type = attributes.get('data-type');
+	return normalizeVibixEmbed({ publisherId: attributes.get('data-publisher-id'), type: type === 'serial' ? 'series' : type, id: attributes.get('data-id') });
 }
 
 function vibixIdentities(item: JsonObject, mediaType: ImportMediaType): ExternalIdentity[] {
