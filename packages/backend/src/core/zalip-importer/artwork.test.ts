@@ -3,9 +3,16 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import { readFile } from 'node:fs/promises';
 import sharp from 'sharp';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { ZalipImporterArtworkService } from '@/core/ZalipImporterArtworkService.js';
 import { artworkCacheUri, artworkOriginalCacheUri, downloadImportArtwork, downloadOriginalImportArtwork, equivalentImportArtwork, importArtworkLimits, importArtworkUrl } from './artwork.js';
+import { recordArtworkCandidates, selectImportArtwork } from './artwork-candidates.js';
+import { normalizeKinopoiskRecord } from './providers.js';
+
+vi.mock('@/core/DriveService.js', () => ({ DriveService: class {} }));
+vi.mock('@/core/HttpRequestService.js', () => ({ HttpRequestService: class {} }));
 
 const mockedFetch = vi.hoisted(() => vi.fn());
 vi.mock('node-fetch', () => ({ default: mockedFetch }));
@@ -18,6 +25,88 @@ function downloadForMode(mode: typeof redirectModes[number], url: URL, agent?: P
 }
 
 describe('bounded local importer artwork', () => {
+	test.each(redirectModes)('follows the verified KP API poster alias and existing image-family hop in %s mode', async mode => {
+		const original = await sharp({ create: { width: 80, height: 120, channels: 3, background: '#789abc' } }).jpeg().toBuffer();
+		const source = 'https://kinopoiskapiunofficial.tech/images/posters/kp/9253376.jpg';
+		const intermediate = 'https://st.kp.yandex.net/images/film_big/9253376.jpg';
+		const destination = 'https://avatars.mds.yandex.net/get-kinopoisk-image/123/fixture-chosen/orig';
+		const firstDestroy = vi.fn(); const secondDestroy = vi.fn(); const agent = {} as never;
+		mockedFetch.mockResolvedValueOnce({ ok: false, status: 301, headers: new Headers({ location: intermediate }), body: { destroy: firstDestroy } });
+		mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: destination }), body: { destroy: secondDestroy } });
+		mockedFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers({ 'content-type': 'image/jpeg', 'content-length': String(original.length) }), arrayBuffer: async () => original });
+		const result = await downloadForMode(mode, new URL(source), agent);
+		expect(result).toMatchObject({ original, originalExtension: 'jpg', width: 80, height: 120 });
+		if ('processed' in result && Buffer.isBuffer(result.processed)) expect(await sharp(result.processed).metadata()).toMatchObject({ format: 'webp', width: 80, height: 120 });
+		expect(mockedFetch.mock.calls.map(([url, options]) => [url, options.redirect])).toEqual([[source, 'manual'], [intermediate, 'manual'], [destination, 'error']]);
+		const signal = mockedFetch.mock.calls[0][1].signal as AbortSignal;
+		for (const [, options] of mockedFetch.mock.calls) expect(options).toMatchObject({ signal, agent, size: importArtworkLimits.inputBytes });
+		expect(signal.aborted).toBe(true); expect(firstDestroy).toHaveBeenCalledOnce(); expect(secondDestroy).toHaveBeenCalledOnce();
+	});
+
+	test('accepts only literal KP API poster inputs for alias redirects', () => {
+		const source = 'https://kinopoiskapiunofficial.tech/images/posters/kp/9253376.jpg';
+		expect(importArtworkUrl(source)?.href).toBe(source);
+		for (const value of [source.replace('https:', 'http:'), source.replace('.tech/', '.tech:443/'), source.replace('.tech/', '.tech:8443/'), source.replace('https://', 'https://user:password@'), source.replace('.tech/', '.tech.evil.org/'), source.replace('9253376', '0'), source.replace('9253376', '09253376'), source.replace('9253376', '9007199254740992'), `${source}?`, `${source}?size=1`, `${source}#`, `${source}#fragment`, source.replace('9253376', '%39' + '253376'), source.replace('/kp/', '/other/../kp/'), source.replace('/kp/', '/other/%2e%2e/kp/'), ` ${source}`, `${source}\n`]) expect(importArtworkUrl(value)).toBeNull();
+	});
+
+	test('rejects any first-hop KP alias destination except the exact same-id HTTPS film_big URL', async () => {
+		const source = new URL('https://kinopoiskapiunofficial.tech/images/posters/kp/9253376.jpg');
+		const approved = 'https://st.kp.yandex.net/images/film_big/9253376.jpg';
+		const invalid = [approved.replace('9253376', '9253377'), approved.replace('film_big', 'film'), approved.replace('https:', 'http:'), approved.replace('https:', ''), approved.replace('.net/', '.net:443/'), approved.replace('.net/', '.net:8443/'), approved.replace('https://', 'https://user:password@'), approved.replace('st.kp.yandex.net', '127.0.0.1'), approved.replace('st.kp.yandex.net', 'st.kp.yandex.net.evil.org'), `${approved}?`, `${approved}?token=fixture`, `${approved}#`, `${approved}#fragment`, approved.replace('9253376', '%39' + '253376'), approved.replace('/film_big/', '/other/../film_big/'), approved.replace('/film_big/', '/other/%2e%2e/film_big/'), approved.replace('/film_big/', '/film_big/%2f'), '/images/film_big/9253376.jpg', 'https://avatars.mds.yandex.net/get-kinopoisk-image/123/fixture/orig'];
+		for (const location of invalid) {
+			mockedFetch.mockReset(); const destroy = vi.fn(); mockedFetch.mockResolvedValueOnce({ ok: false, status: 301, headers: new Headers({ location }), body: { destroy } });
+			await expect(downloadImportArtwork(source, 'posterUrl')).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE'); expect(mockedFetch).toHaveBeenCalledOnce(); expect(destroy).toHaveBeenCalledOnce();
+		}
+	});
+
+	test.each([302, 303, 307, 308])('does not expand the first KP alias hop to redirect status %s', async status => {
+		mockedFetch.mockResolvedValueOnce({ ok: false, status, headers: new Headers({ location: 'https://st.kp.yandex.net/images/film_big/9253376.jpg' }) });
+		await expect(downloadImportArtwork(new URL('https://kinopoiskapiunofficial.tech/images/posters/kp/9253376.jpg'), 'posterUrl')).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE'); expect(mockedFetch).toHaveBeenCalledOnce();
+	});
+
+	test('does not follow extra hops or relax the existing KP302 image-family destination', async () => {
+		const source = new URL('https://kinopoiskapiunofficial.tech/images/posters/kp/9253376.jpg');
+		const intermediate = 'https://st.kp.yandex.net/images/film_big/9253376.jpg'; const destination = 'https://avatars.mds.yandex.net/get-kinopoisk-image/123/fixture/orig';
+		for (const location of [intermediate, 'https://127.0.0.1/poster.jpg', 'https://avatars.mds.yandex.net.evil.org/get-kinopoisk-image/123/fixture/orig', `${destination}?token=fixture`]) {
+			mockedFetch.mockReset(); mockedFetch.mockResolvedValueOnce({ ok: false, status: 301, headers: new Headers({ location: intermediate }) }); mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location }) });
+			await expect(downloadImportArtwork(source, 'posterUrl')).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE'); expect(mockedFetch).toHaveBeenCalledTimes(2);
+		}
+		mockedFetch.mockReset(); mockedFetch.mockResolvedValueOnce({ ok: false, status: 301, headers: new Headers({ location: intermediate }) }); mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: destination }) }); mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: destination.replace('fixture', 'another') }) });
+		await expect(downloadImportArtwork(source, 'posterUrl')).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE'); expect(mockedFetch).toHaveBeenCalledTimes(3); expect(mockedFetch.mock.calls[2][1].redirect).toBe('error');
+	});
+
+	test('the KP alias chain retains decoder, byte and original deadline limits', async () => {
+		const source = new URL('https://kinopoiskapiunofficial.tech/images/posters/kp/9253376.jpg');
+		const intermediate = 'https://st.kp.yandex.net/images/film_big/9253376.jpg'; const destination = 'https://avatars.mds.yandex.net/get-kinopoisk-image/123/fixture/orig';
+		for (const final of [{ mime: 'image/jpeg', size: importArtworkLimits.inputBytes + 1, bytes: Buffer.from('oversized') }, { mime: 'image/svg+xml', size: 6, bytes: Buffer.from('<svg/>') }, { mime: 'image/jpeg', size: 5, bytes: Buffer.from('fake!') }]) {
+			mockedFetch.mockReset(); const body = vi.fn(async () => final.bytes);
+			mockedFetch.mockResolvedValueOnce({ ok: false, status: 301, headers: new Headers({ location: intermediate }) }); mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: destination }) }); mockedFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers({ 'content-type': final.mime, 'content-length': String(final.size) }), arrayBuffer: body });
+			await expect(downloadImportArtwork(source, 'posterUrl')).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE'); expect(mockedFetch).toHaveBeenCalledTimes(3); if (final.size > importArtworkLimits.inputBytes || final.mime === 'image/svg+xml') expect(body).not.toHaveBeenCalled();
+		}
+		mockedFetch.mockReset(); const clock = vi.spyOn(Date, 'now').mockReturnValue(1000);
+		try { mockedFetch.mockImplementationOnce(async () => { clock.mockReturnValue(2001); return { ok: false, status: 301, headers: new Headers({ location: intermediate }) }; }); await expect(downloadImportArtwork(source, 'posterUrl', undefined, undefined, true, 2000)).rejects.toThrow('IMPORT_ARTWORK_UNAVAILABLE'); expect(mockedFetch).toHaveBeenCalledOnce(); } finally { clock.mockRestore(); }
+	});
+
+	test('a selected KP API poster reaches real preparation, conversion and native storage without mocking cache', async () => {
+		const source = 'https://kinopoiskapiunofficial.tech/images/posters/kp/9253376.jpg';
+		const original = await sharp({ create: { width: 80, height: 120, channels: 3, background: '#789abc' } }).jpeg().toBuffer();
+		mockedFetch.mockResolvedValueOnce({ ok: false, status: 301, headers: new Headers({ location: 'https://st.kp.yandex.net/images/film_big/9253376.jpg' }) }); mockedFetch.mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: 'https://avatars.mds.yandex.net/get-kinopoisk-image/123/fixture/orig' }) }); mockedFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers({ 'content-type': 'image/jpeg' }), arrayBuffer: async () => original });
+		const record = normalizeKinopoiskRecord({ kinopoiskId: 9253376, type: 'TV_SERIES', nameRu: 'Fixture series', posterUrl: source }); record.artworkCandidates = recordArtworkCandidates(record);
+		const candidate = record.artworkCandidates.find(value => value.field === 'posterUrl')!;
+		const options = { fields: ['posterUrl'] as const, artworkSelections: [{ ref: record.ref, choices: { posterUrl: candidate.id } }] };
+		const selected = selectImportArtwork(record, record.ref, { ...options, fields: [...options.fields] }, { posterUrl: 'kinopoisk' });
+		const files = new Map<string, { url: string }>(); const stored: { uri: string; bytes: Buffer }[] = [];
+		const repository = { findOneBy: vi.fn(async ({ uri }: { uri: string }) => files.get(uri) ?? null) };
+		const connection = { connect: vi.fn(), release: vi.fn(), query: vi.fn(async () => [{ locked: true }]) };
+		const drive = { addFile: vi.fn(async ({ path, uri, name }: { path: string; uri: string; name: string }) => { stored.push({ uri, bytes: await readFile(path) }); const file = { url: `/files/${name}` }; files.set(uri, file); return file; }) };
+		const service = new ZalipImporterArtworkService({ createQueryRunner: () => connection, getRepository: () => repository } as never, drive as never, { getAgentForHttps: () => undefined } as never);
+		const result = await service.prepare(selected.record, null, [...options.fields], [], { format: 'webp' }, 'local', selected.selectedFields);
+		expect(result.posterUrl).toMatch(/^\/files\/zalip-artwork-[a-f0-9]{16}\.webp$/u); expect(result.warnings).not.toContain('artwork-local-unavailable:posterUrl'); expect(selected.sources.posterUrl).toBe('kinopoisk');
+		expect(drive.addFile).toHaveBeenCalledTimes(2); expect(stored.find(file => file.uri === artworkOriginalCacheUri(new URL(source)))?.bytes).toEqual(original);
+		const processed = stored.find(file => file.uri === artworkCacheUri(new URL(source), 'posterUrl', { format: 'webp' }, false))!.bytes; expect(await sharp(processed).metadata()).toMatchObject({ format: 'webp', width: 80, height: 120 });
+		expect(connection.release).toHaveBeenCalledOnce(); expect(mockedFetch).toHaveBeenCalledTimes(3);
+	});
+
 	test('Kodik artwork admits only verified public screenshot and Shikimori image families', () => {
 		for (const value of ['https://i.kodikres.com/screenshots/seria/123/hash/1.jpg', 'https://i.kodikres.com/screenshots/video/123/hash/2.jpg', 'https://shikimori.io/uploads/poster/animes/123/hash.jpg', 'https://shikimori.io/system/screenshots/original/123.jpg', 'https://shikimori.io/system/animes/original/123.jpg']) expect(importArtworkUrl(value)?.href).toBe(value);
 		for (const value of ['https://i.kodikres.com/private/file.jpg', 'https://i.kodikres.com/screenshots/seria/0/hash/1.jpg', 'https://i.kodikres.com/screenshots/season/123/hash/1.jpg', 'https://i.kodikres.com.evil.org/screenshots/seria/123/hash/1.jpg', 'https://cdn.kodikres.com/screenshots/seria/123/hash/1.jpg', 'https://i.kodikres.com/screenshots/seria/123/hash/1.jpg?cache=1', 'https://shikimori.io/api/animes/123', 'https://shikimori.io/uploads/poster/animes/123/hash.jpg?cache=1', 'https://shikimori.io/uploads/poster/animes/../../secret.jpg', 'https://shikimori.io/system/animes/%2fprivate.jpg', 'http://shikimori.io/system/animes/original/123.jpg']) expect(importArtworkUrl(value)).toBeNull();

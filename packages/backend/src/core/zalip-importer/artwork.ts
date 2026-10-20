@@ -40,6 +40,7 @@ export function importArtworkUrl(value: string): URL | null {
 	if (!safe) return null;
 	const url = new URL(safe);
 	if (url.hostname === 'kinopoiskapiunofficial.tech' && !url.pathname.startsWith('/images/')) return null;
+	if (url.hostname === 'kinopoiskapiunofficial.tech' && url.pathname.startsWith('/images/posters/kp/') && !kinopoiskApiPosterId(value)) return null;
 	if (url.hostname === 'shikimori.io' && (url.search || !/^\/(?:uploads\/poster\/animes|system\/screenshots\/original|system\/animes)\/[A-Za-z0-9._/-]+$/u.test(url.pathname))) return null;
 	if (url.hostname === 'i.kodikres.com' && (url.search || !/^\/screenshots\/(?:seria|video)\/[1-9][0-9]*\/[A-Za-z0-9._/-]+$/u.test(url.pathname))) return null;
 	return url;
@@ -58,6 +59,12 @@ export function artworkOriginalCacheUri(url: URL): string {
 }
 
 const kinopoiskPlaceholder = 'https://st.kp.yandex.net/images/no-poster.gif';
+
+/** Only this verified API alias may redirect; validate the literal input before URL normalization. */
+function kinopoiskApiPosterId(value: string): string | null {
+	const id = /^https:\/\/kinopoiskapiunofficial\.tech\/images\/posters\/kp\/([1-9][0-9]{0,15})\.jpg$/u.exec(value)?.[1];
+	return id && Number.isSafeInteger(Number(id)) ? id : null;
+}
 
 function artworkRedirectSource(url: URL): 'kinopoisk' | 'kodik' | null {
 	if (url.username || url.password || url.port || url.href.includes('#') || url.href.includes('?')) return null;
@@ -101,14 +108,23 @@ async function readImportArtwork(url: URL, agent: Agent | undefined, deadlineAt:
 	if (Date.now() >= deadlineAt) throw new Error('IMPORT_ARTWORK_UNAVAILABLE');
 	const timer = setTimeout(() => controller.abort(), Math.max(1, Math.min(importArtworkLimits.requestTimeoutMs, deadlineAt - Date.now())));
 	try {
-		const redirectSource = artworkRedirectSource(url);
-		const mayFollowImage = redirectSource !== null;
+		const apiPosterId = kinopoiskApiPosterId(url.href);
+		const mayFollowImage = artworkRedirectSource(url) !== null || apiPosterId !== null;
 		let imageUrl = url;
 		let response = await fetch(url.href, { redirect: mayFollowImage ? 'manual' : 'error', size: importArtworkLimits.inputBytes, signal: controller.signal, agent });
-		if (mayFollowImage && response.status === 302) {
+		if (apiPosterId && response.status === 301) {
 			const location = response.headers.get('location');
 			(response.body as Readable | null)?.destroy();
-			const destination = location ? artworkRedirectUrl(url, location, originalOnly) : null;
+			const expected = `https://st.kp.yandex.net/images/film_big/${apiPosterId}.jpg`;
+			if (location !== expected || Date.now() >= deadlineAt) throw new Error('IMPORT_ARTWORK_REJECTED');
+			imageUrl = new URL(expected);
+			response = await fetch(expected, { redirect: 'manual', size: importArtworkLimits.inputBytes, signal: controller.signal, agent });
+		}
+		const redirectSource = artworkRedirectSource(imageUrl);
+		if (redirectSource !== null && response.status === 302) {
+			const location = response.headers.get('location');
+			(response.body as Readable | null)?.destroy();
+			const destination = location ? artworkRedirectUrl(imageUrl, location, originalOnly) : null;
 			// Kinopoisk permits one hop; Kodik may additionally select one verified
 			// edge for this exact image. All hops retain the original request budget.
 			if (!destination || Date.now() >= deadlineAt) throw new Error('IMPORT_ARTWORK_REJECTED');

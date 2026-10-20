@@ -96,6 +96,30 @@ describe('artwork preview projection', () => {
 		const duplicate = { ...gallery, id: 'e'.repeat(64), source: 'kinopoisk' as const }; base.record.artworkCandidates!.push(duplicate);
 		expect(importerArtworkChoiceSelected(duplicate, {}, base)).toBe(false);
 	});
+	it('drops an entirely stale nonempty gallery choice instead of turning refresh into an explicit clear', () => {
+		const base = preview(); base.workId = 'existing1';
+		const choices = { galleryUrls: ['f'.repeat(64)] };
+		const current = importerArtworkCurrentChoices(base, choices);
+		expect(current).toEqual({});
+		expect(importerArtworkPreview(base, current).record.galleryUrls).toEqual([gallery.url]);
+		expect(importerArtworkOptions({}, base.record.ref, current).artworkSelections).toBeUndefined();
+		expect(choices.galleryUrls).toEqual(['f'.repeat(64)]);
+		expect(base.record.galleryUrls).toEqual([gallery.url]);
+	});
+	it('preserves an intentional empty gallery through refresh, preview and queueing', () => {
+		const base = preview(); const choices = { galleryUrls: [] };
+		const current = importerArtworkCurrentChoices(base, choices);
+		expect(current).toEqual({ galleryUrls: [] });
+		expect(current.galleryUrls).not.toBe(choices.galleryUrls);
+		expect(importerArtworkPreview(base, current).record.galleryUrls).toEqual([]);
+		expect(importerArtworkOptions({}, base.record.ref, current).artworkSelections).toEqual([{ ref: base.record.ref, choices: { galleryUrls: [] } }]);
+	});
+	it('never retains gallery choices or explicit clears after the gallery becomes locked or unselected', () => {
+		const base = preview(); base.locks = ['galleryUrls'];
+		for (const galleryUrls of [[], [gallery.id]]) expect(importerArtworkCurrentChoices(base, { galleryUrls })).toEqual({});
+		base.locks = []; base.changes.find(change => change.field === 'galleryUrls')!.selected = false;
+		for (const galleryUrls of [[], [gallery.id]]) expect(importerArtworkCurrentChoices(base, { galleryUrls })).toEqual({});
+	});
 	it('allows an explicit editorial replacement but never bypasses persisted or per-job locks', () => {
 		const base = preview(); base.locks = []; base.workId = 'existing1'; base.changes[0].protected = true;
 		const choices = { posterUrl: alternative.id };

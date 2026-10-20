@@ -53,8 +53,11 @@ export function importerArtworkCurrentChoices(preview: ImportPreview, choices: I
 		if (importerArtworkFieldLocked(preview, field)) continue;
 		const ids = new Set((preview.record.artworkCandidates ?? []).filter(candidate => candidate.field === field).map(candidate => candidate.id));
 		const choice = choices[field];
-		if (field === 'galleryUrls' && Array.isArray(choice)) result.galleryUrls = choice.filter(id => ids.has(id));
-		else if (field !== 'galleryUrls' && typeof choice === 'string' && ids.has(choice)) result[field] = choice;
+		if (field === 'galleryUrls' && Array.isArray(choice)) {
+			const current = choice.filter(id => ids.has(id));
+			// Only an originally empty choice means clear: losing candidates must not delete the gallery.
+			if (choice.length === 0 || current.length > 0) result.galleryUrls = current;
+		} else if (field !== 'galleryUrls' && typeof choice === 'string' && ids.has(choice)) result[field] = choice;
 	}
 	return result;
 }
