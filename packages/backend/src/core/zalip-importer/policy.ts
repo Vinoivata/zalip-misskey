@@ -203,7 +203,7 @@ export function mergeImportRecords(records: ImportRecord[], inputOptions?: Impor
 	const sources: Record<string, string> = {};
 	const artwork = new Set(['posterUrl', 'backdropUrl', 'logoUrl', 'galleryUrls', 'trailerYoutubeKey', 'seasons']);
 	for (const field of importFields) {
-		const defaults: ImportSource[] = artwork.has(field) ? ['tmdb', 'kinopoisk', 'collaps', 'alloha', 'kodik'] : ['kinopoisk', 'tmdb', 'collaps', 'alloha', 'kodik'];
+		const defaults: ImportSource[] = artwork.has(field) ? ['tmdb', 'kinopoisk', 'collaps', 'alloha', 'kodik', 'vibix'] : ['kinopoisk', 'tmdb', 'collaps', 'alloha', 'kodik', 'vibix'];
 		const preferred = options.fieldSources?.[field];
 		const priority = preferred ? [preferred, ...defaults.filter(source => source !== preferred)] : defaults;
 		const candidates = [...records].sort((left, right) => priority.indexOf(left.ref.source) - priority.indexOf(right.ref.source));
@@ -221,14 +221,14 @@ export function mergeImportRecords(records: ImportRecord[], inputOptions?: Impor
 	const prioritizedUnion = (field: 'players' | 'collections') => {
 		const preferred = options.fieldSources?.[field];
 		if (!preferred) return records; // Preserve the established default union order.
-		const order = [preferred, ...(['kinopoisk', 'tmdb', 'collaps', 'alloha', 'kodik'] as const).filter(source => source !== preferred)];
+		const order = [preferred, ...(['kinopoisk', 'tmdb', 'collaps', 'alloha', 'kodik', 'vibix'] as const).filter(source => source !== preferred)];
 		return [...records].sort((left, right) => order.indexOf(left.ref.source) - order.indexOf(right.ref.source));
 	};
 	const playerRecords = prioritizedUnion('players');
 	record.players = playerRecords.flatMap(item => item.players).filter((item, index, all) => all.findIndex(other => other.source === item.source && other.externalId === item.externalId) === index);
 	if (options.fieldSources?.players && record.players.length) sources.players = playerRecords.find(item => item.players.length > 0)!.ref.source;
 	// The authoritative metadata API wins over a player's cached copy, independent of import origin.
-	const ratingPriority: ImportSource[] = ['kinopoisk', 'tmdb', 'collaps', 'alloha', 'kodik'];
+	const ratingPriority: ImportSource[] = ['kinopoisk', 'tmdb', 'collaps', 'alloha', 'kodik', 'vibix'];
 	const ratingPreferred = options.fieldSources?.ratings;
 	const orderedRatings = [...records].sort((left, right) => {
 		const order = ratingPreferred ? [ratingPreferred, ...ratingPriority.filter(source => source !== ratingPreferred)] : ratingPriority;

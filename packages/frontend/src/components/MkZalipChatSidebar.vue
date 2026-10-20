@@ -174,7 +174,19 @@ async function newRoom(): Promise<void> {
 }
 
 watch([filter, query], () => { if (!restoring) { if (filter.value !== 'groups') messageFilter.value = filter.value; debounce(); } }, { flush: 'sync' });
-watch(() => me.id, id => { listSession = null; accountId = id; epoch++; clearTimers(); restoring = true; filter.value = 'all'; messageFilter.value = 'all'; query.value = ''; restoring = false; items.value = []; cursor.value = null; pages.value = 1; scrollTop = 0; mutating.value = new Set(); pending.value = false; actionError.value = ''; error.value = false; restoreScroll(); if (active) void load(false); }, { flush: 'sync' });
+watch([() => me.id, () => typeof me.token === 'string' && !!me.token], ([id, credentialsReady]) => {
+	listSession = null; accountId = id; epoch++; clearTimers(); restoring = true; filter.value = 'all'; messageFilter.value = 'all'; query.value = ''; restoring = false; items.value = []; cursor.value = null; pages.value = 1; scrollTop = 0; mutating.value = new Set(); pending.value = false; actionError.value = ''; error.value = false; restoreScroll();
+	if (!active || !credentialsReady || typeof id !== 'string' || !id) return;
+	const request = epoch;
+	pending.value = true;
+	// Account refresh temporarily removes id and restores the token last. Clear private
+	// state synchronously, but wait for that batch before starting an authenticated load.
+	void nextTick(() => {
+		if (!alive || !active || request !== epoch || id !== me.id) return;
+		if (typeof me.token !== 'string' || !me.token) { pending.value = false; return; }
+		void load(false);
+	});
+}, { flush: 'sync' });
 watch(() => props.utilityTab, tab => { if (tab === 'home') { restoreScroll(); refresh(); } else if (list.value) list.value.scrollTop = 0; });
 connection.on('newChatMessage', refresh); connection.on('readAllChatMessages', refresh); connection.on('chatUnreadState', refresh); chatConversationEvents.on('changed', refresh); window.document.addEventListener('visibilitychange', refresh);
 onMounted(restoreScroll);

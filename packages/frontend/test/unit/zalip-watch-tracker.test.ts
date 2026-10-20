@@ -32,7 +32,7 @@ function setup(withRemount = true) {
 		const iframe = ref<HTMLIFrameElement | null>(null);
 		const remount = async (url: string) => { overrideUrl.value = url; revision.value++; await nextTick(); };
 		tracker = useZalipWatchProgress(context, iframe, saved, withRemount ? remount : undefined);
-		return () => h('iframe', { ref: iframe, src: overrideUrl.value ?? context.value?.iframeUrl, key: [context.value?.provider, context.value?.translationId, context.value?.episodeId ?? 'movie', revision.value].join(':') });
+		return () => h('iframe', { ref: iframe, src: overrideUrl.value ?? context.value?.iframeUrl, srcdoc: context.value?.iframeDocument, key: [context.value?.provider, context.value?.translationId, context.value?.episodeId ?? 'movie', revision.value].join(':') });
 	} });
 	const view = render(Host);
 	const frame = () => view.container.querySelector('iframe')!;
@@ -77,6 +77,26 @@ beforeEach(() => {
 afterEach(() => { cleanup(); Object.defineProperty(window.crypto, 'subtle', { configurable: true, value: nativeSubtle }); });
 
 describe('secure playback progress lifecycle', () => {
+	it.each([null, 'episode1'])('keeps Vibix %s progress episode-only and ignores every other provider event or seek command', async episodeId => {
+		const vibix: WatchPlayerContext = { ...target, provider: 'vibix', episodeId, translationId: '26', providerTranslationId: null, iframeUrl: 'blob:https://zalip.example/vibix-fixture', resumeSeconds: 120 };
+		vi.mocked(misskeyApiZalip).mockResolvedValueOnce({ sessionId: 'vibix-session', sequence: 0, progress: { ...progress, ...vibix, mode: 'episode', positionSeconds: null, durationSeconds: null } });
+		const host = setup(); await host.start(vibix); const post = vi.spyOn(host.frame().contentWindow!, 'postMessage').mockImplementation(() => {});
+		host.alloha('play', 120, { origin: 'null' }); host.alloha('duration', 1000, { origin: 'null' }); host.alloha('timeupdate', 121, { origin: 'null' }); host.collaps('viewProgress', { id: 7, time: 121, duration: 1000 }, { origin: 'null' }); host.identity(); host.event('kodik_player_duration_update', 1000); host.event('kodik_player_play'); host.event('kodik_player_time_update', 120); host.event('kodik_player_pause'); host.tracker().flush(); host.view.unmount();
+		expect(post).not.toHaveBeenCalled(); expect(updates()).toHaveLength(0); expect(host.saved).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ provider: 'vibix', mode: 'episode', positionSeconds: null, durationSeconds: null }));
+		expect(vi.mocked(misskeyApiZalip)).toHaveBeenCalledExactlyOnceWith('zalip/progress/start', { workId: 'work', episodeId, provider: 'vibix', translationId: '26' });
+	});
+	it('rejects a fabricated Vibix time-mode claim without accepting any provider messages', async () => {
+		const vibix: WatchPlayerContext = { ...target, provider: 'vibix', translationId: '26', providerTranslationId: null, iframeUrl: 'blob:https://zalip.example/vibix-fixture', resumeSeconds: 120 };
+		vi.mocked(misskeyApiZalip).mockResolvedValueOnce({ sessionId: 'bad-mode', sequence: 0, progress: { ...progress, ...vibix, mode: 'time' } });
+		const host = setup(); await host.start(vibix); expect(host.tracker().state.value).toBe('failed'); expect(host.saved).not.toHaveBeenCalled(); expect(updates()).toHaveLength(0);
+	});
+	it.each(['account', 'document'] as const)('discards a pending Vibix claim when its %s identity changes', async changed => {
+		const vibix: WatchPlayerContext = { ...target, provider: 'vibix', translationId: '26', providerTranslationId: null, iframeUrl: 'about:srcdoc', iframeDocument: '<!doctype html><p>Fixture only</p>' };
+		let release!: (value: unknown) => void; vi.mocked(misskeyApiZalip).mockImplementationOnce(() => new Promise(resolve => { release = resolve; })); const host = setup(); await host.start(vibix);
+		if (changed === 'account') $i!.id = 'other-viewer'; else host.frame().srcdoc = '<p>Replaced document</p>';
+		release({ sessionId: 'stale-vibix', sequence: 0, progress: { ...progress, ...vibix, mode: 'episode', positionSeconds: null, durationSeconds: null } }); await nextTick(); await Promise.resolve(); await Promise.resolve();
+		expect(host.saved).not.toHaveBeenCalled(); expect(updates()).toHaveLength(0);
+	});
 	it('saves Alloha main-content time but not duration, fullscreen or storage-callback clocks', async () => {
 		const host = setup(); await host.start(allohaTarget);
 		host.alloha('duration', 1000); host.alloha('enterfullscreen', 900); host.dispatch(JSON.stringify({ event: 'getTimeSave', time: 800 }));

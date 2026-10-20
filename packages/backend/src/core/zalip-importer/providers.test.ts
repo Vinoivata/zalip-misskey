@@ -376,12 +376,13 @@ describe('importer adapter contracts', () => {
 				case 'https://api.themoviedb.org': return { images: { secure_base_url: 'https://image.tmdb.org/' } };
 				case 'https://kinopoiskapiunofficial.tech': return { kinopoiskId: 301 };
 				case 'https://apbugall.org': return { data: { category: { slug: 'movie' } } };
+				case 'https://vibix.org': return { data: [] };
 				default: return { results: [] };
 			}
 		});
-		const providers = createImportProviders({ tmdbApiKey: 'fixture', kinopoiskApiKey: 'fixture', allohaApiToken: 'fixture', collapsApiToken: 'fixture', kodikApiToken: 'fixture' }, transport);
+		const providers = createImportProviders({ tmdbApiKey: 'fixture', kinopoiskApiKey: 'fixture', allohaApiToken: 'fixture', collapsApiToken: 'fixture', kodikApiToken: 'fixture', vibixApiToken: 'fixture' }, transport);
 		for (const provider of Object.values(providers)) await expect(provider.check?.()).resolves.toBeUndefined();
-		expect(transport.mock.calls).toHaveLength(5);
+		expect(transport.mock.calls).toHaveLength(6);
 	});
 
 	test.each([
@@ -529,6 +530,13 @@ describe('importer adapter contracts', () => {
 });
 
 describe('safe default HTTP transport', () => {
+	test('carries documented Vibix POST through the bounded HTTP transport and rejects other methods', async () => {
+		mockedFetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: [] }) });
+		const transport = createConfiguredImportTransport({}); const url = 'https://vibix.org/api/v1/publisher/videos/search?name=Fixture&page=1&limit=20';
+		await expect(transport(url, { Authorization: 'Bearer fixture' }, { method: 'POST' })).resolves.toEqual({ data: [] });
+		expect(mockedFetch).toHaveBeenCalledWith(url, expect.objectContaining({ method: 'POST', redirect: 'error', size: 2 * 1024 * 1024, headers: { Accept: 'application/json', Authorization: 'Bearer fixture' } }));
+		await expect(transport(url, {}, { method: 'DELETE' } as never)).rejects.toMatchObject({ code: 'invalid-ref' }); expect(mockedFetch).toHaveBeenCalledOnce();
+	});
 	test('configurable API origins reject path, credentials, explicit ports and local targets', () => {
 		expect(normalizeImportApiOrigin('https://Api.Example.org/')).toBe('https://api.example.org');
 		for (const value of ['http://api.example.org', 'https://api.example.org:443', 'https://api.example.org:8443', 'https://api.example.org/path', 'https://api.example.org/?key=fixture', 'https://user:pass@api.example.org', 'https://127.0.0.1', 'https://[::1]', 'https://metadata.internal', 'https://localhost', ' https://api.example.org']) expect(() => normalizeImportApiOrigin(value)).toThrow('invalid-ref');

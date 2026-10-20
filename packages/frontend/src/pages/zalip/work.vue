@@ -86,12 +86,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<div v-if="work.trailerYoutubeKey && playerView === 'trailer'" :class="$style.playerFrame"><iframe :src="youtubeEmbed(work.trailerYoutubeKey)" :title="i18n.ts.zalip.trailerTab + ': ' + work.title" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>
 						<template v-if="playerView === 'player'">
 							<div ref="watchFrame" :class="$style.watchFrame">
-								<div v-if="$i && playerOpen && activePlayerIframe" :class="$style.playerFrame"><iframe :key="`${activePlayerIframeKey}:${resumeFrameRevision}`" ref="playbackIframe" :src="resumeIframeUrl ?? activePlayerIframe" :title="i18n.ts.zalip.playerTab + ': ' + work.title" loading="lazy" referrerpolicy="origin" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>
+								<div v-if="$i && playerOpen && activePlayerIframe" :class="$style.playerFrame"><iframe :key="`${activePlayerIframeKey}:${resumeFrameRevision}`" ref="playbackIframe" :src="selectedProvider === 'vibix' ? undefined : resumeIframeUrl ?? activePlayerIframe" :srcdoc="activeVibixDocument ?? undefined" :sandbox="selectedProvider === 'vibix' ? vibixPlayerSandbox : undefined" :title="i18n.ts.zalip.playerTab + ': ' + work.title" loading="lazy" referrerpolicy="origin" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>
 								<div v-else :class="$style.playerPreview">
 									<img v-if="selectedEpisode?.stillPath || work.backdropPath" :src="tmdbBackdrop(selectedEpisode?.stillPath || work.backdropPath!)" alt="" width="1280" height="720" loading="lazy" decoding="async">
 									<button v-if="$i && activePlayback && selectedEpisodeAvailable" type="button" class="_button" :class="$style.playOverlay" :aria-label="i18n.ts.zalip.watchTitle" @click="openSelectedPlayer"><i class="ti ti-player-play-filled" aria-hidden="true"></i></button>
 									<button v-else-if="!$i" type="button" class="_button" :class="$style.playerState" @click="signInForDiscussion"><i class="ti ti-login" aria-hidden="true"></i>{{ i18n.ts.zalip.playerSignIn }}</button>
-									<p v-else-if="kodikEpisodeContextBlocked && episodesPending" :class="$style.playerState" role="status"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i>{{ i18n.ts.zalip.playerEpisodesLoading }}</p>
+									<p v-else-if="playerEpisodeContextBlocked && episodesPending" :class="$style.playerState" role="status"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i>{{ i18n.ts.zalip.playerEpisodesLoading }}</p>
 									<p v-else-if="activePlayback && !selectedEpisodeAvailable" :class="$style.playerState" role="status"><i class="ti ti-info-circle" aria-hidden="true"></i>{{ i18n.ts.zalip.playerEpisodeUnavailable }}</p>
 									<p v-else :class="$style.playerState"><i class="ti ti-clock" aria-hidden="true"></i>{{ i18n.ts.zalip.playerUnavailable }}</p>
 								</div>
@@ -252,6 +252,7 @@ import { zalipEpisodeQuery } from '@/utility/zalip-work-route.js';
 import { taxonomyCreditCaption, taxonomyLinkSections, taxonomyProfileLabel, taxonomySectionLabel, taxonomyTypeIcon } from '@/utility/zalip-taxonomy.js';
 import { sameWatchTarget, watchTimeLabel } from '@/utility/zalip-watch-progress.js';
 import { useZalipWatchProgress } from '@/composables/use-zalip-watch-progress.js';
+import { vibixPlayerDocument, vibixPlayerSandbox } from '@/utility/zalip-vibix-player.js';
 
 type ZalipWork = {
 	id: string;
@@ -466,11 +467,13 @@ const filteredEpisodes = computed(() => episodes.value.filter(episode => `${epis
 const selectedEpisodeProgress = computed(() => getEpisodeProgress(work.value?.seasons ?? [], selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null));
 const episodeWatched = computed(() => selectedEpisodeProgress.value != null && episodesWatched.value >= selectedEpisodeProgress.value);
 
-const kodikEpisodeContextBlocked = computed(() => activePlayback.value?.source === 'kodik' && (selectedSeasonNumber.value != null || !!work.value?.seasons.length) && (episodesPending.value || selectedEpisode.value == null));
-const selectedEpisodeAvailable = computed(() => !kodikEpisodeContextBlocked.value && playbackEpisodeAvailable(activePlayback.value, selectedTranslationId.value, selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null));
+const playerEpisodeContextBlocked = computed(() => (activePlayback.value?.source === 'kodik' || activePlayback.value?.source === 'vibix') && (selectedSeasonNumber.value != null || !!work.value?.seasons.length) && (episodesPending.value || selectedEpisode.value == null));
+const selectedEpisodeAvailable = computed(() => !playerEpisodeContextBlocked.value && playbackEpisodeAvailable(activePlayback.value, selectedTranslationId.value, selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null));
 // Unknown anime/animation serials may have no cached coverage yet; retain their native selectors.
 const fixedPlayerClip = computed(() => selectedEpisode.value != null || (!!work.value && !episodic.value && work.value.kind === 'movie'));
-const activePlayerIframe = computed(() => selectedEpisodeAvailable.value ? workPlaybackIframe(activePlayback.value, selectedTranslationId.value, selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null, fixedPlayerClip.value) : null);
+const activeVibixDocument = computed(() => $i && playerOpen.value && playerView.value === 'player' && selectedEpisodeAvailable.value && activePlayback.value?.source === 'vibix'
+	? vibixPlayerDocument(activePlayback.value.vibixEmbed, { seasonNumber: selectedSeasonNumber.value, episodeNumber: selectedEpisode.value?.episodeNumber ?? null, translationId: selectedTranslationId.value }) : null);
+const activePlayerIframe = computed(() => selectedEpisodeAvailable.value ? selectedProvider.value === 'vibix' ? activeVibixDocument.value ? 'about:srcdoc' : null : workPlaybackIframe(activePlayback.value, selectedTranslationId.value, selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null, fixedPlayerClip.value) : null);
 const resumeIframeUrl = ref<string | null>(null);
 const resumeFrameRevision = ref(0);
 
@@ -479,16 +482,17 @@ const activePlayerIframeKey = computed(() => [
 	selectedEpisode.value?.id ?? 'title',
 	selectedTranslationId.value ?? 'default',
 	selectedProvider.value,
+	...(selectedProvider.value === 'vibix' ? [activePlayback.value?.vibixEmbed?.publisherId, activePlayback.value?.vibixEmbed?.type, activePlayback.value?.vibixEmbed?.id] : []),
 ].join(':'));
 watch(activePlayerIframeKey, () => { resumeSelection.value = null; resumeIframeUrl.value = null; resumeFrameRevision.value = 0; }, { flush: 'sync' });
 watch(playerOpen, () => { resumeIframeUrl.value = null; resumeFrameRevision.value = 0; }, { flush: 'sync' });
 const watchPlayerContext = computed(() => {
 	if (!playerOpen.value || playerView.value !== 'player' || !activePlayerIframe.value || !work.value) return null;
 	// Native-selector serials without canonical episode IDs remain playable, but cannot invent a progress target.
-	if (!selectedEpisode.value && (episodic.value || activePlayback.value?.episodes.length || (selectedProvider.value === 'kodik' && new URL(activePlayerIframe.value).pathname.startsWith('/serial/')))) return null;
+	if (!selectedEpisode.value && (episodic.value || activePlayback.value?.episodes.length || (selectedProvider.value === 'vibix' && activePlayback.value?.vibixEmbed?.type === 'series') || (selectedProvider.value === 'kodik' && new URL(activePlayerIframe.value).pathname.startsWith('/serial/')))) return null;
 	const target = { workId: work.value.id, episodeId: selectedEpisode.value?.id ?? null, provider: selectedProvider.value, translationId: selectedTranslationId.value };
 	const resume = resumeSelection.value && sameWatchTarget(resumeSelection.value, target) ? resumeSelection.value : null;
-	return { ...target, iframeUrl: activePlayerIframe.value, seasonNumber: selectedSeasonNumber.value, episodeNumber: selectedEpisode.value?.episodeNumber ?? null,
+	return { ...target, iframeUrl: activePlayerIframe.value, ...(activeVibixDocument.value ? { iframeDocument: activeVibixDocument.value } : {}), seasonNumber: selectedSeasonNumber.value, episodeNumber: selectedEpisode.value?.episodeNumber ?? null,
 										providerTranslationId: activeTranslations.value.find(translation => translation.id === selectedTranslationId.value)?.providerTranslationId ?? null,
 										resumeSeconds: resume?.mode === 'time' ? resume.positionSeconds : null };
 });

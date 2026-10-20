@@ -801,12 +801,29 @@ describe('Zalip importer orchestration', () => {
 		const context = fixture({ runs: [run({ mode: 'availability' })], items: [item({ ref: { source: 'alloha', externalId: '100', mediaType: 'movie' }, workId: 'canonical' })], works: [work({ importData: { values: { players: [] } } })] });
 		enable(context, 'alloha');
 		enable(context, 'kinopoisk');
+		enable(context, 'vibix');
 		isolated.apply.mockResolvedValue({ work: work(), created: false, protectedFields: ['title', 'genres'] });
 		await context.service.processRun('run');
 		expect(context.providers.kinopoisk.lookup).not.toHaveBeenCalled();
 		expect(context.providers.tmdb.lookup).not.toHaveBeenCalled();
+		expect(context.providers.vibix.lookup).toHaveBeenCalled();
 		expect(context.taxonomy.syncImportedWork).not.toHaveBeenCalled();
 		expect(isolated.apply.mock.calls[0][4]).toMatchObject({ mode: 'availability', workId: 'canonical' });
+	});
+
+	test('availability-only refresh can recover a missing primary through a bound Vibix lookup', async () => {
+		const context = fixture({ runs: [run({ mode: 'availability' })], items: [item({ ref: { source: 'alloha', externalId: '100', mediaType: 'movie' }, workId: 'canonical' })], works: [work({ importData: { values: { players: [] } } })] });
+		enable(context, 'alloha');
+		enable(context, 'kinopoisk');
+		enable(context, 'vibix');
+		context.providers.alloha.fetch.mockRejectedValue(new ImportProviderError('not-found'));
+		context.providers.vibix.lookup.mockResolvedValue(record({ ref: { source: 'vibix', externalId: '435', mediaType: 'movie' }, identities: [{ provider: 'tmdb', externalId: '100', entityType: 'movie' }, { provider: 'kinopoisk', externalId: '435', entityType: 'movie' }, { provider: 'vibix', externalId: '435', entityType: 'movie' }] }));
+		isolated.apply.mockResolvedValue({ work: work(), created: false, protectedFields: [] });
+		await context.service.processRun('run');
+		expect(context.items.rows[0]).toMatchObject({ state: 'completed', warnings: ['alloha:not-found'] });
+		expect(context.providers.vibix.lookup).toHaveBeenCalledWith(expect.arrayContaining([{ provider: 'tmdb', externalId: '100', entityType: 'movie' }]), 'movie', ['players']);
+		expect(context.providers.kinopoisk.lookup).not.toHaveBeenCalled();
+		expect(context.taxonomy.syncImportedWork).not.toHaveBeenCalled();
 	});
 
 	test('pauses on provider quota without failing the item, then resumes pending work only', async () => {
@@ -1118,6 +1135,52 @@ describe('Zalip importer orchestration', () => {
 		expect(playback.sources).toHaveLength(1);
 		expect(JSON.stringify(playback)).not.toContain('private-id');
 		expect(JSON.stringify(playback)).not.toContain('internal');
+	});
+
+	test.each(['', 'https://player.example.org/embed/987'])('Vibix SDK playback ignores iframe URL %s and carries sanitized SDK voices', async iframeUrl => {
+		const vibixEmbed = { publisherId: '42', type: 'movie' as const, id: '987' };
+		const player: ImportRecord['players'][number] = { source: 'vibix', externalId: 'private-video-id', iframeUrl, vibixEmbed, translations: [{ id: '123', name: 'Studio', iframe: 'https://untrusted.provider.org/?api_key=private-fixture' }], quality: 'HD', episodes: [] };
+		const context = fixture({ works: [work({ importData: { values: { players: [player] } } })] });
+		context.sourceSettings.getRuntime.mockResolvedValue({ apiOrigins: defaultImportApiOrigins, vibixApiToken: 'private-api-token', vibixIframeHosts: ['player.example.org'], vibixPlayerOrigin: 'https://mirror.example.org' });
+		expect((await context.service.playback('canonical')).sources).toEqual([]);
+		const providers = defaultPlaybackSettings().map(row => row.source === 'vibix' ? { ...row, enabled: true, label: 'SDK player' } : row);
+		context.playbackSettings.show.mockResolvedValue({ providers });
+		const result = await context.service.playback('canonical');
+		expect(result.sources).toEqual([{ source: 'vibix', label: 'SDK player', iframe: '', vibixEmbed, translations: [{ id: '123', name: 'Studio' }], quality: 'HD', episodes: [] }]);
+		for (const secret of ['private-video-id', 'private-api-token', 'private-fixture', 'untrusted.provider.org', 'player.example.org', 'mirror.example.org']) expect(JSON.stringify(result)).not.toContain(secret);
+		expect(context.works.save).not.toHaveBeenCalled();
+		expect(context.catalogue.recordAllohaAvailability).not.toHaveBeenCalled();
+	});
+
+	test.each(['', 'https://player.example.org/embed/987'])('invalid Vibix SDK configurations cannot use an iframe fallback (%s)', async iframeUrl => {
+		for (const vibixEmbed of [undefined, null, {}, { publisherId: '42', type: 'movie', id: '987', token: 'private' }, { publisherId: '42', type: 'movie', id: 'javascript:alert(1)' }, { publisherId: '42', type: 'arbitrary', id: '987' }]) {
+			const context = fixture({ works: [work({ importData: { values: { players: [{ source: 'vibix', externalId: 'private', iframeUrl, vibixEmbed, translations: [], quality: null, episodes: [] }] } } })] });
+			context.sourceSettings.getRuntime.mockResolvedValue({ apiOrigins: defaultImportApiOrigins, vibixIframeHosts: ['player.example.org'] });
+			context.playbackSettings.show.mockResolvedValue({ providers: defaultPlaybackSettings().map(row => ({ ...row, enabled: true })) });
+			expect((await context.service.playback('canonical')).sources).toEqual([]);
+			expect(context.works.save).not.toHaveBeenCalled();
+		}
+	});
+
+	test('hiding a legacy iframe-only Vibix source leaves the existing three iframe providers unchanged', async () => {
+		const players: ImportRecord['players'] = [
+			{ source: 'alloha', externalId: '1', iframeUrl: 'https://ascorbic-as.stravers.live/embed', translations: [], quality: 'HD', episodes: [] },
+			{ source: 'collaps', externalId: '2', iframeUrl: 'https://api.nextembed.ws/embed/50', translations: [], quality: 'HD', episodes: [] },
+			{ source: 'kodik', externalId: '3', iframeUrl: 'https://kodikplayer.com/serial/49752/fixture/720p', translations: [], quality: 'HD', episodes: [] },
+			{ source: 'vibix', externalId: '4', iframeUrl: 'https://player.example.org/embed/987', translations: [], quality: 'HD', episodes: [] },
+		];
+		const context = fixture({ works: [work({ importData: { values: { players } } })] });
+		context.sourceSettings.getRuntime.mockResolvedValue({ apiOrigins: defaultImportApiOrigins, vibixIframeHosts: ['player.example.org'] });
+		context.playbackSettings.show.mockResolvedValue({ providers: defaultPlaybackSettings().map(row => ({ ...row, enabled: true })) });
+		const result = await context.service.playback('canonical');
+		expect(result.sources.map(player => ({ source: player.source, iframe: player.iframe }))).toEqual(players.slice(0, 3).map(player => ({ source: player.source, iframe: player.iframeUrl })));
+		expect(context.works.rows[0].importData).toEqual({ values: { players } });
+		expect(context.works.save).not.toHaveBeenCalled();
+	});
+
+	test('Vibix warnings are closed codes and never echo upstream details', () => {
+		const warnings = ['vibix-metadata-partial', 'vibix-player-url-missing', 'vibix-player-url-rejected', 'vibix-embed-rejected', 'vibix-voice-control-unavailable', 'vibix-voice-limit', 'vibix-person-limit', 'vibix-people-without-identities', 'vibix-episode-data-unavailable', 'vibix:upstream-failure'];
+		expect(safeImportWarnings([...warnings, 'vibix:upstream-failure?token=private', 'vibix:private-message', 'vibix-player-url-rejected:private'])).toEqual(warnings);
 	});
 
 	test('runtime settings rotate API adapters and cached Alloha iframe token without a restart', async () => {

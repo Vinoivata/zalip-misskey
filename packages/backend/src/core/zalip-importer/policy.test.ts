@@ -12,6 +12,17 @@ function record(source: ImportRecord['ref']['source'], values: Partial<ImportRec
 }
 
 describe('Zalip import ownership', () => {
+	test('keeps Vibix behind authoritative metadata while retaining its player and explicit field provenance', () => {
+		const vibix = record('vibix', { posterUrl: 'https://image.tmdb.org/vibix.jpg', ratings: [{ source: 'kinopoisk', value: 5, votes: 1 }], players: [{ source: 'vibix', externalId: '200', iframeUrl: '', vibixEmbed: { publisherId: '10', type: 'movie', id: '30' }, translations: [], quality: 'HD', episodes: [] }] });
+		const kp = record('kinopoisk', { ratings: [{ source: 'kinopoisk', value: 8, votes: 100 }] });
+		const tmdb = record('tmdb', { posterUrl: 'https://image.tmdb.org/tmdb.jpg' });
+		const merged = mergeImportRecords([vibix, tmdb, kp]);
+		expect(merged.record.title).toBe('kinopoisk'); expect(merged.record.posterUrl).toBe(tmdb.posterUrl); expect(merged.record.ratings).toEqual(kp.ratings);
+		expect(merged.record.players).toEqual(vibix.players); expect(merged.record.identities).toContainEqual(vibix.identities[0]);
+		const preferred = mergeImportRecords([tmdb, kp, vibix], { sources: ['vibix'], fieldSources: { title: 'vibix', ratings: 'vibix', players: 'vibix' } });
+		expect(preferred.record.title).toBe('vibix'); expect(preferred.record.ratings).toEqual(vibix.ratings); expect(preferred.sources).toMatchObject({ title: 'vibix', ratings: 'vibix', players: 'vibix' });
+		expect(normalizeImportOptions({ sources: ['vibix'], fieldSources: { posterUrl: 'vibix' } })).toEqual({ sources: ['vibix'], fieldSources: { posterUrl: 'vibix' } });
+	});
 	test('requiring a player is explicit and affects only new-title creation', () => {
 		expect(normalizeImportOptions({ filters: { requirePlayer: true } })).toEqual({ filters: { requirePlayer: true } });
 		expect(() => normalizeImportOptions({ filters: { requirePlayer: 'yes' } } as never)).toThrow('INVALID_IMPORT_OPTIONS');
@@ -70,7 +81,7 @@ describe('Zalip import ownership', () => {
 	});
 
 	test('primary is mandatory while an empty enrichment selection means primary only', () => {
-		expect(selectedImportSources('kinopoisk', {})).toEqual(['tmdb', 'kinopoisk', 'alloha', 'collaps', 'kodik']);
+		expect(selectedImportSources('kinopoisk', {})).toEqual(['tmdb', 'kinopoisk', 'alloha', 'collaps', 'kodik', 'vibix']);
 		expect(selectedImportSources('kinopoisk', { sources: [] })).toEqual(['kinopoisk']);
 		expect(selectedImportSources('kinopoisk', { sources: ['collaps'] })).toEqual(['kinopoisk', 'collaps']);
 		expect(importFieldSelected('description', { fields: [] })).toBe(false);

@@ -23,8 +23,8 @@ export class ZalipPlaybackSettingsService {
 	}
 
 	public async save(value: unknown) {
-		// Legacy rows are upgraded on read only; an old client must not reset Kodik's policy.
-		if (!Array.isArray(value) || value.length !== 3) throw new Error('INVALID_PLAYBACK_SETTINGS');
+		// Legacy rows are upgraded on read only; old clients must not reset new providers' policies.
+		if (!Array.isArray(value) || value.length !== 4) throw new Error('INVALID_PLAYBACK_SETTINGS');
 		const providers = normalizePlaybackSettings(value);
 		await this.db.getRepository(MiZalipPlaybackSettings).upsert({ id: 'default', providers, updatedAt: new Date() }, ['id']);
 		return { providers };

@@ -46,6 +46,15 @@ describe('playback policy endpoints', () => {
 		await expect(f.save.exec({ providers: defaultPlaybackSettings() }, user, null)).rejects.toMatchObject({ code: 'ZALIP_IMPORT_INVALID', httpStatusCode: 400 });
 	});
 
+	test('accepts four providers but rejects legacy writes before losing customized Vibix settings', async () => {
+		const f = fixture();
+		const providers = defaultPlaybackSettings();
+		expect(providers[3]).toEqual({ source: 'vibix', label: 'VIBIX', enabled: false, position: 3 });
+		await f.save.exec({ providers }, user, null);
+		for (const length of [2, 3]) await expect(f.save.exec({ providers: providers.slice(0, length) }, user, null)).rejects.toMatchObject({ code: 'INVALID_PARAM' });
+		expect(f.settings.save).toHaveBeenCalledTimes(1);
+	});
+
 	test('disabled Alloha cannot be restored through the legacy cached endpoint', async () => {
 		const f = fixture();
 		const providers = defaultPlaybackSettings();

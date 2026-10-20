@@ -9,14 +9,14 @@ import { MiUser } from './User.js';
 import { MiZalipWork } from './ZalipWork.js';
 import { MiZalipEpisode } from './ZalipEpisode.js';
 
-export const zalipProgressProviders = ['alloha', 'collaps', 'kodik'] as const;
+export const zalipProgressProviders = ['alloha', 'collaps', 'kodik', 'vibix'] as const;
 export type ZalipProgressProvider = typeof zalipProgressProviders[number];
 export const zalipProgressMaxSeconds = 48 * 60 * 60;
 
 /** Private latest playback target. Never packed as part of a public work or importer snapshot. */
 @Entity('zalip_watch_progress')
 @Index('IDX_zalip_progress_user_played_work', ['userId', 'lastPlayedAt', 'workId'])
-@Check('CHK_zalip_progress_provider', '"provider" IN (\'alloha\', \'collaps\', \'kodik\')')
+@Check('CHK_zalip_progress_provider', '("provider")::text = ANY (ARRAY[(\'alloha\'::character varying)::text, (\'collaps\'::character varying)::text, (\'kodik\'::character varying)::text, (\'vibix\'::character varying)::text])')
 @Check('CHK_zalip_progress_mode', '"mode" IN (\'time\', \'episode\')')
 @Check('CHK_zalip_progress_sequence', '"sequence" >= 0')
 @Check('CHK_zalip_progress_duration', '"durationSeconds" IS NULL OR ("durationSeconds" > 0 AND "durationSeconds" <= 172800)')

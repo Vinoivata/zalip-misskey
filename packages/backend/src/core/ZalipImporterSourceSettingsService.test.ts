@@ -11,6 +11,7 @@ import { defaultImportApiOrigins } from './zalip-importer/providers.js';
 const key = Buffer.alloc(32, 7);
 beforeEach(() => {
 	vi.stubEnv('ZALIP_IMPORTER_SETTINGS_KEY', key.toString('base64'));
+	for (const name of ['ZALIP_VIBIX_API_TOKEN', 'ZALIP_VIBIX_API_ORIGIN', 'ZALIP_VIBIX_PLAYER_ORIGIN', 'ZALIP_VIBIX_IFRAME_HOSTS']) vi.stubEnv(name, undefined);
 	for (const name of ['ZALIP_TMDB_API_KEY', 'ZALIP_KINOPOISK_API_KEY', 'ZALIP_ALLOHA_API_TOKEN', 'ZALIP_COLLAPS_API_TOKEN', 'ZALIP_ALLOHA_PLAYER_TOKEN', 'ZALIP_TMDB_API_ORIGIN', 'ZALIP_KINOPOISK_API_ORIGIN', 'ZALIP_ALLOHA_API_ORIGIN', 'ZALIP_COLLAPS_API_ORIGIN', 'ZALIP_ALLOHA_PLAYER_ORIGIN', 'ZALIP_COLLAPS_PLAYER_ORIGIN', 'ZALIP_ALLOHA_IFRAME_HOSTS', 'ZALIP_COLLAPS_IFRAME_HOSTS', 'ZALIP_KODIK_API_TOKEN', 'ZALIP_KODIK_API_ORIGIN', 'ZALIP_KODIK_PLAYER_ORIGIN', 'ZALIP_KODIK_IFRAME_HOSTS']) vi.stubEnv(name, undefined);
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -45,6 +46,40 @@ describe('source credentials encryption', () => {
 });
 
 describe('administrator source settings', () => {
+	test('Vibix is sixth, unconfigured by default, with no guessed player mirror or iframe host', async () => {
+		const context = fixture();
+		const show = await context.service.show();
+		expect(show.sources.map(row => row.source)).toEqual(['tmdb', 'kinopoisk', 'alloha', 'collaps', 'kodik', 'vibix']);
+		expect(show.sources[5]).toMatchObject({ apiOrigin: 'https://vibix.org', playerOrigin: null, apiToken: null, apiTokenSet: false, apiTokenOrigin: 'none', playerToken: null, playerTokenSet: false, playerTokenOrigin: 'none' });
+		expect(await context.service.getRuntime()).toMatchObject({ apiOrigins: { vibix: 'https://vibix.org' }, vibixApiToken: undefined, vibixPlayerOrigin: undefined, vibixIframeHosts: [] });
+		expect(context.rows).toHaveLength(0);
+	});
+	test('Vibix credentials and optional mirror rotate safely, remain encrypted and may be cleared', async () => {
+		vi.stubEnv('ZALIP_VIBIX_API_TOKEN', 'fixture-vibix-environment');
+		vi.stubEnv('ZALIP_VIBIX_API_ORIGIN', 'https://api.provider.org');
+		vi.stubEnv('ZALIP_VIBIX_PLAYER_ORIGIN', 'https://player.provider.org');
+		vi.stubEnv('ZALIP_VIBIX_IFRAME_HOSTS', ' player.provider.org, other.provider.org, ');
+		const context = fixture();
+		expect((await context.service.show()).sources[5]).toMatchObject({ apiOrigin: 'https://api.provider.org', playerOrigin: 'https://player.provider.org', apiToken: 'fixture-vibix-environment', apiTokenOrigin: 'environment' });
+		const saved = await context.service.save({ source: 'vibix', apiOrigin: defaultImportApiOrigins.vibix, apiToken: 'fixture-vibix-database' });
+		expect(saved.sources[5]).toMatchObject({ apiToken: 'fixture-vibix-database', apiTokenOrigin: 'database', playerToken: null });
+		expect(JSON.stringify(context.rows)).not.toContain('fixture-vibix-database');
+		expect(decryptImporterTokens('vibix', context.rows[0].encryptedTokens, key)).toEqual({ apiToken: 'fixture-vibix-database' });
+		expect(() => decryptImporterTokens('kodik', context.rows[0].encryptedTokens, key)).toThrow('upstream-failure');
+		expect(await context.service.getRuntime()).toMatchObject({ vibixApiToken: 'fixture-vibix-database', vibixPlayerOrigin: 'https://player.provider.org', vibixIframeHosts: ['player.provider.org', 'other.provider.org'] });
+		await context.service.save({ source: 'vibix', apiOrigin: defaultImportApiOrigins.vibix, apiToken: 'fixture-vibix-rotated', playerOrigin: 'https://mirror.provider.org' });
+		expect(await context.service.getRuntime()).toMatchObject({ vibixApiToken: 'fixture-vibix-rotated', vibixPlayerOrigin: 'https://mirror.provider.org' });
+		await context.service.save({ source: 'vibix', apiOrigin: defaultImportApiOrigins.vibix, clearApiToken: true, playerOrigin: null });
+		await context.service.save({ source: 'vibix', apiOrigin: defaultImportApiOrigins.vibix });
+		expect(await context.service.getRuntime()).toMatchObject({ vibixApiToken: undefined, vibixPlayerOrigin: undefined });
+		expect((await context.service.show()).sources[5]).toMatchObject({ apiToken: null, apiTokenSet: false, apiTokenOrigin: 'none', playerOrigin: null });
+	});
+	test('Vibix rejects unsafe origins and public token settings without writing', async () => {
+		const context = fixture();
+		for (const playerOrigin of ['http://player.provider.org', 'https://127.0.0.1', 'https://player.provider.org/embed/1', 'https://player.provider.org?token=fixture', 'https://user@player.provider.org', 'https://player.provider.org:8443']) await expect(context.service.save({ source: 'vibix', apiOrigin: defaultImportApiOrigins.vibix, playerOrigin })).rejects.toMatchObject({ code: 'invalid-ref' });
+		for (const extra of [{ playerToken: 'fixture-public-token' }, { clearPlayerToken: true }, { clearPlayerToken: false }, { apiToken: 'fixture\nheader' }]) await expect(context.service.save({ source: 'vibix', apiOrigin: defaultImportApiOrigins.vibix, ...extra })).rejects.toMatchObject({ code: 'invalid-ref' });
+		expect(context.rows).toHaveLength(0);
+	});
 	test('no stored override retains environment configuration and safe public origins', async () => {
 		vi.stubEnv('ZALIP_TMDB_API_KEY', 'fixture-environment-key');
 		const context = fixture();

@@ -23,10 +23,10 @@ describe('global playback display policy', () => {
 	});
 
 	test('normalizes labels and ordering without changing provider identities', async () => {
-		const input = [{ source: 'alloha', label: ' Alloha HD ', enabled: false, position: 1 }, { source: 'collaps', label: 'Cinema', enabled: true, position: 0 }, { source: 'kodik', label: 'KODIK', enabled: true, position: 2 }];
+		const input = [{ source: 'alloha', label: ' Alloha HD ', enabled: false, position: 1 }, { source: 'collaps', label: 'Cinema', enabled: true, position: 0 }, { source: 'kodik', label: 'KODIK', enabled: true, position: 2 }, defaultPlaybackSettings()[3]];
 		const { service, repository } = fixture();
 		const result = await service.save(input);
-		expect(result.providers).toEqual([{ source: 'collaps', label: 'Cinema', enabled: true, position: 0 }, { source: 'alloha', label: 'Alloha HD', enabled: false, position: 1 }, { source: 'kodik', label: 'KODIK', enabled: true, position: 2 }]);
+		expect(result.providers).toEqual([{ source: 'collaps', label: 'Cinema', enabled: true, position: 0 }, { source: 'alloha', label: 'Alloha HD', enabled: false, position: 1 }, { source: 'kodik', label: 'KODIK', enabled: true, position: 2 }, defaultPlaybackSettings()[3]]);
 		expect(repository.upsert).toHaveBeenCalledWith({ id: 'default', providers: result.providers, updatedAt: expect.any(Date) }, ['id']);
 		expect(input[0].label).toBe(' Alloha HD ');
 	});
@@ -34,18 +34,29 @@ describe('global playback display policy', () => {
 	test('reading an existing two-provider policy preserves custom settings and appends Kodik without a write', async () => {
 		const providers = [{ source: 'collaps', label: 'Other cinema', enabled: false, position: 0 }, { source: 'alloha', label: 'Custom', enabled: false, position: 1 }];
 		const { service, repository } = fixture(providers);
-		await expect(service.show()).resolves.toEqual({ providers: [...providers, { source: 'kodik', label: 'KODIK', enabled: true, position: 2 }] });
+		await expect(service.show()).resolves.toEqual({ providers: [...providers, ...defaultPlaybackSettings().slice(2)] });
 		expect(repository.upsert).not.toHaveBeenCalled();
 		expect(providers).toHaveLength(2);
 	});
 
-	test('saving a complete three-provider policy retains all labels, disabled state and ordering', async () => {
+	test('reading a legacy three-provider policy retains all labels, disabled state and ordering without writes', async () => {
 		const providers = [{ source: 'alloha', label: 'Legacy', enabled: true, position: 2 }, { source: 'collaps', label: 'Backup', enabled: false, position: 1 }, { source: 'kodik', label: 'Anime', enabled: false, position: 0 }];
+		const { service, repository } = fixture(providers);
+		const expected = [...providers].sort((a, b) => a.position - b.position);
+		await expect(service.show()).resolves.toEqual({ providers: [...expected, defaultPlaybackSettings()[3]] });
+		expect(repository.upsert).not.toHaveBeenCalled();
+		await expect(service.save(providers)).rejects.toThrow('INVALID_PLAYBACK_SETTINGS');
+	});
+
+	test('a complete policy persists customized Vibix and legacy labels, ordering and disabled flags', async () => {
+		const providers = [{ source: 'vibix', label: 'Custom SDK', enabled: true, position: 0 }, { source: 'alloha', label: 'Legacy', enabled: false, position: 3 }, { source: 'collaps', label: 'Backup', enabled: false, position: 2 }, { source: 'kodik', label: 'Anime', enabled: false, position: 1 }];
 		const { service, repository } = fixture(providers);
 		const expected = [...providers].sort((a, b) => a.position - b.position);
 		await expect(service.show()).resolves.toEqual({ providers: expected });
 		await expect(service.save(providers)).resolves.toEqual({ providers: expected });
 		expect(repository.upsert).toHaveBeenCalledWith({ id: 'default', providers: expected, updatedAt: expect.any(Date) }, ['id']);
+		for (const length of [2, 3]) await expect(service.save(providers.slice(0, length))).rejects.toThrow('INVALID_PLAYBACK_SETTINGS');
+		expect(repository.upsert).toHaveBeenCalledTimes(1);
 	});
 
 	test('legacy two-row writes cannot reset an existing customized Kodik policy', async () => {

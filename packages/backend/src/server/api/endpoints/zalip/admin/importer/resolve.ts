@@ -14,7 +14,7 @@ export const paramDef = {
 	type: 'object', additionalProperties: false,
 	properties: {
 		...importerAuthProperties,
-		source: { type: 'string', enum: ['tmdb', 'kinopoisk', 'collaps', 'kodik'] },
+		source: { type: 'string', enum: ['tmdb', 'kinopoisk', 'collaps', 'kodik', 'vibix'] },
 		imdbId: { type: 'string', pattern: '^tt[0-9]{5,12}$', maxLength: 14 },
 		mediaType: importerMediaTypeProperty,
 	},

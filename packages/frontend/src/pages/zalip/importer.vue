@@ -49,11 +49,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 					<section :class="$style.panel">
 						<h2>{{ i18n.ts.zalip._importer.byId }}</h2><p :class="$style.hint">{{ i18n.ts.zalip._importer.singleReferenceHint }}</p>
-						<p :class="$style.hint">{{ batch.source === 'kodik' ? i18n.ts.zalip._importer.kodikReferencesHint : i18n.ts.zalip._importer.imdbHint }}</p>
+						<p :class="$style.hint">{{ batch.source === 'kodik' ? i18n.ts.zalip._importer.kodikReferencesHint : batch.source === 'vibix' ? i18n.ts.zalip._importer.vibixReferencesHint : i18n.ts.zalip._importer.imdbHint }}</p>
 						<form :class="$style.form" @submit.prevent="previewBatch">
 							<label><span>{{ i18n.ts.zalip._importer.source }}</span><select v-model="batch.source" :disabled="busy"><option v-for="source in importerSources" :key="source" :value="source" :disabled="!sourceStatus(source)?.configured">{{ importerSourceLabel(source) }}</option></select></label>
 							<label><span>{{ i18n.ts.zalip._importer.idMediaType }}</span><select v-model="batch.mediaType" :disabled="busy"><option value="movie">{{ i18n.ts.zalip._importer.movie }}</option><option value="tv">{{ i18n.ts.zalip._importer.series }}</option></select></label>
-							<label :class="$style.wide"><span>{{ i18n.ts.zalip._importer.references }}</span><textarea v-model="batch.references" rows="2" maxlength="20000" :placeholder="batch.source === 'kodik' ? 'serial-123\nmovie-456' : '11\nhttps://www.themoviedb.org/movie/157336'" :disabled="busy"></textarea></label>
+							<label :class="$style.wide"><span>{{ i18n.ts.zalip._importer.references }}</span><textarea v-model="batch.references" rows="2" maxlength="20000" :placeholder="batch.source === 'kodik' ? 'serial-123\nmovie-456' : batch.source === 'vibix' ? '435\nimdb:tt0133093' : '11\nhttps://www.themoviedb.org/movie/157336'" :disabled="busy"></textarea></label>
 							<div :class="[$style.actions, $style.wide]"><button type="submit" class="_button" :class="$style.button" :disabled="busy || previewLoading || !batch.references.trim()"><i class="ti ti-eye" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.previewFirst }}</button><span :class="$style.hint">{{ i18n.ts.zalip._importer.noPublishing }}</span></div>
 						</form>
 					</section>
@@ -190,7 +190,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<form v-if="playbackProviders.length" @submit.prevent="savePlaybackSettings">
 							<div v-for="(provider, index) in playbackProviders" :key="provider.source" :class="$style.playerSettingsRow">
 								<label :class="$style.grow"><span>{{ importerSourceLabel(provider.source) }} · {{ i18n.ts.zalip._importer.playerLabel }}</span><input v-model="provider.label" required maxlength="40" :disabled="busy || playbackSettingsLoading"></label>
-								<label :class="$style.check"><input v-model="provider.enabled" type="checkbox" :disabled="busy || playbackSettingsLoading">{{ i18n.ts.zalip._importer.enabled }}</label>
+								<label :class="$style.check"><input v-model="provider.enabled" type="checkbox" :disabled="busy || playbackSettingsLoading || (provider.source === 'vibix' && !provider.enabled && !sourceStatus('vibix')?.configured)">{{ i18n.ts.zalip._importer.enabled }}</label>
 								<div :class="$style.actions"><button type="button" class="_button" :class="$style.button" :disabled="busy || playbackSettingsLoading || index === 0" :aria-label="i18n.tsx.zalip._importer.movePlayerUp({ name: provider.label })" @click="movePlayer(index, -1)"><i class="ti ti-arrow-up" aria-hidden="true"></i></button><button type="button" class="_button" :class="$style.button" :disabled="busy || playbackSettingsLoading || index === playbackProviders.length - 1" :aria-label="i18n.tsx.zalip._importer.movePlayerDown({ name: provider.label })" @click="movePlayer(index, 1)"><i class="ti ti-arrow-down" aria-hidden="true"></i></button></div>
 							</div>
 							<button type="submit" class="_button" :class="$style.primary" :disabled="busy || playbackSettingsLoading || !importerPlaybackSettings(playbackProviders)">{{ i18n.ts.zalip._importer.save }}</button>
@@ -245,7 +245,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 								<summary>{{ importerSourceLabel(entry.source) }} · {{ entry.apiTokenSet ? i18n.ts.zalip._importer.configured : i18n.ts.zalip._importer.notConfigured }}</summary>
 								<form :class="$style.form" autocomplete="off" @submit.prevent="saveServiceSettings(entry.source)">
 									<label><span>{{ i18n.ts.zalip._importer.sourceApiOrigin }}</span><input v-model="serviceForms[entry.source].apiOrigin" type="url" required maxlength="1024" :disabled="busy || serviceSettingsLoading" :readonly="!serviceSettings.encryptionReady"></label>
-									<label v-if="entry.source === 'alloha' || entry.source === 'collaps' || entry.source === 'kodik'"><span>{{ i18n.ts.zalip._importer.sourcePlayerOrigin }}</span><input v-model="serviceForms[entry.source].playerOrigin" type="url" :required="entry.source !== 'kodik'" maxlength="1024" :disabled="busy || serviceSettingsLoading" :readonly="!serviceSettings.encryptionReady"><small v-if="entry.source === 'kodik'">{{ i18n.ts.zalip._importer.kodikPlayerOriginHint }}</small></label>
+									<label v-if="entry.source === 'alloha' || entry.source === 'collaps' || entry.source === 'kodik' || entry.source === 'vibix'"><span>{{ i18n.ts.zalip._importer.sourcePlayerOrigin }}</span><input v-model="serviceForms[entry.source].playerOrigin" type="url" :required="entry.source === 'alloha' || entry.source === 'collaps'" maxlength="1024" :disabled="busy || serviceSettingsLoading" :readonly="!serviceSettings.encryptionReady"><small v-if="entry.source === 'kodik'">{{ i18n.ts.zalip._importer.kodikPlayerOriginHint }}</small></label>
 									<label :class="$style.wide"><span>{{ i18n.ts.zalip._importer.sourceApiToken }}</span><input v-model="serviceForms[entry.source].apiToken" type="text" maxlength="4096" autocomplete="off" autocapitalize="off" :spellcheck="false" :disabled="busy || serviceSettingsLoading || serviceForms[entry.source].clearApiToken" :readonly="!serviceSettings.encryptionReady"><small>{{ i18n.tsx.zalip._importer.credentialOrigin({ origin: importerCredentialOriginLabel(entry.apiTokenOrigin) }) }}</small></label>
 									<label :class="[$style.check, $style.wide]"><input v-model="serviceForms[entry.source].clearApiToken" type="checkbox" :disabled="busy || serviceSettingsLoading || !serviceSettings.encryptionReady" @change="clearServiceToken(entry.source, 'api')">{{ i18n.ts.zalip._importer.clearSourceApiToken }}</label>
 									<template v-if="entry.source === 'alloha'">
@@ -425,7 +425,7 @@ const profileCapabilityWarning = computed(() => {
 	const source = sourceStatus(profileForm.source);
 	if (!source?.configured) return i18n.ts.zalip._importer.sourceNotConfigured;
 	if (profileForm.mode === 'collection' && !source.capabilities.collections) return i18n.ts.zalip._importer.collectionsUnsupported;
-	if (profileForm.mode === 'availability' && !['alloha', 'collaps', 'kodik'].includes(profileForm.source)) return i18n.ts.zalip._importer.availabilityUnsupported;
+	if (profileForm.mode === 'availability' && !['alloha', 'collaps', 'kodik', 'vibix'].includes(profileForm.source)) return i18n.ts.zalip._importer.availabilityUnsupported;
 	if (profileForm.mode === 'discovery' && (profileForm.source !== 'collaps' || !source.capabilities.updates)) return i18n.ts.zalip._importer.discoveryUnsupported;
 	return '';
 });
@@ -951,7 +951,7 @@ function movePlayer(index: number, delta: -1 | 1): void {
 	if (index < 0 || index >= playbackProviders.value.length || target < 0 || target >= playbackProviders.value.length) return;
 	const providers = [...playbackProviders.value];
 	[providers[index], providers[target]] = [providers[target], providers[index]];
-	playbackProviders.value = providers.map((provider, position) => ({ ...provider, position: position as 0 | 1 | 2 }));
+	playbackProviders.value = providers.map((provider, position) => ({ ...provider, position: position as 0 | 1 | 2 | 3 }));
 }
 
 function playbackSettingsActionReady(params: { providers: ImportPlaybackProvider[] }): boolean { return !actionBusy() && !playbackSettingsLoading.value && JSON.stringify(params) === JSON.stringify(importerPlaybackSettings(playbackProviders.value)); }

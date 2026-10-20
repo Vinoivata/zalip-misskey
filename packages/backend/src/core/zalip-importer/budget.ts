@@ -24,8 +24,8 @@ export function remainingQuota(response: unknown): number | null {
 export function budgetedTransport(redis: Redis.Redis, transport: ImportTransport, key: string | undefined, dailyBudget = 350, apiOrigin = 'https://kinopoiskapiunofficial.tech'): ImportTransport {
 	const fingerprint = createHash('sha256').update(key ?? '').digest('hex').slice(0, 20);
 	const paced = pacedImportTransport(transport);
-	return async (url, headers) => {
-		if (new URL(url).origin !== apiOrigin || !key) return transport(url, headers);
+	return async (url, headers, options) => {
+		if (new URL(url).origin !== apiOrigin || !key) return options ? transport(url, headers, options) : transport(url, headers);
 		const prefix = `zalip:import:kp:${fingerprint}`;
 		const quotaKey = `${prefix}:remaining`;
 		if (await redis.get(quotaKey) == null) {
@@ -52,7 +52,7 @@ export function budgetedTransport(redis: Redis.Redis, transport: ImportTransport
 			return 1`, 2, dayKey, quotaKey, dailyBudget);
 		if (Number(reserved) !== 1) throw new ImportProviderError('quota-exceeded', 3600000);
 		try {
-			return await paced(url, headers);
+			return await (options ? paced(url, headers, options) : paced(url, headers));
 		} catch (error) {
 			if (error instanceof ImportProviderError && error.code === 'quota-exceeded') await redis.set(quotaKey, 0, 'EX', 3600);
 			throw error;

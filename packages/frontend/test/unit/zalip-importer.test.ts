@@ -10,6 +10,22 @@ import type { ImportPlaybackProvider, ImportServiceSettings, TaxonomyWork } from
 import { importerVoiceRepairReady } from '../../src/utility/zalip-importer.js';
 
 describe('importer presentation helpers', () => {
+	it('Vibix accepts documented KP/IMDb lookups, not own-video or TMDB IDs', () => {
+		for (const mediaType of ['movie', 'tv'] as const) {
+			expect(importerReference('vibix', mediaType, ' 123 ')).toEqual({ source: 'vibix', mediaType, externalId: '123' });
+			for (const value of ['tt1234567', 'imdb:tt1234567', 'https://www.imdb.com/title/tt1234567/']) expect(importerReference('vibix', mediaType, value)).toEqual({ source: 'vibix', mediaType, externalId: 'imdb:tt1234567' });
+			for (const value of ['0', '012', '-1', 'tmdb:movie:123', 'movie-123', 'serial-123', '1'.repeat(17), 'https://vibix.org/video/123', 'https://kinopoisk.ru.evil.org/film/123/', 'https://user@kinopoisk.ru/film/123/']) expect(importerReference('vibix', mediaType, value)).toBeNull();
+		}
+		expect(importerReference('vibix', 'movie', 'https://www.kinopoisk.ru/series/123/')).toEqual({ source: 'vibix', mediaType: 'tv', externalId: '123' });
+		expect(importerReference('vibix', 'tv', 'https://kinopoisk.ru/film/456/')).toEqual({ source: 'vibix', mediaType: 'movie', externalId: '456' });
+	});
+	it('humanizes bounded Vibix warnings without exposing provider payloads', () => {
+		expect(importerWarningLabel('vibix-metadata-partial')).toBe(i18n.tsx.zalip._importer.warningMetadataPartial({ source: 'Vibix' }));
+		expect(importerWarningLabel('vibix-player-url-rejected')).toBe(i18n.tsx.zalip._importer.warningPlayerRejected({ source: 'Vibix' }));
+		expect(importerWarningLabel('vibix:not-configured')).toBe(i18n.tsx.zalip._importer.warningSource({ source: 'Vibix', reason: i18n.ts.zalip._importer.errorConfiguration }));
+		for (const [code, label] of [['vibix-player-url-missing', i18n.ts.zalip._importer.warningVibixPlayerMissing], ['vibix-voice-control-unavailable', i18n.ts.zalip._importer.warningVibixVoiceControl], ['vibix-voice-limit', i18n.ts.zalip._importer.warningVibixVoices], ['vibix-person-limit', i18n.ts.zalip._importer.warningVibixPersonLimit], ['vibix-people-without-identities', i18n.ts.zalip._importer.warningVibixPeople], ['vibix-episode-data-unavailable', i18n.ts.zalip._importer.warningVibixEpisodes]]) expect(importerWarningLabel(code)).toBe(label);
+		for (const value of ['vibix:upstream-failure?token=private', 'vibix-player-url-rejected:private', 'vibix:private-error']) expect(importerWarningLabel(value)).toBe(i18n.ts.zalip._importer.warningGeneric);
+	});
 	it('repairs only the displayed player revision with unchanged saved locks', () => {
 		const state = { workId: 'work1', title: 'Fixture', playbackRevision: 'a'.repeat(64), locks: ['title', 'posterUrl'], fields: [] };
 		expect(importerVoiceRepairReady(state, 'work1', ['posterUrl', 'title'])).toBe(true);
@@ -101,7 +117,7 @@ describe('importer presentation helpers', () => {
 	it('keeps explicit empty options empty and snapshots grouped form values', () => {
 		const defaults = importerSelection();
 		expect(defaults.fields).toEqual([...importerFields]);
-		expect(defaults.sources).toEqual(['tmdb', 'kinopoisk', 'alloha', 'collaps', 'kodik']);
+		expect(defaults.sources).toEqual(['tmdb', 'kinopoisk', 'alloha', 'collaps', 'kodik', 'vibix']);
 		expect(importerSelection({ sources: ['tmdb', 'collaps'] }).sources).toEqual(['tmdb', 'collaps']);
 		const selection = importerSelection({ sources: [], fields: [], fieldSources: { title: 'tmdb' } });
 		const options = importerOptions(selection);
@@ -159,7 +175,7 @@ describe('importer presentation helpers', () => {
 	it('snapshots global player labels without changing provider identities', () => {
 		const providers: ImportPlaybackProvider[] = [{ source: 'collaps', label: ' Cinema ', enabled: false, position: 1 }, { source: 'alloha', label: 'Alloha', enabled: true, position: 0 }];
 		const result = importerPlaybackSettings(providers);
-		expect(result?.providers).toEqual([{ source: 'alloha', label: 'Alloha', enabled: true, position: 0 }, { source: 'collaps', label: 'Cinema', enabled: false, position: 1 }, { source: 'kodik', label: 'Kodik', enabled: true, position: 2 }]);
+		expect(result?.providers).toEqual([{ source: 'alloha', label: 'Alloha', enabled: true, position: 0 }, { source: 'collaps', label: 'Cinema', enabled: false, position: 1 }, { source: 'kodik', label: 'Kodik', enabled: true, position: 2 }, { source: 'vibix', label: 'Vibix', enabled: false, position: 3 }]);
 		expect(providers).toHaveLength(2);
 		providers[0].label = 'Changed'; expect(result?.providers[1].label).toBe('Cinema');
 		expect(importerPlaybackSettings([providers[0]])).toBeNull();
@@ -170,12 +186,19 @@ describe('importer presentation helpers', () => {
 	it('snapshots and orders all three providers without accepting malformed or partial rosters', () => {
 		const providers: ImportPlaybackProvider[] = [{ source: 'kodik', label: ' Anime ', enabled: false, position: 0 }, { source: 'collaps', label: 'Collaps', enabled: true, position: 2 }, { source: 'alloha', label: 'Alloha', enabled: false, position: 1 }];
 		const result = importerPlaybackSettings(providers);
-		expect(result?.providers).toEqual([{ source: 'kodik', label: 'Anime', enabled: false, position: 0 }, { source: 'alloha', label: 'Alloha', enabled: false, position: 1 }, { source: 'collaps', label: 'Collaps', enabled: true, position: 2 }]);
+		expect(result?.providers).toEqual([{ source: 'kodik', label: 'Anime', enabled: false, position: 0 }, { source: 'alloha', label: 'Alloha', enabled: false, position: 1 }, { source: 'collaps', label: 'Collaps', enabled: true, position: 2 }, { source: 'vibix', label: 'Vibix', enabled: false, position: 3 }]);
 		expect(providers[0].label).toBe(' Anime ');
 		providers[0].label = 'Changed'; expect(result?.providers[0].label).toBe('Anime');
 		const invalidProviders: ImportPlaybackProvider[][] = [[], [providers[0], providers[1]], [...providers, providers[0]], [providers[0], providers[1], { ...providers[2], source: 'kodik' }], [providers[0], providers[1], { ...providers[2], position: 2 }]];
 		for (const invalid of invalidProviders) expect(importerPlaybackSettings(invalid)).toBeNull();
-		expect(importerPlaybackSettings([{ source: 'collaps', label: 'C', enabled: false, position: 0 }, { source: 'alloha', label: 'A', enabled: true, position: 1 }])?.providers).toEqual([{ source: 'collaps', label: 'C', enabled: false, position: 0 }, { source: 'alloha', label: 'A', enabled: true, position: 1 }, { source: 'kodik', label: 'Kodik', enabled: true, position: 2 }]);
+		expect(importerPlaybackSettings([{ source: 'collaps', label: 'C', enabled: false, position: 0 }, { source: 'alloha', label: 'A', enabled: true, position: 1 }])?.providers).toEqual([{ source: 'collaps', label: 'C', enabled: false, position: 0 }, { source: 'alloha', label: 'A', enabled: true, position: 1 }, { source: 'kodik', label: 'Kodik', enabled: true, position: 2 }, { source: 'vibix', label: 'Vibix', enabled: false, position: 3 }]);
+	});
+	it('keeps a complete four-player policy including explicitly enabled and reordered Vibix', () => {
+		const providers: ImportPlaybackProvider[] = [{ source: 'vibix', label: ' SDK ', enabled: true, position: 0 }, { source: 'alloha', label: 'Custom A', enabled: false, position: 3 }, { source: 'collaps', label: 'Custom C', enabled: false, position: 2 }, { source: 'kodik', label: 'Anime', enabled: false, position: 1 }];
+		expect(importerPlaybackSettings(providers)?.providers).toEqual([{ ...providers[0], label: 'SDK' }, providers[3], providers[2], providers[1]]);
+		expect(providers[0].label).toBe(' SDK ');
+		expect(importerPlaybackSettings([...providers, providers[0]])).toBeNull();
+		expect(importerPlaybackSettings(providers.slice(0, 3))).toBeNull();
 	});
 	it('adds effective work pages without losing earlier cards or distinct roles', () => {
 		const make = (id: string, role: string | null): TaxonomyWork => ({ id, slug: id, title: id, releaseYear: null, posterPath: null, kind: 'movie', role });
@@ -355,20 +378,20 @@ describe('importer presentation helpers', () => {
 		form.apiToken = ''; form.playerOrigin = 'https://ignored.service.org'; form.playerToken = 'ignored-player'; form.clearPlayerToken = true;
 		expect(importerServiceRequest(settings, form)).toEqual({ source: 'tmdb', apiOrigin: settings.apiOrigin });
 	});
-	it('keeps the optional Kodik mirror and API credential independent from Alloha public tokens', () => {
-		const settings: ImportServiceSettings = { source: 'kodik', apiOrigin: 'https://kodikapi.org', playerOrigin: null, apiToken: 'fixture-api', apiTokenSet: true, apiTokenOrigin: 'environment', playerToken: null, playerTokenSet: false, playerTokenOrigin: 'none', updatedAt: null };
+	it.each(['kodik', 'vibix'] as const)('keeps the optional %s mirror and API credential independent from Alloha public tokens', source => {
+		const settings: ImportServiceSettings = { source, apiOrigin: source === 'kodik' ? 'https://kodikapi.org' : 'https://vibix.org', playerOrigin: null, apiToken: 'fixture-api', apiTokenSet: true, apiTokenOrigin: 'environment', playerToken: null, playerTokenSet: false, playerTokenOrigin: 'none', updatedAt: null };
 		const form = importerServiceForm(settings);
-		expect(importerServiceRequest(settings, form)).toEqual({ source: 'kodik', apiOrigin: settings.apiOrigin });
+		expect(importerServiceRequest(settings, form)).toEqual({ source, apiOrigin: settings.apiOrigin });
 		form.playerToken = 'ignored-player'; form.clearPlayerToken = true;
-		expect(importerServiceRequest(settings, form)).toEqual({ source: 'kodik', apiOrigin: settings.apiOrigin });
+		expect(importerServiceRequest(settings, form)).toEqual({ source, apiOrigin: settings.apiOrigin });
 		form.playerOrigin = ' https://mirror.service.org/ ';
-		expect(importerServiceRequest(settings, form)).toEqual({ source: 'kodik', apiOrigin: settings.apiOrigin, playerOrigin: 'https://mirror.service.org' });
+		expect(importerServiceRequest(settings, form)).toEqual({ source, apiOrigin: settings.apiOrigin, playerOrigin: 'https://mirror.service.org' });
 		form.apiToken = 'fixture-new';
 		expect(importerServiceRequest(settings, form)?.apiToken).toBe('fixture-new');
 		for (const playerOrigin of ['http://mirror.service.org', 'https://mirror.service.org/player', 'https://token@mirror.service.org', 'not-an-origin']) { form.playerOrigin = playerOrigin; expect(importerServiceRequest(settings, form)).toBeNull(); }
 		const saved = { ...settings, playerOrigin: 'https://mirror.service.org' };
 		const clearing = importerServiceForm(saved); clearing.playerOrigin = ' ';
-		expect(importerServiceRequest(saved, clearing)).toEqual({ source: 'kodik', apiOrigin: settings.apiOrigin, playerOrigin: null });
+		expect(importerServiceRequest(saved, clearing)).toEqual({ source, apiOrigin: settings.apiOrigin, playerOrigin: null });
 		expect(saved.playerOrigin).toBe('https://mirror.service.org');
 		expect(settings.apiTokenOrigin).toBe('environment');
 	});

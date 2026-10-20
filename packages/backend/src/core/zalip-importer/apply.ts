@@ -10,7 +10,7 @@ import { MiZalipSeason } from '@/models/ZalipSeason.js';
 import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
 import { MiZalipExternalIdentity } from '@/models/ZalipExternalIdentity.js';
 import { canUpdateField, importFieldSelected, nonEmpty, normalizeImportOptions, readImportState, sameValue } from './policy.js';
-import { safeAllohaPlayerUrl, safeImportUrl } from './providers.js';
+import { normalizeVibixEmbed, safeAllohaPlayerUrl, safeImportUrl } from './providers.js';
 import { importFields, type ExternalIdentity, type ImportArtworkExpected, type ImportArtworkField, type ImportOptions, type ImportPlayer, type ImportRecord } from './types.js';
 import type { DataSource, EntityManager } from 'typeorm';
 
@@ -171,6 +171,7 @@ function normalizedSnapshot(record: ImportRecord): ImportRecord {
 		})),
 		players: record.players.map(player => ({
 			source: player.source, externalId: player.externalId.trim().slice(0, 100), iframeUrl: player.iframeUrl,
+			...(player.source === 'vibix' && normalizeVibixEmbed(player.vibixEmbed) ? { vibixEmbed: normalizeVibixEmbed(player.vibixEmbed)! } : {}),
 			quality: boundedText(player.quality, 128), translations: player.translations.map(translation => playerTranslationSnapshot(player, translation)),
 			episodes: player.episodes.map(episode => ({ seasonNumber: episode.seasonNumber, episodeNumber: episode.episodeNumber })),
 		})),

@@ -82,6 +82,8 @@
 - Fix: Present cinema discussions as title or episode contexts instead of replies to their importing administrator, including quoted threads and full comment composition.
 - Feat: Add a responsive Zalip messenger and opt-in cinema mini-chats with conversation search, personal archive, pinning and mute controls, message replies, editing, forwarding, voice recording and visible-message read receipts.
 - Enhance: Refine Zalip messages with a Notr-inspired conversation switcher, consistent sidebar geometry, compact bubbles and composer, and accessible profile and loaded-attachment details without changing chat permissions or storage.
+- Feat: Add isolated Vibix SDK playback with canonical episode and voice selection, retaining episode-only continuation until the provider documents a verified time API.
+- Fix: Wait for account refresh credentials before loading messenger conversations while immediately clearing the previous account's private state.
 
 ### Server
 - Feat: Add personal chat organisation and durable read frontiers, canonical replies, editing and forwarding, with strict participant access and revocable scoped realtime delivery.
@@ -121,6 +123,7 @@
 - Feat: Count authenticated local note views after a visible dwell, with durable aggregates, native visibility checks and rolling daily Redis deduplication without IP or device tracking.
 - Feat: Store Zalip reviews and helpful votes against canonical titles and signed-in authors, with unique opinions, protected moderation, and shared atomic library ratings.
 - Fix: Resolve title discussion context for nested comments and reposts, use system-owned new discussion roots, and avoid implicit notifications to technical root authors.
+- Feat: Add Vibix metadata and player imports with exact Kinopoisk/IMDb bindings, encrypted administrator credentials, bounded normalization and backward-compatible playback settings.
 
 ## 2026.7.0
 

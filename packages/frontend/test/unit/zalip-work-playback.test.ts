@@ -35,6 +35,7 @@ const testEpisodes = [1, 2, 3].map(number => ({ id: `episode${number}`, episodeN
 const alloha: PlaybackSource = { source: 'alloha', label: 'Alloha Cinema', iframe: 'https://alloha.example/?token_movie=fixture&token=public-fixture', quality: 'HD', translations: [{ id: '246', name: 'First Studio', iframe: 'https://alloha.example/?token_movie=fixture&token=public-fixture&translation=246', quality: 'HD' }, { id: '247', name: 'Second Studio', iframe: 'https://alloha.example/?token_movie=fixture&token=public-fixture&translation=247', quality: 'Full HD' }], episodes: [] };
 const collaps: PlaybackSource = { source: 'collaps', label: 'Collaps Cinema', iframe: 'https://collaps.example/embed/fixture', quality: null, translations: [{ id: 'studio-one', name: 'Collaps One', iframe: 'https://collaps.example/embed/fixture?oneSound=Collaps%20One' }, { id: 'studio-two', name: 'Collaps Two', iframe: 'https://collaps.example/embed/fixture?oneSound=Collaps%20Two' }], episodes: [] };
 const kodik: PlaybackSource = { source: 'kodik', label: 'Kodik Cinema', iframe: 'https://kodik.example/serial/123/default/720p', quality: 'HD', translations: [{ id: 'serial-123', name: 'Kodik One', iframe: 'https://kodik.example/serial/123/voice-one/720p', episodes: [{ seasonNumber: 2, episodeNumber: 1 }] }, { id: 'serial-456', name: 'Kodik Two', iframe: 'https://kodik.example/serial/456/voice-two/720p', episodes: [{ seasonNumber: 2, episodeNumber: 1 }, { seasonNumber: 2, episodeNumber: 3 }] }], episodes: [{ seasonNumber: 2, episodeNumber: 1 }, { seasonNumber: 2, episodeNumber: 3 }] };
+const vibix: PlaybackSource = { source: 'vibix', label: 'Vibix Cinema', iframe: '', vibixEmbed: { publisherId: '123456789', type: 'series', id: '12345' }, quality: 'HD', translations: [{ id: '26', name: 'Vibix One' }, { id: '42', name: 'Vibix Two' }], episodes: [] };
 const legacy: LegacyAllohaPlayback = { available: true, label: 'Legacy Alloha', iframe: 'https://legacy.example/?token_movie=fixture', translations: [{ id: 246, name: 'Legacy First', iframe: 'https://legacy.example/?token_movie=fixture&translation=246', quality: null, resolutions: [] }, { id: 247, name: 'Legacy Second', iframe: 'https://legacy.example/?token_movie=fixture&translation=247', quality: null, resolutions: [] }], lastCheckedAt: null };
 let sources: PlaybackSource[];
 let legacyPlayback: LegacyAllohaPlayback;
@@ -43,6 +44,7 @@ let failLegacy: boolean;
 let failSources: boolean;
 let workData: typeof serial;
 let savedProgress: WatchProgress | null;
+let previousDisabledLoadingPolicy: boolean;
 
 function setup() {
 	return render(Work, { props: { slug: serial.slug }, global: { stubs: {
@@ -79,6 +81,9 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	Object.defineProperty(window.crypto, 'subtle', { configurable: true, value: webcrypto.subtle });
 	(window as unknown as HappyWindow).happyDOM.settings.navigation.disableChildFrameNavigation = true;
+	// srcdoc is parsed, but external SDK scripts stay disabled in unit tests.
+	previousDisabledLoadingPolicy = (window as unknown as HappyWindow).happyDOM.settings.handleDisabledFileLoadingAsSuccess;
+	(window as unknown as HappyWindow).happyDOM.settings.handleDisabledFileLoadingAsSuccess = true;
 	sources = structuredClone([alloha, collaps]);
 	legacyPlayback = { ...legacy, available: false, iframe: null, translations: [] };
 	providers = undefined;
@@ -95,7 +100,7 @@ beforeEach(() => {
 		if (endpoint === 'zalip/library/list') return [];
 		if (endpoint === 'zalip/taxonomy/show') return { entries: [] };
 		if (endpoint === 'zalip/progress/show') return { progress: savedProgress };
-		if (endpoint === 'zalip/progress/start') return { sessionId: 'session', sequence: 0, progress: { ...savedProgress, ...params, completed: false } };
+		if (endpoint === 'zalip/progress/start') return { sessionId: 'session', sequence: 0, progress: { ...savedProgress, ...params, ...(params?.provider === 'vibix' ? { mode: 'episode', positionSeconds: null, durationSeconds: null } : {}), completed: false } };
 		if (endpoint === 'zalip/progress/update') return { accepted: true, progress: { ...savedProgress, ...params } };
 		if (endpoint === 'zalip/progress/reset') return { cleared: true };
 		if (endpoint === 'zalip/playback/alloha/show') {
@@ -109,9 +114,36 @@ beforeEach(() => {
 		throw new Error(`Unexpected endpoint: ${endpoint}`);
 	});
 });
-afterEach(cleanup);
+afterEach(() => { cleanup(); (window as unknown as HappyWindow).happyDOM.settings.handleDisabledFileLoadingAsSuccess = previousDisabledLoadingPolicy; });
 
 describe('Zalip work playback selection', () => {
+	it('renders SDK-only Vibix in an opaque srcdoc sandbox and changes canonical episodes/voices without outer scripts', async () => {
+		sources = [structuredClone(vibix), structuredClone(alloha)]; const view = setup(); await play(view);
+		const first = iframe(view); const document = () => new DOMParser().parseFromString(iframe(view).srcdoc, 'text/html');
+		expect(first.hasAttribute('src')).toBe(false); expect(first.getAttribute('sandbox')).toBe('allow-scripts allow-forms allow-presentation'); expect(document().querySelector('ins')!.getAttribute('data-id')).toBe('12345'); expect(document().querySelector('ins')!.getAttribute('data-season')).toBe('2'); expect(document().querySelector('ins')!.getAttribute('data-episodes')).toBe('1'); expect(document().querySelector('ins')!.getAttribute('data-voiceover')).toBe('26'); expect(view.container.querySelector('script')).toBeNull();
+		await waitFor(() => expect(player(view).getByText(i18n.ts.zalip._progress.episodeHint)).toBeTruthy());
+		await chooseEpisode(view, 3); expect(iframe(view)).not.toBe(first); expect(document().querySelector('ins')!.getAttribute('data-episodes')).toBe('3'); const episodeFrame = iframe(view);
+		await fireEvent.click((await openVoices(view, 'Vibix One')).getByRole('button', { name: 'Vibix Two' })); expect(iframe(view)).not.toBe(episodeFrame); expect(document().querySelector('ins')!.getAttribute('data-voiceover')).toBe('42'); expect(document().querySelector('ins')!.getAttribute('data-episodes')).toBe('3');
+		await fireEvent.click(player(view).getByRole('button', { name: 'Alloha Cinema', pressed: false })); expect(iframe(view).src).toContain('https://alloha.example/'); expect(iframe(view).hasAttribute('srcdoc')).toBe(false); expect(iframe(view).hasAttribute('sandbox')).toBe(false);
+	});
+	it('opens a Vibix movie without invented coordinates or timestamp restoration', async () => {
+		workData = { ...serial, kind: 'movie', seasons: [] }; sources = [{ ...structuredClone(vibix), vibixEmbed: { ...vibix.vibixEmbed!, type: 'movie' } }]; const view = setup(); await play(view);
+		const document = new DOMParser().parseFromString(iframe(view).srcdoc, 'text/html'); expect(document.querySelector('ins')!.getAttribute('data-type')).toBe('movie'); expect(document.querySelector('ins')!.hasAttribute('data-season')).toBe(false); expect(document.querySelector('ins')!.hasAttribute('data-episodes')).toBe(false);
+		await waitFor(() => expect(misskeyApiZalip).toHaveBeenCalledWith('zalip/progress/start', { workId: 'work', episodeId: null, provider: 'vibix', translationId: '26' })); expect(await player(view).findByText(i18n.ts.zalip._progress.movieHint)).toBeTruthy();
+	});
+	it('retains the exact saved Vibix episode and voice without pretending that an SDK time seek exists', async () => {
+		sources = [structuredClone(vibix)]; savedProgress = { workId: 'work', episodeId: 'episode3', seasonNumber: 2, episodeNumber: 3, provider: 'vibix', translationId: '42', mode: 'episode', positionSeconds: null, durationSeconds: null, completed: false, lastPlayedAt: '2026-10-20T00:00:00Z' }; const view = setup();
+		await fireEvent.click(await view.findByRole('button', { name: i18n.ts.zalip._progress.resume })); await waitFor(() => expect(iframe(view)).not.toBeNull()); const document = new DOMParser().parseFromString(iframe(view).srcdoc, 'text/html'); expect(document.querySelector('ins')!.getAttribute('data-season')).toBe('2'); expect(document.querySelector('ins')!.getAttribute('data-episodes')).toBe('3'); expect(document.querySelector('ins')!.getAttribute('data-voiceover')).toBe('42'); expect(iframe(view).srcdoc).not.toContain('data-time');
+	});
+	it('unmounts the Vibix document for the trailer and rebuilds only inside the opaque frame when returning', async () => {
+		sources = [structuredClone(vibix)]; const view = setup(); await play(view); const first = iframe(view); await fireEvent.click(player(view).getByRole('button', { name: i18n.ts.zalip.trailerTab })); expect(iframe(view)).toBeNull();
+		await fireEvent.click(player(view).getByRole('button', { name: 'Vibix Cinema', pressed: true })); expect(iframe(view)).not.toBe(first); expect(iframe(view).getAttribute('sandbox')).not.toContain('allow-same-origin'); expect(iframe(view).srcdoc).toContain('https://graphicslab.io/sdk/v2/rendex-sdk.min.js'); view.unmount(); expect(view.container.querySelector('iframe')).toBeNull();
+	});
+	it('does not mount a default Vibix episode while another canonical season is loading', async () => {
+		sources = [structuredClone(vibix)]; workData.seasons.push({ id: 'season3', seasonNumber: 3, title: 'Season 3', episodeCount: 3 }); const view = setup(); await play(view);
+		let release!: (episodes: typeof testEpisodes) => void; const pending = new Promise<typeof testEpisodes>(resolve => { release = resolve; }); const original = vi.mocked(misskeyApiZalip).getMockImplementation()!; vi.mocked(misskeyApiZalip).mockImplementation((endpoint, params) => endpoint === 'zalip/seasons/episodes' ? pending : original(endpoint, params));
+		await fireEvent.click(player(view).getByRole('button', { name: '3', pressed: false })); expect(iframe(view)).toBeNull(); expect(player(view).getByRole('status').textContent).toContain(i18n.ts.zalip.playerEpisodesLoading); release(testEpisodes.map(episode => ({ ...episode, id: `s3-${episode.id}` }))); await waitFor(() => expect(iframe(view)).not.toBeNull()); expect(new DOMParser().parseFromString(iframe(view).srcdoc, 'text/html').querySelector('ins')!.getAttribute('data-season')).toBe('3');
+	});
 	it('opens reviews as a separate title tab without remounting the active player', async () => {
 		const view = setup(); await play(view);
 		const activePlayer = iframe(view);

@@ -13,7 +13,7 @@ export const playbackSettingsResponse = {
 	type: 'object', optional: false, nullable: false,
 	properties: { providers: { type: 'array', items: {
 		type: 'object', properties: {
-			source: { type: 'string', enum: ['alloha', 'collaps', 'kodik'] }, label: { type: 'string' },
+			source: { type: 'string', enum: ['alloha', 'collaps', 'kodik', 'vibix'] }, label: { type: 'string' },
 			enabled: { type: 'boolean' }, position: { type: 'integer' },
 		}, required: ['source', 'label', 'enabled', 'position'],
 	} } }, required: ['providers'],

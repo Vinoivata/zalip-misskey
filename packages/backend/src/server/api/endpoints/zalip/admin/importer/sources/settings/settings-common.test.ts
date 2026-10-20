@@ -52,4 +52,9 @@ describe('secure native administrator source-settings contracts', () => {
 		for (const extra of [{ unexpected: true }, { apiToken: 'x'.repeat(4097) }, { apiOrigin: 'x'.repeat(1025) }, { source: 'imdb' }]) await expect(endpoint.exec({ source: 'tmdb', apiOrigin: 'https://api.themoviedb.org', ...extra }, user, null)).rejects.toMatchObject({ code: 'INVALID_PARAM' });
 		expect(methods.save).toHaveBeenCalledTimes(1);
 	});
+	test('Vibix uses the same secure native settings contract and permits clearing an optional mirror', async () => {
+		const { role, settings, methods } = fixture();
+		await new Save(role, settings).exec({ source: 'vibix', apiOrigin: 'https://vibix.org', apiToken: 'synthetic-vibix-key', playerOrigin: null }, user, null);
+		expect(methods.save).toHaveBeenCalledWith(expect.objectContaining({ source: 'vibix', apiOrigin: 'https://vibix.org', apiToken: 'synthetic-vibix-key', playerOrigin: null }));
+	});
 });

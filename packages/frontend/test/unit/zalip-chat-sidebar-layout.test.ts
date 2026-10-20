@@ -45,7 +45,7 @@ beforeEach(() => {
 	vi.useFakeTimers(); vi.clearAllMocks(); window.history.replaceState({}, '', '/chat');
 	controls.router = new Nirax([{ path: '/chat', component: Home }, { path: '/chat/user/:userId', component: Room }, { path: '/chat/room/:roomId', component: Room }], '/chat', true, {});
 	controls.router.on('push', ({ fullPath }: any) => window.history.pushState({}, '', fullPath)); controls.router.on('replace', ({ fullPath }: any) => window.history.replaceState({}, '', fullPath));
-	controls.account = reactive({ id: `me-${++accountSequence}`, policies: { chatAvailability: 'available' } });
+	controls.account = reactive({ id: `me-${++accountSequence}`, token: 'fixture-token', policies: { chatAvailability: 'available' } });
 	controls.user.mockResolvedValue(peer); controls.input.mockResolvedValue({ canceled: false, result: 'Movie club' });
 	controls.api.mockImplementation(async (endpoint: string) => endpoint === 'chat/rooms/create' ? { id: 'club', name: 'Movie club' } : { items: [], nextCursor: null });
 });
@@ -157,6 +157,77 @@ describe('shared full-page messenger geometry and utility routes', () => {
 });
 
 describe('persistent account-scoped list state and confirmed preferences', () => {
+	it('waits for an account refresh batch to restore credentials before reloading the list', async () => {
+		const initial = deferred<any>(); const requests: { accountId: string | undefined; credentialPresent: boolean }[] = [];
+		controls.api.mockImplementation(async () => {
+			requests.push({ accountId: controls.account.id, credentialPresent: typeof controls.account.token === 'string' && !!controls.account.token });
+			if (!requests.at(-1)!.credentialPresent) throw new Error('CREDENTIAL_REQUIRED');
+			return requests.length === 1 ? initial.promise : { items: [conversation('current')], nextCursor: null };
+		});
+		const view = render(Sidebar, options); const id = controls.account.id; const token = controls.account.token;
+		expect(requests).toEqual([{ accountId: id, credentialPresent: true }]);
+		// Mirror updateCurrentAccount: every old key is removed, id returns before token.
+		for (const key of Object.keys(controls.account)) delete controls.account[key];
+		Object.assign(controls.account, { id, policies: { chatAvailability: 'available' } });
+		expect(requests).toHaveLength(1);
+		controls.account.token = token; await settle();
+		expect(requests).toEqual([{ accountId: id, credentialPresent: true }, { accountId: id, credentialPresent: true }]);
+		expect(view.getByText('Text current')).toBeTruthy(); expect(view.queryByRole('alert')).toBeNull();
+		initial.resolve({ items: [conversation('stale-initial')], nextCursor: null }); await settle();
+		expect(view.queryByText('Text stale-initial')).toBeNull(); expect(view.getByText('Text current')).toBeTruthy();
+	});
+
+	it('invalidates private state immediately and reloads only the final principal in a rapid switch', async () => {
+		controls.api.mockResolvedValue({ items: [conversation('private-old')], nextCursor: null });
+		const view = render(Sidebar, options); await settle(); await fireEvent.click(view.getByRole('button', { name: `${i18n.ts.more}: private-old` }));
+		const oldMenu = controls.menu.mock.calls.at(-1)![0]; controls.api.mockClear();
+		const requested: string[] = []; controls.api.mockImplementation(async () => { requested.push(controls.account.id); return { items: [conversation('final-account')], nextCursor: null }; });
+		controls.account.id = 'intermediate-account'; controls.account.id = 'final-account';
+		oldMenu.find((entry: any) => entry.text === i18n.ts.zalip._chatUi.archive).action();
+		expect(controls.api).not.toHaveBeenCalled(); await nextTick(); expect(view.queryByText('Text private-old')).toBeNull(); await settle();
+		expect(requested).toEqual(['final-account']); expect(view.getByText('Text final-account')).toBeTruthy();
+		expect(controls.api.mock.calls.every(call => call[0] === 'zalip/chat/conversations')).toBe(true);
+	});
+
+	it('reloads when credentials arrive after the account id has settled in an earlier tick', async () => {
+		const view = render(Sidebar, options); await settle(); controls.api.mockClear();
+		delete controls.account.token; controls.account.id = 'late-account'; await settle();
+		expect(controls.api).not.toHaveBeenCalled();
+		controls.api.mockResolvedValueOnce({ items: [conversation('late-account')], nextCursor: null });
+		controls.account.token = 'late-fixture-token'; expect(controls.api).not.toHaveBeenCalled(); await settle();
+		expect(controls.api).toHaveBeenCalledOnce(); expect(view.getByText('Text late-account')).toBeTruthy(); expect(view.queryByRole('alert')).toBeNull();
+	});
+
+	it('invalidates private requests on token-only logout without reloading on nonempty token rotation', async () => {
+		const response = deferred<any>(); controls.api.mockReturnValueOnce(response.promise);
+		const view = render(Sidebar, options); controls.account.token = 'rotated-fixture-token'; await settle(); expect(controls.api).toHaveBeenCalledOnce();
+		delete controls.account.token; await settle(); response.resolve({ items: [conversation('private-token-only')], nextCursor: null }); await settle();
+		expect(view.queryByText('Text private-token-only')).toBeNull(); expect(controls.api).toHaveBeenCalledOnce();
+	});
+
+	it('cancels a deferred account reload on logout without credentials or stale private responses', async () => {
+		const response = deferred<any>(); controls.api.mockReturnValueOnce(response.promise);
+		const view = render(Sidebar, options); expect(controls.api).toHaveBeenCalledOnce();
+		controls.account.id = 'next-account'; delete controls.account.id; delete controls.account.token;
+		await settle(); expect(controls.api).toHaveBeenCalledOnce(); expect(view.queryByRole('alert')).toBeNull();
+		controls.account.id = 'signed-out-cache'; await settle(); expect(controls.api).toHaveBeenCalledOnce();
+		response.resolve({ items: [conversation('private-after-logout')], nextCursor: null }); await settle();
+		expect(view.queryByText('Text private-after-logout')).toBeNull(); expect(controls.api).toHaveBeenCalledOnce();
+	});
+
+	it('cancels an account reload queued just before unmount', async () => {
+		const view = render(Sidebar, options); await settle(); controls.api.mockClear();
+		controls.account.id = 'next-account'; view.unmount(); await settle(); expect(controls.api).not.toHaveBeenCalled();
+	});
+
+	it('keeps explicit Retry working after a real initial request failure', async () => {
+		controls.api.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ items: [conversation('retried')], nextCursor: null });
+		const view = render(Sidebar, options); await settle(); expect(view.getByRole('alert').textContent).toBe(i18n.ts.zalip._chatUi.loadError);
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.retry })); await settle();
+		expect(view.queryByRole('alert')).toBeNull(); expect(view.getByText('Text retried')).toBeTruthy(); expect(controls.api).toHaveBeenCalledTimes(2);
+		expect(controls.api).toHaveBeenLastCalledWith('zalip/chat/conversations', { filter: 'all', query: '', limit: 30 });
+	});
+
 	it('keeps Groups isolated and restores the previous Messages subfilter', async () => {
 		const view = render(Sidebar, options); await settle();
 		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._chatUi.archived })); await debounce();

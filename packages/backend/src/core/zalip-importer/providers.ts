@@ -10,7 +10,7 @@ import { Agent as HttpsAgent } from 'node:https';
 import { isIP } from 'node:net';
 import ipaddr from 'ipaddr.js';
 import { artworkCandidate } from './artwork-candidates.js';
-import { validImportRef, type ExternalIdentity, type ImportCredit, type ImportEpisode, type ImportField, type ImportMediaType, type ImportPlayer, type ImportProvider, type ImportProviderStatus, type ImportRecord, type ImportRef, type ImportSearchPage, type ImportSearchResult, type ImportSource } from './types.js';
+import { validImportRef, type ExternalIdentity, type ImportCredit, type ImportEpisode, type ImportField, type ImportMediaType, type ImportPlayer, type ImportProvider, type ImportProviderStatus, type ImportRecord, type ImportRef, type ImportSearchPage, type ImportSearchResult, type ImportSource, type ImportVibixEmbed } from './types.js';
 
 export type ImportProviderErrorCode = 'not-configured' | 'not-found' | 'quota-exceeded' | 'rate-limited' | 'upstream-failure' | 'invalid-ref' | 'unsupported' | 'malformed-response';
 
@@ -22,7 +22,8 @@ export class ImportProviderError extends Error {
 	}
 }
 
-export type ImportTransport = (url: string, headers: Record<string, string>) => Promise<unknown>;
+export type ImportTransportOptions = { method: 'POST' };
+export type ImportTransport = (url: string, headers: Record<string, string>, options?: ImportTransportOptions) => Promise<unknown>;
 export type ImportProviderConfig = {
 	tmdbApiKey?: string;
 	allohaApiToken?: string;
@@ -31,13 +32,16 @@ export type ImportProviderConfig = {
 	kinopoiskApiKey?: string;
 	collapsApiToken?: string;
 	kodikApiToken?: string;
+	vibixApiToken?: string;
 	allohaIframeHosts?: string[];
 	collapsIframeHosts?: string[];
 	kodikIframeHosts?: string[];
+	vibixIframeHosts?: string[];
 	apiOrigins?: Partial<Record<ImportSource, string>>;
 	allohaPlayerOrigin?: string;
 	collapsPlayerOrigin?: string;
 	kodikPlayerOrigin?: string;
+	vibixPlayerOrigin?: string;
 };
 
 const origins: Record<ImportSource, string> = {
@@ -46,6 +50,7 @@ const origins: Record<ImportSource, string> = {
 	alloha: 'https://apbugall.org',
 	collaps: 'https://api.bhcesh.me',
 	kodik: 'https://kodik-api.com',
+	vibix: 'https://vibix.org',
 };
 export const defaultImportApiOrigins: Readonly<Record<ImportSource, string>> = Object.freeze({ ...origins });
 
@@ -84,7 +89,7 @@ type JsonObject = Record<string, unknown>;
 
 /** Process-wide pacing also covers simultaneous UI searches; distributed daily quotas remain in the runner. */
 export function pacedImportTransport(transport: ImportTransport, intervalMs = 250): ImportTransport {
-	return async (url, headers) => {
+	return async (url, headers, options) => {
 		const origin = new URL(url).origin;
 		const gate = requestGates.get(origin) ?? { pending: Promise.resolve(), nextAt: 0 };
 		requestGates.set(origin, gate);
@@ -95,7 +100,7 @@ export function pacedImportTransport(transport: ImportTransport, intervalMs = 25
 		});
 		gate.pending = turn.catch(() => {});
 		await turn;
-		return transport(url, headers);
+		return options ? transport(url, headers, options) : transport(url, headers);
 	};
 }
 
@@ -197,9 +202,10 @@ export function rewriteImportPlayerOrigin(value: string, origin?: string): strin
 
 /** Cached player choices also adopt token/mirror changes without exposing server API credentials. */
 export function configuredImportPlayerUrl(value: unknown, source: ImportPlayer['source'], config: ImportProviderConfig): string | null {
-	const origin = source === 'alloha' ? config.allohaPlayerOrigin : source === 'collaps' ? config.collapsPlayerOrigin : config.kodikPlayerOrigin;
-	const extraHosts = source === 'alloha' ? config.allohaIframeHosts : source === 'collaps' ? config.collapsIframeHosts : config.kodikIframeHosts;
-	const hosts = configuredIframeHosts(extraHosts, source === 'alloha' ? 'ascorbic-as.stravers.live' : source === 'collaps' ? 'api.nextembed.ws' : 'kodikplayer.com');
+	const origin = source === 'alloha' ? config.allohaPlayerOrigin : source === 'collaps' ? config.collapsPlayerOrigin : source === 'kodik' ? config.kodikPlayerOrigin : config.vibixPlayerOrigin;
+	const extraHosts = source === 'alloha' ? config.allohaIframeHosts : source === 'collaps' ? config.collapsIframeHosts : source === 'kodik' ? config.kodikIframeHosts : config.vibixIframeHosts;
+	// Vibix's API can supply an empty iframe_url and an SDK tag. Do not invent an iframe host.
+	const hosts = source === 'vibix' ? [...extraHosts ?? []] : configuredIframeHosts(extraHosts, source === 'alloha' ? 'ascorbic-as.stravers.live' : source === 'collaps' ? 'api.nextembed.ws' : 'kodikplayer.com');
 	if (origin) hosts.push(new URL(normalizeImportApiOrigin(origin)).hostname);
 	const safe = source === 'alloha' ? safeAllohaPlayerUrl(value, hosts, config.allohaPlayerToken) : safeImportUrl(value, hosts);
 	return safe ? rewriteImportPlayerOrigin(safe, origin) : null;
@@ -612,6 +618,137 @@ export function normalizeAllohaRecord(value: unknown, ref: ImportRef, iframeHost
 	return record;
 }
 
+function vibixItem(value: unknown): JsonObject {
+	const envelope = object(value);
+	if (envelope.success === false) throw new ImportProviderError('malformed-response');
+	return Object.hasOwn(envelope, 'data') ? object(envelope.data) : envelope;
+}
+
+/** The stored/public SDK contract contains only three inert attributes, never markup, URLs or commands. */
+export function normalizeVibixEmbed(value: unknown): ImportVibixEmbed | null {
+	if (!value || typeof value !== 'object' || Array.isArray(value) || ![Object.prototype, null].includes(Object.getPrototypeOf(value))) return null;
+	const descriptors = Object.getOwnPropertyDescriptors(value);
+	const keys = Reflect.ownKeys(value);
+	if (keys.length !== 3 || keys.some(key => typeof key !== 'string' || !['publisherId', 'type', 'id'].includes(key)) || Object.values(descriptors).some(descriptor => !descriptor.enumerable || !Object.hasOwn(descriptor, 'value'))) return null;
+	const item = value as Record<string, unknown>;
+	const numericId = (id: unknown): id is string => typeof id === 'string' && /^[1-9][0-9]{0,15}$/u.test(id) && Number.isSafeInteger(Number(id));
+	return numericId(item.publisherId) && numericId(item.id) && (item.type === 'movie' || item.type === 'series') ? { publisherId: item.publisherId, type: item.type, id: item.id } : null;
+}
+
+function vibixEmbedCode(value: unknown): ImportVibixEmbed | null {
+	if (typeof value !== 'string' || value.length > 4096) return null;
+	const tag = /^<ins\s+([^<>]*)>\s*<\/ins>$/iu.exec(value.trim());
+	if (!tag) return null;
+	const attributes = new Map<string, string>();
+	const pattern = /\s*([a-z][a-z0-9-]*)\s*=\s*(["'])([^"'<>]*)\2/iy;
+	let offset = 0;
+	while (offset < tag[1].trimEnd().length) {
+		pattern.lastIndex = offset;
+		const attribute = pattern.exec(tag[1]);
+		if (!attribute) return null;
+		const key = attribute[1].toLowerCase();
+		if (!['data-publisher-id', 'data-type', 'data-id'].includes(key) || attributes.has(key)) return null;
+		attributes.set(key, attribute[3]); offset = pattern.lastIndex;
+		if (offset < tag[1].trimEnd().length && !/\s/u.test(tag[1][offset])) return null;
+	}
+	return normalizeVibixEmbed({ publisherId: attributes.get('data-publisher-id'), type: attributes.get('data-type'), id: attributes.get('data-id') });
+}
+
+function vibixIdentities(item: JsonObject, mediaType: ImportMediaType): ExternalIdentity[] {
+	const kp = item.kp_id == null ? null : externalId(item.kp_id);
+	const legacyKp = item.kinopoisk_id == null ? null : externalId(item.kinopoisk_id);
+	const imdb = typeof item.imdb_id === 'string' && /^tt[0-9]{5,12}$/u.test(item.imdb_id) ? item.imdb_id : null;
+	if ((item.kp_id != null && kp == null) || (item.kinopoisk_id != null && legacyKp == null) || (kp && legacyKp && kp !== legacyKp) || (item.imdb_id != null && imdb == null)) throw new ImportProviderError('malformed-response');
+	return [...identity('kinopoisk', kp ?? legacyKp, mediaType), ...identity('imdb', imdb, mediaType, true)];
+}
+
+/** Numeric Vibix references mean KP, never the unrelated publisher video ID. */
+function vibixReference(identities: ExternalIdentity[], mediaType: ImportMediaType): ImportRef {
+	const kp = keyFor(identities, 'kinopoisk', mediaType);
+	const imdb = keyFor(identities, 'imdb', mediaType);
+	if (!kp && !imdb) throw new ImportProviderError('malformed-response');
+	return { source: 'vibix', externalId: kp ?? `imdb:${imdb}`, mediaType };
+}
+
+function assertVibixIdentities(record: ImportRecord, expected: ExternalIdentity[], mediaType: ImportMediaType): void {
+	if (record.ref.mediaType !== mediaType) throw new ImportProviderError('malformed-response');
+	for (const binding of expected.filter(item => item.entityType === mediaType && ['kinopoisk', 'imdb'].includes(item.provider))) {
+		if (!record.identities.some(actual => actual.provider === binding.provider && actual.externalId === binding.externalId && actual.entityType === mediaType)) throw new ImportProviderError('malformed-response');
+	}
+}
+
+/** Only documented metadata is projected. An SDK tag is never executed or treated as an iframe URL. */
+export function normalizeVibixRecord(value: unknown, iframeHosts: readonly string[] = [], requestedRef?: ImportRef): ImportRecord {
+	const item = vibixItem(value);
+	const id = externalId(item.id);
+	const mediaType = item.type === 'movie' ? 'movie' : item.type === 'serial' ? 'tv' : null;
+	if (!id || !mediaType) throw new ImportProviderError('malformed-response');
+	const identities = vibixIdentities(item, mediaType);
+	const canonical = vibixReference(identities, mediaType);
+	if (requestedRef && (requestedRef.source !== 'vibix' || !validImportRef(requestedRef) || requestedRef.mediaType !== mediaType)) throw new ImportProviderError('malformed-response');
+	const ref = requestedRef ?? canonical;
+	const record = blankRecord(ref, requireTitle(firstText(item.name_rus, item.name, item.name_original, item.name_eng)));
+	record.identities.push(...identities);
+	const requestedIdentity: ExternalIdentity = ref.externalId.startsWith('imdb:')
+		? { provider: 'imdb', externalId: ref.externalId.slice(5), entityType: mediaType }
+		: { provider: 'kinopoisk', externalId: ref.externalId, entityType: mediaType };
+	assertVibixIdentities(record, [requestedIdentity], mediaType);
+	record.originalTitle = firstText(item.name_original, item.name_eng);
+	record.description = text(item.description, 8192) ?? text(item.description_short, 8192);
+	record.releaseYear = year(item.year);
+	record.runtimeMinutes = integer(item.duration, 1, 1440);
+	record.genres = names(item.genre, 'name');
+	record.countries = names(item.country, 'name');
+	record.kind = mediaKind(mediaType, record.genres, record.countries);
+	record.posterUrl = safeImportUrl(item.poster_url);
+	record.backdropUrl = safeImportUrl(item.backdrop_url);
+	record.ratings = [...rating('kinopoisk', item.kp_rating, item.kp_votes), ...rating('imdb', item.imdb_rating, item.imdb_votes)];
+	// Publisher responses do not document studios, collections, logos or a complete episode catalogue.
+	record.warnings.push('vibix-metadata-partial');
+	if (Array.isArray(item.persons) && item.persons.length > 300) record.warnings.push('vibix-person-limit');
+	record.credits = uniqueCredits(array(item.persons, 300).flatMap(raw => {
+		const person = object(raw);
+		const personId = externalId(person.id); const name = firstText(person.name, person.name_anyway, person.name_eng);
+		if (!personId || !name) { record.warnings.push('vibix-people-without-identities'); return []; }
+		return [{ source: 'vibix' as const, externalId: personId, name, role: role(person.occupation), character: null, imageUrl: null }];
+	}));
+	if (Array.isArray(item.voiceovers) && item.voiceovers.length > MAX_RESULTS) record.warnings.push('vibix-voice-limit');
+	const translations: ImportPlayer['translations'] = [];
+	for (const raw of array(item.voiceovers)) {
+		const voice = object(raw); const voiceId = externalId(voice.id); const name = text(voice.name);
+		if (!voiceId || !name) continue;
+		const previous = translations.find(translation => translation.id === voiceId);
+		if (previous && previous.name !== name) throw new ImportProviderError('malformed-response');
+		if (!previous) translations.push({ id: voiceId, name });
+	}
+	if (mediaType === 'tv') record.warnings.push('vibix-episode-data-unavailable');
+	const iframe = safeImportUrl(item.iframe_url, iframeHosts);
+	const embed = vibixEmbedCode(item.embed_code);
+	const matchingEmbed = embed?.type === (mediaType === 'movie' ? 'movie' : 'series') ? embed : null;
+	if (typeof item.embed_code === 'string' && item.embed_code.trim() && !matchingEmbed) record.warnings.push('vibix-embed-rejected');
+	if (translations.length && !matchingEmbed) record.warnings.push('vibix-voice-control-unavailable');
+	// Only the documented SDK integration is supported; an iframe URL alone is metadata-only.
+	if (matchingEmbed) record.players.push({ source: 'vibix', externalId: id, iframeUrl: '', vibixEmbed: matchingEmbed, translations, quality: text(item.quality, 64), episodes: [] });
+	if (typeof item.iframe_url === 'string' && item.iframe_url.trim() && !iframe) record.warnings.push('vibix-player-url-rejected');
+	if (!matchingEmbed) record.warnings.push('vibix-player-url-missing');
+	record.warnings = [...new Set(record.warnings)];
+	record.complete = false;
+	return record;
+}
+
+function vibixSearchPage(value: unknown, page: number, iframeHosts: readonly string[], mediaType?: ImportMediaType): ImportSearchPage {
+	const response = object(value);
+	if (response.success === false || !Array.isArray(response.data)) throw new ImportProviderError('malformed-response');
+	const pagination = object(response.meta);
+	const currentPage = integer(pagination.current_page, 1, 1000); const lastPage = integer(pagination.last_page, 1, 1000);
+	if ((pagination.current_page != null && currentPage !== page) || (pagination.last_page != null && (lastPage == null || lastPage < page))) throw new ImportProviderError('malformed-response');
+	// Follow only our bounded integer page, never an upstream links.next URL containing credentials.
+	const hasMore = page < 1000 && (lastPage != null ? page < lastPage : response.data.length >= 20);
+	const result = searchPage(response.data.slice(0, 20), page, hasMore, row => normalizeVibixRecord(row, iframeHosts));
+	result.items = result.items.filter((item, index, items) => (mediaType == null || item.ref.mediaType === mediaType) && items.findIndex(other => other.ref.externalId === item.ref.externalId && other.ref.mediaType === item.ref.mediaType) === index);
+	return result;
+}
+
 function kodikId(value: unknown): string | null {
 	return typeof value === 'string' && /^(?:movie|serial)-[1-9][0-9]{0,15}$/u.test(value) ? value : null;
 }
@@ -765,17 +902,17 @@ function retryAfter(value: string | null): number | undefined {
 /** Fixed API origins, no redirects, bounded response size and timeout. Credentials never enter thrown errors. */
 export function createConfiguredImportTransport(config: ImportProviderConfig): ImportTransport {
 	const allowed = new Set(Object.values(importAddressOrigins(config)));
-	return (url, headers) => performImportRequest(url, headers, allowed);
+	return (url, headers, options) => performImportRequest(url, headers, allowed, options);
 }
 
-async function performImportRequest(url: string, headers: Record<string, string>, allowedOrigins: ReadonlySet<string>): Promise<unknown> {
+async function performImportRequest(url: string, headers: Record<string, string>, allowedOrigins: ReadonlySet<string>, options?: ImportTransportOptions): Promise<unknown> {
 	let parsed: URL;
 	try { parsed = new URL(url); } catch { throw new ImportProviderError('invalid-ref'); }
-	if (!allowedOrigins.has(parsed.origin) || parsed.username || parsed.password || parsed.hash) throw new ImportProviderError('invalid-ref');
+	if (!allowedOrigins.has(parsed.origin) || parsed.username || parsed.password || parsed.hash || (options && options.method !== 'POST')) throw new ImportProviderError('invalid-ref');
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), 12000);
 	try {
-		const response = await fetch(url, { headers: { Accept: 'application/json', ...headers }, redirect: 'error', size: 2 * 1024 * 1024, signal: controller.signal, agent: importerHttpsAgent });
+		const response = await fetch(url, { headers: { Accept: 'application/json', ...headers }, ...(options ? { method: options.method } : {}), redirect: 'error', size: 2 * 1024 * 1024, signal: controller.signal, agent: importerHttpsAgent });
 		if (response.status === 404) throw new ImportProviderError('not-found');
 		if (response.status === 401 || response.status === 403) throw new ImportProviderError('not-configured');
 		if (response.status === 402) throw new ImportProviderError('quota-exceeded', 86400000);
@@ -790,7 +927,7 @@ async function performImportRequest(url: string, headers: Record<string, string>
 	}
 }
 
-export const defaultImportTransport: ImportTransport = (url, headers) => performImportRequest(url, headers, new Set(Object.values(origins)));
+export const defaultImportTransport: ImportTransport = (url, headers, options) => performImportRequest(url, headers, new Set(Object.values(origins)), options);
 
 function pageNumber(value = 1, maximum = 1000): number {
 	if (!Number.isInteger(value) || value < 1 || value > maximum) throw new ImportProviderError('invalid-ref');
@@ -822,19 +959,19 @@ function status(source: ImportSource, credential: string | undefined, search: bo
 
 export function createImportRequest(source: ImportSource, credential: string | undefined, transport: ImportTransport, apiOrigin = origins[source]) {
 	const origin = normalizeImportApiOrigin(apiOrigin);
-	return async (path: string, parameters: Record<string, string> = {}): Promise<unknown> => {
+	return async (path: string, parameters: Record<string, string> = {}, options?: ImportTransportOptions): Promise<unknown> => {
 		if (!credential?.trim()) throw new ImportProviderError('not-configured');
 		const url = new URL(path, origin);
 		if (url.origin !== origin || !path.startsWith('/') || path.startsWith('//')) throw new ImportProviderError('invalid-ref');
 		for (const [key, value] of Object.entries(parameters)) url.searchParams.set(key, value);
 		const headers: Record<string, string> = {};
 		if (source === 'kinopoisk') headers['X-API-KEY'] = credential.trim();
-		if (source === 'alloha') headers.Authorization = `Bearer ${credential.trim()}`;
+		if (source === 'alloha' || source === 'vibix') headers.Authorization = `Bearer ${credential.trim()}`;
 		if (source === 'tmdb') url.searchParams.set('api_key', credential.trim());
 		if (source === 'collaps') url.searchParams.set('token', credential.trim());
 		if (source === 'kodik') url.searchParams.set('token', credential.trim());
 		try {
-			return await transport(url.toString(), headers);
+			return await (options ? transport(url.toString(), headers, options) : transport(url.toString(), headers));
 		} catch (error) {
 			if (error instanceof ImportProviderError) throw error;
 			throw new ImportProviderError('upstream-failure');
@@ -899,12 +1036,15 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 	const allohaRequest = createImportRequest('alloha', config.allohaApiToken, pacedTransport, addresses.alloha);
 	const collapsRequest = createImportRequest('collaps', config.collapsApiToken, pacedTransport, addresses.collaps);
 	const kodikRequest = createImportRequest('kodik', config.kodikApiToken, pacedTransport, addresses.kodik);
+	const vibixRequest = createImportRequest('vibix', config.vibixApiToken, pacedTransport, addresses.vibix);
 	const allohaHosts = configuredIframeHosts(config.allohaIframeHosts, 'ascorbic-as.stravers.live');
 	const collapsHosts = configuredIframeHosts(config.collapsIframeHosts, 'api.nextembed.ws');
 	const kodikHosts = configuredIframeHosts(config.kodikIframeHosts, 'kodikplayer.com');
+	const vibixHosts = [...config.vibixIframeHosts ?? []];
 	if (config.allohaPlayerOrigin) allohaHosts.push(new URL(normalizeImportApiOrigin(config.allohaPlayerOrigin)).hostname);
 	if (config.collapsPlayerOrigin) collapsHosts.push(new URL(normalizeImportApiOrigin(config.collapsPlayerOrigin)).hostname);
 	if (config.kodikPlayerOrigin) kodikHosts.push(new URL(normalizeImportApiOrigin(config.kodikPlayerOrigin)).hostname);
+	if (config.vibixPlayerOrigin) vibixHosts.push(new URL(normalizeImportApiOrigin(config.vibixPlayerOrigin)).hostname);
 	const tmdb: ImportProvider = {
 		status: () => status('tmdb', config.tmdbApiKey, true, true, false),
 		async check() {
@@ -1223,5 +1363,46 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 			return kodik.fetch(canonicalKodikRef(rows[0]), fields);
 		},
 	};
-	return { tmdb, kinopoisk, alloha, collaps, kodik };
+	const vibix: ImportProvider = {
+		status: () => status('vibix', config.vibixApiToken, true, false, false),
+		async check() {
+			// The live API rejects limit=1 despite the OpenAPI minimum; its default page is supported.
+			const response = object(await vibixRequest('/api/v1/publisher/videos/links', { page: '1', limit: '20' }));
+			if (response.success === false || !Array.isArray(response.data)) throw new ImportProviderError('malformed-response');
+		},
+		async search(query, page = 1, mediaType) {
+			const keyword = text(query); pageNumber(page);
+			if (!keyword || (mediaType != null && !['movie', 'tv'].includes(mediaType))) throw new ImportProviderError('invalid-ref');
+			const response = await vibixRequest('/api/v1/publisher/videos/search', { name: keyword, page: String(page), limit: '20' }, { method: 'POST' });
+			return vibixSearchPage(response, page, vibixHosts, mediaType);
+		},
+		async fetch(ref) {
+			if (ref.source !== 'vibix' || !validImportRef(ref) || (!ref.externalId.startsWith('imdb:') && externalId(ref.externalId) !== ref.externalId)) throw new ImportProviderError('invalid-ref');
+			const path = ref.externalId.startsWith('imdb:') ? `imdb/${ref.externalId.slice(5)}` : `kp/${ref.externalId}`;
+			const record = normalizeVibixRecord(await vibixRequest(`/api/v1/publisher/videos/${path}`), vibixHosts, ref);
+			for (const player of record.players) if (player.iframeUrl) player.iframeUrl = rewriteImportPlayerOrigin(player.iframeUrl, config.vibixPlayerOrigin);
+			return record;
+		},
+		async lookup(identities, mediaType) {
+			if (!['movie', 'tv'].includes(mediaType)) throw new ImportProviderError('invalid-ref');
+			const expected = identities.filter(item => item.entityType === mediaType && ['vibix', 'kinopoisk', 'imdb'].includes(item.provider));
+			for (const provider of ['vibix', 'kinopoisk', 'imdb']) if (new Set(expected.filter(item => item.provider === provider).map(item => item.externalId)).size > 1) throw new ImportProviderError('malformed-response');
+			const own = expected.find(item => item.provider === 'vibix');
+			const kp = keyFor(expected, 'kinopoisk', mediaType); const imdb = keyFor(expected, 'imdb', mediaType);
+			if (!own && !kp && !imdb) return null;
+			const ref: ImportRef = { source: 'vibix', externalId: own?.externalId ?? kp ?? `imdb:${imdb}`, mediaType };
+			let record: ImportRecord;
+			try { record = await vibix.fetch(ref); } catch (error) {
+				if (!(error instanceof ImportProviderError) || error.code !== 'not-found') throw error;
+				if (own || !kp || !imdb) return null;
+				try { record = await vibix.fetch({ source: 'vibix', externalId: `imdb:${imdb}`, mediaType }); } catch (fallbackError) {
+					if (fallbackError instanceof ImportProviderError && fallbackError.code === 'not-found') return null;
+					throw fallbackError;
+				}
+			}
+			assertVibixIdentities(record, expected, mediaType);
+			return record;
+		},
+	};
+	return { tmdb, kinopoisk, alloha, collaps, kodik, vibix };
 }

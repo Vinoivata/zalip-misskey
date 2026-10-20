@@ -15,8 +15,9 @@ type TokenOverrides = { apiToken?: string | null; playerToken?: string | null };
 export type SaveImporterSourceSettings = { source: ImportSource; apiOrigin: string; playerOrigin?: string | null; apiToken?: string; clearApiToken?: boolean; playerToken?: string; clearPlayerToken?: boolean };
 export type RuntimeImporterSettings = ImportProviderConfig & { apiOrigins: Record<ImportSource, string>; allohaPlayerOrigin: string; collapsPlayerOrigin: string };
 const playerDefaults = { alloha: 'https://ascorbic-as.stravers.live', collaps: 'https://api.nextembed.ws' } as const;
-const apiEnvironment = { tmdb: 'ZALIP_TMDB_API_KEY', kinopoisk: 'ZALIP_KINOPOISK_API_KEY', alloha: 'ZALIP_ALLOHA_API_TOKEN', collaps: 'ZALIP_COLLAPS_API_TOKEN', kodik: 'ZALIP_KODIK_API_TOKEN' } as const;
-const apiOriginEnvironment = { tmdb: 'ZALIP_TMDB_API_ORIGIN', kinopoisk: 'ZALIP_KINOPOISK_API_ORIGIN', alloha: 'ZALIP_ALLOHA_API_ORIGIN', collaps: 'ZALIP_COLLAPS_API_ORIGIN', kodik: 'ZALIP_KODIK_API_ORIGIN' } as const;
+const apiEnvironment = { tmdb: 'ZALIP_TMDB_API_KEY', kinopoisk: 'ZALIP_KINOPOISK_API_KEY', alloha: 'ZALIP_ALLOHA_API_TOKEN', collaps: 'ZALIP_COLLAPS_API_TOKEN', kodik: 'ZALIP_KODIK_API_TOKEN', vibix: 'ZALIP_VIBIX_API_TOKEN' } as const;
+const apiOriginEnvironment = { tmdb: 'ZALIP_TMDB_API_ORIGIN', kinopoisk: 'ZALIP_KINOPOISK_API_ORIGIN', alloha: 'ZALIP_ALLOHA_API_ORIGIN', collaps: 'ZALIP_COLLAPS_API_ORIGIN', kodik: 'ZALIP_KODIK_API_ORIGIN', vibix: 'ZALIP_VIBIX_API_ORIGIN' } as const;
+const optionalPlayerOriginEnvironment = { kodik: 'ZALIP_KODIK_PLAYER_ORIGIN', vibix: 'ZALIP_VIBIX_PLAYER_ORIGIN' } as const;
 
 export function importerSettingsEncryptionKey(value: string | undefined): Buffer | null {
 	if (!value || !/^[A-Za-z0-9+/]{43}=$/u.test(value)) return null;
@@ -84,8 +85,8 @@ export class ZalipImporterSourceSettingsService {
 			const row = rows.find(candidate => candidate.source === source);
 			const values = row ? decryptImporterTokens(source, row.encryptedTokens, key) : {};
 			const apiOrigin = normalizeImportApiOrigin(row?.apiOrigin ?? (process.env[apiOriginEnvironment[source]] || defaultImportApiOrigins[source]));
-			const kodikPlayerOrigin = source === 'kodik' ? row ? row.playerOrigin : process.env.ZALIP_KODIK_PLAYER_ORIGIN || null : null;
-			const playerOrigin = source === 'alloha' || source === 'collaps' ? normalizeImportApiOrigin(row?.playerOrigin ?? (process.env[source === 'alloha' ? 'ZALIP_ALLOHA_PLAYER_ORIGIN' : 'ZALIP_COLLAPS_PLAYER_ORIGIN'] || playerDefaults[source])) : kodikPlayerOrigin ? normalizeImportApiOrigin(kodikPlayerOrigin) : null;
+			const optionalPlayerOrigin = source === 'kodik' || source === 'vibix' ? row ? row.playerOrigin : process.env[optionalPlayerOriginEnvironment[source]] || null : null;
+			const playerOrigin = source === 'alloha' || source === 'collaps' ? normalizeImportApiOrigin(row?.playerOrigin ?? (process.env[source === 'alloha' ? 'ZALIP_ALLOHA_PLAYER_ORIGIN' : 'ZALIP_COLLAPS_PLAYER_ORIGIN'] || playerDefaults[source])) : optionalPlayerOrigin ? normalizeImportApiOrigin(optionalPlayerOrigin) : null;
 			return { source, apiOrigin, playerOrigin, values, updatedAt: row?.updatedAt.toISOString() ?? null };
 		});
 	}
@@ -108,21 +109,24 @@ export class ZalipImporterSourceSettingsService {
 		const kodikIframeHosts = process.env.ZALIP_KODIK_IFRAME_HOSTS?.split(',').map(value => value.trim()).filter(Boolean) ?? [];
 		return {
 			apiOrigins: Object.fromEntries(settings.map(row => [row.source, row.apiOrigin])) as Record<ImportSource, string>,
-			tmdbApiKey: apiToken('tmdb'), kinopoiskApiKey: apiToken('kinopoisk'), allohaApiToken: apiToken('alloha'), collapsApiToken: apiToken('collaps'), kodikApiToken: apiToken('kodik'),
+			tmdbApiKey: apiToken('tmdb'), kinopoiskApiKey: apiToken('kinopoisk'), allohaApiToken: apiToken('alloha'), collapsApiToken: apiToken('collaps'), kodikApiToken: apiToken('kodik'), vibixApiToken: apiToken('vibix'),
 			allohaPlayerToken: credential(settings.find(row => row.source === 'alloha')!.values, 'playerToken', process.env.ZALIP_ALLOHA_PLAYER_TOKEN) ?? undefined,
 			allohaPlayerOrigin: settings.find(row => row.source === 'alloha')!.playerOrigin!, collapsPlayerOrigin: settings.find(row => row.source === 'collaps')!.playerOrigin!,
 			allohaIframeHosts: process.env.ZALIP_ALLOHA_IFRAME_HOSTS?.split(',').map(value => value.trim()).filter(Boolean),
 			collapsIframeHosts: process.env.ZALIP_COLLAPS_IFRAME_HOSTS?.split(',').map(value => value.trim()).filter(Boolean),
 			kodikPlayerOrigin: settings.find(row => row.source === 'kodik')!.playerOrigin ?? undefined,
 			kodikIframeHosts: kodikIframeHosts.length ? kodikIframeHosts : ['kodikplayer.com'],
+			vibixPlayerOrigin: settings.find(row => row.source === 'vibix')!.playerOrigin ?? undefined,
+			vibixIframeHosts: process.env.ZALIP_VIBIX_IFRAME_HOSTS?.split(',').map(value => value.trim()).filter(Boolean) ?? [],
 		};
 	}
 
 	public async save(input: SaveImporterSourceSettings) {
 		if (!input || !importSources.includes(input.source)) throw new ImportProviderError('invalid-ref');
 		const apiOrigin = normalizeImportApiOrigin(input.apiOrigin);
-		const playerOrigin = input.playerOrigin === undefined ? undefined : input.playerOrigin === null && input.source === 'kodik' ? null : normalizeImportApiOrigin(input.playerOrigin as string);
-		if (playerOrigin !== undefined && !['alloha', 'collaps', 'kodik'].includes(input.source)) throw new ImportProviderError('invalid-ref');
+		const optionalPlayerOrigin = input.source === 'kodik' || input.source === 'vibix';
+		const playerOrigin = input.playerOrigin === undefined ? undefined : input.playerOrigin === null && optionalPlayerOrigin ? null : normalizeImportApiOrigin(input.playerOrigin as string);
+		if (playerOrigin !== undefined && !['alloha', 'collaps', 'kodik', 'vibix'].includes(input.source)) throw new ImportProviderError('invalid-ref');
 		if (input.source !== 'alloha' && (input.playerToken !== undefined || input.clearPlayerToken !== undefined)) throw new ImportProviderError('invalid-ref');
 		if ((input.clearApiToken !== undefined && typeof input.clearApiToken !== 'boolean') || (input.clearPlayerToken !== undefined && typeof input.clearPlayerToken !== 'boolean')) throw new ImportProviderError('invalid-ref');
 		const apiToken = token(input.apiToken), playerToken = token(input.playerToken);
@@ -137,7 +141,8 @@ export class ZalipImporterSourceSettingsService {
 			const values = existing ? decryptImporterTokens(input.source, existing.encryptedTokens, key) : {};
 			if (apiToken || input.clearApiToken) values.apiToken = input.clearApiToken ? null : apiToken;
 			if (playerToken || input.clearPlayerToken) values.playerToken = input.clearPlayerToken ? null : playerToken;
-			const retainedPlayerOrigin = existing ? existing.playerOrigin : input.source === 'kodik' && process.env.ZALIP_KODIK_PLAYER_ORIGIN ? normalizeImportApiOrigin(process.env.ZALIP_KODIK_PLAYER_ORIGIN) : null;
+			const environmentPlayerOrigin = input.source === 'kodik' || input.source === 'vibix' ? process.env[optionalPlayerOriginEnvironment[input.source]] : undefined;
+			const retainedPlayerOrigin = existing ? existing.playerOrigin : environmentPlayerOrigin ? normalizeImportApiOrigin(environmentPlayerOrigin) : null;
 			await repository.save(repository.create({ source: input.source, apiOrigin, playerOrigin: playerOrigin === undefined ? retainedPlayerOrigin : playerOrigin, encryptedTokens: Object.keys(values).length ? encryptImporterTokens(input.source, values, key) : null, updatedAt: new Date() }));
 		});
 		return this.show();

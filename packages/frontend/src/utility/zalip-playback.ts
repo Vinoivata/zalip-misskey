@@ -3,10 +3,13 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-export type PlaybackProvider = 'alloha' | 'collaps' | 'kodik';
+import type { VibixEmbed } from '@/utility/zalip-vibix-player.js';
+import { validVibixEmbed } from '@/utility/zalip-vibix-player.js';
+
+export type PlaybackProvider = 'alloha' | 'collaps' | 'kodik' | 'vibix';
 export type PlaybackEpisode = { seasonNumber: number; episodeNumber: number };
 export type PlaybackTranslation = { id: string; name: string; type?: 'voice' | 'subtitles'; providerTranslationId?: string; iframe?: string; quality?: string | null; resolutions?: string[]; episodes?: PlaybackEpisode[] };
-export type PlaybackSource = { source: PlaybackProvider; label: string; iframe: string; quality: string | null; translations: PlaybackTranslation[]; episodes: PlaybackEpisode[] };
+export type PlaybackSource = { source: PlaybackProvider; label: string; iframe: string; quality: string | null; translations: PlaybackTranslation[]; episodes: PlaybackEpisode[]; vibixEmbed?: VibixEmbed };
 export type PlaybackProviderSetting = { source: PlaybackProvider; label: string; enabled: boolean; position: number };
 export type LegacyAllohaPlayback = {
 	label?: string;
@@ -45,7 +48,7 @@ export function workPlaybackSources(sources: PlaybackSource[], legacy: LegacyAll
 }
 
 export function selectablePlaybackTranslations(source: PlaybackSource | null): PlaybackTranslation[] {
-	return source?.translations.filter(translation => !!translation.iframe) ?? [];
+	return source?.translations.filter(translation => source.source === 'vibix' ? validVibixEmbed(source.vibixEmbed) && /^[1-9]\d{0,15}$/u.test(translation.id) && Number.isSafeInteger(Number(translation.id)) : !!translation.iframe) ?? [];
 }
 
 /** The provider's edition name remains intact; label explicit subtitles without duplicating it. */
@@ -56,6 +59,7 @@ export function playbackTranslationLabel(translation: PlaybackTranslation, subti
 /** Unknown legacy coverage stays playable; a known Kodik voice never silently opens another episode. */
 export function playbackEpisodeAvailable(source: PlaybackSource | null, translationId: string | null, seasonNumber: number | null, episodeNumber: number | null): boolean {
 	if (!source) return false;
+	if (source.source === 'vibix' && (!validVibixEmbed(source.vibixEmbed) || (seasonNumber != null && source.vibixEmbed.type !== 'series'))) return false;
 	if (seasonNumber == null || episodeNumber == null) return true;
 	const episodes = selectablePlaybackTranslations(source).find(translation => translation.id === translationId)?.episodes;
 	return episodes === undefined || episodes.some(episode => episode.seasonNumber === seasonNumber && episode.episodeNumber === episodeNumber);
@@ -63,7 +67,8 @@ export function playbackEpisodeAvailable(source: PlaybackSource | null, translat
 
 /** Provider-specific voice selectors are supplied by the server; the page owns only season/episode. */
 export function workPlaybackIframe(source: PlaybackSource | null, translationId: string | null, seasonNumber: number | null, episodeNumber: number | null, lockClip = false): string | null {
-	if (!source || !playbackEpisodeAvailable(source, translationId, seasonNumber, episodeNumber)) return null;
+	// SDK-only Vibix must use the isolated generated document, never a guessed iframe URL.
+	if (!source || source.source === 'vibix' || !playbackEpisodeAvailable(source, translationId, seasonNumber, episodeNumber)) return null;
 	const iframe = selectablePlaybackTranslations(source).find(translation => translation.id === translationId)?.iframe ?? source.iframe;
 	try {
 		const url = new URL(iframe);

@@ -25,7 +25,7 @@ import { budgetedTransport } from './zalip-importer/budget.js';
 import { recordArtworkCandidates, sameImportRef, selectImportArtwork } from './zalip-importer/artwork-candidates.js';
 import { equivalentImportArtwork } from './zalip-importer/artwork.js';
 import { canUpdateField, importFieldSelected, matchesCreatePlayerFilter, matchesImportFilters, mergeImportRecords, nonEmpty, normalizeImportOptions, readImportState, sameValue, selectedImportSources } from './zalip-importer/policy.js';
-import { configuredImportPlayerUrl, createImportProviders, createConfiguredImportTransport, ImportProviderError, importPlayerTranslationUrl } from './zalip-importer/providers.js';
+import { configuredImportPlayerUrl, createImportProviders, createConfiguredImportTransport, ImportProviderError, importPlayerTranslationUrl, normalizeVibixEmbed } from './zalip-importer/providers.js';
 import { importArtworkFields, importFields, importSources, validImportRef, type ExternalIdentity, type ImportArtworkExpected, type ImportArtworkField, type ImportField, type ImportMediaType, type ImportOptions, type ImportPlayer, type ImportPreview, type ImportProvider, type ImportRecord, type ImportRef, type ImportSource, type PreparedImportRecord } from './zalip-importer/types.js';
 
 export type CreateImportRun = {
@@ -100,8 +100,10 @@ const importWarningCodes = new Set([
 	'kodik-people-without-identities', 'kodik-studios-without-identities', 'kodik-metadata-partial', 'kodik-voice-limit',
 	'kodik-player-url-rejected', 'kodik-season-limit', 'kodik-episode-data-rejected', 'kodik-episode-limit',
 	'kodik-anime-identity-partial', 'kodik-anime-scope-unmapped',
+	'vibix-metadata-partial', 'vibix-player-url-missing', 'vibix-player-url-rejected', 'vibix-voice-control-unavailable',
+	'vibix-voice-limit', 'vibix-person-limit', 'vibix-people-without-identities', 'vibix-episode-data-unavailable', 'vibix-embed-rejected',
 ]);
-const sourceWarningPattern = /^(?:tmdb|kinopoisk|alloha|collaps|kodik):(?:not-configured|not-found|quota-exceeded|rate-limited|upstream-failure|invalid-ref|unsupported|malformed-response|import-failed|NO_SUCH_WORK|IMPORT_IDENTITY_CONFLICT|IMPORT_INVALID_RECORD|ZALIP_CATALOG_ENTRY_NOT_FOUND)$/u;
+const sourceWarningPattern = /^(?:tmdb|kinopoisk|alloha|collaps|kodik|vibix):(?:not-configured|not-found|quota-exceeded|rate-limited|upstream-failure|invalid-ref|unsupported|malformed-response|import-failed|NO_SUCH_WORK|IMPORT_IDENTITY_CONFLICT|IMPORT_INVALID_RECORD|ZALIP_CATALOG_ENTRY_NOT_FOUND)$/u;
 
 /** The durable journal accepts closed codes only, never provider text, URLs or credentials. */
 export function safeImportWarnings(value: unknown): string[] {
@@ -181,7 +183,7 @@ export class ZalipImporterService {
 			let fallback: ImportRecord | null = null;
 			for (const source of selectedSources) {
 				const provider = providers[source];
-				if (source === ref.source || !provider.status().configured || (availabilityOnly && source !== 'alloha' && source !== 'collaps' && source !== 'kodik')) continue;
+				if (source === ref.source || !provider.status().configured || (availabilityOnly && source !== 'alloha' && source !== 'collaps' && source !== 'kodik' && source !== 'vibix')) continue;
 				try {
 					const exact = identities.find(identity => identity.provider === source && identity.entityType === ref.mediaType);
 					const candidate = exact ? await provider.fetch({ source, externalId: exact.externalId, mediaType: ref.mediaType }, fields) : await provider.lookup?.(identities, ref.mediaType, fields);
@@ -206,7 +208,7 @@ export class ZalipImporterService {
 		// A second pass permits TMDB discovery from IMDb obtained from Kinopoisk/Collaps.
 		for (let pass = 0; pass < 2; pass++) {
 			for (const source of selectedSources) {
-				if (visited.has(source) || !providers[source].status().configured || (availabilityOnly && source !== 'alloha' && source !== 'collaps' && source !== 'kodik')) continue;
+				if (visited.has(source) || !providers[source].status().configured || (availabilityOnly && source !== 'alloha' && source !== 'collaps' && source !== 'kodik' && source !== 'vibix')) continue;
 				const provider = providers[source];
 				try {
 					// A refresh already owns exact provider bindings. Reuse those rather than
@@ -466,8 +468,9 @@ export class ZalipImporterService {
 			providers,
 			sources: providers.filter(setting => setting.enabled).flatMap(setting => {
 				const player = players.find(candidate => candidate.source === setting.source);
-				const iframe = player ? configuredImportPlayerUrl(player.iframeUrl, setting.source, config) : null;
-				if (!player || !iframe) return [];
+				const iframe = player && player.source !== 'vibix' ? configuredImportPlayerUrl(player.iframeUrl, setting.source, config) : null;
+				const vibixEmbed = player?.source === 'vibix' ? normalizeVibixEmbed(player.vibixEmbed) : null;
+				if (!player || (player.source === 'vibix' ? !vibixEmbed : !iframe)) return [];
 				const seen = new Set<string>();
 				const translations = (Array.isArray(player.translations) ? player.translations : []).slice(0, 100).flatMap(translation => {
 					if (translation == null || typeof translation !== 'object' || typeof translation.id !== 'string' || typeof translation.name !== 'string') return [];
@@ -475,8 +478,8 @@ export class ZalipImporterService {
 					const name = translation.name.trim();
 					if (!id || id.length > 100 || !name || name.length > 256 || seen.has(id)) return [];
 					seen.add(id);
-					const voiceIframe = translation.iframe === undefined
-						? importPlayerTranslationUrl(iframe, player.source, { id, name })
+					const voiceIframe = player.source === 'vibix' ? null : translation.iframe === undefined
+						? importPlayerTranslationUrl(iframe!, player.source, { id, name })
 						: configuredImportPlayerUrl(translation.iframe, player.source, config);
 					// A Kodik voice has its own resource path; falling back to the parent would select another voice.
 					if (player.source === 'kodik' && !voiceIframe) return [];
@@ -496,7 +499,7 @@ export class ZalipImporterService {
 						...(player.source === 'kodik' && typeof translation.providerTranslationId === 'string' && /^[1-9][0-9]{0,15}$/u.test(translation.providerTranslationId) ? { providerTranslationId: translation.providerTranslationId } : {}),
 					}];
 				});
-				return [{ source: player.source, label: setting.label, iframe, translations, quality: player.quality, episodes: player.episodes }];
+				return [{ source: player.source, label: setting.label, iframe: iframe ?? '', ...(vibixEmbed ? { vibixEmbed } : {}), translations, quality: player.quality, episodes: player.episodes }];
 			}),
 		};
 	}

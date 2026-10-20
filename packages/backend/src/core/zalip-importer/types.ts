@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-export const importSources = ['tmdb', 'kinopoisk', 'alloha', 'collaps', 'kodik'] as const;
+export const importSources = ['tmdb', 'kinopoisk', 'alloha', 'collaps', 'kodik', 'vibix'] as const;
 export type ImportSource = typeof importSources[number];
 export type ImportMediaType = 'movie' | 'tv';
 export type ImportRef = { source: ImportSource; externalId: string; mediaType: ImportMediaType };
@@ -14,6 +14,8 @@ export function validImportRef(value: unknown): value is ImportRef {
 	const ref = value as Partial<ImportRef>;
 	if (!ref.source || !importSources.includes(ref.source) || !ref.mediaType || !['movie', 'tv'].includes(ref.mediaType) || typeof ref.externalId !== 'string') return false;
 	if (ref.source === 'kodik') return /^(?:(?:shikimori|kinopoisk)-[1-9][0-9]{0,15}|imdb-tt[0-9]{5,12})$/u.test(ref.externalId) || (ref.mediaType === 'movie' ? /^movie-[1-9][0-9]{0,15}$/u : /^serial-[1-9][0-9]{0,15}$/u).test(ref.externalId);
+	// Vibix has no documented own-video-ID lookup: a numeric ref is explicitly a KP ID.
+	if (ref.source === 'vibix') return /^imdb:tt[0-9]{5,12}$/u.test(ref.externalId) || /^[1-9][0-9]{0,15}$/u.test(ref.externalId) && Number.isSafeInteger(Number(ref.externalId));
 	return /^(?:[1-9][0-9]{0,15}|tmdb:(?:movie|tv):[1-9][0-9]{0,15}|imdb:tt[0-9]{5,12})$/u.test(ref.externalId);
 }
 export type ExternalIdentity = { provider: string; externalId: string; entityType: ImportMediaType };
@@ -22,7 +24,9 @@ export type ImportCompany = { externalId: string | null; source: ImportSource; n
 export type ImportCollection = { externalId: string; source: ImportSource; name: string; description?: string | null; imageUrl?: string | null };
 export type ImportEpisode = { episodeNumber: number; title: string; originalTitle?: string | null; description?: string | null; airDate?: string | null; stillUrl?: string | null; runtimeMinutes?: number | null; tmdbEpisodeId?: number | null };
 export type ImportSeason = { seasonNumber: number; title: string; description?: string | null; posterUrl?: string | null; airDate?: string | null; episodeCount?: number | null; episodes: ImportEpisode[] };
-export type ImportPlayer = { source: 'alloha' | 'collaps' | 'kodik'; externalId: string; iframeUrl: string; translations: { id: string; name: string; providerTranslationId?: string; type?: 'voice' | 'subtitles'; iframe?: string; quality?: string | null; resolutions?: string[]; episodes?: { seasonNumber: number; episodeNumber: number }[] }[]; quality: string | null; episodes: { seasonNumber: number; episodeNumber: number }[] };
+/** Public SDK attributes, not API authentication and not the publisher API's video-ID namespace. */
+export type ImportVibixEmbed = { publisherId: string; type: 'movie' | 'series'; id: string };
+export type ImportPlayer = { source: 'alloha' | 'collaps' | 'kodik' | 'vibix'; externalId: string; iframeUrl: string; vibixEmbed?: ImportVibixEmbed; translations: { id: string; name: string; providerTranslationId?: string; type?: 'voice' | 'subtitles'; iframe?: string; quality?: string | null; resolutions?: string[]; episodes?: { seasonNumber: number; episodeNumber: number }[] }[]; quality: string | null; episodes: { seasonNumber: number; episodeNumber: number }[] };
 export type ImportRecord = {
 	ref: ImportRef;
 	identities: ExternalIdentity[];

@@ -24,7 +24,7 @@ import type * as misskey from 'misskey-js';
 type ImporterTaxonomyEntry = { id: string; name: string; data: Record<string, unknown> };
 type ImporterTaxonomyShow = { entry: ImporterTaxonomyEntry; works: { id: string }[] };
 type ImporterTaxonomyLinks = { entries: { entry: ImporterTaxonomyEntry }[] };
-type ImporterProviderStatus = { source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik'; configured: boolean };
+type ImporterProviderStatus = { source: 'tmdb' | 'kinopoisk' | 'alloha' | 'collaps' | 'kodik' | 'vibix'; configured: boolean };
 type ImporterAdminEndpoint = Extract<keyof misskey.Endpoints, `zalip/admin/importer/${string}`>;
 type ImporterPermissionCase = { [E in ImporterAdminEndpoint]: [E, misskey.Endpoints[E]['req']] }[ImporterAdminEndpoint];
 
@@ -222,6 +222,7 @@ describe('Zalip discussions', () => {
 	test('importer endpoints reject anonymous and non-administrator callers before provider access', async () => {
 		const ref = { source: 'tmdb', externalId: '123', mediaType: 'movie' } as const;
 		const kodikRef = { source: 'kodik', externalId: 'shikimori-123', mediaType: 'tv' } as const;
+		const vibixRef = { source: 'vibix', externalId: '435', mediaType: 'movie' } as const;
 		const cases: ImporterPermissionCase[] = [
 			['zalip/admin/importer/sources', {}],
 			['zalip/admin/importer/sources/check', { source: 'tmdb' }],
@@ -234,8 +235,13 @@ describe('Zalip discussions', () => {
 			['zalip/admin/importer/search', { source: 'kodik', query: 'offline permission test' }],
 			['zalip/admin/importer/preview', { ref: kodikRef }],
 			['zalip/admin/importer/runs/create', { refs: [kodikRef], mode: 'import' }],
+			['zalip/admin/importer/sources/check', { source: 'vibix' }],
+			['zalip/admin/importer/resolve', { source: 'vibix', imdbId: 'tt1234567', mediaType: 'movie' }],
+			['zalip/admin/importer/search', { source: 'vibix', query: 'offline permission test' }],
+			['zalip/admin/importer/preview', { ref: vibixRef }],
+			['zalip/admin/importer/runs/create', { refs: [vibixRef], mode: 'import' }],
 			['zalip/admin/importer/playback-settings/show', {}],
-			['zalip/admin/importer/playback-settings/save', { providers: [{ source: 'alloha', label: 'Alloha', enabled: true, position: 0 }, { source: 'collaps', label: 'Collaps', enabled: true, position: 1 }, { source: 'kodik', label: 'Kodik', enabled: true, position: 2 }] }],
+			['zalip/admin/importer/playback-settings/save', { providers: [{ source: 'alloha', label: 'Alloha', enabled: true, position: 0 }, { source: 'collaps', label: 'Collaps', enabled: true, position: 1 }, { source: 'kodik', label: 'Kodik', enabled: true, position: 2 }, { source: 'vibix', label: 'Vibix', enabled: false, position: 3 }] }],
 			['zalip/admin/importer/artwork/inspect', { kind: 'work', limit: 1 }],
 			['zalip/admin/importer/artwork/step', { kind: 'work', id: 'work01', field: 'posterPath', expected: 'a'.repeat(64) }],
 			['zalip/admin/importer/runs/create', { refs: [ref], mode: 'import' }],
@@ -265,8 +271,8 @@ describe('Zalip discussions', () => {
 		}
 	});
 
-	test('source credentials remain exclusive to native administrators, including Kodik settings', async () => {
-		const params = { source: 'kodik', apiOrigin: 'https://kodik-api.com', playerOrigin: null } as const;
+	test.each([{ source: 'kodik', apiOrigin: 'https://kodik-api.com' }, { source: 'vibix', apiOrigin: 'https://vibix.org' }] as const)('$source credentials remain exclusive to native administrators', async ({ source, apiOrigin }) => {
+		const params = { source, apiOrigin, playerOrigin: null };
 		const applicationToken = await createAppToken(admin, ['read:account', 'write:account']);
 		for (const [endpoint, input] of [['zalip/admin/importer/sources/settings/show', {}], ['zalip/admin/importer/sources/settings/save', params]] as const) {
 			const anonymous = await api(endpoint, input);
@@ -281,7 +287,7 @@ describe('Zalip discussions', () => {
 		}
 	});
 
-	test('playback settings upgrade legacy reads without writes and only accept complete three-provider saves', async () => {
+	test('playback settings upgrade legacy reads without writes and only accept complete four-provider saves', async () => {
 		const db = await initTestDb(true);
 		const repository = db.getRepository(MiZalipPlaybackSettings);
 		const previous = await repository.findOneBy({ id: 'default' });
@@ -291,14 +297,22 @@ describe('Zalip discussions', () => {
 			const before = await repository.findOneByOrFail({ id: 'default' });
 			const upgraded = await api('zalip/admin/importer/playback-settings/show', {}, admin);
 			assert.strictEqual(upgraded.status, 200);
-			assert.deepStrictEqual(upgraded.body.providers, [...legacy, { source: 'kodik', label: 'KODIK', enabled: true, position: 2 }]);
+			assert.deepStrictEqual(upgraded.body.providers, [...legacy, { source: 'kodik', label: 'KODIK', enabled: true, position: 2 }, { source: 'vibix', label: 'VIBIX', enabled: false, position: 3 }]);
 			assert.deepStrictEqual(await repository.findOneByOrFail({ id: 'default' }), before);
-			const providers = [{ source: 'kodik' as const, label: 'Anime', enabled: false, position: 0 }, { source: 'alloha' as const, label: 'Primary', enabled: true, position: 2 }, { source: 'collaps' as const, label: 'Backup', enabled: false, position: 1 }];
+			const legacyThree = [{ source: 'kodik' as const, label: 'Anime', enabled: false, position: 0 }, { source: 'alloha' as const, label: 'Primary', enabled: true, position: 2 }, { source: 'collaps' as const, label: 'Backup', enabled: false, position: 1 }];
+			await repository.upsert({ id: 'default', providers: legacyThree, updatedAt: new Date('2026-10-18T00:00:00.000Z') }, ['id']);
+			const beforeThree = await repository.findOneByOrFail({ id: 'default' });
+			const upgradedThree = await api('zalip/admin/importer/playback-settings/show', {}, admin);
+			assert.strictEqual(upgradedThree.status, 200);
+			const orderedLegacyThree = [...legacyThree].sort((a, b) => a.position - b.position);
+			assert.deepStrictEqual(upgradedThree.body.providers, [...orderedLegacyThree, { source: 'vibix', label: 'VIBIX', enabled: false, position: 3 }]);
+			assert.deepStrictEqual(await repository.findOneByOrFail({ id: 'default' }), beforeThree);
+			const providers = [{ source: 'vibix' as const, label: 'SDK player', enabled: false, position: 0 }, { source: 'kodik' as const, label: 'Anime', enabled: false, position: 1 }, { source: 'alloha' as const, label: 'Primary', enabled: true, position: 3 }, { source: 'collaps' as const, label: 'Backup', enabled: false, position: 2 }];
 			const saved = await api('zalip/admin/importer/playback-settings/save', { providers }, admin);
 			assert.strictEqual(saved.status, 200);
 			assert.deepStrictEqual(saved.body.providers, [...providers].sort((a, b) => a.position - b.position));
 			const persisted = await repository.findOneByOrFail({ id: 'default' });
-			for (const [invalid, code] of [[legacy, 'INVALID_PARAM'], [[...providers, providers[0]], 'INVALID_PARAM'], [providers.map(row => row.source === 'kodik' ? { ...row, position: 1 } : row), 'ZALIP_IMPORT_INVALID'], [providers.map(row => row.source === 'kodik' ? { ...row, source: 'collaps' } : row), 'ZALIP_IMPORT_INVALID']] as const) {
+			for (const [invalid, code] of [[legacy, 'INVALID_PARAM'], [legacyThree, 'INVALID_PARAM'], [[...providers, providers[0]], 'INVALID_PARAM'], [providers.map(row => row.source === 'kodik' ? { ...row, position: 2 } : row), 'ZALIP_IMPORT_INVALID'], [providers.map(row => row.source === 'kodik' ? { ...row, source: 'collaps' } : row), 'ZALIP_IMPORT_INVALID']] as const) {
 				const rejected = await api('zalip/admin/importer/playback-settings/save', { providers: invalid } as never, admin);
 				assert.strictEqual(rejected.status, 400);
 				assert.strictEqual(castAsError(rejected.body).error.code, code);
@@ -356,6 +370,52 @@ describe('Zalip discussions', () => {
 			await repository.delete({ source: 'kodik' });
 			// A full Nest reset drops the test schema and invalidates shared fixtures.
 			// This service reads its key dynamically; an empty value restores no key.
+			await sendEnvUpdateRequest({ key: 'ZALIP_IMPORTER_SETTINGS_KEY', value: '' });
+			await db.destroy();
+		}
+	});
+
+	test('Vibix credentials configure only the source, never enable playback or queue jobs', async () => {
+		assert.ok(!process.env.ZALIP_IMPORTER_SETTINGS_KEY, 'the isolated fixture requires no developer encryption key');
+		assert.ok(!process.env.ZALIP_VIBIX_API_TOKEN, 'the isolated fixture requires no developer Vibix token');
+		const db = await initTestDb(true);
+		const repository = db.getRepository(MiZalipImporterSourceSetting);
+		assert.strictEqual(await repository.count(), 0);
+		const beforeRuns = await db.getRepository(MiZalipImportRun).count();
+		const initial = await api('zalip/admin/importer/sources', {}, admin);
+		assert.strictEqual(initial.status, 200);
+		assert.strictEqual((initial.body.sources as ImporterProviderStatus[]).find(row => row.source === 'vibix')?.configured, false);
+		await sendEnvUpdateRequest({ key: 'ZALIP_IMPORTER_SETTINGS_KEY', value: Buffer.alloc(32, 19).toString('base64') });
+		try {
+			const saved = await api('zalip/admin/importer/sources/settings/save', { source: 'vibix', apiOrigin: 'https://vibix.org', apiToken: 'synthetic-offline-vibix-fixture', playerOrigin: null }, admin);
+			assert.strictEqual(saved.status, 200);
+			const settings = saved.body.sources.find(row => row.source === 'vibix');
+			assert.ok(settings);
+			assert.strictEqual(settings.apiToken, 'synthetic-offline-vibix-fixture');
+			assert.strictEqual(settings.apiTokenOrigin, 'database');
+			assert.strictEqual(settings.playerToken, null);
+			assert.strictEqual(settings.playerOrigin, null);
+			assert.strictEqual(JSON.stringify(await repository.find()).includes('synthetic-offline-vibix-fixture'), false);
+			const configured = await api('zalip/admin/importer/sources', {}, admin);
+			assert.strictEqual(configured.status, 200);
+			assert.strictEqual((configured.body.sources as ImporterProviderStatus[]).find(row => row.source === 'vibix')?.configured, true);
+			const playback = await api('zalip/admin/importer/playback-settings/show', {}, admin);
+			assert.strictEqual(playback.status, 200);
+			assert.strictEqual(playback.body.providers.find(row => row.source === 'vibix')?.enabled, false);
+			const cleared = await api('zalip/admin/importer/sources/settings/save', { source: 'vibix', apiOrigin: 'https://vibix.org', playerOrigin: null, clearApiToken: true }, admin);
+			assert.strictEqual(cleared.status, 200);
+			assert.strictEqual(cleared.body.sources.find(row => row.source === 'vibix')?.apiTokenSet, false);
+			const status = await api('zalip/admin/importer/sources', {}, admin);
+			assert.strictEqual(status.status, 200);
+			assert.strictEqual((status.body.sources as ImporterProviderStatus[]).find(row => row.source === 'vibix')?.configured, false);
+			for (const [externalId, mediaType] of [['435', 'movie'], ['imdb:tt1234567', 'tv']] as const) {
+				const response = await api('zalip/admin/importer/runs/create', { refs: [{ source: 'vibix', externalId, mediaType }], mode: 'import' }, admin);
+				assert.strictEqual(response.status, 503);
+				assert.strictEqual(castAsError(response.body).error.code, 'ZALIP_IMPORT_NOT_CONFIGURED');
+			}
+			assert.strictEqual(await db.getRepository(MiZalipImportRun).count(), beforeRuns);
+		} finally {
+			await repository.delete({ source: 'vibix' });
 			await sendEnvUpdateRequest({ key: 'ZALIP_IMPORTER_SETTINGS_KEY', value: '' });
 			await db.destroy();
 		}

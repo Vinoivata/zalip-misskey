@@ -19,7 +19,7 @@ export const paramDef = {
 	properties: {
 		...progressAuthProperties,
 		workId: progressId, episodeId: { ...progressId, nullable: true },
-		provider: { type: 'string', enum: ['alloha', 'collaps', 'kodik'] },
+		provider: { type: 'string', enum: ['alloha', 'collaps', 'kodik', 'vibix'] },
 		translationId: { type: 'string', minLength: 1, maxLength: 100, nullable: true },
 		expectedResourceFingerprint: { type: 'string', minLength: 64, maxLength: 64, pattern: '^[a-f0-9]{64}$' },
 	},

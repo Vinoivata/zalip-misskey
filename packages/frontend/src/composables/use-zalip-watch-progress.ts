@@ -13,6 +13,7 @@ import { $i } from '@/i.js';
 
 export type WatchPlayerContext = WatchTarget & {
 	iframeUrl: string;
+	iframeDocument?: string;
 	seasonNumber: number | null;
 	episodeNumber: number | null;
 	providerTranslationId: string | null;
@@ -53,9 +54,26 @@ export function useZalipWatchProgress(context: Readonly<Ref<WatchPlayerContext |
 		let frame: HTMLIFrameElement = initialFrame;
 		let source: Window = initialFrame.contentWindow;
 		let mountedIframeUrl = frame.src;
-		const origin = new URL(mountedIframeUrl).origin;
+		const mountedIframeDocument = frame.srcdoc;
 		const alive = () => active && epoch === generation && $i?.id === accountId && context.value === value;
-		const current = () => alive() && iframe.value === frame && frame.src === mountedIframeUrl;
+		const current = () => alive() && iframe.value === frame && frame.src === mountedIframeUrl && frame.srcdoc === mountedIframeDocument;
+		if (value.provider === 'vibix') {
+			// No documented playback-events/seek contract: remember only this explicit app-owned target.
+			// The opaque sandbox and all its messages remain outside the balancer time adapters.
+			startQueue = startQueue.catch(() => {}).then(async () => {
+				if (!current()) return;
+				try {
+					state.value = 'saving';
+					const start = await misskeyApiZalip<{ sessionId: string; sequence: 0; progress: WatchProgress }>('zalip/progress/start', { workId: value.workId, episodeId: value.episodeId, provider: value.provider, translationId: value.translationId });
+					if (!current()) return;
+					if (!sameWatchTarget(start.progress, value) || start.progress.mode !== 'episode' || start.progress.positionSeconds != null || start.progress.durationSeconds != null) { state.value = 'failed'; return; }
+					mode.value = 'episode'; saved(start.progress); state.value = 'saved';
+				} catch { if (current()) state.value = 'failed'; }
+			});
+			return;
+		}
+		const provider = value.provider;
+		const origin = new URL(mountedIframeUrl).origin;
 		let duration: number | null = null;
 		let contentDuration: number | null = null;
 		let position: number | null = null;
@@ -235,8 +253,8 @@ export function useZalipWatchProgress(context: Readonly<Ref<WatchPlayerContext |
 					if (!current()) return;
 					if (!fingerprint) { interrupted = true; state.value = 'failed'; return; }
 					expectedResourceFingerprint = fingerprint;
-				} else if (value.provider !== 'kodik') {
-					expectedResourceFingerprint = await balancerResourceFingerprint(value.provider, value.translationId, mountedIframeUrl, value.seasonNumber, value.episodeNumber) ?? undefined;
+				} else if (provider !== 'kodik') {
+					expectedResourceFingerprint = await balancerResourceFingerprint(provider, value.translationId, mountedIframeUrl, value.seasonNumber, value.episodeNumber) ?? undefined;
 					if (!current()) return;
 				}
 				const start = await misskeyApiZalip<{ sessionId: string; sequence: 0; progress: WatchProgress }>('zalip/progress/start', { workId: value.workId, episodeId: value.episodeId, provider: value.provider, translationId: value.translationId, ...(expectedResourceFingerprint ? { expectedResourceFingerprint } : {}) });

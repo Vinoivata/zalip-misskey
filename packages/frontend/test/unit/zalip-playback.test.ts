@@ -40,6 +40,15 @@ describe('work playback helpers', () => {
 		expect(selectablePlaybackTranslations({ ...alloha, translations: [{ id: 'metadata', name: 'Native' }, ...alloha.translations] })).toEqual(alloha.translations);
 		expect(selectablePlaybackTranslations(null)).toEqual([]);
 	});
+	it('exposes numeric SDK-only Vibix voices without fabricating iframe URLs or borrowing another provider', () => {
+		const vibix: PlaybackSource = { source: 'vibix', label: 'Vibix', iframe: '', vibixEmbed: { publisherId: '123456789', type: 'series', id: '12345' }, quality: 'HD', translations: [{ id: '26', name: 'Vibix Studio' }, { id: 'unsafe', name: 'Unusable voice' }], episodes: [] };
+		expect(selectablePlaybackTranslations(vibix)).toEqual([vibix.translations[0]]);
+		expect(workPlaybackIframe(vibix, '26', 2, 3, true)).toBeNull();
+		expect(selectablePlaybackTranslations({ ...vibix, vibixEmbed: undefined })).toEqual([]);
+		expect(selectablePlaybackTranslations({ ...vibix, vibixEmbed: undefined, translations: [{ id: '26', name: 'Unsafe guessed URL', iframe: 'https://wrong.example/player' }] })).toEqual([]);
+		expect(workPlaybackSources([vibix], legacy).map(source => source.source)).toEqual(['vibix', 'alloha']);
+		expect(playbackEpisodeAvailable({ ...vibix, translations: [{ ...vibix.translations[0], episodes: [{ seasonNumber: 2, episodeNumber: 1 }] }] }, '26', 2, 3)).toBe(false);
+	});
 	it('labels explicit subtitle editions without changing source names or duplicating existing markers', () => {
 		const translation = { id: 'serial-123', name: 'Studio', type: 'subtitles' as const };
 		expect(playbackTranslationLabel(translation, 'Субтитры')).toBe('Studio · Субтитры');

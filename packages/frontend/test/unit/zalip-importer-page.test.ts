@@ -53,6 +53,41 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe('importer focused presentation', () => {
+	it('previews a Vibix KP reference with the sixth source without publishing automatically', async () => {
+		const view = setup({ source: 'vibix', mediaType: 'movie', externalId: '435' });
+		await view.findByRole('heading', { name: 'Fixture title' });
+		expect(misskeyApiZalip).toHaveBeenCalledWith('zalip/admin/importer/preview', expect.objectContaining({ ref: { source: 'vibix', mediaType: 'movie', externalId: '435' } }));
+		expect(view.getByLabelText(i18n.ts.zalip._importer.references)).toHaveProperty('placeholder', '435\nimdb:tt0133093');
+		expect(view.getByText(i18n.ts.zalip._importer.vibixReferencesHint)).toBeTruthy();
+		expect(vi.mocked(misskeyApiZalip).mock.calls.some(([endpoint]) => endpoint === 'zalip/admin/importer/runs/create')).toBe(false);
+	});
+	it('shows an unconfigured Vibix source but prevents choosing it for lookup', async () => {
+		const original = vi.mocked(misskeyApiZalip).getMockImplementation()!;
+		vi.mocked(misskeyApiZalip).mockImplementation(async (endpoint, params) => endpoint === 'zalip/admin/importer/sources' ? { sources: importerSources.map(source => ({ source, configured: source !== 'vibix', capabilities: { search: true, collections: false, updates: false }, dailyLimit: null })) } : original(endpoint, params));
+		const view = setup();
+		await waitFor(() => expect(view.getByRole('button', { name: i18n.ts.zalip._importer.find }).hasAttribute('disabled')).toBe(false));
+		const sourceSelect = view.getByLabelText(i18n.ts.zalip._importer.references).closest('form')!.querySelector('select')!;
+		expect(sourceSelect.querySelector('option[value="vibix"]')).toHaveProperty('disabled', true);
+	});
+	it('allows disabling a previously enabled Vibix player after credentials were cleared, but not re-enabling it', async () => {
+		const original = vi.mocked(misskeyApiZalip).getMockImplementation()!;
+		vi.mocked(misskeyApiZalip).mockImplementation(async (endpoint, params) => {
+			if (endpoint === 'zalip/admin/importer/sources') return { sources: importerSources.map(source => ({ source, configured: source !== 'vibix', capabilities: { search: true, collections: false, updates: false }, dailyLimit: null })) };
+			if (endpoint === 'zalip/admin/importer/playback-settings/show') return { providers: ['alloha', 'collaps', 'kodik', 'vibix'].map((source, position) => ({ source, label: source, enabled: true, position })) };
+			if (endpoint === 'zalip/admin/importer/maintenance/list' || endpoint === 'zalip/admin/importer/maintenance/schedules/list') return [];
+			return original(endpoint, params);
+		});
+		const view = setup();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._importer.maintenance }));
+		const label = await view.findByLabelText(`Vibix · ${i18n.ts.zalip._importer.playerLabel}`);
+		const checkbox = label.closest('div')!.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+		expect(checkbox.checked).toBe(true);
+		expect(checkbox.disabled).toBe(false);
+		await fireEvent.click(checkbox);
+		expect(checkbox.checked).toBe(false);
+		expect(checkbox.disabled).toBe(true);
+		expect(vi.mocked(misskeyApiZalip).mock.calls.some(([endpoint]) => endpoint === 'zalip/admin/importer/playback-settings/save')).toBe(false);
+	});
 	it('shows inputs before collapsed options and source diagnostics without losing other tabs', async () => {
 		const view = setup();
 		await waitFor(() => expect(view.getByRole('button', { name: i18n.ts.zalip._importer.find }).hasAttribute('disabled')).toBe(false));

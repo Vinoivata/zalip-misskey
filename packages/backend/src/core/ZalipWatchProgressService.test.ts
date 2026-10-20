@@ -72,6 +72,32 @@ function fixture() {
 }
 
 describe('ZalipWatchProgressService private playback state', () => {
+	it('keeps Vibix SDK targets in episode mode for series and movies, never invented seconds', async () => {
+		for (const movie of [false, true]) {
+			const f = fixture();
+			f.playbackSettings.show.mockResolvedValue({ providers: defaultPlaybackSettings().map(provider => ({ ...provider, enabled: true })) });
+			f.work.kind = movie ? 'movie' : 'series'; f.work.tmdbMediaType = movie ? 'movie' : 'tv';
+			f.work.importData = { values: { players: [{ source: 'vibix', externalId: '900', iframeUrl: '', vibixEmbed: { publisherId: '100', type: movie ? 'movie' : 'series', id: '200' }, translations: [{ id: '26', name: 'Voice' }], episodes: [] }] } };
+			const result = await f.service.start(owner, { workId: 'work', episodeId: movie ? null : 'episode1', provider: 'vibix', translationId: '26' });
+			expect(result.progress).toMatchObject({ provider: 'vibix', mode: 'episode', positionSeconds: null, durationSeconds: null, episodeId: movie ? null : 'episode1' });
+			await expect(f.service.update(owner, { workId: 'work', sessionId: result.sessionId, sequence: 1, positionSeconds: 20, durationSeconds: 100 })).rejects.toMatchObject({ code: 'INVALID_ZALIP_PROGRESS' });
+		}
+	});
+
+	it('rejects disabled, malformed, mismatched and unconfirmed Vibix targets', async () => {
+		const sdk = { source: 'vibix', externalId: '900', iframeUrl: '', vibixEmbed: { publisherId: '100', type: 'series', id: '200' }, translations: [{ id: '26', name: 'Voice', episodes: [{ seasonNumber: 1, episodeNumber: 1 }] }], episodes: [] };
+		for (const invalid of ['disabled', 'embed', 'type', 'voice', 'coverage']) {
+			const f = fixture(); const player = structuredClone(sdk);
+			f.playbackSettings.show.mockResolvedValue({ providers: defaultPlaybackSettings().map(provider => ({ ...provider, enabled: invalid !== 'disabled' || provider.source !== 'vibix' })) });
+			if (invalid === 'embed') player.vibixEmbed.id = '<script>';
+			if (invalid === 'type') player.vibixEmbed.type = 'movie';
+			if (invalid === 'coverage') player.translations[0].episodes = [];
+			f.work.importData = { values: { players: [player] } };
+			await expect(f.service.start(owner, { workId: 'work', episodeId: 'episode1', provider: 'vibix', translationId: invalid === 'voice' ? '99' : '26' })).rejects.toMatchObject({ code: 'ZALIP_PROGRESS_UNAVAILABLE' });
+			expect(f.rows.size).toBe(0);
+		}
+	});
+
 	it('starts only a canonical target, mints a session and keeps importer locks and metadata unchanged', async () => {
 		const f = fixture(); const before = structuredClone(f.work);
 		const result = await f.service.start(owner, target);

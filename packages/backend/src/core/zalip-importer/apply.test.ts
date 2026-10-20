@@ -83,6 +83,17 @@ function fixture(seed: { works?: MiZalipWork[]; identities?: Partial<MiZalipExte
 }
 
 describe('Zalip transactional import application', () => {
+	test('persists only validated Vibix SDK identifiers, never raw embed HTML or arbitrary fields', async () => {
+		const context = fixture();
+		const sdk = { publisherId: '100', type: 'movie' as const, id: '200' };
+		const imported = await applyImportRecord(context.db, context.idService, record({ players: [{ source: 'vibix', externalId: '900', iframeUrl: '', vibixEmbed: sdk, quality: null, translations: [{ id: '26', name: 'Voice' }], episodes: [] }] }), {});
+		expect((imported.work.importData.values as Row).players).toEqual([expect.objectContaining({ source: 'vibix', iframeUrl: '', vibixEmbed: sdk })]);
+		const invalidContext = fixture();
+		const invalid = await applyImportRecord(invalidContext.db, invalidContext.idService, record({ players: [{ source: 'vibix', externalId: '900', iframeUrl: '', vibixEmbed: { ...sdk, rawHtml: '<script>fixture</script>' } as never, quality: null, translations: [], episodes: [] }] }), {});
+		expect(JSON.stringify(invalid.work.importData)).not.toContain('rawHtml');
+		expect(JSON.stringify(invalid.work.importData)).not.toContain('<script>');
+	});
+
 	test('creates only drafts, stores normalized metadata and initializes persistent ownership locks', async () => {
 		const context = fixture();
 		const result = await applyImportRecord(context.db, context.idService, record(), { title: 'tmdb' }, { lockedFields: ['title', 'genres'] });

@@ -16,7 +16,7 @@ import { MiZalipAllohaSource } from '@/models/ZalipAllohaSource.js';
 import { MiZalipWatchProgress, zalipProgressMaxSeconds, zalipProgressProviders } from '@/models/ZalipWatchProgress.js';
 import type { ZalipProgressProvider } from '@/models/ZalipWatchProgress.js';
 import type { MiLocalUser } from '@/models/User.js';
-import { configuredImportPlayerUrl, importPlayerTranslationUrl } from './zalip-importer/providers.js';
+import { configuredImportPlayerUrl, importPlayerTranslationUrl, normalizeVibixEmbed } from './zalip-importer/providers.js';
 import { readImportState } from './zalip-importer/policy.js';
 import type { ImportPlayer } from './zalip-importer/types.js';
 import { ZalipPlaybackSettingsService } from './ZalipPlaybackSettingsService.js';
@@ -79,6 +79,19 @@ export class ZalipWatchProgressService {
 		const stored = readImportState(work.importData).values.players;
 		// Match the public playback projection: snapshots may retain multiple resource slots per provider.
 		const player = (Array.isArray(stored) ? stored : []).find(candidate => candidate && typeof candidate === 'object' && candidate.source === target.provider) as ImportPlayer | undefined;
+		if (target.provider === 'vibix') {
+			const embed = normalizeVibixEmbed(player?.vibixEmbed);
+			if (!player || !embed || (episode ? embed.type !== 'series' : embed.type !== 'movie')) throw new ZalipProgressError('ZALIP_PROGRESS_UNAVAILABLE');
+			const translations = Array.isArray(player.translations) ? player.translations.slice(0, 100) : [];
+			const translation = target.translationId === null ? null : translations.find(voice => voice?.id === target.translationId);
+			if (target.translationId !== null && (!/^[1-9]\d{0,15}$/u.test(target.translationId) || !translation)) throw new ZalipProgressError('ZALIP_PROGRESS_UNAVAILABLE');
+			if (target.translationId === null && translations.length > 0) throw new ZalipProgressError('INVALID_ZALIP_PROGRESS_TARGET');
+			const coverage = translation?.episodes ?? (Array.isArray(player.episodes) && player.episodes.length ? player.episodes : undefined);
+			if (episode && Array.isArray(coverage) && !coverage.some(item => item.seasonNumber === episode.season!.seasonNumber && item.episodeNumber === episode.episodeNumber)) throw new ZalipProgressError('ZALIP_PROGRESS_UNAVAILABLE');
+			// The SDK has no documented time/seek contract. Keep only an explicit canonical target.
+			const resourceId = createHash('sha256').update(JSON.stringify(['vibix', 'sdk-v1', embed, target.translationId])).digest('hex');
+			return { resourceId, mode: 'episode' as const };
+		}
 		const parentUrl = player ? configuredImportPlayerUrl(player.iframeUrl, target.provider, runtime.config) : null;
 		if (player && parentUrl) {
 			const translations = Array.isArray(player.translations) ? player.translations.slice(0, 100) : [];

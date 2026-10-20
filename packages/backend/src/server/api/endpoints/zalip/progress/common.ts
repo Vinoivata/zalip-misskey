@@ -23,7 +23,7 @@ export const progressSchema = {
 		episodeId: { ...progressId, optional: false, nullable: true },
 		seasonNumber: { type: 'integer', optional: false, nullable: true },
 		episodeNumber: { type: 'integer', optional: false, nullable: true },
-		provider: { type: 'string', optional: false, nullable: false, enum: ['alloha', 'collaps', 'kodik'] },
+		provider: { type: 'string', optional: false, nullable: false, enum: ['alloha', 'collaps', 'kodik', 'vibix'] },
 		translationId: { type: 'string', optional: false, nullable: true },
 		mode: { type: 'string', optional: false, nullable: false, enum: ['time', 'episode'] },
 		positionSeconds: { type: 'number', optional: false, nullable: true },

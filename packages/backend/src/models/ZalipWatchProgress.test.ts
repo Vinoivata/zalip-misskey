@@ -10,18 +10,22 @@ import { MiZalipWatchProgress } from './ZalipWatchProgress.js';
 
 const migrationUrl = new URL('../../migration/1792273818692-ZalipWatchProgressTimeProviders.js', import.meta.url);
 const originalUrl = new URL('../../migration/1792257239060-ZalipWatchProgress.js', import.meta.url);
+const vibixMigrationUrl = new URL('../../migration/1792498138374-ZalipVibixProgress.js', import.meta.url);
 const currentCheck = '("mode" = \'time\' AND "provider" IN (\'alloha\', \'collaps\', \'kodik\')) OR ("mode" = \'episode\' AND "positionSeconds" IS NULL AND "durationSeconds" IS NULL)';
 const previousCheck = '("mode" = \'time\' AND "provider" = \'kodik\') OR ("mode" = \'episode\' AND "positionSeconds" IS NULL AND "durationSeconds" IS NULL)';
+const currentProviderCheck = '("provider")::text = ANY (ARRAY[(\'alloha\'::character varying)::text, (\'collaps\'::character varying)::text, (\'kodik\'::character varying)::text, (\'vibix\'::character varying)::text])';
+const previousProviderCheck = '("provider")::text = ANY (ARRAY[(\'alloha\'::character varying)::text, (\'collaps\'::character varying)::text, (\'kodik\'::character varying)::text])';
 type QueryRunner = { query: (sql: string) => Promise<unknown> };
 type Migration = { name: string; up: (runner: QueryRunner) => Promise<void>; down: (runner: QueryRunner) => Promise<void> };
 const { ZalipWatchProgressTimeProviders1792273818692 } = await import(migrationUrl.href) as { ZalipWatchProgressTimeProviders1792273818692: new () => Migration };
+const { ZalipVibixProgress1792498138374 } = await import(vibixMigrationUrl.href) as { ZalipVibixProgress1792498138374: new () => Migration };
 
 describe('Zalip watch-progress provider schema', () => {
 	it('retains all six checks and permits time only for the closed supported provider set', () => {
 		const checks = getMetadataArgsStorage().checks.filter(check => check.target === MiZalipWatchProgress);
 		expect(checks.map(check => check.name).sort()).toEqual(['CHK_zalip_progress_duration', 'CHK_zalip_progress_mode', 'CHK_zalip_progress_position', 'CHK_zalip_progress_provider', 'CHK_zalip_progress_sequence', 'CHK_zalip_progress_time_provider']);
 		expect(checks.find(check => check.name === 'CHK_zalip_progress_time_provider')?.expression).toBe(currentCheck);
-		expect(checks.find(check => check.name === 'CHK_zalip_progress_provider')?.expression).toBe('"provider" IN (\'alloha\', \'collaps\', \'kodik\')');
+		expect(checks.find(check => check.name === 'CHK_zalip_progress_provider')?.expression).toBe(currentProviderCheck);
 		expect(checks.find(check => check.name === 'CHK_zalip_progress_duration')?.expression).toBe('"durationSeconds" IS NULL OR ("durationSeconds" > 0 AND "durationSeconds" <= 172800)');
 		expect(checks.find(check => check.name === 'CHK_zalip_progress_position')?.expression).toBe('"positionSeconds" IS NULL OR ("durationSeconds" IS NOT NULL AND "positionSeconds" >= 0 AND "positionSeconds" <= "durationSeconds")');
 	});
@@ -59,5 +63,35 @@ describe('Zalip watch-progress provider schema', () => {
 	it('keeps the historical migration unchanged and gives the new migration an SPDX header', () => {
 		expect(readFileSync(originalUrl, 'utf8')).toContain(`ADD CONSTRAINT "CHK_zalip_progress_time_provider" CHECK (${previousCheck})`);
 		expect(readFileSync(migrationUrl, 'utf8')).toContain('SPDX-License-Identifier: AGPL-3.0-only');
+	});
+
+	it('expands only the target check for Vibix while retaining the closed time provider set', async () => {
+		const query = vi.fn(async (_sql: string) => undefined);
+		await new ZalipVibixProgress1792498138374().up({ query });
+		expect(query).toHaveBeenCalledExactlyOnceWith(`ALTER TABLE "zalip_watch_progress" DROP CONSTRAINT "CHK_zalip_progress_provider", ADD CONSTRAINT "CHK_zalip_progress_provider" CHECK (${currentProviderCheck})`);
+		expect(query.mock.calls[0][0]).not.toMatch(/\b(?:UPDATE|INSERT|DELETE|TRUNCATE|DROP TABLE|DROP COLUMN)\b/u);
+		expect(currentCheck).not.toContain('vibix');
+	});
+
+	it('refuses a Vibix downgrade with existing history rather than deleting or converting it', async () => {
+		const query = vi.fn(async (_sql: string) => undefined);
+		await new ZalipVibixProgress1792498138374().down({ query });
+		const sql = query.mock.calls[0][0];
+		expect(query).toHaveBeenCalledTimes(1);
+		expect(sql).toContain('LOCK TABLE "zalip_watch_progress" IN ACCESS EXCLUSIVE MODE;');
+		expect(sql).toContain('WHERE "provider" = \'vibix\'');
+		expect(sql).toContain('USING ERRCODE = \'23514\'');
+		expect(sql.indexOf('LOCK TABLE')).toBeLessThan(sql.indexOf('IF EXISTS'));
+		expect(sql.indexOf('RAISE EXCEPTION')).toBeLessThan(sql.indexOf('ALTER TABLE'));
+		expect(sql).toContain(`CHECK (${previousProviderCheck})`);
+		expect(sql).not.toMatch(/\b(?:UPDATE|INSERT|DELETE|TRUNCATE|DROP TABLE|DROP COLUMN)\b/u);
+	});
+
+	it('keeps individual varchar-to-text casts for exact PostgreSQL catalog round trips', () => {
+		const castValues = (expression: string) => [...expression.matchAll(/\('([a-z]+)'::character varying\)::text/gu)].map(match => match[1]);
+		expect(castValues(currentProviderCheck)).toEqual(['alloha', 'collaps', 'kodik', 'vibix']);
+		expect(castValues(previousProviderCheck)).toEqual(['alloha', 'collaps', 'kodik']);
+		expect(currentProviderCheck).not.toContain('::text[]');
+		expect(previousProviderCheck).not.toContain('::text[]');
 	});
 });

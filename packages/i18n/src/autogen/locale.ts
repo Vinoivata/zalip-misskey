@@ -2291,6 +2291,10 @@ export interface Locale extends ILocale {
              */
             "kodikReferencesHint": string;
             /**
+             * Vibix: ID Кинопоиска или imdb:tt…. Внутренний ID видео и код вставки плеера не подходят для импорта.
+             */
+            "vibixReferencesHint": string;
+            /**
              * Необязательное зеркало плеера. Без него используется адрес, полученный от Kodik. Очистите сохранённый адрес, чтобы отключить замену зеркала.
              */
             "kodikPlayerOriginHint": string;
@@ -2710,6 +2714,30 @@ export interface Locale extends ILocale {
              * Для подключения озвучек Kodik к этому аниме нужна проверенная привязка конкретного сезона. Общий ID сериала не используется для автоматического объединения.
              */
             "warningKodikAnimeScope": string;
+            /**
+             * Vibix не вернул готовый плеер или допустимый код вставки. Данные тайтла сохранены, остальные плееры не изменены.
+             */
+            "warningVibixPlayerMissing": string;
+            /**
+             * Vibix не подтвердил управление озвучкой. Выбор доступен внутри плеера.
+             */
+            "warningVibixVoiceControl": string;
+            /**
+             * Достигнут лимит озвучек Vibix для одного импорта.
+             */
+            "warningVibixVoices": string;
+            /**
+             * Часть создателей Vibix не имеет подтверждённых данных. Существующие связи сохранены.
+             */
+            "warningVibixPeople": string;
+            /**
+             * Часть серий Vibix не сопоставлена с допустимыми номерами. Номера серий не переназначены.
+             */
+            "warningVibixEpisodes": string;
+            /**
+             * Достигнут лимит создателей Vibix для одного импорта.
+             */
+            "warningVibixPersonLimit": string;
             /**
              * Часть дополнительных данных недоступна. Проверьте сохранённый тайтл.
              */

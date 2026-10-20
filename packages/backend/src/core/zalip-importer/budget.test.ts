@@ -52,6 +52,13 @@ describe('import quota parsing', () => {
 });
 
 describe('distributed Kinopoisk request budget', () => {
+	it('preserves a Vibix POST through the budget wrapper without charging Kinopoisk', async () => {
+		const { redis } = redisFixture(); const transport = vi.fn().mockResolvedValue({ data: [] });
+		const url = 'https://vibix.org/api/v1/publisher/videos/search?name=Fixture&page=1&limit=20';
+		await budgetedTransport(redis as never, transport, fixtureKey)(url, { Authorization: 'Bearer fixture' }, { method: 'POST' });
+		expect(transport).toHaveBeenCalledWith(url, { Authorization: 'Bearer fixture' }, { method: 'POST' });
+		expect(redis.eval).not.toHaveBeenCalled(); expect(redis.get).not.toHaveBeenCalled();
+	});
 	it('does not apply Kinopoisk quotas to other providers or an unconfigured key', async () => {
 		const { redis } = redisFixture();
 		const transport = vi.fn().mockResolvedValue({ result: true });
