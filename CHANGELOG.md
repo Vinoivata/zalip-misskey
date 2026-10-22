@@ -4,6 +4,10 @@
 -
 
 ### Client
+- Enhance: Align Zalip post action symbols and author spacing with the Notr reference and animate existing reactions only when visible, respecting reduced-motion settings.
+- Fix: Keep deeply nested cinema replies and title-share posters within narrow discussion columns and reveal successfully submitted replies under their actual parent.
+- Fix: Start the Vibix player bootstrap after its mount node, use sequential fallback loading and bound retries without broadening iframe permissions.
+- Feat: Add a public community directory, native follow controls and optional community selection in the post composer using existing Misskey channels and account policies.
 - Fix: Remove duplicate mobile and tablet messenger navigation and empty chrome spacing, preserve conversation list navigation, and reconcile message visibility, input sizing and chat actions.
 - Fix: Keep Zalip title artwork fallbacks and mobile watch actions usable, preserve compact age/country facts, move discussions nearer the player, and align cinema rails and touch controls across screen sizes.
 - Fix: Wrap narrow Zalip discussion headers, keep deleted replies removed with current local counters, and support keyboard activation of repost menus.

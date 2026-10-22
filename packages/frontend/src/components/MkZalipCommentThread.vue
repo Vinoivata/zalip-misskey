@@ -4,7 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<section v-if="!isDeleted && !hideByPlugin && !hardMuted && !appearNote.isHidden" ref="rootEl" tabindex="-1" :class="[$style.root, { [$style.nested]: depth > 0 }]" :data-comment-id="appearNote.id">
+<section v-if="!isDeleted && !hideByPlugin && !hardMuted && !appearNote.isHidden" ref="rootEl" tabindex="-1" :class="[$style.root, { [$style.nested]: depth > 0, [$style.deep]: depth >= 2 }]" :data-comment-id="appearNote.id" :data-comment-depth="depth">
 	<button v-if="muted" type="button" class="_button" :class="$style.muted" @click="muted = false">{{ i18n.tsx.userSaysSomething({ name: appearNote.user.name ?? appearNote.user.username }) }}</button>
 	<template v-else>
 		<article :class="$style.comment">
@@ -47,6 +47,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<p v-if="pager.state.pending" :class="$style.state" role="status">{{ i18n.ts.loading }}</p>
 			<div v-if="pager.state.error" :class="$style.state"><p role="alert">{{ i18n.ts.zalip.commentsError }}</p><button type="button" class="_textButton" @click="pager.loadNext()">{{ i18n.ts.retry }}</button></div>
 			<p v-else-if="pager.state.loaded && !pager.state.items.length && !pager.state.hasMore" :class="$style.state">{{ i18n.ts.zalip.commentsEmpty }}</p>
+			<button v-if="hasUnloadedReplies && !pager.state.pending && !pager.state.error && !pager.state.limited" type="button" class="_button" :class="$style.more" @click="pager.loadNext()">{{ i18n.ts.loadReplies }}</button>
 			<button v-if="pager.state.hasMore && !pager.state.pending && !pager.state.error" type="button" class="_button" :class="$style.more" @click="pager.loadNext()">{{ i18n.ts.loadMore }}</button>
 			<MkA v-if="pager.state.limited" :class="$style.continue" :to="notePage(appearNote)">{{ i18n.ts.continueThread }} <i class="ti ti-arrow-up-right" aria-hidden="true"></i></MkA>
 		</div>
@@ -98,6 +99,7 @@ const atDepthLimit = computed(() => props.depth >= COMMENT_THREAD_MAX_DEPTH);
 // useNote captures this card's snapshot; local deltas belong to that same baseline.
 const replyCount = computed(() => Math.max(0, appearNote.repliesCount + localReplies.value.size - removedReplies.value.size, pager.state.items.length));
 const hasReplies = computed(() => replyCount.value > 0);
+const hasUnloadedReplies = computed(() => !pager.state.loaded && replyCount.value > pager.state.items.length);
 const expandedChildren = computed(() => pager.state.expanded && pager.state.items.length > 0);
 const hasLongText = computed(() => shouldCollapsed({ ...appearNote, files: [] }, []));
 const summaryReaction = computed(() => $appearNote.myReaction ?? Object.entries($appearNote.reactions).sort((a, b) => b[1] - a[1])[0]?.[0]);
@@ -107,7 +109,9 @@ useGlobalEvent('notePosted', created => {
 	if (created.userId !== $i?.id || created.replyId !== appearNote.id || created.isHidden || created.deletedAt || removedReplies.value.has(created.id) || seenLocalReplies.has(created.id)) return;
 	seenLocalReplies.add(created.id);
 	if (!pager.state.items.some(note => note.id === created.id)) localReplies.value.add(created.id);
-	pager.insert(created);
+	// A successful reply should be visible beneath its real parent even when
+	// that branch was closed. Older replies still require an explicit load.
+	if (!atDepthLimit.value) pager.reveal(created);
 });
 useGlobalEvent('noteDeleted', id => {
 	const wasLocal = localReplies.value.delete(id);
@@ -150,5 +154,12 @@ useGlobalEvent('noteDeleted', id => {
 .state { margin: 0; padding: 12px 0; font-size: 13px; color: var(--MI_THEME-fgTransparentWeak); > p { margin: 0 0 6px; } }
 .muted { width: 100%; min-height: 44px; text-align: center; color: var(--MI_THEME-fgTransparentWeak); }
 @media (hover: none), (pointer: coarse) { .action, .menu { min-width: 44px; min-height: 44px; } }
+// Keep the real recursive parent/child structure, but stop consuming horizontal
+// space at every level in a narrow discussion column.
+@container (max-width: 600px) {
+	.deep > .branch { margin-left: 0; }
+	.deep > .branch > .branchItem::before { left: calc(var(--comment-avatar) / 2 - .5px); width: 0; border-bottom: 0; border-bottom-left-radius: 0; }
+	.deep > .branch > .branchContinues::after { left: calc(var(--comment-avatar) / 2 - .5px); }
+}
 @container (max-width: 450px) { .root { padding: 14px 16px; } .nested { padding: 12px 0 0; } .actions { gap: 8px; } }
 </style>

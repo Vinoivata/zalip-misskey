@@ -42,9 +42,14 @@ export function createCommentReplyPager(options: {
 	let cursor = '0';
 	let generation = 0;
 
-	function accept(note: Misskey.entities.Note): boolean {
+	function allowed(note: Misskey.entities.Note): boolean {
 		if (note.replyId !== options.parentId || blocked.has(note.id) || removed.has(note.id) || note.isHidden || note.deletedAt) return false;
 		if (options.allowNote && !options.allowNote(note)) return false;
+		return true;
+	}
+
+	function accept(note: Misskey.entities.Note): boolean {
+		if (!allowed(note)) return false;
 		if (state.items.some(item => item.id === note.id)) return false;
 		if (!budget.take(note)) { state.limited = true; return false; }
 		return true;
@@ -84,6 +89,18 @@ export function createCommentReplyPager(options: {
 		state.items.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 	}
 
+	/** Reveal a confirmed own reply without requesting or expanding any other branch. */
+	function reveal(note: Misskey.entities.Note): void {
+		if (state.items.some(item => item.id === note.id)) {
+			if (allowed(note)) state.expanded = true;
+			return;
+		}
+		if (!accept(note)) return;
+		state.items.push(note);
+		state.items.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+		state.expanded = true;
+	}
+
 	function reset(): void {
 		generation++;
 		cursor = '0';
@@ -96,5 +113,5 @@ export function createCommentReplyPager(options: {
 		state.items = state.items.filter(note => note.id !== noteId);
 	}
 
-	return { state, toggle, loadNext, insert, reset, remove };
+	return { state, toggle, loadNext, insert, reveal, reset, remove };
 }

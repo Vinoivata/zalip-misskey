@@ -4,6 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
+<div :class="$style.root">
 <MkA :to="`/zalip/${share.slug}`" :class="[$style.card, { [$style.preview]: preview }]">
 	<div :class="$style.poster">
 		<img v-if="images.poster(share)" :src="images.poster(share)!" alt="" width="300" height="450" loading="lazy" decoding="async" @error="images.failed">
@@ -16,6 +17,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<p v-if="share.description" :class="$style.description">{{ share.description }}</p>
 	</div>
 </MkA>
+</div>
 </template>
 
 <script lang="ts" setup>
@@ -45,6 +47,11 @@ const kindIcon = computed(() => ({ movie: 'ti ti-movie', series: 'ti ti-device-t
 </script>
 
 <style lang="scss" module>
+.root {
+	min-width: 0;
+	container: zalip-share-card / inline-size;
+}
+
 .card {
 	display: grid;
 	grid-template-columns: 88px minmax(0, 1fr);
@@ -75,6 +82,8 @@ const kindIcon = computed(() => ({ movie: 'ti ti-movie', series: 'ti ti-device-t
 .poster {
 	position: relative;
 	display: grid;
+	min-width: 0;
+	width: 100%;
 	align-self: stretch;
 	aspect-ratio: 2 / 3;
 	border-radius: 0;
@@ -152,15 +161,26 @@ const kindIcon = computed(() => ({ movie: 'ti ti-movie', series: 'ti ti-device-t
 	font-weight: 500;
 }
 
-@container (max-width: 360px) {
+// This query follows the space left inside a nested reply, not the viewport or
+// the outer feed. A wide phone can still contain a very narrow quoted title.
+@container zalip-share-card (max-width: 280px) {
 	.card {
-		grid-template-columns: 72px minmax(0, 1fr);
+		grid-template-columns: 64px minmax(0, 1fr);
 		gap: 0;
 		padding: 0;
 	}
+	.body { padding: 10px; }
+	.title { font-size: 14px; }
 
 	.description {
 		-webkit-line-clamp: 2;
 	}
+}
+
+@container zalip-share-card (max-width: 220px) {
+	.card { grid-template-columns: minmax(0, 1fr); }
+	.poster { width: 100%; aspect-ratio: 16 / 10; }
+	.poster img { object-fit: contain; }
+	.body { padding: 10px 12px 12px; }
 }
 </style>

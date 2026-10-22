@@ -177,25 +177,85 @@ describe('shared Threads-style comments', () => {
 		expect(view.getByText('Comment 003')).toBeTruthy(); expect(controls.api).toHaveBeenCalledTimes(1);
 		globalEvents.emit('noteDeleted', '003'); await settle(); expect(view.queryByText('Comment 003')).toBeNull();
 	});
+
+	it('reveals a newly posted own reply under its closed parent without loading unrelated or older replies', async () => {
+		controls.api.mockResolvedValue([note('001', { replyId: '000', repliesCount: 0 })]);
+		const view = setup(note('000', { repliesCount: 1 }));
+		globalEvents.emit('notePosted', note('foreign', { replyId: '000', userId: 'someone-else' }));
+		globalEvents.emit('notePosted', note('wrong-parent', { replyId: 'other', userId: 'viewer' }));
+		globalEvents.emit('notePosted', note('002', { replyId: '000', userId: 'viewer', repliesCount: 0 })); await settle();
+		expect(view.getByText('Comment 002')).toBeTruthy();
+		expect(view.queryByText('Comment foreign')).toBeNull();
+		expect(view.queryByText('Comment wrong-parent')).toBeNull();
+		expect(view.queryByText('Comment 001')).toBeNull();
+		expect(controls.api).not.toHaveBeenCalled();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.loadReplies })); await settle();
+		expect(view.getByText('Comment 001')).toBeTruthy();
+		expect(view.getByText('Comment 002')).toBeTruthy();
+		expect(controls.api).toHaveBeenCalledExactlyOnceWith('notes/replies', { noteId: '000', limit: 10, sinceId: '0' }, 'fixture-token');
+	});
+
+	it('keeps a Dustfall-shaped chain and content-share sibling attached to their actual parents', async () => {
+		const first = 'asmwhz8mfwle001e';
+		const second = 'asmwlq1cfwle001f';
+		const third = 'asmwmim6fwle001h';
+		const fourth = 'asmwn30yfwle001j';
+		const sibling = 'asmwqg1sfwle001n';
+		const fixtures = new Map<string, Misskey.entities.Note[]>([
+			[first, [note(second, { replyId: first, repliesCount: 1 }), note(sibling, { replyId: first, text: null, repliesCount: 0, zalipShare: { slug: 'shared-title', title: 'Shared title' } as Misskey.entities.Note['zalipShare'] })]],
+			[second, [note(third, { replyId: second, repliesCount: 1 })]],
+			[third, [note(fourth, { replyId: third, repliesCount: 0 })]],
+		]);
+		controls.api.mockImplementation(async (_endpoint: string, params: { noteId: string }) => fixtures.get(params.noteId) ?? []);
+		const view = setup(note(first, { repliesCount: 2 }));
+		for (const id of [first, second, third]) {
+			const parent = view.container.querySelector(`[data-comment-id="${id}"]`)!;
+			const expand = Array.from(parent.querySelectorAll('button')).find(button => button.textContent === i18n.ts.loadReplies)!;
+			await fireEvent.click(expand); await settle();
+		}
+		const parentOf = (id: string) => view.container.querySelector(`[data-comment-id="${id}"]`)?.parentElement?.closest('[data-comment-id]')?.getAttribute('data-comment-id');
+		expect(parentOf(second)).toBe(first);
+		expect(parentOf(third)).toBe(second);
+		expect(parentOf(fourth)).toBe(third);
+		expect(parentOf(sibling)).toBe(first);
+		expect(view.container.querySelector(`[data-comment-id="${third}"]`)?.getAttribute('data-comment-depth')).toBe('2');
+		expect(view.container.querySelector(`[data-comment-id="${fourth}"]`)?.className).toContain('deep');
+		expect(commentSource).toContain('.deep > .branch { margin-left: 0; }');
+		expect(commentSource).toContain('@container (max-width: 600px)');
+		expect(view.container.querySelector(`[data-comment-id="${sibling}"] [data-testid="comment-share"]`)).toBeTruthy();
+		expect(controls.api.mock.calls.map(call => call[1].noteId)).toEqual([first, second, third]);
+		globalEvents.emit('notePosted', note('new-leaf', { replyId: third, userId: 'viewer', repliesCount: 0 })); await settle();
+		expect(parentOf('new-leaf')).toBe(third);
+		expect(parentOf(sibling)).toBe(first);
+		expect(controls.api).toHaveBeenCalledTimes(3);
+	});
+
+	it('keeps the depth limit for newly posted replies instead of creating an unbounded recursive tree', async () => {
+		const view = setup(note('000', { repliesCount: 0 }), { depth: 4 });
+		globalEvents.emit('notePosted', note('001', { replyId: '000', userId: 'viewer', repliesCount: 0 })); await settle();
+		expect(view.queryByText('Comment 001')).toBeNull();
+		expect(view.getByRole('link', { name: i18n.ts.continueThread })).toBeTruthy();
+		expect(controls.api).not.toHaveBeenCalled();
+	});
 	it('counts multiple new direct replies once and clears the count when they are deleted', async () => {
 		const view = setup(note('000', { repliesCount: 0 }));
 		const first = note('001', { userId: 'viewer', replyId: '000', repliesCount: 0 });
 		const second = note('002', { userId: 'viewer', replyId: '000', repliesCount: 0 });
 		globalEvents.emit('notePosted', first); globalEvents.emit('notePosted', first); globalEvents.emit('notePosted', second); await settle();
-		expect(view.getByRole('button', { name: i18n.ts.reply }).textContent).toBe('2');
+		expect(view.getAllByRole('button', { name: i18n.ts.reply })[0].textContent).toBe('2');
 		globalEvents.emit('noteDeleted', '001'); await settle();
-		expect(view.getByRole('button', { name: i18n.ts.reply }).textContent).toBe('1');
+		expect(view.getAllByRole('button', { name: i18n.ts.reply })[0].textContent).toBe('1');
 		globalEvents.emit('noteDeleted', '002'); globalEvents.emit('notePosted', second); await settle();
-		expect(view.getByRole('button', { name: i18n.ts.reply }).textContent).toBe('0');
+		expect(view.getAllByRole('button', { name: i18n.ts.reply })[0].textContent).toBe('0');
 		expect(view.queryByRole('button', { name: i18n.ts.loadReplies })).toBeNull();
 	});
 	it('does not apply a local count delta again after a refreshed server count', async () => {
 		const view = setup(note('000', { repliesCount: 0 }));
 		const own = note('001', { userId: 'viewer', replyId: '000', repliesCount: 0 });
 		globalEvents.emit('notePosted', own); await settle();
-		expect(view.getByRole('button', { name: i18n.ts.reply }).textContent).toBe('1');
+		expect(view.getAllByRole('button', { name: i18n.ts.reply })[0].textContent).toBe('1');
 		await view.rerender({ note: note('000', { repliesCount: 1 }) }); await settle();
 		globalEvents.emit('notePosted', own); await settle();
-		expect(view.getByRole('button', { name: i18n.ts.reply }).textContent).toBe('1');
+		expect(view.getAllByRole('button', { name: i18n.ts.reply })[0].textContent).toBe('1');
 	});
 });

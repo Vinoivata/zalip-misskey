@@ -42,6 +42,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</template>
 		</div>
 	</div>
+	<div v-if="!communityLocked" :class="$style.communityRow">
+		<button type="button" class="_button" :class="$style.communityButton" :disabled="posting || posted || props.mock" :aria-label="i18n.ts.zalip._communities.pick" :aria-haspopup="'dialog'" @click="chooseCommunity"><i class="ti ti-users" aria-hidden="true"></i><span>{{ targetChannel?.name ?? i18n.ts.zalip._communities.optional }}</span><i class="ti ti-chevron-down" aria-hidden="true"></i></button>
+		<span v-if="targetChannel" :class="$style.communityNotice">{{ i18n.ts.zalip._communities.publicNotice }}</span>
+	</div>
 	<MkNoteSimple v-if="replyTargetNote" :class="$style.targetNote" :note="replyTargetNote"/>
 	<MkNoteSimple v-if="renoteTargetNote" :class="$style.targetNote" :note="renoteTargetNote"/>
 	<div v-if="quoteId" :class="$style.withQuote"><i class="ti ti-quote" aria-hidden="true"></i> {{ i18n.ts.quoteAttached }}<button type="button" class="_button" :aria-label="i18n.ts.remove" @click="quoteId = null; renoteTargetNote = null;"><i class="ti ti-x" aria-hidden="true"></i></button></div>
@@ -229,6 +233,11 @@ const justEndedComposition = ref(false);
 const renoteTargetNote: ShallowRef<PostFormProps['renote'] | null> = shallowRef(props.renote);
 const replyTargetNote: ShallowRef<PostFormProps['reply'] | null> = shallowRef(props.reply);
 const targetChannel = shallowRef(props.channel);
+const communityLocked = computed(() => props.channel != null || replyTargetNote.value != null || renoteTargetNote.value != null || props.initialNote != null);
+const personalCommunityAudience = ref({ visibility: visibility.value, localOnly: localOnly.value });
+let communityRequest = 0;
+let communityPickerOpen = false;
+let communityAlive = true;
 const selectedZalipWork = ref<ZalipWorkShare | null>(props.zalipWork ?? null);
 
 const serverDraftId = ref<string | null>(null);
@@ -252,7 +261,8 @@ uploader.events.on('itemUploaded', ctx => {
 });
 
 const draftKey = computed((): string => {
-	let key = targetChannel.value ? `channel:${targetChannel.value.id}` : '';
+	// Keep the originating draft slot stable when adding/removing an optional group.
+	let key = props.channel ? `channel:${props.channel.id}` : '';
 
 	if (props.zalipWork) {
 		key += `zalip:${props.zalipWork.id}`;
@@ -451,6 +461,35 @@ function watchForDraft() {
 	watch(quoteId, () => saveDraft());
 	watch(reactionAcceptance, () => saveDraft());
 	watch(scheduledAt, () => saveDraft());
+	watch(targetChannel, () => saveDraft());
+}
+
+function chooseCommunity(): void {
+	if (communityLocked.value || communityPickerOpen || posting.value || posted.value || props.mock) return;
+	const request = ++communityRequest;
+	const account = postAccount.value?.id ?? $i.id;
+	const current = () => communityAlive && request === communityRequest && account === (postAccount.value?.id ?? $i.id) && !posting.value && !posted.value;
+	communityPickerOpen = true;
+	const { dispose } = os.popup(defineAsyncComponent(() => import('@/components/MkZalipCommunityPicker.vue')), { currentChannelId: targetChannel.value?.id ?? null }, {
+		selected: async channel => {
+			if (!current() || channel?.isArchived) return;
+			if (channel && visibility.value !== 'public') {
+				const { canceled } = await os.confirm({ type: 'warning', text: i18n.ts.zalip._communities.publicNotice });
+				if (canceled || !current()) return;
+			}
+			if (channel) {
+				if (!targetChannel.value) personalCommunityAudience.value = { visibility: visibility.value, localOnly: localOnly.value };
+				targetChannel.value = channel;
+				visibility.value = 'public';
+				localOnly.value = true;
+			} else if (targetChannel.value) {
+				targetChannel.value = null;
+				visibility.value = personalCommunityAudience.value.visibility;
+				localOnly.value = personalCommunityAudience.value.localOnly;
+			}
+		},
+		closed: () => { communityPickerOpen = false; dispose(); },
+	});
 }
 
 function checkMissingMention() {
@@ -821,6 +860,8 @@ type StoredDrafts = {
 			quoteId: string | null;
 			reactionAcceptance: 'likeOnly' | 'likeOnlyForRemote' | 'nonSensitiveOnly' | 'nonSensitiveOnlyForLocalLikeOnlyForRemote' | null;
 			scheduledAt: number | null;
+			channel?: PostFormProps['channel'];
+			communityAudience?: { visibility: 'public' | 'home' | 'followers' | 'specified'; localOnly: boolean };
 		};
 	};
 };
@@ -844,6 +885,8 @@ function saveDraft() {
 			quoteId: quoteId.value,
 			reactionAcceptance: reactionAcceptance.value,
 			scheduledAt: scheduledAt.value,
+			channel: targetChannel.value ?? null,
+			communityAudience: personalCommunityAudience.value,
 		},
 	};
 
@@ -1250,6 +1293,7 @@ async function openAccountMenu(ev: PointerEvent) {
 				reactionAcceptance.value = draft.reactionAcceptance;
 				scheduledAt.value = draft.scheduledAt ?? null;
 				if (draft.channel) targetChannel.value = draft.channel as unknown as Misskey.entities.Channel;
+				else if (!props.channel) targetChannel.value = null;
 
 				visibleUsers.value = [];
 				draft.visibleUserIds?.forEach(uid => {
@@ -1399,12 +1443,20 @@ onMounted(() => {
 				quoteId.value = draft.data.quoteId;
 				reactionAcceptance.value = draft.data.reactionAcceptance;
 				scheduledAt.value = draft.data.scheduledAt ?? null;
+				if (!communityLocked.value && draft.data.channel) {
+					targetChannel.value = draft.data.channel;
+					personalCommunityAudience.value = draft.data.communityAudience ?? personalCommunityAudience.value;
+					visibility.value = 'public'; localOnly.value = true;
+				}
 			}
 		}
 
 		// 削除して編集
 		if (props.initialNote) {
 			const init = props.initialNote;
+			// Editing an existing private/personal note must never inherit a group
+			// from an unrelated new-post draft (a group forces public visibility).
+			targetChannel.value = init.channelId == null ? null : init.channel ?? (props.channel?.id === init.channelId ? props.channel : null);
 			text.value = init.text ? init.text : '';
 			useCw.value = init.cw != null;
 			cw.value = init.cw ?? null;
@@ -1433,6 +1485,8 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+	communityAlive = false;
+	communityRequest++;
 	uploader.abortAll();
 	if (textAutocomplete) {
 		textAutocomplete.detach();
@@ -1467,6 +1521,9 @@ defineExpose({
 </script>
 
 <style lang="scss" module>
+.communityRow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 0 24px 12px; }
+.communityButton { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; min-width: 0; max-width: 100%; padding: 0 12px; border-radius: 999px; background: var(--MI_THEME-buttonBg); color: var(--MI_THEME-fgTransparentWeak); font-size: 13px; > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } &:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; } &:disabled { opacity: .5; cursor: not-allowed; } }
+.communityNotice { color: var(--MI_THEME-fgTransparentWeak); font-size: 11px; }
 .root {
 	position: relative;
 	container-type: inline-size;

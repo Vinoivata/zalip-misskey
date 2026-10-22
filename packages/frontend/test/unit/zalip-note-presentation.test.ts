@@ -193,7 +193,7 @@ describe('Zalip compact note presentation', () => {
 		const plain = setup(MkNote);
 		expect(plain.container.querySelector('[class*="sub_thread"]')).toBeNull();
 		expect(noteSource).toContain('.threadContent::after');
-		expect(noteSource).toContain('left: -32px;');
+		expect(noteSource).toContain('left: -28px;');
 		cleanup();
 		const reply = setup(MkNote, note({ replyId: 'parent', reply: note({ id: 'parent', text: 'Parent fixture' }) }));
 		expect(reply.getByText('Parent fixture')).toBeTruthy();
@@ -238,7 +238,7 @@ describe('Zalip compact note presentation', () => {
 	it('matches the measured Notr visual sizes without reducing touch targets or exposing federation metadata', () => {
 		expect(noteSource).toMatch(/\.avatar\s*\{[^}]*width: 40px;[^}]*height: 40px;/u);
 		for (const source of [noteSource, detailedSource]) {
-			expect(source).toContain('> svg { width: 20px; height: 20px; }');
+			expect(source).toContain('> svg { width: 18px; height: 18px; }');
 			expect(source).toContain('flex: 0 0 44px;');
 			expect(source).not.toContain('MkInstanceTicker');
 			expect(source).not.toContain('disableFederation');

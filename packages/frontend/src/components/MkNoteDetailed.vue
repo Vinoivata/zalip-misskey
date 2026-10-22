@@ -48,6 +48,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<template v-else>
 		<article v-if="contentContext?.isRoot" :class="$style.note"><MkZalipDiscussionCard :context="contentContext"/></article>
 		<article v-else ref="articleEl" :class="$style.note" @contextmenu.stop="onContextmenu">
+			<MkZalipReactionFloat :noteId="appearNote.id" :target="articleEl" :reactions="$appearNote.reactions" :reactionEmojis="$appearNote.reactionEmojis" :enabled="!appearNote.isHidden && (appearNote.cw == null || showContent)"/>
 			<header :class="$style.noteHeader">
 				<MkAvatar :class="$style.noteHeaderAvatar" :user="appearNote.user" link preview/>
 				<div :class="$style.noteHeaderBody">
@@ -238,6 +239,7 @@ import { DI } from '@/di.js';
 import { $i } from '@/i.js';
 import { createZalipDiscussionPager } from '@/utility/zalip-discussion-pager.js';
 import { useZalipNoteViews } from '@/composables/use-zalip-note-views.js';
+import MkZalipReactionFloat from '@/components/MkZalipReactionFloat.vue';
 import { getNoteSummary } from '@/utility/get-note-summary.js';
 import MkZalipDiscussionCard from '@/components/MkZalipDiscussionCard.vue';
 import { zalipDiscussionContext, zalipDiscussionRoute } from '@/utility/zalip-discussion-context.js';
@@ -436,7 +438,7 @@ const keymap = {
 </script>
 
 <style lang="scss" module>
-.summaryReaction { width: 20px; height: 20px; font-size: 20px; object-fit: contain; }
+.summaryReaction { width: 18px; height: 18px; font-size: 18px; object-fit: contain; }
 .root {
 	position: relative;
 	font-size: 14px;
@@ -520,6 +522,7 @@ const keymap = {
 }
 
 .note {
+	position: relative;
 	padding: 18px 18px 0;
 	font-size: 18px;
 
@@ -617,7 +620,7 @@ const keymap = {
 .reactionCount { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; min-height: 44px; color: var(--MI_THEME-fgTransparentWeak); font-size: 13px; font-variant-numeric: tabular-nums; }
 .reactionCount:focus-visible { outline: 2px solid var(--MI_THEME-focus); border-radius: 8px; }
 .noteFooterButton.reacted { color: var(--MI_THEME-accent); }
-.actionRow > .bookmark { min-width: 44px; min-height: 44px; > svg { width: 20px; height: 20px; } }
+.actionRow > .bookmark { min-width: 44px; min-height: 44px; > svg { width: 18px; height: 18px; } }
 .discussionSelect { max-width: 50%; padding: 5px 8px; border: 1px solid var(--MI_THEME-divider); border-radius: 7px; background: transparent; color: var(--MI_THEME-fgTransparentWeak); font: inherit; font-size: 12px; }
 
 .noteFooterButton {
@@ -633,7 +636,7 @@ const keymap = {
 	border: 0;
 	border-radius: 999px;
 	font-size: 20px;
-	> svg { width: 20px; height: 20px; }
+	> svg { width: 18px; height: 18px; }
 
 	&:hover {
 		color: var(--MI_THEME-fgHighlighted);

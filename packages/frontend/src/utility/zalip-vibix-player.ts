@@ -10,6 +10,44 @@ export type VibixPlayerSelection = { seasonNumber: number | null; episodeNumber:
 /** Never add allow-same-origin: the third-party SDK must not see Misskey cookies or storage. */
 export const vibixPlayerSandbox = 'allow-scripts allow-forms allow-presentation';
 const sdkUrls = ['https://graphicslab.io/sdk/v2/rendex-sdk.min.js', 'https://alt.graphicslab.io/sdk/v2/rendex-sdk.min.js'] as const;
+// Keep this bootstrap self-contained: it runs only inside the isolated srcdoc,
+// after its INS exists. Do not execute provider HTML or run both SDKs together.
+const sdkBootstrap = `(function(urls) {
+	var root = document.documentElement;
+	if (root.dataset.vibixSdkState) return;
+	root.dataset.vibixSdkState = 'loading';
+	var current = null;
+	var retried = false;
+	function load(index) {
+		var script = document.createElement('script');
+		script.id = 'zalip-vibix-sdk';
+		script.async = true;
+		script.src = urls[index];
+		current = script;
+		script.onload = function() {
+			if (current !== script) return;
+			current = null;
+			script.onload = script.onerror = null;
+			root.dataset.vibixSdkState = 'ready';
+		};
+		script.onerror = function() {
+			if (current !== script) return;
+			current = null;
+			script.onload = script.onerror = null;
+			script.remove();
+			if (index + 1 < urls.length) {
+				load(index + 1);
+			} else if (!retried) {
+				retried = true;
+				window.setTimeout(function() { load(0); }, 800);
+			} else {
+				root.dataset.vibixSdkState = 'failed';
+			}
+		};
+		document.head.appendChild(script);
+	}
+	load(0);
+})(${JSON.stringify(sdkUrls)});`;
 const positiveId = (value: unknown): value is string => typeof value === 'string' && /^[1-9]\d{0,15}$/u.test(value) && Number.isSafeInteger(Number(value));
 
 export function validVibixEmbed(value: unknown): value is VibixEmbed {
@@ -31,5 +69,5 @@ export function vibixPlayerDocument(embed: unknown, selection: VibixPlayerSelect
 		...(seasonNumber == null ? [] : [`data-season="${seasonNumber}"`, `data-episodes="${episodeNumber}"`]),
 		...(selection.translationId == null ? [] : [`data-voiceover="${selection.translationId}"`, 'data-voiceover-only="true"']),
 	];
-	return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><style>html,body{margin:0;width:100%;height:100%;background:transparent}ins,iframe{display:block;width:100%;height:100%;border:0}</style>${sdkUrls.map(url => `<script src="${url}" async></script>`).join('')}</head><body><ins ${attributes.join(' ')}></ins></body></html>`;
+	return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><style>html,body{margin:0;width:100%;height:100%;background:transparent}ins,iframe{display:block;width:100%;height:100%;border:0}</style></head><body><ins ${attributes.join(' ')}></ins><script>${sdkBootstrap}</script></body></html>`;
 }

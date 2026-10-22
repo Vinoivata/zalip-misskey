@@ -11,7 +11,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<button v-for="mode in feedModes.filter(mode => mode.key !== 'global')" :key="mode.key" type="button" class="_button" :class="[$style.mode, { [$style.modeActive]: src === mode.key }]" :aria-pressed="src === mode.key" @click="src = mode.key">
 					<MkZalipIcon :name="mode.icon"/><span>{{ mode.title }}</span>
 				</button>
-				<MkA to="/channels" :class="$style.mode"><span aria-hidden="true">#</span><span>{{ i18n.ts.zalip.feedInterests }}</span></MkA>
+				<MkA to="/channels" :class="$style.mode"><MkZalipIcon name="users"/><span>{{ i18n.ts.zalip._communities.title }}</span></MkA>
 				<button v-for="mode in feedModes.filter(mode => mode.key === 'global')" :key="mode.key" type="button" class="_button" :class="[$style.mode, { [$style.modeActive]: src === mode.key }]" :aria-pressed="src === mode.key" @click="src = mode.key"><MkZalipIcon :name="mode.icon"/><span>{{ mode.title }}</span></button>
 				<MkA v-if="$i" to="/my/favorites" :class="$style.mode"><MkZalipIcon name="bookmark"/><span>{{ i18n.ts.favorites }}</span></MkA>
 				<button type="button" class="_button" :class="[$style.mode, { [$style.modeActive]: settingsOpen }]" :aria-label="i18n.ts.zalip.feedSettings" aria-haspopup="menu" :aria-expanded="settingsOpen" @click="openFeedSettings"><MkZalipIcon name="settings"/></button>

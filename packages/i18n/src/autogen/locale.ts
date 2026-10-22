@@ -1269,6 +1269,80 @@ export interface Locale extends ILocale {
      */
     "start": string;
     "zalip": {
+        "_communities": {
+            /**
+             * Сообщества
+             */
+            "title": string;
+            /**
+             * Обсуждайте кино и сериалы, находите темы и авторов по интересам.
+             */
+            "description": string;
+            /**
+             * Обзор
+             */
+            "discover": string;
+            /**
+             * Мои подписки
+             */
+            "following": string;
+            /**
+             * Мои сообщества
+             */
+            "owned": string;
+            /**
+             * Создать сообщество
+             */
+            "create": string;
+            /**
+             * Публичное сообщество: записи видны всем.
+             */
+            "publicNotice": string;
+            /**
+             * Создание сообществ отключено настройками сервера для вашего аккаунта.
+             */
+            "createUnavailable": string;
+            /**
+             * Выбрать сообщество
+             */
+            "pick": string;
+            /**
+             * Личная запись
+             */
+            "personal": string;
+            /**
+             * Сообщество — необязательно
+             */
+            "optional": string;
+            /**
+             * Сообщества не найдены
+             */
+            "noResults": string;
+            /**
+             * Не удалось загрузить сообщества.
+             */
+            "loadError": string;
+            /**
+             * Название или описание сообщества
+             */
+            "searchPlaceholder": string;
+            /**
+             * Авторов: {n}
+             */
+            "authorsCount": ParameterizedString<"n">;
+            /**
+             * Записей: {n}
+             */
+            "notesCount": ParameterizedString<"n">;
+            /**
+             * Написать запись
+             */
+            "post": string;
+            /**
+             * Настройки сообщества
+             */
+            "edit": string;
+        };
         "_importer": {
             /**
              * Настройки недоступны
@@ -3780,6 +3854,10 @@ export interface Locale extends ILocale {
              * Один отзыв на тайтл — его можно изменить.
              */
             "onePerWork": string;
+            /**
+             * Для каждого тайтла можно опубликовать один отзыв и одну рецензию. Оценка у них общая.
+             */
+            "onePerFormat": string;
             /**
              * Показать ещё
              */

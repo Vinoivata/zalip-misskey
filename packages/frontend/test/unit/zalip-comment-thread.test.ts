@@ -96,6 +96,52 @@ describe('lazy direct comment pagination', () => {
 		pager.insert(reply('004')); pager.insert(reply('004')); expect(pager.state.items).toHaveLength(1);
 		pager.remove('004'); expect(pager.state.items).toEqual([]);
 	});
+
+	it('reveals a confirmed direct reply in a closed branch without fetching or inventing a server cursor', async () => {
+		const fetchPage = vi.fn().mockResolvedValue([reply('001'), reply('002')]);
+		const pager = createCommentReplyPager({ parentId: '000', accountId: () => 'viewer', fetchPage });
+		pager.reveal(reply('002'));
+		expect(pager.state.expanded).toBe(true);
+		expect(pager.state.items.map(note => note.id)).toEqual(['002']);
+		expect(pager.state.loaded).toBe(false);
+		expect(fetchPage).not.toHaveBeenCalled();
+		await pager.loadNext();
+		expect(fetchPage).toHaveBeenCalledExactlyOnceWith({ noteId: '000', limit: 10, sinceId: '0' });
+		expect(pager.state.items.map(note => note.id)).toEqual(['001', '002']);
+		pager.toggle();
+		pager.reveal(reply('003'));
+		expect(pager.state.expanded).toBe(true);
+		expect(pager.state.items.map(note => note.id)).toEqual(['001', '002', '003']);
+		expect(fetchPage).toHaveBeenCalledTimes(1);
+	});
+
+	it('does not reveal another parent, an ancestor, hidden or deleted content, or an over-budget reply', () => {
+		const budget = createCommentThreadBudget(1);
+		const pager = createCommentReplyPager({ parentId: '000', ancestors: ['ancestor'], accountId: () => null, budget, allowNote: note => note.id !== 'muted', fetchPage: vi.fn() });
+		for (const note of [reply('000'), reply('ancestor'), reply('foreign', { replyId: 'other' }), reply('hidden', { isHidden: true }), reply('deleted', { deletedAt: 'now' }), reply('muted')]) pager.reveal(note);
+		expect(pager.state.expanded).toBe(false);
+		expect(pager.state.items).toEqual([]);
+		pager.reveal(reply('001'));
+		pager.reveal(reply('002'));
+		expect(pager.state.items.map(note => note.id)).toEqual(['001']);
+		expect(pager.state.limited).toBe(true);
+	});
+
+	it('reveals a reply already received by a concurrent server page without adding a duplicate or fetching again', async () => {
+		const created = reply('001');
+		const fetchPage = vi.fn().mockResolvedValue([created]);
+		const pager = createCommentReplyPager({ parentId: '000', accountId: () => 'viewer', fetchPage });
+		pager.toggle(); await settle();
+		pager.toggle();
+		expect(pager.state.expanded).toBe(false);
+		pager.reveal(created);
+		expect(pager.state.expanded).toBe(true);
+		expect(pager.state.items.map(note => note.id)).toEqual(['001']);
+		expect(fetchPage).toHaveBeenCalledTimes(1);
+		pager.toggle();
+		pager.reveal({ ...created, isHidden: true });
+		expect(pager.state.expanded).toBe(false);
+	});
 	it('does not resurrect a deleted reply from an in-flight page or a repeated local event', async () => {
 		let finish!: (notes: Misskey.entities.Note[]) => void;
 		const fetchPage = vi.fn(() => new Promise<Misskey.entities.Note[]>(resolve => { finish = resolve; }));

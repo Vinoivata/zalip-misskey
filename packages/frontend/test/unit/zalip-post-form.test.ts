@@ -75,6 +75,7 @@ beforeEach(() => {
 	prefer.s.defaultNoteLocalOnly = false;
 	controls.api.mockResolvedValue({ createdNote: note({ id: 'created', text: 'Created' }) });
 	controls.apiWithDialog.mockResolvedValue({ id: 'draft' });
+	controls.popup.mockReturnValue({ dispose: vi.fn() });
 	controls.confirm.mockResolvedValue({ canceled: false });
 	controls.inputDatetime.mockResolvedValue({ canceled: false, result: new Date(Date.now() + 60_000) });
 	controls.choosePc.mockResolvedValue([]); controls.chooseDrive.mockResolvedValue([]);
@@ -82,6 +83,66 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('Notr-style native post composer', () => {
+	it('keeps community optional and sends no channel ID for a personal post', async () => {
+		const view = setup({ initialText: 'Personal post', initialVisibility: 'followers' }); await settle();
+		expect(view.getByRole('button', { name: i18n.ts.zalip._communities.pick }).textContent).toContain(i18n.ts.zalip._communities.optional);
+		await fireEvent.click(view.getByTestId('post-form-submit')); await settle();
+		expect(controls.api).toHaveBeenCalledExactlyOnceWith('notes/create', expect.objectContaining({ channelId: undefined, visibility: 'followers', localOnly: false }), undefined);
+	});
+	it('publishes to the exact chosen native channel with its required public local audience', async () => {
+		const view = setup({ initialText: 'Community post' }); await settle();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._communities.pick }));
+		const handlers = controls.popup.mock.lastCall![2] as { selected: (value: unknown) => Promise<void> };
+		await handlers.selected({ id: 'cinema-club', name: 'Cinema club', color: 'var(--MI_THEME-accent)', isArchived: false }); await settle();
+		expect(view.getByText(i18n.ts.zalip._communities.publicNotice)).toBeTruthy(); expect(controls.confirm).not.toHaveBeenCalled();
+		await fireEvent.click(view.getByTestId('post-form-submit')); await settle();
+		expect(controls.api).toHaveBeenCalledWith('notes/create', expect.objectContaining({ channelId: 'cinema-club', visibility: 'public', localOnly: true }), undefined);
+	});
+	it('asks before broadening a private draft and restores its original audience when the community is removed', async () => {
+		const view = setup({ initialText: 'Private draft', initialVisibility: 'followers', initialLocalOnly: false }); await settle();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._communities.pick }));
+		const first = controls.popup.mock.lastCall![2] as { selected: (value: unknown) => Promise<void>; closed: () => void };
+		await first.selected({ id: 'club', name: 'Club', color: 'var(--MI_THEME-accent)' }); await settle();
+		expect(controls.confirm).toHaveBeenCalledExactlyOnceWith({ type: 'warning', text: i18n.ts.zalip._communities.publicNotice }); first.closed();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._communities.pick }));
+		await (controls.popup.mock.lastCall![2] as { selected: (value: null) => Promise<void> }).selected(null); await settle();
+		await fireEvent.click(view.getByTestId('post-form-submit')); await settle();
+		expect(controls.api).toHaveBeenCalledWith('notes/create', expect.objectContaining({ channelId: undefined, visibility: 'followers', localOnly: false }), undefined);
+	});
+	it('leaves a private draft untouched when public community confirmation is declined', async () => {
+		controls.confirm.mockResolvedValue({ canceled: true }); const view = setup({ initialText: 'Private draft', initialVisibility: 'followers' }); await settle();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._communities.pick }));
+		await (controls.popup.mock.lastCall![2] as { selected: (value: unknown) => Promise<void> }).selected({ id: 'club', name: 'Club' }); await settle();
+		await fireEvent.click(view.getByTestId('post-form-submit')); await settle(); expect(controls.api).toHaveBeenCalledWith('notes/create', expect.objectContaining({ channelId: undefined, visibility: 'followers' }), undefined);
+	});
+	it('does not move replies or an explicitly opened community composer to another group', async () => {
+		const reply = setup({ reply: note() }); await settle(); expect(reply.queryByRole('button', { name: i18n.ts.zalip._communities.pick })).toBeNull(); reply.unmount();
+		const view = setup({ initialText: 'Fixed channel', channel: { id: 'fixed', name: 'Fixed', color: 'var(--MI_THEME-accent)' }, fixed: true }); await settle(); expect(view.queryByRole('button', { name: i18n.ts.zalip._communities.pick })).toBeNull();
+		await fireEvent.click(view.getByTestId('post-form-submit')); await settle(); expect(controls.api).toHaveBeenCalledWith('notes/create', expect.objectContaining({ channelId: 'fixed', visibility: 'public', localOnly: true }), undefined);
+	});
+	it('retains the optional community and personal audience in the original local draft slot', async () => {
+		const view = setup({ initialText: 'Saved community draft', initialVisibility: 'followers', instant: false }); await settle();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._communities.pick }));
+		await (controls.popup.mock.lastCall![2] as { selected: (value: unknown) => Promise<void> }).selected({ id: 'club', name: 'Club', color: 'var(--MI_THEME-accent)' }); await settle();
+		const draft = JSON.parse(controls.drafts.get('drafts')!)['note:viewer'].data;
+		expect(draft.channel.id).toBe('club'); expect(draft.communityAudience).toEqual({ visibility: 'followers', localOnly: false }); expect(draft.text).toBe('Saved community draft');
+		view.unmount(); controls.api.mockClear(); const restored = setup({ instant: false }); await settle();
+		expect(restored.getByRole('button', { name: i18n.ts.zalip._communities.pick }).textContent).toContain('Club');
+		await fireEvent.click(restored.getByTestId('post-form-submit')); await settle(); expect(controls.api).toHaveBeenCalledWith('notes/create', expect.objectContaining({ text: 'Saved community draft', channelId: 'club', visibility: 'public', localOnly: true }), undefined);
+	});
+	it('ignores a picker selection after its composer unmounts', async () => {
+		const view = setup({ initialText: 'Draft' }); await settle(); await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._communities.pick }));
+		const handler = controls.popup.mock.lastCall![2] as { selected: (value: unknown) => Promise<void> }; view.unmount(); await handler.selected({ id: 'old', name: 'Old' });
+		expect(controls.api).not.toHaveBeenCalled(); expect(controls.confirm).not.toHaveBeenCalled();
+	});
+	it.each(['followers', 'specified'] as const)('never attaches an unrelated saved community when editing an existing %s note', async visibility => {
+		controls.drafts.set('drafts', JSON.stringify({ 'note:viewer': { updatedAt: new Date().toISOString(), data: { text: 'Unrelated club draft', useCw: false, cw: null, visibility: 'public', localOnly: true, files: [], poll: null, quoteId: null, reactionAcceptance: null, scheduledAt: null, channel: { id: 'club', name: 'Club', color: 'var(--MI_THEME-accent)' } } } }));
+		const initialNote = note({ text: 'Private existing body', visibility, channelId: undefined, channel: undefined, localOnly: false });
+		const view = setup({ instant: false, channel: null, initialNote }); await settle();
+		expect((view.getByTestId('post-form-text') as HTMLTextAreaElement).value).toBe('Private existing body'); expect(view.queryByRole('button', { name: i18n.ts.zalip._communities.pick })).toBeNull();
+		await fireEvent.click(view.getByTestId('post-form-submit')); await settle();
+		expect(controls.api).toHaveBeenCalledWith('notes/create', expect.objectContaining({ text: 'Private existing body', visibility, channelId: undefined, localOnly: false }), undefined);
+	});
 	it('has labelled controls and keeps the selected author, private audience and text/CW state visible without posting', async () => {
 		const view = setup({ initialText: 'Private draft', initialCw: 'Spoilers', initialVisibility: 'followers' });
 		expect(view.getByText('Viewer name')).toBeTruthy();

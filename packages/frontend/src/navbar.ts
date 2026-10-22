@@ -164,8 +164,8 @@ export const navbarItemDef = reactive<{
 		to: '/my/clips',
 	},
 	channels: {
-		title: i18n.ts.channel,
-		icon: 'ti ti-device-tv',
+		title: i18n.ts.zalip._communities.title,
+		icon: 'ti ti-users',
 		to: '/channels',
 	},
 	chat: {

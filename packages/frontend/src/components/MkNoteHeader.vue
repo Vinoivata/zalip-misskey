@@ -70,7 +70,7 @@ const mock = inject(DI.mock, false);
 	font-size: 15px;
 	line-height: 1.4;
 	.identity { min-width: 0; }
-	.username { grid-column: 1 / -1; grid-row: 2; margin: 0; font-size: 14px; }
+	.username { grid-column: 1 / -1; grid-row: 2; margin: 0; font-size: 13px; line-height: 16px; }
 	.info { grid-column: 2; grid-row: 1; margin: 0; font-size: 13px; }
 	.info::before { margin-right: 4px; content: '·'; }
 	.name { margin: 0; }

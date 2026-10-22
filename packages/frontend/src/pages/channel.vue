@@ -6,15 +6,19 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <PageWithHeader v-model:tab="tab" :actions="headerActions" :tabs="headerTabs" :swipable="true">
 	<div class="_spacer" style="--MI_SPACER-w: 700px;">
+		<div v-if="loadError" :class="$style.loadState"><p role="alert">{{ i18n.ts.zalip._communities.loadError }}</p><button type="button" class="_textButton" @click="loadChannel">{{ i18n.ts.retry }}</button></div>
+		<p v-else-if="!channel" :class="$style.loadState" role="status">{{ i18n.ts.loading }}</p>
+		<header v-if="channel" :class="$style.communityHeader">
+			<MkA to="/channels" :class="$style.directoryLink"><i class="ti ti-arrow-left" aria-hidden="true"></i> {{ i18n.ts.zalip._communities.title }}</MkA>
+			<h1>{{ channel.name }}</h1><p>{{ i18n.ts.zalip._communities.publicNotice }}</p>
+			<div :class="$style.communityActions"><XChannelFollowButton :key="channel.id" :channel="channel" full @changed="channel.isFollowing = $event"/><button type="button" class="_button" :class="$style.writePost" :disabled="channel.isArchived" @click="openPostForm"><i class="ti ti-pencil" aria-hidden="true"></i> {{ i18n.ts.zalip._communities.post }}</button><button v-if="$i" type="button" class="_button" :class="$style.favoriteButton" :disabled="favoriteBusy" :aria-busy="favoriteBusy" :aria-label="favorited ? i18n.ts.unfavorite : i18n.ts.favorite" :aria-pressed="favorited" @click="favorited ? unfavorite() : favorite()"><i class="ti ti-star" aria-hidden="true"></i></button></div>
+		</header>
 		<div v-if="channel && tab === 'overview'" class="_gaps">
 			<div class="_panel" :class="$style.bannerContainer">
-				<XChannelFollowButton :channel="channel" :full="true" :class="$style.subscribe"/>
-				<MkButton v-if="favorited" v-tooltip="i18n.ts.unfavorite" asLike class="button" rounded primary :class="$style.favorite" @click="unfavorite()"><i class="ti ti-star"></i></MkButton>
-				<MkButton v-else v-tooltip="i18n.ts.favorite" asLike class="button" rounded :class="$style.favorite" @click="favorite()"><i class="ti ti-star"></i></MkButton>
 				<div :style="{ backgroundImage: channel.bannerUrl ? `url(${channel.bannerUrl})` : undefined }" :class="$style.banner">
 					<div :class="$style.bannerStatus">
-						<div><i class="ti ti-users ti-fw"></i><I18n :src="i18n.ts._channel.usersCount" tag="span" style="margin-left: 4px;"><template #n><b>{{ channel.usersCount }}</b></template></I18n></div>
-						<div><i class="ti ti-pencil ti-fw"></i><I18n :src="i18n.ts._channel.notesCount" tag="span" style="margin-left: 4px;"><template #n><b>{{ channel.notesCount }}</b></template></I18n></div>
+						<div><i class="ti ti-users ti-fw" aria-hidden="true"></i> {{ i18n.tsx.zalip._communities.authorsCount({ n: channel.usersCount }) }}</div>
+						<div><i class="ti ti-pencil ti-fw" aria-hidden="true"></i> {{ i18n.tsx.zalip._communities.notesCount({ n: channel.notesCount }) }}</div>
 						<div v-if="$i != null && channel != null && $i.id === channel.userId" style="color: var(--MI_THEME-warn)"><i class="ti ti-user-star ti-fw"></i><span style="margin-left: 4px;">{{ i18n.ts.youAreAdmin }}</span></div>
 					</div>
 					<div v-if="channel.isSensitive" :class="$style.sensitiveIndicator">{{ i18n.ts.sensitive }}</div>
@@ -36,9 +40,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkInfo v-if="channel.isArchived" warn>{{ i18n.ts.thisChannelArchived }}</MkInfo>
 
 			<!-- スマホ・タブレットの場合、キーボードが表示されると投稿が見づらくなるので、デスクトップ場合のみ自動でフォーカスを当てる -->
-			<MkPostForm v-if="$i && prefer.r.showFixedPostFormInChannel.value" :channel="channel" class="post-form _panel" fixed :autofocus="deviceKind === 'desktop'"/>
+			<MkPostForm v-if="$i && !channel.isArchived && prefer.r.showFixedPostFormInChannel.value" :key="channel.id" :channel="channel" class="post-form _panel" fixed :autofocus="deviceKind === 'desktop'"/>
 
-			<MkStreamingNotesTimeline :key="channelId" src="channel" :channel="channelId"/>
+			<MkStreamingNotesTimeline :key="channelId" src="channel" :channel="channelId" :zalipFlat="true"/>
 		</div>
 		<div v-else-if="tab === 'featured'">
 			<MkNotesTimeline :paginator="featuredPaginator"/>
@@ -58,20 +62,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</div>
 		</div>
 	</div>
-	<template #footer>
-		<div :class="$style.footer">
-			<div class="_spacer" style="--MI_SPACER-w: 700px; --MI_SPACER-min: 16px; --MI_SPACER-max: 16px;">
-				<div class="_buttonsCenter">
-					<MkButton inline rounded primary gradate @click="openPostForm()"><i class="ti ti-pencil"></i> {{ i18n.ts.postToTheChannel }}</MkButton>
-				</div>
-			</div>
-		</div>
-	</template>
 </PageWithHeader>
 </template>
 
 <script lang="ts" setup>
-import { computed, watch, ref, markRaw, shallowRef } from 'vue';
+import { computed, onBeforeUnmount, watch, ref, markRaw, shallowRef } from 'vue';
 import * as Misskey from 'misskey-js';
 import { url } from '@@/js/config.js';
 import { useInterval } from '@@/js/use-interval.js';
@@ -99,6 +94,7 @@ import { notesSearchAvailable } from '@/utility/check-permissions.js';
 import { miLocalStorage } from '@/local-storage.js';
 import { useRouter } from '@/router.js';
 import { Paginator } from '@/utility/paginator.js';
+import { pleaseLogin } from '@/utility/please-login.js';
 
 const router = useRouter();
 
@@ -109,7 +105,12 @@ const props = defineProps<{
 const tab = ref('overview');
 
 const channel = ref<Misskey.entities.Channel | null>(null);
+const loadError = ref(false);
+let loadRequest = 0;
+let alive = true;
 const favorited = ref(false);
+const favoriteBusy = ref(false);
+let favoriteRequest = 0;
 const searchQuery = ref('');
 const searchPaginator = shallowRef();
 const searchKey = ref('');
@@ -128,27 +129,37 @@ useInterval(() => {
 	afterMounted: true,
 });
 
-watch(() => props.channelId, async () => {
-	const _channel = await misskeyApi('channels/show', {
-		channelId: props.channelId,
-	});
+async function loadChannel(): Promise<void> {
+	const request = ++loadRequest;
+	const channelId = props.channelId;
+	const account = $i?.id;
+	const token = $i?.token ?? null;
+	const current = () => alive && request === loadRequest && props.channelId === channelId && $i?.id === account && ($i?.token ?? null) === token;
+	channel.value = null; loadError.value = false; favorited.value = false; favoriteBusy.value = false; favoriteRequest++; searchPaginator.value = undefined;
+	try {
+		const _channel = await misskeyApi('channels/show', { channelId }, token);
+		if (!current()) return;
 
-	favorited.value = _channel.isFavorited ?? false;
-	if (favorited.value || _channel.isFollowing) {
-		tab.value = 'timeline';
-	}
-
-	if ((favorited.value || _channel.isFollowing) && _channel.lastNotedAt) {
-		const lastReadedAt: number = miLocalStorage.getItemAsJson(`channelLastReadedAt:${_channel.id}`) ?? 0;
-		const lastNotedAt = Date.parse(_channel.lastNotedAt);
-
-		if (lastNotedAt > lastReadedAt) {
-			miLocalStorage.setItemAsJson(`channelLastReadedAt:${_channel.id}`, lastNotedAt);
+		favorited.value = _channel.isFavorited ?? false;
+		if (favorited.value || _channel.isFollowing) {
+			tab.value = 'timeline';
 		}
-	}
 
-	channel.value = _channel;
-}, { immediate: true });
+		if ((favorited.value || _channel.isFollowing) && _channel.lastNotedAt) {
+			const lastReadedAt: number = miLocalStorage.getItemAsJson(`channelLastReadedAt:${_channel.id}`) ?? 0;
+			const lastNotedAt = Date.parse(_channel.lastNotedAt);
+
+			if (lastNotedAt > lastReadedAt) {
+				miLocalStorage.setItemAsJson(`channelLastReadedAt:${_channel.id}`, lastNotedAt);
+			}
+		}
+
+		channel.value = _channel;
+	} catch { if (current()) loadError.value = true; }
+}
+
+watch(() => [props.channelId, $i?.id, $i?.token], loadChannel, { immediate: true });
+onBeforeUnmount(() => { alive = false; loadRequest++; });
 
 function edit() {
 	router.push('/channels/:channelId/edit', {
@@ -158,38 +169,39 @@ function edit() {
 	});
 }
 
-function openPostForm() {
-	os.post({
-		channel: channel.value,
-	});
+async function openPostForm(): Promise<void> {
+	const selected = channel.value;
+	if (!selected || selected.isArchived) return;
+	if (!await pleaseLogin()) return;
+	if (!alive || channel.value?.id !== selected.id) return;
+	void os.post({ channel: selected });
 }
 
-function favorite() {
-	if (!channel.value) return;
-
-	os.apiWithDialog('channels/favorite', {
-		channelId: channel.value.id,
-	}).then(() => {
-		favorited.value = true;
+async function changeFavorite(next: boolean): Promise<void> {
+	if (!channel.value || !$i || favoriteBusy.value) return;
+	const channelId = channel.value.id;
+	const account = $i.id;
+	const token = $i.token;
+	const request = ++favoriteRequest;
+	const loadEpoch = loadRequest;
+	const current = () => alive && request === favoriteRequest && loadEpoch === loadRequest && channel.value?.id === channelId && $i?.id === account && $i.token === token;
+	favoriteBusy.value = true;
+	try {
+		if (!next) {
+			const { canceled } = await os.confirm({ type: 'warning', text: i18n.ts.unfavoriteConfirm });
+			if (canceled || !current()) return;
+		}
+		if (!current()) return;
+		await misskeyApi(next ? 'channels/favorite' : 'channels/unfavorite', { channelId }, token);
+		if (!current()) return;
+		favorited.value = next;
 		favoritedChannelsCache.delete();
-	});
+	} catch { if (current()) void os.alert({ type: 'error', text: i18n.ts.somethingHappened }); } finally { if (current()) favoriteBusy.value = false; }
 }
 
-async function unfavorite() {
-	if (!channel.value) return;
+async function favorite(): Promise<void> { await changeFavorite(true); }
 
-	const confirm = await os.confirm({
-		type: 'warning',
-		text: i18n.ts.unfavoriteConfirm,
-	});
-	if (confirm.canceled) return;
-	os.apiWithDialog('channels/unfavorite', {
-		channelId: channel.value.id,
-	}).then(() => {
-		favorited.value = false;
-		favoritedChannelsCache.delete();
-	});
-}
+async function unfavorite(): Promise<void> { await changeFavorite(false); }
 
 async function mute() {
 	if (!channel.value) return;
@@ -291,7 +303,7 @@ const headerActions = computed(() => {
 			});
 		}
 
-		if (!channel.value.isMuting) {
+		if ($i && !channel.value.isMuting) {
 			headerItems.push({
 				icon: 'ti ti-volume',
 				text: i18n.ts.mute,
@@ -299,7 +311,7 @@ const headerActions = computed(() => {
 					await mute();
 				},
 			});
-		} else {
+		} else if ($i) {
 			headerItems.push({
 				icon: 'ti ti-volume-off',
 				text: i18n.ts.unmute,
@@ -342,12 +354,19 @@ const headerTabs = computed(() => [{
 }]);
 
 definePage(() => ({
-	title: channel.value ? channel.value.name : i18n.ts.channel,
-	icon: 'ti ti-device-tv',
+	title: channel.value ? channel.value.name : i18n.ts.zalip._communities.title,
+	icon: 'ti ti-users',
 }));
 </script>
 
 <style lang="scss" module>
+.communityHeader { margin-bottom: 24px; h1 { margin: 16px 0 8px; font-size: 26px; overflow-wrap: anywhere; } > p { color: var(--MI_THEME-fgTransparentWeak); font-size: 13px; line-height: 1.5; } }
+.directoryLink { display: inline-flex; align-items: center; gap: 8px; color: var(--MI_THEME-fgTransparentWeak); font-size: 13px; }
+.communityActions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; }
+.writePost, .favoriteButton { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 16px; border-radius: 999px; background: var(--MI_THEME-buttonBg); &:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; } &:disabled { opacity: .5; cursor: not-allowed; } }
+.writePost { background: var(--MI_THEME-accent); color: var(--MI_THEME-fgOnAccent); font-size: 13px; font-weight: 700; }
+.favoriteButton[aria-pressed=true] { color: var(--MI_THEME-accent); }
+.loadState { padding: 32px 16px; text-align: center; color: var(--MI_THEME-fgTransparentWeak); }
 .footer {
 	-webkit-backdrop-filter: var(--MI-blur, blur(15px));
 	backdrop-filter: var(--MI-blur, blur(15px));
