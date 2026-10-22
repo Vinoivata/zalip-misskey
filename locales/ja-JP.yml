@@ -924,6 +924,11 @@ zalip:
     deleteGroup: "Удалить группу"
     invitationNotice: "Вас пригласили в эту группу. Для участия нужно принять приглашение."
     acceptInvitation: "Принять приглашение?"
+  _socialFeed:
+    discussions: "Обсуждения"
+    emptyDiscussions: "Обсуждений и отзывов пока нет."
+    emptyEssays: "Пока нет рецензий."
+    loadError: "Не удалось загрузить обсуждения. Попробуйте ещё раз."
   _reviews:
     title: "Отзывы и рецензии"
     reviews: "Отзывы"

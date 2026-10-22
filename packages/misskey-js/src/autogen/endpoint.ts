@@ -783,6 +783,8 @@ import type {
 	ZalipDiscussionsShowResponse,
 	ZalipEpisodesDiscussionsEnsureRequest,
 	ZalipEpisodesDiscussionsEnsureResponse,
+	ZalipFeedListRequest,
+	ZalipFeedListResponse,
 	ZalipGenresListResponse,
 	ZalipLibraryListResponse,
 	ZalipLibraryUpdateRequest,
@@ -1331,6 +1333,7 @@ export type Endpoints = {
 	'zalip/discussions/ensure': { req: ZalipDiscussionsEnsureRequest; res: ZalipDiscussionsEnsureResponse };
 	'zalip/discussions/show': { req: ZalipDiscussionsShowRequest; res: ZalipDiscussionsShowResponse };
 	'zalip/episodes/discussions/ensure': { req: ZalipEpisodesDiscussionsEnsureRequest; res: ZalipEpisodesDiscussionsEnsureResponse };
+	'zalip/feed/list': { req: ZalipFeedListRequest; res: ZalipFeedListResponse };
 	'zalip/genres/list': { req: EmptyRequest; res: ZalipGenresListResponse };
 	'zalip/library/list': { req: EmptyRequest; res: ZalipLibraryListResponse };
 	'zalip/library/update': { req: ZalipLibraryUpdateRequest; res: ZalipLibraryUpdateResponse };

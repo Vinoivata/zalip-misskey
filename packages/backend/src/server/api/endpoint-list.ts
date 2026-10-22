@@ -466,6 +466,7 @@ export * as 'zalip/episodes/discussions/ensure' from './endpoints/zalip/episodes
 export * as 'zalip/library/list' from './endpoints/zalip/library/list.js';
 export * as 'zalip/library/update' from './endpoints/zalip/library/update.js';
 export * as 'zalip/reviews/list' from './endpoints/zalip/reviews/list.js';
+export * as 'zalip/feed/list' from './endpoints/zalip/feed/list.js';
 export * as 'zalip/chat/conversations' from './endpoints/zalip/chat/conversations.js';
 export * as 'zalip/chat/preferences/show' from './endpoints/zalip/chat/preferences/show.js';
 export * as 'zalip/chat/preferences/update' from './endpoints/zalip/chat/preferences/update.js';

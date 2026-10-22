@@ -5539,6 +5539,17 @@ declare module '../api.js' {
     ): Promise<SwitchCaseResponseType<E, P>>;
 
     /**
+     * Read canonical public title comments and reviews, or essays. Never manufactures Notes. Cursor scope includes the viewer, section and spoiler filter; privacy is reapplied on every page.
+     *
+     * **Credential required**: *No*
+     */
+    request<E extends 'zalip/feed/list', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
      * List genre facets used by published Zalip cinema titles.
      *
      * **Credential required**: *No*

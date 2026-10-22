@@ -10,7 +10,7 @@ import MkZalipFeed from '@/components/MkZalipFeed.vue';
 import type { MenuItem } from '@/types/menu.js';
 import { i18n } from '@/i18n.js';
 
-const controls = vi.hoisted(() => ({ popup: vi.fn(), post: vi.fn(), login: vi.fn(), reload: vi.fn(), storeSet: vi.fn(), reset: () => {}, dismiss: () => {} }));
+const controls = vi.hoisted(() => ({ popup: vi.fn(), post: vi.fn(), login: vi.fn(), reload: vi.fn(), socialRefresh: vi.fn(), storeSet: vi.fn(), reset: () => {}, dismiss: () => {} }));
 vi.mock('@/i.js', () => ({ $i: { id: 'fixture-viewer' } }));
 vi.mock('@/os.js', () => ({ popupMenu: controls.popup, post: controls.post }));
 vi.mock('@/utility/please-login.js', () => ({ pleaseLogin: controls.login }));
@@ -25,6 +25,10 @@ vi.mock('@/store.js', async () => {
 vi.mock('@/components/MkStreamingNotesTimeline.vue', async () => {
 	const { defineComponent, h } = await import('vue');
 	return { default: defineComponent({ props: ['src', 'withReplies'], setup: (props, { expose }) => { expose({ reloadTimeline: controls.reload }); return () => h('div', { 'data-testid': 'timeline', 'data-src': props.src, 'data-with-replies': props.withReplies }); } }) };
+});
+vi.mock('@/components/MkZalipSocialFeed.vue', async () => {
+	const { defineComponent, h } = await import('vue');
+	return { default: defineComponent({ props: ['section', 'pullToRefresh', 'withSensitive'], setup: (props, { expose }) => { expose({ refresh: controls.socialRefresh }); return () => h('div', { 'data-testid': 'social-feed', 'data-section': props.section, 'data-sensitive': String(props.withSensitive) }); } }) };
 });
 
 function setup() {
@@ -68,5 +72,22 @@ describe('native feed settings surface', () => {
 		const view = setup(); await settle(); const button = view.getByRole('button', { name: i18n.ts.zalip.feedSettings });
 		await fireEvent.click(button); await fireEvent.click(button); await settle(); expect(controls.popup).toHaveBeenCalledTimes(1);
 		controls.dismiss(); await settle(); await fireEvent.click(button); await settle(); expect(controls.popup).toHaveBeenCalledTimes(2); expect(button.getAttribute('aria-expanded')).toBe('true');
+	});
+	it('switches discussions and essays without changing native filters, dimensions or the selected timeline', async () => {
+		const view = setup(); await settle();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._socialFeed.discussions })); await settle();
+		expect(view.queryByTestId('timeline')).toBeNull();
+		expect(view.queryByRole('button', { name: i18n.ts.zalip.feedSettings })).toBeNull();
+		expect(view.queryByRole('region', { name: i18n.ts.zalip.feedQuickPost })).toBeNull();
+		expect(view.getByTestId('social-feed').getAttribute('data-section')).toBe('discussions');
+		expect(view.getByTestId('social-feed').getAttribute('data-sensitive')).toBe('false');
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._reviews.essays })); await settle();
+		expect(view.getByTestId('social-feed').getAttribute('data-section')).toBe('essays');
+		expect(controls.storeSet).not.toHaveBeenCalled();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip.feedFollowing })); await settle();
+		expect(view.queryByTestId('social-feed')).toBeNull();
+		expect(view.getByTestId('timeline').getAttribute('data-src')).toBe('home');
+		expect(view.getByRole('button', { name: i18n.ts.zalip.feedSettings })).toBeTruthy();
+		expect(controls.storeSet.mock.calls.at(-1)?.[1].filter).toEqual({ withRenotes: true, withReplies: true, withSensitive: false, onlyFiles: false });
 	});
 });

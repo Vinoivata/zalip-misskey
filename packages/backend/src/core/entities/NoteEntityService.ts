@@ -389,6 +389,8 @@ export class NoteEntityService implements OnModuleInit {
 		me?: { id: MiUser['id'] } | null | undefined,
 		options?: {
 			detail?: boolean;
+			/** Keep poll/myReaction details without hydrating nested reply/renote bodies. */
+			withNestedNotes?: boolean;
 			skipHide?: boolean;
 			withReactionAndUserPairCache?: boolean;
 			_hint_?: {
@@ -404,6 +406,7 @@ export class NoteEntityService implements OnModuleInit {
 	): Promise<Packed<'Note'>> {
 		const opts = Object.assign({
 			detail: true,
+			withNestedNotes: true,
 			skipHide: false,
 			withReactionAndUserPairCache: false,
 		}, options);
@@ -488,7 +491,7 @@ export class NoteEntityService implements OnModuleInit {
 				clippedCount: note.clippedCount,
 
 				// そもそもJOINしていない場合はundefined、JOINしたけど存在していなかった場合はnullで区別される
-				reply: (note.replyId && note.reply === null) ? null : note.replyId ? nullIfEntityNotFound(this.pack(note.reply ?? note.replyId, me, {
+				reply: opts.withNestedNotes === false ? undefined : (note.replyId && note.reply === null) ? null : note.replyId ? nullIfEntityNotFound(this.pack(note.reply ?? note.replyId, me, {
 					detail: false,
 					skipHide: opts.skipHide,
 					withReactionAndUserPairCache: opts.withReactionAndUserPairCache,
@@ -496,7 +499,7 @@ export class NoteEntityService implements OnModuleInit {
 				})) : undefined,
 
 				// そもそもJOINしていない場合はundefined、JOINしたけど存在していなかった場合はnullで区別される
-				renote: (note.renoteId && note.renote === null) ? null : note.renoteId ? nullIfEntityNotFound(this.pack(note.renote ?? note.renoteId, me, {
+				renote: opts.withNestedNotes === false ? undefined : (note.renoteId && note.renote === null) ? null : note.renoteId ? nullIfEntityNotFound(this.pack(note.renote ?? note.renoteId, me, {
 					detail: true,
 					skipHide: opts.skipHide,
 					withReactionAndUserPairCache: opts.withReactionAndUserPairCache,
@@ -530,6 +533,7 @@ export class NoteEntityService implements OnModuleInit {
 		me?: { id: MiUser['id'] } | null | undefined,
 		options?: {
 			detail?: boolean;
+			withNestedNotes?: boolean;
 			skipHide?: boolean;
 		},
 	) {

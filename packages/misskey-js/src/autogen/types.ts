@@ -4541,6 +4541,15 @@ export type paths = {
          */
         post: operations['zalip___episodes___discussions___ensure'];
     };
+    '/zalip/feed/list': {
+        /**
+         * zalip/feed/list
+         * @description Read canonical public title comments and reviews, or essays. Never manufactures Notes. Cursor scope includes the viewer, section and spoiler filter; privacy is reapplied on every page.
+         *
+         *     **Credential required**: *No*
+         */
+        post: operations['zalip___feed___list'];
+    };
     '/zalip/genres/list': {
         /**
          * zalip/genres/list
@@ -43501,6 +43510,157 @@ export interface operations {
                         /** Format: misskey:id */
                         noteId: string;
                         created: boolean;
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    zalip___feed___list: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                    /**
+                     * @default discussions
+                     * @enum {string}
+                     */
+                    section?: 'discussions' | 'essays';
+                    /** @default 10 */
+                    limit?: number;
+                    /** @default true */
+                    hideSpoilers?: boolean;
+                    cursor?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        items: ({
+                            key: string;
+                            id: string;
+                            /** Format: date-time */
+                            createdAt: string;
+                            work: {
+                                id: string;
+                                slug: string;
+                                /** @enum {string} */
+                                kind: 'movie' | 'series' | 'anime' | 'animation';
+                                title: string;
+                                posterPath: string | null;
+                                releaseYear: number | null;
+                            };
+                            /** @enum {string} */
+                            type: 'comment';
+                            note: components['schemas']['Note'];
+                            discussion: {
+                                rootNoteId: string;
+                                episodeId: string | null;
+                                episodeNumber: number | null;
+                                seasonNumber: number | null;
+                            };
+                        } | {
+                            key: string;
+                            id: string;
+                            /** Format: date-time */
+                            createdAt: string;
+                            work: {
+                                id: string;
+                                slug: string;
+                                /** @enum {string} */
+                                kind: 'movie' | 'series' | 'anime' | 'animation';
+                                title: string;
+                                posterPath: string | null;
+                                releaseYear: number | null;
+                            };
+                            /** @enum {string} */
+                            type: 'review' | 'essay';
+                            review: {
+                                /** Format: id */
+                                id: string;
+                                /** Format: id */
+                                workId: string;
+                                user: components['schemas']['UserLite'];
+                                /** @enum {string} */
+                                format: 'review' | 'essay';
+                                title: string | null;
+                                body: string;
+                                isSpoiler: boolean;
+                                /** @enum {string} */
+                                sentiment: 'positive' | 'neutral' | 'negative';
+                                rating: number | null;
+                                helpfulCount: number;
+                                unhelpfulCount: number;
+                                /** @enum {string|null} */
+                                myVote: 'helpful' | 'unhelpful' | null;
+                                /** Format: date-time */
+                                createdAt: string;
+                                /** Format: date-time */
+                                updatedAt: string;
+                                canEdit: boolean;
+                                canDelete: boolean;
+                            };
+                        })[];
+                        nextCursor: string | null;
                     };
                 };
             };

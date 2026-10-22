@@ -3693,6 +3693,24 @@ export interface Locale extends ILocale {
              */
             "acceptInvitation": string;
         };
+        "_socialFeed": {
+            /**
+             * Обсуждения
+             */
+            "discussions": string;
+            /**
+             * Обсуждений и отзывов пока нет.
+             */
+            "emptyDiscussions": string;
+            /**
+             * Пока нет рецензий.
+             */
+            "emptyEssays": string;
+            /**
+             * Не удалось загрузить обсуждения. Попробуйте ещё раз.
+             */
+            "loadError": string;
+        };
         "_reviews": {
             /**
              * Отзывы и рецензии

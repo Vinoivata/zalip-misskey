@@ -8,17 +8,19 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<section :class="$style.feedColumn" :aria-label="i18n.ts.timeline">
 		<header :class="$style.feedHead">
 			<div :class="$style.modeRail" :aria-label="i18n.ts.timeline">
-				<button v-for="mode in feedModes.filter(mode => mode.key !== 'global')" :key="mode.key" type="button" class="_button" :class="[$style.mode, { [$style.modeActive]: src === mode.key }]" :aria-pressed="src === mode.key" @click="src = mode.key">
+				<button v-for="mode in feedModes.filter(mode => mode.key !== 'global')" :key="mode.key" type="button" class="_button" :class="[$style.mode, { [$style.modeActive]: section === 'posts' && src === mode.key }]" :aria-pressed="section === 'posts' && src === mode.key" @click="selectTimeline(mode.key)">
 					<MkZalipIcon :name="mode.icon"/><span>{{ mode.title }}</span>
 				</button>
+				<button type="button" class="_button" :class="[$style.mode, { [$style.modeActive]: section === 'discussions' }]" :aria-pressed="section === 'discussions'" @click="section = 'discussions'"><i class="ti ti-messages" aria-hidden="true"></i><span>{{ i18n.ts.zalip._socialFeed.discussions }}</span></button>
+				<button type="button" class="_button" :class="[$style.mode, { [$style.modeActive]: section === 'essays' }]" :aria-pressed="section === 'essays'" @click="section = 'essays'"><i class="ti ti-file-text" aria-hidden="true"></i><span>{{ i18n.ts.zalip._reviews.essays }}</span></button>
 				<MkA to="/channels" :class="$style.mode"><MkZalipIcon name="users"/><span>{{ i18n.ts.zalip._communities.title }}</span></MkA>
-				<button v-for="mode in feedModes.filter(mode => mode.key === 'global')" :key="mode.key" type="button" class="_button" :class="[$style.mode, { [$style.modeActive]: src === mode.key }]" :aria-pressed="src === mode.key" @click="src = mode.key"><MkZalipIcon :name="mode.icon"/><span>{{ mode.title }}</span></button>
+				<button v-for="mode in feedModes.filter(mode => mode.key === 'global')" :key="mode.key" type="button" class="_button" :class="[$style.mode, { [$style.modeActive]: section === 'posts' && src === mode.key }]" :aria-pressed="section === 'posts' && src === mode.key" @click="selectTimeline(mode.key)"><MkZalipIcon :name="mode.icon"/><span>{{ mode.title }}</span></button>
 				<MkA v-if="$i" to="/my/favorites" :class="$style.mode"><MkZalipIcon name="bookmark"/><span>{{ i18n.ts.favorites }}</span></MkA>
-				<button type="button" class="_button" :class="[$style.mode, { [$style.modeActive]: settingsOpen }]" :aria-label="i18n.ts.zalip.feedSettings" aria-haspopup="menu" :aria-expanded="settingsOpen" @click="openFeedSettings"><MkZalipIcon name="settings"/></button>
+				<button v-if="section === 'posts'" type="button" class="_button" :class="[$style.mode, { [$style.modeActive]: settingsOpen }]" :aria-label="i18n.ts.zalip.feedSettings" aria-haspopup="menu" :aria-expanded="settingsOpen" @click="openFeedSettings"><MkZalipIcon name="settings"/></button>
 			</div>
 		</header>
 
-		<section :class="$style.composer" :aria-label="i18n.ts.zalip.feedQuickPost">
+		<section v-if="section === 'posts'" :class="$style.composer" :aria-label="i18n.ts.zalip.feedQuickPost">
 			<button type="button" class="_button" :class="$style.composerInput" @click="writePost">
 				<MkAvatar v-if="$i" :user="$i" :class="$style.composeAvatar"/>
 				<span v-else :class="$style.composerAnonymous"><i class="ti ti-user"></i></span>
@@ -28,6 +30,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</section>
 
 		<MkStreamingNotesTimeline
+			v-if="section === 'posts'"
 			ref="tlComponent"
 			:key="src + withRenotes + withReplies + onlyFiles + withSensitive"
 			:class="$style.tl"
@@ -41,6 +44,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			:zalipFlat="true"
 			:pullToRefresh="pullToRefresh"
 		/>
+		<MkZalipSocialFeed v-else ref="socialComponent" :section="section" :pullToRefresh="pullToRefresh" :withSensitive="withSensitive"/>
 	</section>
 </main>
 </template>
@@ -51,6 +55,7 @@ import type { MenuItem } from '@/types/menu.js';
 import type { BasicTimelineType } from '@/timelines.js';
 import type { ZalipIconName } from '@/components/MkZalipIcon.vue';
 import MkStreamingNotesTimeline from '@/components/MkStreamingNotesTimeline.vue';
+import MkZalipSocialFeed from '@/components/MkZalipSocialFeed.vue';
 import MkZalipIcon from '@/components/MkZalipIcon.vue';
 import * as os from '@/os.js';
 import { store } from '@/store.js';
@@ -62,11 +67,14 @@ import { prefer } from '@/preferences.js';
 import { pleaseLogin } from '@/utility/please-login.js';
 
 const tlComponent = useTemplateRef('tlComponent');
+const socialComponent = useTemplateRef('socialComponent');
+const section = ref<'posts' | 'discussions' | 'essays'>('posts');
 const settingsOpen = ref(false);
 withDefaults(defineProps<{ pullToRefresh?: boolean }>(), { pullToRefresh: true });
 
 async function refresh(): Promise<void> {
-	await tlComponent.value?.reloadTimeline();
+	if (section.value === 'posts') await tlComponent.value?.reloadTimeline();
+	else await socialComponent.value?.refresh();
 }
 
 defineExpose({ refresh });
@@ -119,6 +127,11 @@ function saveSrc(newSrc: TimelinePageSrc): void {
 	if (['local', 'global'].includes(newSrc)) {
 		srcWhenNotSignin.value = newSrc as 'local' | 'global';
 	}
+}
+
+function selectTimeline(newSrc: BasicTimelineType): void {
+	section.value = 'posts';
+	src.value = newSrc;
 }
 
 function saveTlFilter(key: keyof typeof store.s.tl.filter, newValue: boolean) {

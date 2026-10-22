@@ -13,7 +13,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	@keydown.enter.self.prevent="openComments()"
 	@keydown.space.self.prevent="openComments()"
 >
-	<MkNoteSub v-if="appearNote.replyId && !isCommentRepost && !renoteCollapsed" :note="appearNote?.reply ?? null" :class="$style.replyTo" thread/>
+	<MkNoteSub v-if="!hideNestedPreviews && appearNote.replyId && !isCommentRepost && !renoteCollapsed" :note="appearNote?.reply ?? null" :class="$style.replyTo" thread/>
 	<div v-if="pinned" :class="$style.tip"><i class="ti ti-pin"></i> {{ i18n.ts.pinnedNote }}</div>
 	<div v-if="isRenote" :class="$style.renote">
 		<div v-if="note.channel" :class="$style.colorBar" :style="{ background: note.channel.color }"></div>
@@ -112,7 +112,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<div v-if="isEnabledUrlPreview" data-zalip-post-interactive>
 							<MkUrlPreview v-for="url in urls" :key="url" :url="url" :compact="true" :detail="false" :class="$style.urlPreview"/>
 						</div>
-						<div v-if="appearNote.renoteId" data-zalip-post-interactive :class="$style.quote"><MkNoteSimple :note="appearNote?.renote ?? null" :class="$style.quoteNote"/></div>
+						<div v-if="!hideNestedPreviews && appearNote.renoteId" data-zalip-post-interactive :class="$style.quote"><MkNoteSimple :note="appearNote?.renote ?? null" :class="$style.quoteNote"/></div>
 					</div>
 					<MkA v-if="appearNote.channel && !inChannel" :class="$style.channel" :to="`/channels/${appearNote.channel.id}`"><i class="ti ti-device-tv"></i> {{ appearNote.channel.name }}</MkA>
 				</div>
@@ -231,8 +231,10 @@ const props = withDefaults(defineProps<{
 	pinned?: boolean;
 	mock?: boolean;
 	withHardMute?: boolean;
+	hideNestedPreviews?: boolean;
 }>(), {
 	mock: false,
+	hideNestedPreviews: false,
 });
 
 const emit = defineEmits<{

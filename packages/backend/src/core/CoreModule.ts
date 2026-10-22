@@ -82,6 +82,7 @@ import { ReversiService } from './ReversiService.js';
 import { PageService } from './PageService.js';
 import { ZalipCatalogService } from './ZalipCatalogService.js';
 import { ZalipReviewService } from './ZalipReviewService.js';
+import { ZalipFeedService } from './ZalipFeedService.js';
 import { ZalipWatchProgressService } from './ZalipWatchProgressService.js';
 import { ZalipNoteViewService } from './ZalipNoteViewService.js';
 import { ZalipImporterService } from './ZalipImporterService.js';
@@ -403,6 +404,7 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		PageService,
 		ZalipCatalogService,
 		ZalipReviewService,
+		ZalipFeedService,
 		ZalipWatchProgressService,
 		ZalipNoteViewService,
 		ZalipImporterService,
@@ -721,6 +723,7 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		PageService,
 		ZalipCatalogService,
 		ZalipReviewService,
+		ZalipFeedService,
 		ZalipWatchProgressService,
 		ZalipNoteViewService,
 		ZalipImporterService,

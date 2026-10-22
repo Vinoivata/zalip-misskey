@@ -254,6 +254,15 @@ export class ZalipReviewService {
 		});
 	}
 
+	/** Read-only finite projection for the cross-title feed. No fake native Notes. */
+	public async feedByIds(ids: string[], me: Viewer | null, format: ZalipReviewFormat, hideSpoilers: boolean): Promise<PackedZalipReview[]> {
+		if (ids.length === 0) return [];
+		if (ids.length > 40 || !zalipReviewFormats.includes(format)) throw new ZalipReviewError('INVALID_ZALIP_REVIEW');
+		const rows = await this.db.query<ReviewRow[]>(`${reviewProjectionSql} WHERE r."id" = ANY($1::varchar[]) AND r."deletedAt" IS NULL AND ${zalipReviewVisibleAuthorSql}
+			AND r."format" = $3 AND (NOT $4::boolean OR r."isSpoiler" = false)`, [ids, me?.id ?? null, format, hideSpoilers]);
+		return this.pack(rows, me);
+	}
+
 	public async delete(me: Viewer, reviewId: string): Promise<void> {
 		const moderator = await this.roleService.isModerator(me);
 		await this.db.transaction(async manager => {

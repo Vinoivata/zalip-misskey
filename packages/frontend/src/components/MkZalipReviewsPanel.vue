@@ -42,16 +42,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</form>
 	<p v-if="actionError" role="alert" :class="[$style.state, $style.error]">{{ actionError }}</p>
 	<div v-if="pager.state.items.length" :class="$style.items">
-		<article v-for="review in pager.state.items" :id="`review-${review.id}`" :key="review.id" :class="$style.review">
-			<MkAvatar :user="review.user" :class="$style.avatar" link/>
-			<div :class="$style.reviewMain">
-				<header :class="$style.reviewHeader"><div :class="$style.author"><MkA :to="userPage(review.user)"><b>{{ review.user.name || review.user.username }}</b></MkA><MkTime :time="review.createdAt"/><span v-if="review.rating != null" :class="$style.rating"><i class="ti ti-star"></i> {{ review.rating }}</span></div><button v-if="$i" type="button" class="_button" :class="$style.menu" :aria-label="i18n.ts.more" @click="openMenu(review, $event)"><i class="ti ti-dots"></i></button></header>
-				<span :class="[$style.sentiment, $style[review.sentiment]]">{{ sentimentLabel(review.sentiment) }}</span>
-				<template v-if="!review.isSpoiler || revealed.has(review.id)"><h3 v-if="review.title" :class="$style.reviewTitle">{{ review.title }}</h3><p :class="$style.body" class="_selectable">{{ review.body }}</p></template>
-				<button v-else type="button" class="_button" :class="$style.spoiler" @click="reveal(review.id)"><i class="ti ti-eye-off"></i><span>{{ i18n.ts.zalip._reviews.spoiler }}</span><b>{{ i18n.ts.zalip._reviews.showSpoiler }}</b></button>
-				<footer :class="$style.votes"><button type="button" class="_button" :class="[$style.vote, { [$style.active]: review.myVote === 'helpful' }]" :disabled="review.user.id === $i?.id || votePending.has(review.id)" :aria-pressed="review.myVote === 'helpful'" :aria-label="i18n.ts.zalip._reviews.useful" @click="vote(review, 'helpful')"><i class="ti ti-thumb-up"></i> {{ review.helpfulCount }}</button><button type="button" class="_button" :class="[$style.vote, { [$style.active]: review.myVote === 'unhelpful' }]" :disabled="review.user.id === $i?.id || votePending.has(review.id)" :aria-pressed="review.myVote === 'unhelpful'" :aria-label="i18n.ts.zalip._reviews.notUseful" @click="vote(review, 'unhelpful')"><i class="ti ti-thumb-down"></i> {{ review.unhelpfulCount }}</button></footer>
-			</div>
-		</article>
+		<MkZalipReviewCard v-for="review in pager.state.items" :key="review.id" :review="review" :viewerId="$i?.id" :revealed="revealed.has(review.id)" :pending="votePending.has(review.id)" @reveal="reveal(review.id)" @vote="vote(review, $event)" @menu="openMenu(review, $event)"/>
 	</div>
 	<div v-if="pager.state.error" :class="$style.state"><p role="alert">{{ i18n.ts.zalip._reviews.loadError }}</p><button type="button" class="_button" :class="$style.action" @click="pager.load">{{ i18n.ts.retry }}</button></div>
 	<div v-else-if="pager.state.loaded && !pager.state.items.length && !pager.state.pending" :class="$style.state"><p>{{ filtered ? i18n.ts.zalip._reviews.filteredEmpty : i18n.ts.zalip._reviews.empty }}</p><button v-if="filtered" type="button" class="_button" :class="$style.action" @click="resetFilters">{{ i18n.ts.zalip._reviews.resetFilters }}</button></div>
@@ -65,11 +56,10 @@ import { computed, nextTick, onBeforeUnmount, reactive, ref, useTemplateRef, wat
 import { url } from '@@/js/config.js';
 import type { MenuItem } from '@/types/menu.js';
 import type { ZalipReview, ZalipReviewFilters, ZalipReviewFormat, ZalipReviewSentiment, ZalipReviewVote, ZalipReviewsResponse } from '@/utility/zalip-reviews.js';
-import MkAvatar from '@/components/global/MkAvatar.vue';
+import MkZalipReviewCard from '@/components/MkZalipReviewCard.vue';
 import { createZalipReviewsPager } from '@/utility/zalip-reviews.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { pleaseLogin } from '@/utility/please-login.js';
-import { userPage } from '@/filters/user.js';
 import { $i } from '@/i.js';
 import { i18n } from '@/i18n.js';
 import * as os from '@/os.js';
@@ -122,10 +112,6 @@ function reload(): void {
 
 function resetFilters(): void {
 	format.value = 'all'; sentiment.value = 'all'; hideSpoilers.value = false;
-}
-
-function sentimentLabel(value: ZalipReviewSentiment): string {
-	return sentiments.value.find(item => item.value === value)?.label ?? '';
 }
 
 function reveal(id: string): void { revealed.value = new Set([...revealed.value, id]); }

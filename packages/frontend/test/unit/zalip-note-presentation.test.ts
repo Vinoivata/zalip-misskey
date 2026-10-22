@@ -212,6 +212,23 @@ describe('Zalip compact note presentation', () => {
 		expect(bubble.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 		expect(noteSource).toContain(':replyAnchor="commentButton"');
 	});
+	it('can omit intentionally unavailable nested previews in a flat feed without claiming the parent was deleted', async () => {
+		const fixture = note({ replyId: 'canonical-root', renoteId: 'quoted', poll: { multiple: false, expiresAt: null, choices: [] }, zalipDiscussion: { workId: 'work', slug: 'cinema-title', title: 'Canonical cinema title', posterPath: null, rootNoteId: 'canonical-root', isRoot: false, episodeId: null, episodeNumber: null, seasonNumber: null } });
+		const view = setup(MkNote, fixture, { hideNestedPreviews: true });
+		expect(view.queryByText(i18n.ts.deletedNote)).toBeNull();
+		expect(view.queryByTestId('note-quote')).toBeNull();
+		expect(view.container.querySelector('[class*="sub_thread"]')).toBeNull();
+		expect(view.getByText('Fixture post')).toBeTruthy();
+		expect(view.getByTestId('note-poll')).toBeTruthy();
+		expect(view.getByRole('link', { name: /Canonical cinema title/u }).getAttribute('href')).toBe('/zalip/cinema-title#discussion');
+		expect(view.getByRole('button', { name: i18n.ts.reaction }).getAttribute('aria-pressed')).toBe('true');
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip.comments }));
+		expect(actions.push).toHaveBeenCalledWith('/notes/:noteId/:initialTab?', { params: { noteId: fixture.id, initialTab: 'replies' } });
+		cleanup();
+		const ordinary = setup(MkNote, fixture);
+		expect(ordinary.getByText(i18n.ts.deletedNote)).toBeTruthy();
+		expect(ordinary.getByTestId('note-quote')).toBeTruthy();
+	});
 	it.each([MkNote, MkNoteDetailed])('renders the actual reposted comment and attachment instead of a parent-root preview in %s', component => {
 		const parent = note({ id: 'discussion-root', text: 'Обсуждение: Test title', isZalipDiscussionRoot: true });
 		const comment = note({ id: 'actual-comment', text: 'The comment the user reposted', replyId: parent.id, reply: parent, files: [{ id: 'comment-image' } as Misskey.entities.DriveFile] });

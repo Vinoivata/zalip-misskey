@@ -94,6 +94,7 @@
 - Enhance: Add preview-first person imports, responsive biographies with formatted dates and age, alias search and role/year/type filmography filters without changing existing catalogue identities.
 - Fix: Preserve pending Zalip replies and post navigation across target changes, synchronize lazy-loaded post bookmarks, recover failed episode lists, and show accurate catalogue library badges and original-title search.
 - Fix: Use confirmed movie or series classification for anime continuation and retain episode artwork fallbacks when a still is unavailable.
+- Feat: Add discussions and essays feed tabs with shared title-linked review cards, independent editing and protected spoiler controls while retaining native comment actions.
 
 ### Server
 - Enhance: Enrich Vibix serial players through a bounded exact-identity publisher catalogue lookup and retain valid episode maps only within the same provider account and SDK parent.
@@ -140,6 +141,7 @@
 - Fix: Download selected Kinopoisk posters through the validated same-title API and image-CDN redirect chain without broadening network or image limits.
 - Feat: Import exact TMDB/Kinopoisk person identities with protected editorial fields, bounded local WebP portraits, same-ID Kinopoisk portrait redirects, scheduled photo processing, distinct-work filmography cursors and public-only Person metadata.
 - Fix: Share verified movie/series classification between public Zalip title details and watch-progress validation without exposing provider identities.
+- Feat: Add a bounded, privacy-filtered cinema discussion and essay feed with scoped keyset pagination and native comment reaction and poll details.
 
 ## 2026.7.0
 
