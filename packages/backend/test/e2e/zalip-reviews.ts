@@ -152,7 +152,7 @@ describe('Zalip canonical title reviews HTTP API', () => {
 		for (const rating of [8, null]) {
 			if (rating === null) assert.strictEqual((await createReview(workId, author, { rating: null })).rating, null);
 			const current = await db.getRepository(MiZalipLibraryEntry).findOneByOrFail({ userId: author.id, workId });
-			assert.deepStrictEqual(current, { ...before, personalRating: rating, updatedAt: current.updatedAt });
+			assert.deepStrictEqual({ ...current }, { ...before, personalRating: rating, updatedAt: current.updatedAt });
 		}
 		const cleared = await api('zalip/reviews/list', { workId }, author);
 		assert.ok(cleared.body.myReviews.every(row => row.rating === null));
@@ -250,13 +250,17 @@ describe('Zalip canonical title reviews HTTP API', () => {
 		const review = await createReview(workId, author, { rating: 9 });
 		await createReview(workId, reader, { rating: 3 });
 		try {
-			assert.strictEqual((await api('blocking/create', { userId: author.id }, reader)).status, 204);
+			const blocking = await api('blocking/create', { userId: author.id }, reader);
+			assert.strictEqual(blocking.status, 200);
+			assert.strictEqual(blocking.body.id, author.id);
 			const blocked = await api('zalip/reviews/list', { workId }, reader);
 			assert.strictEqual(blocked.body.total, 1);
 			assert.strictEqual(blocked.body.summary.ratingCount, 1);
 			assert.strictEqual(blocked.body.summary.averageRating, 3);
 			assertApiError(await api('zalip/reviews/vote', { reviewId: review.id, value: 'helpful' }, reader), 404, 'NO_SUCH_ZALIP_REVIEW');
-			assert.strictEqual((await api('blocking/delete', { userId: author.id }, reader)).status, 204);
+			const unblocking = await api('blocking/delete', { userId: author.id }, reader);
+			assert.strictEqual(unblocking.status, 200);
+			assert.strictEqual(unblocking.body.id, author.id);
 			assert.strictEqual((await api('mute/create', { userId: author.id }, reader)).status, 204);
 			const muted = await api('zalip/reviews/list', { workId }, reader);
 			assert.strictEqual(muted.body.total, 1);
