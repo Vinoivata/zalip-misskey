@@ -7,6 +7,7 @@ process.env.NODE_ENV = 'test';
 
 import * as assert from 'node:assert';
 import { randomUUID } from 'node:crypto';
+import { setTimeout } from 'node:timers/promises';
 import { afterAll, beforeAll, describe, test } from 'vitest';
 import type { DataSource } from 'typeorm';
 import type { SignupResponse } from 'misskey-js/entities.js';
@@ -186,10 +187,20 @@ describe('Zalip typed social feed HTTP API', () => {
 		// A formerly public parent/quote may become private after a public reply exists.
 		await db.getRepository(MiNote).update(parent.id, { visibility: 'specified', visibleUserIds: [reader.id] });
 		await db.getRepository(MiNote).update(quoted.id, { visibility: 'specified', visibleUserIds: [reader.id] });
+		// Native NoteEntityService.packMany intentionally supplies a null own-reaction
+		// hint for Notes younger than two seconds. Keep that cache/performance policy;
+		// this fixture verifies settled native state, not an immediate-posting race.
+		await setTimeout(2100);
+		const native = await api('notes/show', { noteId: comment.id }, author);
+		assert.strictEqual(native.status, 200);
+		assert.strictEqual(native.body.myReaction, '👍');
+		assert.deepStrictEqual(native.body.poll?.choices.map(choice => [choice.text, choice.votes, choice.isVoted]), [['Yes', 1, true], ['No', 0, false]]);
 		const result = await feed({ limit: 20 }, author); assert.strictEqual(result.status, 200);
 		const item = result.body.items.find(value => value.id === comment.id);
 		assert.ok(item?.type === 'comment'); assert.strictEqual(item.note.myReaction, '👍');
 		assert.deepStrictEqual(item.note.poll?.choices.map(choice => [choice.text, choice.votes, choice.isVoted]), [['Yes', 1, true], ['No', 0, false]]);
+		assert.strictEqual(item.note.myReaction, native.body.myReaction);
+		assert.deepStrictEqual(item.note.poll, native.body.poll);
 		assert.strictEqual(item.note.replyId, parent.id); assert.strictEqual(item.note.renoteId, quoted.id);
 		assert.strictEqual(item.note.reply, undefined); assert.strictEqual(item.note.renote, undefined);
 		assert.ok(!JSON.stringify(result.body.items).includes('SECRET NESTED'));
