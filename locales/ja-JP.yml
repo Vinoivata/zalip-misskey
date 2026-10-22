@@ -1024,6 +1024,7 @@ zalip:
   playerUnavailable: "Плеер пока недоступен. Попробуйте позже."
   playerEpisodeUnavailable: "Этой серии нет в выбранной озвучке. Выберите другую озвучку или плеер."
   playerEpisodesLoading: "Загружаем эпизоды…"
+  playerEpisodesLoadFailed: "Не удалось загрузить серии. Попробуйте ещё раз."
   playerEpisodesEmpty: "Список серий пока готовится."
   playerVoiceSearch: "Найти озвучку"
   trailerTab: "Трейлер"

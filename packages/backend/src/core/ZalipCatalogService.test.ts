@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { DataSource, EntitySchema } from 'typeorm';
 import { ZalipCatalogService } from '@/core/ZalipCatalogService.js';
 import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
+import { MiZalipExternalIdentity } from '@/models/ZalipExternalIdentity.js';
 import { MiZalipEpisodeNoteContext } from '@/models/ZalipEpisodeNoteContext.js';
 import { MiZalipLibraryEntry } from '@/models/ZalipLibraryEntry.js';
 import { MiZalipNoteContext } from '@/models/ZalipNoteContext.js';
@@ -53,7 +54,8 @@ describe('ZalipCatalogService', () => {
 		const work = { id: 'work', slug: 'title', title: 'Title', kind: 'movie', posterPath: '/files/processed.webp', galleryPaths: ['/files/frame.webp'], importData: { localArtwork: { posterUrl: '/files/processed.webp' }, values: { posterUrl: 'https://original.private.invalid/poster.jpg' }, artworkOriginals: ['https://original.private.invalid/frame.jpg'], countries: ['Россия'], ratings: [] } };
 		const works = { findOneBy: vi.fn().mockResolvedValue(work) };
 		const seasons = { find: vi.fn().mockResolvedValue([]) };
-		const db = { getRepository: (model: unknown) => model === MiZalipWork ? works : seasons, query: vi.fn().mockResolvedValue([]) };
+		const identities = { find: vi.fn().mockResolvedValue([]) };
+		const db = { getRepository: (model: unknown) => model === MiZalipWork ? works : model === MiZalipExternalIdentity ? identities : seasons, query: vi.fn().mockResolvedValue([]) };
 		const service = new ZalipCatalogService(db as never, {} as never, {} as never, {} as never);
 		const card = service.packWork(work as never);
 		const detail = await service.showPublished('title');
@@ -64,6 +66,28 @@ describe('ZalipCatalogService', () => {
 			expect(JSON.stringify(result)).not.toContain('original.private.invalid');
 		}
 		expect(detail?.galleryPaths).toEqual(['/files/frame.webp']);
+		expect(detail?.mediaType).toBe('movie');
+		expect(identities.find).toHaveBeenCalledExactlyOnceWith({ where: { workId: 'work' }, select: { entityType: true } });
+	});
+
+	it.each([
+		{ kind: 'anime', tmdbMediaType: 'movie', identities: [], hasSeason: false, expected: 'movie' },
+		{ kind: 'animation', tmdbMediaType: null, identities: [{ entityType: 'movie' }], hasSeason: false, expected: 'movie' },
+		{ kind: 'movie', tmdbMediaType: 'movie', identities: [{ entityType: 'tv' }], hasSeason: false, expected: 'tv' },
+		{ kind: 'anime', tmdbMediaType: 'movie', identities: [], hasSeason: true, expected: 'tv' },
+		{ kind: 'anime', tmdbMediaType: null, identities: [], hasSeason: false, expected: null },
+	])('publishes only the resolved media type for $kind / $expected', async scenario => {
+		const work = { id: 'work', slug: 'title', title: 'Title', kind: scenario.kind, tmdbMediaType: scenario.tmdbMediaType, importData: {}, galleryPaths: [] };
+		const repositories = new Map<unknown, unknown>([
+			[MiZalipWork, { findOneBy: vi.fn().mockResolvedValue(work) }],
+			[MiZalipSeason, { find: vi.fn().mockResolvedValue(scenario.hasSeason ? [{ id: 'season', seasonNumber: 1 }] : []) }],
+			[MiZalipExternalIdentity, { find: vi.fn().mockResolvedValue(scenario.identities.map(identity => ({ ...identity, externalId: 'private-provider-id' }))) }],
+		]);
+		const service = new ZalipCatalogService({ getRepository: (model: unknown) => repositories.get(model), query: vi.fn().mockResolvedValue([]) } as never, {} as never, {} as never, {} as never);
+		const detail = await service.showPublished('title');
+		expect(detail?.mediaType).toBe(scenario.expected);
+		expect(detail).not.toHaveProperty('tmdbMediaType');
+		expect(JSON.stringify(detail)).not.toContain('private-provider-id');
 	});
 
 	it('legacy season refresh checks importer ownership under the same work row lock', async () => {

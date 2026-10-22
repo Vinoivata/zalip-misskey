@@ -27,6 +27,8 @@ import {
 import { MiZalipNoteContext } from '@/models/ZalipNoteContext.js';
 import { MiZalipSeason } from '@/models/ZalipSeason.js';
 import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
+import { MiZalipExternalIdentity } from '@/models/ZalipExternalIdentity.js';
+import { zalipMediaType, type ZalipMediaType } from '@/misc/zalip-media-type.js';
 import { MiZalipEpisodeNoteContext } from '@/models/ZalipEpisodeNoteContext.js';
 import { MiZalipAllohaAvailabilityEvent } from '@/models/ZalipAllohaAvailabilityEvent.js';
 import { MiZalipAllohaSource, type ZalipAllohaTranslation } from '@/models/ZalipAllohaSource.js';
@@ -110,6 +112,8 @@ export type PackedZalipSeason = {
 };
 
 export type PackedZalipWorkDetail = PackedZalipWork & {
+	/** Movie/TV identity verified against stored provider bindings and seasons. */
+	mediaType: ZalipMediaType | null;
 	galleryPaths: string[];
 	seasons: PackedZalipSeason[];
 	countries?: string[];
@@ -400,8 +404,10 @@ export class ZalipCatalogService {
 			where: { workId: work.id },
 			order: { seasonNumber: 'ASC' },
 		});
+		const identities = await this.db.getRepository(MiZalipExternalIdentity).find({ where: { workId: work.id }, select: { entityType: true } });
 		return {
 			...(await this.packWorksWithCommunityRatings([work]))[0]!,
+			mediaType: zalipMediaType(work, identities, seasons.length > 0),
 			galleryPaths: work.galleryPaths,
 			countries: readImportState(work.importData).countries,
 			externalRatings: readImportState(work.importData).ratings,

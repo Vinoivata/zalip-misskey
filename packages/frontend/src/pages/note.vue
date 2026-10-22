@@ -44,7 +44,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, watch, ref, markRaw } from 'vue';
+import { computed, watch, ref, markRaw, onBeforeUnmount } from 'vue';
 import * as Misskey from 'misskey-js';
 import { host } from '@@/js/config.js';
 import MkNoteDetailed from '@/components/MkNoteDetailed.vue';
@@ -70,7 +70,7 @@ const props = defineProps<{
 	initialTab?: string;
 }>();
 
-const note = ref<null | Misskey.entities.Note>(CTX_NOTE);
+const note = ref<null | Misskey.entities.Note>(null);
 const clips = ref<Misskey.entities.Clip[]>();
 const showPrev = ref<'user' | 'channel' | false>(false);
 const showNext = ref<'user' | 'channel' | false>(false);
@@ -81,6 +81,8 @@ const initialTab = computed<'reactions' | 'replies' | 'renotes' | undefined>(() 
 	return 'replies';
 });
 const error = ref();
+let requestId = 0;
+let alive = true;
 
 const prevUserPaginator = markRaw(new Paginator('users/notes', {
 	limit: 10,
@@ -116,47 +118,56 @@ const nextChannelPaginator = markRaw(new Paginator('channels/timeline', {
 	}) : undefined),
 }));
 
-function fetchNote() {
+async function fetchNote(): Promise<void> {
+	const request = ++requestId;
+	const noteId = props.noteId;
+	const account = $i?.id ?? null;
+	const token = $i?.token ?? null;
+	const current = () => alive && request === requestId && props.noteId === noteId && ($i?.id ?? null) === account && ($i?.token ?? null) === token;
 	showPrev.value = false;
 	showNext.value = false;
 	note.value = null;
+	clips.value = undefined;
+	error.value = undefined;
+	for (const paginator of [prevUserPaginator, nextUserPaginator, prevChannelPaginator, nextChannelPaginator]) paginator.initialId = noteId;
+	// Account refresh can replace id and token separately. Do not issue a
+	// guest request or reuse anonymous context during that transient state.
+	if ($i && (!account || !token)) return;
 
-	if (CTX_NOTE && CTX_NOTE.id === props.noteId) {
-		note.value = CTX_NOTE;
-		return;
-	}
-
-	misskeyApi('notes/show', {
-		noteId: props.noteId,
-	}).then(res => {
+	try {
+		const res = !$i && CTX_NOTE?.id === noteId ? CTX_NOTE : await misskeyApi('notes/show', { noteId }, token);
+		if (!current()) return;
 		note.value = res;
 		const appearNote = getAppearNote(res) ?? res;
 		// 古いノートは被クリップ数をカウントしていないので、2023-10-01以前のものは強制的にnotes/clipsを叩く
 		if ((appearNote.clippedCount ?? 0) > 0 || new Date(appearNote.createdAt).getTime() < new Date('2023-10-01').getTime()) {
-			misskeyApi('notes/clips', {
-				noteId: appearNote.id,
-			}).then((_clips) => {
-				clips.value = _clips;
-			});
+			try {
+				const result = await misskeyApi('notes/clips', { noteId: appearNote.id }, token);
+				if (current()) clips.value = result;
+			} catch { /* Optional clips must not turn a loaded post into an error. */ }
 		}
-	}).catch(err => {
-		if (['fbcc002d-37d9-4944-a6b0-d9e29f2d33ab', '145f88d2-b03d-4087-8143-a78928883c4b'].includes(err.id)) {
-			pleaseLogin({
+	} catch (err) {
+		if (!current()) return;
+		const id = err && typeof err === 'object' && 'id' in err ? err.id : null;
+		if (id === 'fbcc002d-37d9-4944-a6b0-d9e29f2d33ab' || id === '145f88d2-b03d-4087-8143-a78928883c4b') {
+			void pleaseLogin({
 				path: '/',
-				message: err.id === 'fbcc002d-37d9-4944-a6b0-d9e29f2d33ab' ? i18n.ts.thisContentsAreMarkedAsSigninRequiredByAuthor : i18n.ts.signinOrContinueOnRemote,
+				message: id === 'fbcc002d-37d9-4944-a6b0-d9e29f2d33ab' ? i18n.ts.thisContentsAreMarkedAsSigninRequiredByAuthor : i18n.ts.signinOrContinueOnRemote,
 				openOnRemote: {
 					type: 'lookup',
-					url: `https://${host}/notes/${props.noteId}`,
+					url: `https://${host}/notes/${noteId}`,
 				},
-			});
+			}).catch(() => { /* The native sign-in dialog owns its failure state. */ });
 		}
 		error.value = err;
-	});
+	}
 }
 
-watch(() => props.noteId, fetchNote, {
+watch(() => [props.noteId, $i?.id, $i?.token], () => { void fetchNote(); }, {
 	immediate: true,
+	flush: 'sync',
 });
+onBeforeUnmount(() => { alive = false; requestId++; });
 
 definePage(() => ({
 	title: i18n.ts.note,

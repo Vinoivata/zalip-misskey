@@ -87,6 +87,7 @@ type LibraryEntry = {
 		slug: string;
 		kind: WorkKind;
 		title: string;
+		originalTitle?: string | null;
 		description?: string | null;
 		releaseYear: number | null;
 		posterPath: string | null;
@@ -130,9 +131,9 @@ function filterLabel(filter: LibraryFilter): string {
 function statusIcon(status: LibraryStatus): string { return ({ watching: 'ti ti-eye', planned: 'ti ti-bookmark', completed: 'ti ti-check', on_hold: 'ti ti-player-pause', dropped: 'ti ti-x' })[status]; }
 
 const filteredEntries = computed(() => {
-	const normalizedQuery = searchQuery.value.toLocaleLowerCase('ru');
+	const normalizedQuery = searchQuery.value.trim().toLocaleLowerCase('ru');
 	const filtered = entries.value.filter(entry => matchesFilter(entry, activeFilter.value)
-		&& (!normalizedQuery || entry.work.title.toLocaleLowerCase('ru').includes(normalizedQuery)));
+		&& (!normalizedQuery || [entry.work.title, entry.work.originalTitle].some(title => title?.toLocaleLowerCase('ru').includes(normalizedQuery))));
 	if (sortOrder.value === 'title') return [...filtered].sort((left, right) => left.work.title.localeCompare(right.work.title, 'ru'));
 	if (sortOrder.value === 'rating') return [...filtered].sort((left, right) => (right.personalRating ?? -1) - (left.personalRating ?? -1));
 	return filtered;

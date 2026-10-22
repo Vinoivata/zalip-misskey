@@ -106,4 +106,18 @@ describe('Zalip library', () => {
 		expect(release.firstElementChild?.getAttribute('aria-hidden')).toBe('true');
 		expect(view.getByRole('link', { name: i18n.ts.zalip.librarySubscriptions }).getAttribute('href')).toBe('/library?filter=subscribed');
 	});
+
+	it('searches original titles case-insensitively and ignores surrounding whitespace', async () => {
+		vi.mocked(misskeyApiZalip).mockResolvedValue([
+			{ ...entry, isFavorite: true, work: { ...work, title: 'Русское название', originalTitle: 'Original Movie' } },
+			{ ...entry, status: 'watching', work: { ...work, id: 'other', title: 'Другой фильм', originalTitle: null } },
+		]);
+		const view = render(Library, { global });
+		await view.findByRole('heading', { name: 'Русское название' });
+		await fireEvent.update(view.getByRole('searchbox'), '  ORIGINAL  ');
+		expect(view.getByRole('heading', { name: 'Русское название' })).toBeTruthy();
+		expect(view.queryByRole('heading', { name: 'Другой фильм' })).toBeNull();
+		await fireEvent.update(view.getByRole('searchbox'), 'РУССКОЕ');
+		expect(view.getByRole('heading', { name: 'Русское название' })).toBeTruthy();
+	});
 });

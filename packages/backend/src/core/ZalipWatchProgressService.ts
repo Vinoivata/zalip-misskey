@@ -8,6 +8,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import type { EntityManager } from 'typeorm';
 import { DI } from '@/di-symbols.js';
+import { zalipMediaType } from '@/misc/zalip-media-type.js';
 import { MiZalipWork } from '@/models/ZalipWork.js';
 import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
 import { MiZalipSeason } from '@/models/ZalipSeason.js';
@@ -62,9 +63,8 @@ export class ZalipWatchProgressService {
 			return episode;
 		}
 		const identities = await manager.getRepository(MiZalipExternalIdentity).findBy({ workId: work.id });
-		const serial = work.kind === 'series' || work.tmdbMediaType === 'tv' || identities.some(identity => identity.entityType === 'tv') || await manager.getRepository(MiZalipSeason).countBy({ workId: work.id }) > 0;
-		const movie = work.kind === 'movie' || work.tmdbMediaType === 'movie' || identities.some(identity => identity.entityType === 'movie');
-		if (serial || !movie) throw new ZalipProgressError('INVALID_ZALIP_PROGRESS_TARGET');
+		const hasSeasons = await manager.getRepository(MiZalipSeason).countBy({ workId: work.id }) > 0;
+		if (zalipMediaType(work, identities, hasSeasons) !== 'movie') throw new ZalipProgressError('INVALID_ZALIP_PROGRESS_TARGET');
 		return null;
 	}
 

@@ -25,6 +25,7 @@ import { genEmbedCode } from '@/utility/get-embed-code.js';
 import { prefer } from '@/preferences.js';
 import { getPluginHandlers } from '@/plugin.js';
 import { globalEvents } from '@/events.js';
+import { changeNoteBookmark, noteBookmarkState } from '@/utility/zalip-note-bookmarks.js';
 
 const isInBrowserTranslationAvailable = (
 	'LanguageDetector' in window &&
@@ -191,8 +192,10 @@ export function getNoteMenu(props: {
 	const actorId = $i?.id;
 	const actorToken = $i?.token;
 	const actorCurrent = () => !compact || (actorId != null && $i?.id === actorId && $i.token === actorToken);
+	const bookmarkCurrent = () => actorId != null && $i?.id === actorId && $i.token === actorToken;
+	let bookmarkDisposed = false;
 
-	const cleanups = [] as (() => void)[];
+	const cleanups = [() => { bookmarkDisposed = true; }] as (() => void)[];
 
 	function del(): void {
 		if (!actorCurrent()) return;
@@ -238,12 +241,22 @@ export function getNoteMenu(props: {
 		});
 	}
 
-	function toggleFavorite(favorite: boolean): void {
-		if (!actorCurrent()) return;
-		claimAchievement('noteFavorited1');
-		os.apiWithDialog(favorite ? 'notes/favorites/create' : 'notes/favorites/delete', {
-			noteId: appearNote.id,
-		});
+	async function toggleFavorite(favorite: boolean): Promise<void> {
+		if (bookmarkDisposed || !bookmarkCurrent()) return;
+		try {
+			// Selecting an item closes its menu normally; only an account change cancels that action.
+			const result = await changeNoteBookmark(appearNote.id, favorite, bookmarkCurrent);
+			if (result === 'changed' && favorite && bookmarkCurrent()) claimAchievement('noteFavorited1');
+			if (result === 'unavailable' && bookmarkCurrent()) await os.alert({ type: 'error', text: i18n.ts.cannotLoad });
+		} catch {
+			if (bookmarkCurrent()) await os.alert({ type: 'error', text: i18n.ts.somethingHappened });
+		}
+	}
+
+	async function loadBookmarkState() {
+		const state = await noteBookmarkState.load(appearNote.id, true);
+		if (!state || !bookmarkCurrent()) throw new Error('unavailable note state');
+		return state;
 	}
 
 	function toggleThreadMute(mute: boolean): void {
@@ -362,11 +375,8 @@ export function getNoteMenu(props: {
 		const menuItems: MenuItem[] = [];
 		const unavailable = (): MenuItem & { type: 'label' } => ({ type: 'label', text: i18n.ts.cannotLoad });
 		const active = (item: MenuButton): MenuButton => ({ ...item, action: event => { if (!disposed && actorCurrent()) return item.action(event); } });
-		if ($i == null) return { menu: [{ type: 'label', text: i18n.ts.signinRequired }] as MenuItem[], cleanup: () => { disposed = true; } };
-		const state = misskeyApi('notes/state', { noteId: appearNote.id }, actorToken).then(value => {
-			if (typeof value.isFavorited !== 'boolean' || typeof value.isMutedThread !== 'boolean') throw new Error('invalid note state');
-			return value;
-		});
+		if ($i == null) return { menu: [{ type: 'label', text: i18n.ts.signinRequired }] as MenuItem[], cleanup: () => { disposed = true; bookmarkDisposed = true; } };
+		const state = loadBookmarkState();
 		menuItems.push(state.then(value => active(value.isFavorited ? {
 			icon: 'ti ti-bookmark-off', text: i18n.ts.unfavorite, action: () => toggleFavorite(false),
 		} : {
@@ -420,15 +430,14 @@ export function getNoteMenu(props: {
 		if (appearNote.userId === $i.id || $i.isModerator || $i.isAdmin) {
 			menuItems.push({ type: 'divider' }, active({ icon: 'ti ti-trash', text: i18n.ts.delete, danger: true, action: del }));
 		}
-		return { menu: menuItems, cleanup: () => { disposed = true; } };
+		return { menu: menuItems, cleanup: () => { disposed = true; bookmarkDisposed = true; } };
 	}
 
 	const menuItems: MenuItem[] = [];
 
 	if ($i) {
-		const statePromise = misskeyApi('notes/state', {
-			noteId: appearNote.id,
-		});
+		const statePromise = loadBookmarkState();
+		const unavailableState = (): MenuItem & { type: 'label' } => ({ type: 'label', text: i18n.ts.cannotLoad });
 
 		if (props.currentClip?.userId === $i.id) {
 			menuItems.push({
@@ -496,7 +505,7 @@ export function getNoteMenu(props: {
 			icon: 'ti ti-star',
 			text: i18n.ts.favorite,
 			action: () => toggleFavorite(true),
-		}));
+		}).catch(unavailableState));
 
 		menuItems.push({
 			type: 'parent',
@@ -513,7 +522,7 @@ export function getNoteMenu(props: {
 			icon: 'ti ti-message-off',
 			text: i18n.ts.muteThread,
 			action: () => toggleThreadMute(true),
-		}));
+		}).catch(unavailableState));
 
 		if (appearNote.userId === $i.id) {
 			if (($i.pinnedNoteIds ?? []).includes(appearNote.id)) {

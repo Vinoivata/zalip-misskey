@@ -9,16 +9,17 @@ import type * as Misskey from 'misskey-js';
 import type { MenuButton, MenuItem } from '@/types/menu.js';
 import { getNoteMenu } from '@/utility/get-note-menu.js';
 import { i18n } from '@/i18n.js';
+import { noteBookmarkState } from '@/utility/zalip-note-bookmarks.js';
 
 const controls = vi.hoisted(() => ({
 	account: null as { id: string; token: string; isAdmin: boolean; isModerator: boolean; pinnedNoteIds: string[]; policies: { canUseTranslator: boolean } } | null,
-	api: vi.fn(), dialog: vi.fn(), confirm: vi.fn(), select: vi.fn(), popup: vi.fn(), post: vi.fn(), copy: vi.fn(), emitted: vi.fn(),
+	api: vi.fn(), dialog: vi.fn(), confirm: vi.fn(), select: vi.fn(), popup: vi.fn(), post: vi.fn(), copy: vi.fn(), emitted: vi.fn(), alert: vi.fn(),
 	state: { isFavorited: false, isMutedThread: false },
 	author: { id: 'author', isMuted: false, isBlocking: false },
 }));
 vi.mock('@/i.js', () => ({ get $i() { return controls.account; } }));
 vi.mock('@/utility/misskey-api.js', () => ({ misskeyApi: controls.api }));
-vi.mock('@/os.js', () => ({ apiWithDialog: controls.dialog, confirm: controls.confirm, select: controls.select, popupAsyncWithDialog: controls.popup, post: controls.post, pageWindow: vi.fn() }));
+vi.mock('@/os.js', () => ({ apiWithDialog: controls.dialog, alert: controls.alert, confirm: controls.confirm, select: controls.select, popupAsyncWithDialog: controls.popup, post: controls.post, pageWindow: vi.fn() }));
 vi.mock('@/utility/achievements.js', () => ({ claimAchievement: vi.fn() }));
 vi.mock('@/utility/copy-to-clipboard.js', () => ({ copyToClipboard: controls.copy }));
 vi.mock('@/utility/get-user-menu.js', () => ({ getUserMenu: () => ({ menu: [], cleanup: vi.fn() }) }));
@@ -44,6 +45,7 @@ async function settle(): Promise<void> { for (let i = 0; i < 6; i++) await Promi
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	noteBookmarkState.clear();
 	controls.account = { id: 'viewer', token: 'unit-token', isAdmin: false, isModerator: false, pinnedNoteIds: [], policies: { canUseTranslator: false } };
 	controls.state = { isFavorited: false, isMutedThread: false }; controls.author = { id: 'author', isMuted: false, isBlocking: false };
 	controls.api.mockImplementation(async (endpoint: string) => endpoint === 'notes/state' ? controls.state : endpoint === 'users/show' ? controls.author : undefined);
@@ -54,7 +56,7 @@ describe('opt-in compact post actions', () => {
 	it('keeps useful direct actions without federation, copying, sharing or technical tools, and does not write on open', async () => {
 		const value = menu(); const resolved = await items(value);
 		expect(labels(resolved)).toEqual([i18n.ts.favorite, i18n.ts.muteThread, i18n.ts.mute, i18n.ts.block, i18n.ts.reportAbuse]);
-		expect(controls.api.mock.calls.map(call => call[0])).toEqual(['notes/state', 'users/show']);
+		expect(controls.api.mock.calls.map(call => call[0]).sort()).toEqual(['notes/state', 'users/show']);
 		expect(controls.api).toHaveBeenCalledWith('users/show', { userId: 'author' }, 'unit-token');
 		expect(controls.dialog).not.toHaveBeenCalled(); expect(controls.post).not.toHaveBeenCalled(); expect(controls.copy).not.toHaveBeenCalled();
 		expect(button(resolved, i18n.ts.reportAbuse).danger).toBe(true);
@@ -63,7 +65,8 @@ describe('opt-in compact post actions', () => {
 	it('retains authoritative bookmark/thread reversal and native mute/block reversal', async () => {
 		controls.state = { isFavorited: true, isMutedThread: true }; controls.author = { id: 'author', isMuted: true, isBlocking: true };
 		const value = menu(); const resolved = await items(value);
-		await click(button(resolved, i18n.ts.unfavorite)); expect(controls.dialog).toHaveBeenCalledWith('notes/favorites/delete', { noteId: 'note-one' });
+		await click(button(resolved, i18n.ts.unfavorite)); expect(controls.api).toHaveBeenCalledWith('notes/favorites/delete', { noteId: 'note-one' }, 'unit-token');
+		expect(noteBookmarkState.peek('note-one')?.state?.isFavorited).toBe(false);
 		await click(button(resolved, i18n.ts.unmuteThread)); expect(controls.dialog).toHaveBeenCalledWith('notes/thread-muting/delete', { noteId: 'note-one' });
 		await click(button(resolved, i18n.ts.unmute)); expect(controls.dialog).toHaveBeenCalledWith('mute/delete', { userId: 'author' }, 'unit-token');
 		await click(button(resolved, i18n.ts.unblock)); expect(controls.confirm).toHaveBeenCalledWith({ type: 'warning', text: i18n.ts.unblockConfirm });
@@ -106,5 +109,15 @@ describe('opt-in compact post actions', () => {
 	it('does not remove the original full generic menu when compact appearance is absent', async () => {
 		const value = menu(note(), false); const resolved = await items(value);
 		expect(labels(resolved)).toEqual(expect.arrayContaining([i18n.ts.copyContent, i18n.ts.copyLink, i18n.ts.copyRemoteLink, i18n.ts.showOnRemote])); value.cleanup();
+	});
+	it('resolves unavailable bookmark and thread state as labels in the full generic menu', async () => {
+		controls.api.mockRejectedValue(new Error('offline'));
+		const value = menu(note(), false);
+		const resolved = await items(value);
+		expect(resolved.filter(item => 'type' in item && item.type === 'label' && item.text === i18n.ts.cannotLoad)).toHaveLength(2);
+		expect(labels(resolved)).not.toContain(i18n.ts.favorite);
+		expect(labels(resolved)).not.toContain(i18n.ts.muteThread);
+		expect(controls.dialog).not.toHaveBeenCalled();
+		value.cleanup();
 	});
 });

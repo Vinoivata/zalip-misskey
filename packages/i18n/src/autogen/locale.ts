@@ -4092,6 +4092,10 @@ export interface Locale extends ILocale {
          */
         "playerEpisodesLoading": string;
         /**
+         * Не удалось загрузить серии. Попробуйте ещё раз.
+         */
+        "playerEpisodesLoadFailed": string;
+        /**
          * Список серий пока готовится.
          */
         "playerEpisodesEmpty": string;

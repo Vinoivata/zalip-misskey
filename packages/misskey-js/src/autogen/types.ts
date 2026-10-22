@@ -45755,6 +45755,8 @@ export interface operations {
                         slug: string;
                         /** @enum {string} */
                         kind: 'movie' | 'series' | 'anime' | 'animation';
+                        /** @enum {string|null} */
+                        mediaType: 'movie' | 'tv' | null;
                         title: string;
                         originalTitle: string | null;
                         description: string | null;

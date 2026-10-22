@@ -23,6 +23,7 @@ export const meta = {
 			id: { type: 'string', format: 'misskey:id' },
 			slug: { type: 'string' },
 			kind: { type: 'string', enum: ['movie', 'series', 'anime', 'animation'] },
+			mediaType: { type: 'string', enum: ['movie', 'tv'], optional: false, nullable: true },
 			title: { type: 'string' },
 			originalTitle: { type: 'string', nullable: true },
 			description: { type: 'string', nullable: true },
@@ -58,7 +59,7 @@ export const meta = {
 				},
 			},
 		},
-		required: ['id', 'slug', 'kind', 'title', 'originalTitle', 'description', 'releaseYear', 'genres', 'runtimeMinutes', 'posterPath', 'backdropPath', 'logoPath', 'galleryPaths', 'trailerYoutubeKey', 'communityRating', 'ratingCount', 'seasons'],
+		required: ['id', 'slug', 'kind', 'mediaType', 'title', 'originalTitle', 'description', 'releaseYear', 'genres', 'runtimeMinutes', 'posterPath', 'backdropPath', 'logoPath', 'galleryPaths', 'trailerYoutubeKey', 'communityRating', 'ratingCount', 'seasons'],
 	},
 
 	errors: {

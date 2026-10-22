@@ -92,11 +92,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<MkA v-for="(work, index) in sortedWorks" :key="work.id" :to="`/zalip/${work.slug}`" :class="$style.card">
 							<div :class="$style.poster">
 								<img v-if="images.poster(work)" :src="images.poster(work)!" alt="" width="300" height="450" :loading="index === 0 ? 'eager' : 'lazy'" decoding="async" @error="images.failed"><i v-else class="ti ti-movie"></i>
-								<span v-if="library[work.id]" :class="[$style.status, $style[library[work.id]]]">{{ statusLabel(library[work.id]) }}</span>
+								<span v-if="libraryStatus(work.id)" :class="[$style.status, $style[libraryStatus(work.id) ?? '']]">{{ statusLabel(libraryStatus(work.id)) }}</span>
 							</div>
 							<div :class="$style.cardBody">
 								<h3>{{ work.title }}</h3>
-								<p :class="$style.cardMeta"><span>{{ work.releaseYear ?? kindLabel(work.kind) }}</span><span v-if="work.communityRating != null" :aria-label="i18n.tsx.zalip.communityRating({ rating: work.communityRating.toFixed(1) })">· {{ work.communityRating.toFixed(1) }} <i class="ti ti-star-filled"></i></span><i v-if="library[work.id]" class="ti ti-bookmark-filled" :class="$style.saved" :aria-label="i18n.ts.zalip.libraryTotal"></i></p>
+								<p :class="$style.cardMeta"><span>{{ work.releaseYear ?? kindLabel(work.kind) }}</span><span v-if="work.communityRating != null" :aria-label="i18n.tsx.zalip.communityRating({ rating: work.communityRating.toFixed(1) })">· {{ work.communityRating.toFixed(1) }} <i class="ti ti-star-filled"></i></span><i v-if="libraryIcon(work.id)" :class="[libraryIcon(work.id), $style.saved]" :aria-label="libraryStatus(work.id) ? statusLabel(libraryStatus(work.id)) : i18n.ts.zalip.inBookmarks"></i></p>
 								<span v-if="work.originalTitle" :class="$style.originalTitle">{{ work.originalTitle }}</span>
 								<p v-if="work.description" :class="$style.cardDescription">{{ work.description }}</p>
 								<div v-if="work.genres.length" :class="$style.cardGenres">{{ work.genres.slice(0, 3).join(' · ') }}</div>
@@ -121,7 +121,8 @@ let pendingFilterFocus: 'panel' | 'button' | null = null;
 </script>
 
 <script lang="ts" setup>
-import { computed, nextTick, onActivated, onMounted, ref, useTemplateRef, watch } from 'vue';
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, useTemplateRef, watch } from 'vue';
+import { useZalipPageReload } from '@/composables/use-zalip-page-reload.js';
 import { definePage } from '@/page.js';
 import { i18n } from '@/i18n.js';
 import { useRouter } from '@/router.js';
@@ -135,6 +136,7 @@ defineOptions({ name: 'ZalipCatalogue' });
 type WorkKind = 'movie' | 'series' | 'anime' | 'animation';
 type CatalogueSort = 'newest' | 'year-desc' | 'year-asc' | 'title';
 type LibraryStatus = 'watching' | 'planned' | 'completed' | 'on_hold' | 'dropped';
+type LibraryBadge = { status: LibraryStatus | null; isFavorite: boolean };
 type CatalogueQuery = {
 	genres: string;
 	types: string;
@@ -186,7 +188,8 @@ const totalWorks = ref(0);
 const nextCursor = ref<string | null>(null);
 const morePending = ref(false);
 const moreError = ref(false);
-const library = ref<Record<string, LibraryStatus>>({});
+const library = ref<Record<string, LibraryBadge>>({});
+let libraryRequest = 0;
 const viewMode = ref<'tiles' | 'cards'>(miLocalStorage.getItem('zalipCatalogueView') === 'cards' ? 'cards' : 'tiles');
 
 function setView(value: 'tiles' | 'cards'): void {
@@ -194,19 +197,39 @@ function setView(value: 'tiles' | 'cards'): void {
 	miLocalStorage.setItem('zalipCatalogueView', value);
 }
 
-function statusLabel(status: LibraryStatus): string {
+function statusLabel(status: LibraryStatus | null): string {
+	if (status == null) return i18n.ts.zalip.libraryNoStatus;
 	return ({ watching: i18n.ts.zalip.statusWatching, planned: i18n.ts.zalip.statusPlanned, completed: i18n.ts.zalip.statusCompleted, on_hold: i18n.ts.zalip.statusOnHold, dropped: i18n.ts.zalip.statusDropped })[status];
 }
 
+function libraryStatus(workId: string): LibraryStatus | null {
+	return library.value[workId]?.status ?? null;
+}
+
+function libraryIcon(workId: string): string | null {
+	const entry = library.value[workId];
+	if (entry?.status) return ({ watching: 'ti ti-eye', planned: 'ti ti-bookmark', completed: 'ti ti-check', on_hold: 'ti ti-player-pause', dropped: 'ti ti-x' })[entry.status];
+	return entry?.isFavorite ? 'ti ti-bookmark' : null;
+}
+
 async function loadLibrary(): Promise<void> {
-	if (!$i) return;
+	const request = ++libraryRequest;
+	const account = $i?.id;
+	const token = $i?.token;
+	if (!account) { library.value = {}; return; }
 	try {
-		const entries = await misskeyApiZalip<{ status: LibraryStatus | null; work: { id: string } }[]>('zalip/library/list');
-		library.value = Object.fromEntries(entries.flatMap(entry => entry.status == null ? [] : [[entry.work.id, entry.status]]));
+		const entries = await misskeyApiZalip<(LibraryBadge & { work: { id: string } })[]>('zalip/library/list');
+		if (request !== libraryRequest || $i?.id !== account || $i?.token !== token) return;
+		library.value = Object.fromEntries(entries.map(entry => [entry.work.id, { status: entry.status, isFavorite: entry.isFavorite }]));
 	} catch {
 		// Library badges are optional; catalogue browsing remains available.
 	}
 }
+
+useZalipPageReload(loadLibrary);
+watch([() => $i?.id, () => $i?.token], () => { library.value = {}; void loadLibrary(); });
+onDeactivated(() => { libraryRequest++; });
+onBeforeUnmount(() => { libraryRequest++; });
 
 const genreOptions = ref<string[]>([]);
 const pending = ref(true);
@@ -432,10 +455,9 @@ watch(() => [props.genres, props.types, props.query, props.yearFrom, props.yearT
 
 onMounted(() => {
 	void loadGenres();
-	void loadLibrary();
 	void restoreFilterFocus();
 });
-onActivated(() => { void restoreFilterFocus(); void loadLibrary(); });
+onActivated(() => { void restoreFilterFocus(); });
 
 definePage(() => ({ title: i18n.ts.zalip.catalogueHeading, icon: 'ti ti-layout-grid' }));
 </script>

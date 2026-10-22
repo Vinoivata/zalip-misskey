@@ -86,6 +86,8 @@
 - Fix: Wait for account refresh credentials before loading messenger conversations while immediately clearing the previous account's private state.
 - Fix: Drop stale importer gallery selections without turning missing image candidates into an unintended gallery clear.
 - Enhance: Add preview-first person imports, responsive biographies with formatted dates and age, alias search and role/year/type filmography filters without changing existing catalogue identities.
+- Fix: Preserve pending Zalip replies and post navigation across target changes, synchronize lazy-loaded post bookmarks, recover failed episode lists, and show accurate catalogue library badges and original-title search.
+- Fix: Use confirmed movie or series classification for anime continuation and retain episode artwork fallbacks when a still is unavailable.
 
 ### Server
 - Feat: Add personal chat organisation and durable read frontiers, canonical replies, editing and forwarding, with strict participant access and revocable scoped realtime delivery.
@@ -128,6 +130,7 @@
 - Feat: Add Vibix metadata and player imports with exact Kinopoisk/IMDb bindings, encrypted administrator credentials, bounded normalization and backward-compatible playback settings.
 - Fix: Download selected Kinopoisk posters through the validated same-title API and image-CDN redirect chain without broadening network or image limits.
 - Feat: Import exact TMDB/Kinopoisk person identities with protected editorial fields, bounded local WebP portraits, same-ID Kinopoisk portrait redirects, scheduled photo processing, distinct-work filmography cursors and public-only Person metadata.
+- Fix: Share verified movie/series classification between public Zalip title details and watch-progress validation without exposing provider identities.
 
 ## 2026.7.0
 

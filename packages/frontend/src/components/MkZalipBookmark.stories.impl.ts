@@ -12,7 +12,7 @@ export const Default = {
 	render(args) {
 		return { components: { MkZalipBookmark }, setup: () => ({ args }), template: '<MkZalipBookmark v-bind="args"/>' };
 	},
-	args: { noteId: 'example-note' },
+	args: { noteId: 'example-note', mock: true },
 	parameters: {
 		layout: 'centered',
 		msw: { handlers: [http.post('/api/notes/state', () => HttpResponse.json({ isFavorited: false, isWatching: false }))] },

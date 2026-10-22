@@ -11,7 +11,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<form :class="$style.form" @submit.prevent="submit">
 				<div v-if="isReply" :class="$style.replying">
 					<span>{{ i18n.tsx.zalip.replyPlaceholder({ name: replyTo.user.name ?? replyTo.user.username }) }}</span>
-					<button type="button" class="_button" :aria-label="i18n.ts.cancel" @click="emit('cancelReply')"><i class="ti ti-x"></i></button>
+					<button type="button" class="_button" :aria-label="i18n.ts.cancel" :disabled="posting" @click="cancelReply"><i class="ti ti-x"></i></button>
 				</div>
 				<div :class="$style.inputRow">
 					<textarea ref="textareaEl" v-model="text" :class="$style.textarea" :maxlength="maxLength" :disabled="posting" :placeholder="placeholder" :aria-label="placeholder" rows="1" @keydown="onKeydown" @input="resize"></textarea>
@@ -52,6 +52,7 @@ const posting = ref(false);
 const error = ref<string | null>(null);
 let submission = 0;
 let alive = true;
+let draftVersion = 0;
 const maxLength = computed(() => instance?.maxNoteTextLength ?? 1000);
 const isReply = computed(() => props.replyTo.id !== props.rootNote.id);
 const placeholder = computed(() => {
@@ -70,15 +71,16 @@ onDeactivated(() => {
 	replySlot.value = null;
 });
 onBeforeUnmount(() => { alive = false; submission++; });
-watch(() => [props.rootNote.id, $i?.id], () => {
+watch(text, () => { draftVersion++; }, { flush: 'sync' });
+watch(() => [props.rootNote.id, $i?.id, $i?.token], () => {
 	submission++;
 	posting.value = false;
 	text.value = '';
 	error.value = null;
-});
+}, { flush: 'sync' });
 watch(() => props.replyTo.id, () => {
 	error.value = null;
-	nextTick(() => textareaEl.value?.focus());
+	nextTick(() => { if (alive && active.value) textareaEl.value?.focus(); });
 });
 
 function resize(): void {
@@ -99,7 +101,12 @@ async function signIn(): Promise<void> {
 }
 
 function openFullComposer(): void {
+	if (!alive || !active.value || posting.value || !$i) return;
 	void os.post({ reply: props.replyTo, initialText: text.value, initialVisibility: props.rootNote.visibility, initialLocalOnly: props.rootNote.localOnly });
+}
+
+function cancelReply(): void {
+	if (!posting.value) emit('cancelReply');
 }
 
 useGlobalEvent('notePosted', note => {
@@ -111,32 +118,40 @@ useGlobalEvent('notePosted', note => {
 });
 
 async function submit(): Promise<void> {
-	if (!canSubmit.value || $i == null) return;
+	if (!alive || !active.value || !canSubmit.value || !$i?.id || !$i.token) return;
 	const request = ++submission;
 	const account = $i.id;
+	const token = $i.token;
 	const rootId = props.rootNote.id;
 	const replyId = props.replyTo.id;
-	const current = () => alive && active.value && request === submission && $i?.id === account && props.rootNote.id === rootId && props.replyTo.id === replyId;
+	const version = draftVersion;
+	// KeepAlive may hide this form while a request completes. Ownership, unlike
+	// visible UI, survives deactivation so a successful reply cannot be retried.
+	const current = () => alive && request === submission && $i?.id === account && $i.token === token && props.rootNote.id === rootId;
 	posting.value = true;
 	error.value = null;
 	try {
 		const result = await misskeyApi('notes/create', {
 			text: text.value.trim(),
-			replyId: props.replyTo.id,
+			replyId,
 			visibility: props.rootNote.visibility,
 			localOnly: props.rootNote.localOnly,
 			...(props.rootNote.visibility === 'specified' ? { visibleUserIds: props.rootNote.visibleUserIds } : {}),
-		});
+		}, token);
 		if (!current()) return;
-		text.value = '';
-		nextTick(resize);
+		// The submitted reply still belongs to this discussion if another reply
+		// target was selected while it was pending. Never silently lose success.
+		if (version === draftVersion) {
+			text.value = '';
+			if (active.value) nextTick(() => { if (alive && active.value) resize(); });
+		}
 		globalEvents.emit('notePosted', result.createdNote);
 		incNotesCount();
 		emit('posted', result.createdNote);
 	} catch {
-		if (current()) error.value = i18n.ts.zalip.commentError;
+		if (current() && active.value && props.replyTo.id === replyId) error.value = i18n.ts.zalip.commentError;
 	} finally {
-		if (alive && request === submission) posting.value = false;
+		if (request === submission) posting.value = false;
 	}
 }
 </script>

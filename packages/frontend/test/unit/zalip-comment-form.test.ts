@@ -5,7 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/vue';
-import { nextTick } from 'vue';
+import { defineComponent, h, KeepAlive, nextTick, ref } from 'vue';
 import type * as Misskey from 'misskey-js';
 import ZalipCommentForm from '@/components/ZalipCommentForm.vue';
 import { globalEvents } from '@/events.js';
@@ -46,6 +46,7 @@ async function submit(view: ReturnType<typeof setup>, text = ' Draft reply '): P
 beforeEach(() => {
 	vi.clearAllMocks();
 	$i!.id = 'viewer';
+	$i!.token = 'fixture-token';
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -63,7 +64,7 @@ describe('comment submission context guards', () => {
 		const pending = deferred(); controls.api.mockReturnValueOnce(pending.promise);
 		const emitted = vi.spyOn(globalEvents, 'emit');
 		const view = setup(); await submit(view);
-		expect(controls.api).toHaveBeenCalledExactlyOnceWith('notes/create', { text: 'Draft reply', replyId: 'root', visibility: 'public', localOnly: false });
+		expect(controls.api).toHaveBeenCalledExactlyOnceWith('notes/create', { text: 'Draft reply', replyId: 'root', visibility: 'public', localOnly: false }, 'fixture-token');
 		expect((view.getByRole('textbox') as HTMLTextAreaElement).disabled).toBe(true);
 		const posted = note('created', { userId: 'viewer', replyId: 'root' });
 		pending.resolve({ createdNote: posted }); await settle();
@@ -74,13 +75,13 @@ describe('comment submission context guards', () => {
 		expect((view.getByRole('textbox') as HTMLTextAreaElement).disabled).toBe(false);
 	});
 
-	it.each(['root', 'reply', 'account', 'unmount'] as const)('discards a late success after %s changes without emitting or incrementing the new context', async change => {
+	it.each(['root', 'account', 'token', 'unmount'] as const)('discards a late success after %s changes without emitting or incrementing the new context', async change => {
 		const pending = deferred(); controls.api.mockReturnValueOnce(pending.promise);
 		const emitted = vi.spyOn(globalEvents, 'emit');
 		const view = setup(); await submit(view);
 		if (change === 'root') { const other = note('other-root'); await view.rerender({ rootNote: other, replyTo: other }); }
-		if (change === 'reply') await view.rerender({ rootNote: view.root, replyTo: note('other-reply', { replyId: 'root' }) });
 		if (change === 'account') { $i!.id = 'other-viewer'; await settle(); }
+		if (change === 'token') { $i!.token = 'other-token'; await settle(); }
 		if (change === 'unmount') view.unmount();
 		pending.resolve({ createdNote: note('private-old-result', { userId: 'viewer', replyId: 'root', visibility: 'specified', text: 'PRIVATE OLD ACCOUNT' }) });
 		await settle();
@@ -90,17 +91,88 @@ describe('comment submission context guards', () => {
 		expect(view.queryByText(i18n.ts.zalip.commentError)).toBeNull();
 	});
 
-	it.each(['root', 'reply', 'account', 'unmount'] as const)('does not expose a late submission error after %s changes', async change => {
+	it.each(['root', 'reply', 'account', 'token', 'unmount'] as const)('does not expose a late submission error after %s changes', async change => {
 		const pending = deferred(); controls.api.mockReturnValueOnce(pending.promise);
 		const view = setup(); await submit(view);
 		if (change === 'root') { const other = note('other-root'); await view.rerender({ rootNote: other, replyTo: other }); }
 		if (change === 'reply') await view.rerender({ rootNote: view.root, replyTo: note('other-reply', { replyId: 'root' }) });
 		if (change === 'account') { $i!.id = 'other-viewer'; await settle(); }
+		if (change === 'token') { $i!.token = 'other-token'; await settle(); }
 		if (change === 'unmount') view.unmount();
 		pending.reject(new Error('Old-context failure')); await settle();
 		expect(view.queryByText(i18n.ts.zalip.commentError)).toBeNull();
 		expect(view.emitted().posted).toBeUndefined();
 		expect(controls.increment).not.toHaveBeenCalled();
+	});
+
+	it('keeps a successful reply visible and counted if another target is selected while pending', async () => {
+		const pending = deferred(); controls.api.mockReturnValueOnce(pending.promise);
+		const emitted = vi.spyOn(globalEvents, 'emit');
+		const view = setup();
+		const child = note('child', { replyId: 'root' });
+		await view.rerender({ rootNote: view.root, replyTo: child });
+		await submit(view);
+		expect((view.getByRole('button', { name: i18n.ts.cancel }) as HTMLButtonElement).disabled).toBe(true);
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.cancel }));
+		expect(view.emitted().cancelReply).toBeUndefined();
+		await view.rerender({ rootNote: view.root, replyTo: note('another-child', { replyId: 'root' }) });
+		const posted = note('created', { userId: 'viewer', replyId: 'child' });
+		pending.resolve({ createdNote: posted }); await settle();
+		expect(view.emitted().posted).toEqual([[posted]]);
+		expect(emitted).toHaveBeenCalledExactlyOnceWith('notePosted', posted);
+		expect(controls.increment).toHaveBeenCalledTimes(1);
+		expect((view.getByRole('textbox') as HTMLTextAreaElement).value).toBe('');
+		expect((view.getByRole('textbox') as HTMLTextAreaElement).disabled).toBe(false);
+		expect(controls.api).toHaveBeenCalledExactlyOnceWith('notes/create', expect.objectContaining({ replyId: 'child' }), 'fixture-token');
+	});
+
+	it('does not erase a newer draft when the submitted reply succeeds', async () => {
+		const pending = deferred(); controls.api.mockReturnValueOnce(pending.promise);
+		const view = setup(); await submit(view);
+		// A parent/editor integration may update the draft even while native input is disabled.
+		await fireEvent.update(view.getByRole('textbox'), 'A newer draft');
+		pending.resolve({ createdNote: note('created', { userId: 'viewer', replyId: 'root' }) }); await settle();
+		expect((view.getByRole('textbox') as HTMLTextAreaElement).value).toBe('A newer draft');
+		expect(view.emitted().posted).toHaveLength(1);
+	});
+
+	it('acknowledges success while a cached form is inactive and returns without a duplicate draft or focus', async () => {
+		const pending = deferred(); controls.api.mockReturnValueOnce(pending.promise);
+		const emitted = vi.spyOn(globalEvents, 'emit');
+		const focus = vi.spyOn(HTMLTextAreaElement.prototype, 'focus');
+		const shown = ref(true); const root = note('root'); const posted = vi.fn();
+		const view = render(defineComponent({ setup: () => () => h(KeepAlive, null, { default: () => shown.value ? h(ZalipCommentForm, { rootNote: root, replyTo: root, onPosted: posted }) : null }) }));
+		await submit({ root, ...view });
+		shown.value = false; await settle(); focus.mockClear();
+		expect(view.queryByRole('textbox')).toBeNull();
+		const created = note('created', { userId: 'viewer', replyId: 'root' });
+		pending.resolve({ createdNote: created }); await settle();
+		expect(posted).toHaveBeenCalledExactlyOnceWith(created);
+		expect(emitted).toHaveBeenCalledExactlyOnceWith('notePosted', created);
+		expect(controls.increment).toHaveBeenCalledTimes(1);
+		expect(focus).not.toHaveBeenCalled();
+		shown.value = true; await settle();
+		expect((view.getByRole('textbox') as HTMLTextAreaElement).value).toBe('');
+		expect((view.getByRole('textbox') as HTMLTextAreaElement).disabled).toBe(false);
+		await fireEvent.submit(view.container.querySelector('form')!);
+		expect(controls.api).toHaveBeenCalledTimes(1);
+	});
+
+	it('keeps an inactive failed draft for retry without surfacing errors or stealing focus', async () => {
+		const pending = deferred(); controls.api.mockReturnValueOnce(pending.promise);
+		const focus = vi.spyOn(HTMLTextAreaElement.prototype, 'focus');
+		const shown = ref(true); const root = note('root'); const posted = vi.fn();
+		const view = render(defineComponent({ setup: () => () => h(KeepAlive, null, { default: () => shown.value ? h(ZalipCommentForm, { rootNote: root, replyTo: root, onPosted: posted }) : null }) }));
+		await submit({ root, ...view });
+		shown.value = false; await settle(); focus.mockClear();
+		pending.reject(new Error('Offline while cached')); await settle();
+		expect(posted).not.toHaveBeenCalled();
+		expect(controls.increment).not.toHaveBeenCalled();
+		expect(focus).not.toHaveBeenCalled();
+		shown.value = true; await settle();
+		expect((view.getByRole('textbox') as HTMLTextAreaElement).value).toBe(' Draft reply ');
+		expect((view.getByRole('textbox') as HTMLTextAreaElement).disabled).toBe(false);
+		expect(view.queryByText(i18n.ts.zalip.commentError)).toBeNull();
 	});
 
 	it('does not clear a new request pending flag when the old root response finishes', async () => {
@@ -126,5 +198,11 @@ describe('comment submission context guards', () => {
 		expect((view.getByRole('textbox') as HTMLTextAreaElement).disabled).toBe(false);
 		expect((view.getByRole('textbox') as HTMLTextAreaElement).value).toBe(' Draft reply ');
 		expect(view.emitted().posted).toBeUndefined();
+		const posted = note('retried', { userId: 'viewer', replyId: 'root' });
+		controls.api.mockResolvedValueOnce({ createdNote: posted });
+		await fireEvent.submit(view.container.querySelector('form')!); await settle();
+		expect(view.queryByText(i18n.ts.zalip.commentError)).toBeNull();
+		expect(view.emitted().posted).toEqual([[posted]]);
+		expect(controls.api).toHaveBeenCalledTimes(2);
 	});
 });

@@ -42,7 +42,7 @@ let legacyPlayback: LegacyAllohaPlayback;
 let providers: PlaybackProviderSetting[] | undefined;
 let failLegacy: boolean;
 let failSources: boolean;
-let workData: typeof serial;
+let workData: typeof serial & { mediaType?: 'movie' | 'tv' | null };
 let savedProgress: WatchProgress | null;
 let previousDisabledLoadingPolicy: boolean;
 
@@ -205,6 +205,112 @@ describe('Zalip work playback selection', () => {
 		sources = [structuredClone(collaps)];
 		const view = setup(); await play(view);
 		expect(new URL(iframe(view).src).searchParams.has('showMenu')).toBe(false);
+		await nextTick();
+		expect(vi.mocked(misskeyApiZalip).mock.calls.some(call => call[0] === 'zalip/progress/start')).toBe(false);
+	});
+	it.each(['animation', 'anime'])('locks a confirmed %s feature on both balancers and supplies the exact fingerprint', async kind => {
+		workData = { ...serial, kind, mediaType: 'movie', seasons: [] };
+		const movieAlloha = structuredClone(alloha);
+		movieAlloha.iframe = movieAlloha.iframe.replace('token_movie=fixture', 'token_movie=fixtureMovie');
+		for (const translation of movieAlloha.translations) translation.iframe = translation.iframe!.replace('token_movie=fixture', 'token_movie=fixtureMovie');
+		sources = [movieAlloha, structuredClone(collaps)];
+		const view = setup(); await play(view);
+		const allohaUrl = new URL(iframe(view).src);
+		expect(allohaUrl.searchParams.get('hidden')).toBe('episode,season,translation');
+		expect(allohaUrl.searchParams.has('season')).toBe(false);
+		await waitFor(() => expect(misskeyApiZalip).toHaveBeenCalledWith('zalip/progress/start', expect.objectContaining({ episodeId: null, provider: 'alloha', translationId: '246', expectedResourceFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/u) })));
+		await fireEvent.click(player(view).getByRole('button', { name: 'Collaps Cinema', pressed: false }));
+		const collapsUrl = new URL(iframe(view).src);
+		expect(collapsUrl.searchParams.get('showMenu')).toBe('false');
+		expect(collapsUrl.searchParams.get('showPreNext')).toBe('false');
+		expect(collapsUrl.searchParams.has('episode')).toBe(false);
+		await waitFor(() => expect(misskeyApiZalip).toHaveBeenCalledWith('zalip/progress/start', expect.objectContaining({ episodeId: null, provider: 'collaps', translationId: 'studio-one', expectedResourceFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/u) })));
+	});
+	it('retains native episode selectors for a confirmed anime serial with no cached seasons', async () => {
+		workData = { ...serial, kind: 'anime', mediaType: 'tv', seasons: [] };
+		sources = [structuredClone(collaps)];
+		const view = setup(); await play(view); await nextTick();
+		expect(new URL(iframe(view).src).searchParams.has('showMenu')).toBe(false);
+		expect(vi.mocked(misskeyApiZalip).mock.calls.some(call => call[0] === 'zalip/progress/start')).toBe(false);
+	});
+	it('shows a recoverable season error rather than an empty-season claim and retries the same season', async () => {
+		let fail = true;
+		const fallback = vi.mocked(misskeyApiZalip).getMockImplementation()!;
+		vi.mocked(misskeyApiZalip).mockImplementation((endpoint, params) => endpoint === 'zalip/seasons/episodes'
+			? fail ? Promise.reject(new Error('Offline')) : Promise.resolve(testEpisodes)
+			: fallback(endpoint, params));
+		const view = setup();
+		const error = await view.findByRole('alert');
+		expect(error.textContent).toContain(i18n.ts.zalip.playerEpisodesLoadFailed);
+		expect(player(view).queryByText(i18n.ts.zalip.playerEpisodesEmpty)).toBeNull();
+		fail = false;
+		await fireEvent.click(within(error).getByRole('button', { name: i18n.ts.retry }));
+		await waitFor(() => expect(view.queryByRole('alert')).toBeNull());
+		expect(view.getByRole('heading', { name: /Episode 1$/u, level: 2 })).toBeTruthy();
+		expect(vi.mocked(misskeyApiZalip).mock.calls.filter(call => call[0] === 'zalip/seasons/episodes').map(call => call[1])).toEqual([{ slug: serial.slug, seasonNumber: 2 }, { slug: serial.slug, seasonNumber: 2 }]);
+	});
+	it('keeps a successfully empty season distinct from a failed request', async () => {
+		const fallback = vi.mocked(misskeyApiZalip).getMockImplementation()!;
+		vi.mocked(misskeyApiZalip).mockImplementation((endpoint, params) => endpoint === 'zalip/seasons/episodes' ? Promise.resolve([]) : fallback(endpoint, params));
+		const view = setup();
+		await view.findByRole('heading', { name: serial.title, level: 1 });
+		expect(await player(view).findByText(i18n.ts.zalip.playerEpisodesEmpty)).toBeTruthy();
+		expect(view.queryByRole('alert')).toBeNull();
+	});
+	it('does not replace the current season with an error from an older loading season', async () => {
+		workData.seasons.push({ id: 'season3', seasonNumber: 3, title: 'Season 3', episodeCount: 3 }, { id: 'season4', seasonNumber: 4, title: 'Season 4', episodeCount: 3 });
+		const view = setup(); await play(view);
+		let rejectOld!: (error: Error) => void;
+		const delayed = new Promise<never>((_, reject) => { rejectOld = reject; });
+		const fallback = vi.mocked(misskeyApiZalip).getMockImplementation()!;
+		vi.mocked(misskeyApiZalip).mockImplementation((endpoint, params) => endpoint === 'zalip/seasons/episodes' && params?.seasonNumber === 3 ? delayed : fallback(endpoint, params));
+		await fireEvent.click(player(view).getByRole('button', { name: '3', pressed: false }));
+		await fireEvent.click(player(view).getByRole('button', { name: '4', pressed: false }));
+		await view.findByRole('heading', { name: /Episode 1$/u, level: 2 });
+		rejectOld(new Error('Late offline failure')); await nextTick(); await nextTick();
+		expect(view.queryByRole('alert')).toBeNull();
+		expect(player(view).getByRole('button', { name: '4', pressed: true })).toBeTruthy();
+		expect(new URL(iframe(view).src).searchParams.get('season')).toBe('4');
+	});
+	it('ignores a previous title\'s delayed episode response after a route change', async () => {
+		workData.seasons.push({ id: 'season3', seasonNumber: 3, title: 'Season 3', episodeCount: 3 });
+		const view = setup(); await play(view);
+		let resolveOld!: (episodes: typeof testEpisodes) => void;
+		const delayed = new Promise<typeof testEpisodes>(resolve => { resolveOld = resolve; });
+		const fallback = vi.mocked(misskeyApiZalip).getMockImplementation()!;
+		vi.mocked(misskeyApiZalip).mockImplementation((endpoint, params) => endpoint === 'zalip/seasons/episodes' && params?.slug === serial.slug && params.seasonNumber === 3 ? delayed : fallback(endpoint, params));
+		await fireEvent.click(player(view).getByRole('button', { name: '3', pressed: false }));
+		workData = { ...serial, id: 'other-work', slug: 'other-series', title: 'Other Series' };
+		await view.rerender({ slug: 'other-series' });
+		await view.findByRole('heading', { name: 'Other Series', level: 1 });
+		resolveOld(testEpisodes.map(episode => ({ ...episode, title: 'Stale Episode', id: `stale-${episode.id}` })));
+		await nextTick(); await nextTick();
+		expect(view.queryByRole('heading', { name: /Stale Episode/u })).toBeNull();
+		expect(view.getByRole('heading', { name: /Episode 1$/u, level: 2 })).toBeTruthy();
+		expect(view.queryByRole('alert')).toBeNull();
+	});
+	it('falls back from a failed episode still through cover and poster, then a placeholder without an error loop', async () => {
+		Object.assign(workData, { backdropPath: 'https://social.example/files/cover.webp', posterPath: 'https://social.example/files/poster.webp' });
+		const fallback = vi.mocked(misskeyApiZalip).getMockImplementation()!;
+		vi.mocked(misskeyApiZalip).mockImplementation((endpoint, params) => endpoint === 'zalip/seasons/episodes'
+			? Promise.resolve(testEpisodes.map(episode => ({ ...episode, stillPath: `https://social.example/files/${episode.id}.webp` }))) : fallback(endpoint, params));
+		const view = setup();
+		await view.findByRole('heading', { name: /Episode 1$/u, level: 2 });
+		const preview = () => view.container.querySelector('[class*=playerPreview] > img') as HTMLImageElement | null;
+		const guide = () => view.container.querySelector('[class*=episodeGuideStill]') as HTMLImageElement | null;
+		expect(preview()?.src).toBe('https://social.example/files/episode1.webp');
+		await fireEvent.error(preview()!);
+		expect(preview()?.src).toBe('https://social.example/files/cover.webp');
+		expect(guide()?.src).toBe('https://social.example/files/cover.webp');
+		await fireEvent.error(guide()!);
+		expect(preview()?.src).toBe('https://social.example/files/poster.webp');
+		const tile = player(view).getByRole('button', { name: /1.*Episode 1/u });
+		expect(tile.querySelector('img')?.src).toBe('https://social.example/files/poster.webp');
+		await fireEvent.error(tile.querySelector('img')!);
+		expect(preview()).toBeNull();
+		expect(guide()).toBeNull();
+		expect(tile.querySelector('img')).toBeNull();
+		expect(tile.querySelector('.ti-device-tv')).toBeTruthy();
 	});
 	it.each(['series', 'anime'])('keeps an unbound %s serial playable without inventing a canonical progress target', async kind => {
 		workData = { ...serial, kind, seasons: [] };
@@ -365,7 +471,7 @@ describe('Zalip work playback selection', () => {
 		const previousApi = vi.mocked(misskeyApiZalip).getMockImplementation()!;
 		vi.mocked(misskeyApiZalip).mockImplementation((endpoint, params) => endpoint === 'zalip/seasons/episodes' ? Promise.reject(new Error('Episode request failed')) : previousApi(endpoint, params));
 		await fireEvent.click(player(view).getByRole('button', { name: '3', pressed: false }));
-		await waitFor(() => expect(player(view).getByRole('status').textContent).toContain(i18n.ts.zalip.playerEpisodeUnavailable));
+		await waitFor(() => expect(player(view).getByRole('status').textContent).toContain(i18n.ts.zalip.playerEpisodesLoadFailed));
 		expect(iframe(view)).toBeNull();
 		expect(player(view).queryByRole('button', { name: i18n.ts.zalip.watchTitle })).toBeNull();
 		vi.mocked(misskeyApiZalip).mockImplementation(previousApi);

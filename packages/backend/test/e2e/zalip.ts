@@ -13,6 +13,7 @@ import { MiZalipImportRun } from '@/models/ZalipImportRun.js';
 import { MiZalipImporterSourceSetting } from '@/models/ZalipImporterSourceSetting.js';
 import { MiZalipPlaybackSettings } from '@/models/ZalipPlaybackSettings.js';
 import { MiZalipWork } from '@/models/ZalipWork.js';
+import { MiZalipExternalIdentity } from '@/models/ZalipExternalIdentity.js';
 import { MiZalipSeason } from '@/models/ZalipSeason.js';
 import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
 import { MiZalipLibraryEntry } from '@/models/ZalipLibraryEntry.js';
@@ -98,12 +99,38 @@ describe('Zalip discussions', () => {
 		assert.strictEqual(detail.status, 200);
 		assert.strictEqual(detail.body.posterPath, posterUrl);
 		assert.strictEqual(detail.body.posterThumbnailUrl, thumbnailUrl);
+		assert.strictEqual(detail.body.mediaType, 'movie');
 		const page = await api('zalip/works/page', { query: 'Native poster fixture' });
 		assert.strictEqual(page.status, 200);
 		assert.strictEqual(page.body.items.find(work => work.id === before.id)?.posterThumbnailUrl, thumbnailUrl);
 		assert.deepStrictEqual(await db.getRepository(MiZalipWork).findOneByOrFail({ id: before.id }), before);
 		await db.getRepository(MiZalipWork).update(before.id, { publicationState: 'draft' });
 		assert.strictEqual((await api('zalip/works/show', { slug: before.slug })).status, 404);
+	});
+
+	test('publishes only verified media types, with serial evidence taking precedence and identities kept private', async () => {
+		const db = await initTestDb(true);
+		const fixtures = [
+			{ id: 'zaliptypemovie', kind: 'anime' as const, tmdbMediaType: 'movie' as const, expected: 'movie' },
+			{ id: 'zaliptypebound', kind: 'animation' as const, tmdbMediaType: null, expected: 'movie' },
+			{ id: 'zaliptypetv', kind: 'movie' as const, tmdbMediaType: 'movie' as const, expected: 'tv' },
+			{ id: 'zaliptypeunknown', kind: 'anime' as const, tmdbMediaType: null, expected: null },
+		];
+		const now = new Date();
+		await db.getRepository(MiZalipWork).insert(fixtures.map(({ expected: _expected, ...work }) => ({ ...work, slug: work.id, title: work.id, publicationState: 'published' as const, createdAt: now, updatedAt: now, publishedAt: now })));
+		await db.getRepository(MiZalipExternalIdentity).insert([
+			{ id: 'zaliptypeidentitym', workId: 'zaliptypebound', provider: 'kinopoisk', entityType: 'movie', externalId: 'private-media-type-movie', updatedAt: now },
+			{ id: 'zaliptypeidentityt', workId: 'zaliptypetv', provider: 'tmdb', entityType: 'tv', externalId: 'private-media-type-tv', updatedAt: now },
+		]);
+		for (const fixture of fixtures) {
+			const response = await api('zalip/works/show', { slug: fixture.id });
+			assert.strictEqual(response.status, 200);
+			assert.strictEqual(response.body.mediaType, fixture.expected);
+			assert.strictEqual(JSON.stringify(response.body).includes('private-media-type-'), false);
+			assert.strictEqual(Object.hasOwn(response.body, 'tmdbMediaType'), false);
+		}
+		await db.getRepository(MiZalipWork).update('zaliptypemovie', { publicationState: 'draft' });
+		assert.strictEqual((await api('zalip/works/show', { slug: 'zaliptypemovie' })).status, 404);
 	});
 
 	test('pages beyond 100 published titles with global ordering and scoped cursors, excluding drafts', async () => {
