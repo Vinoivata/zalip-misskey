@@ -4,7 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render } from '@testing-library/vue';
+import { cleanup, fireEvent, render, within } from '@testing-library/vue';
 import { defineComponent, h, nextTick, reactive } from 'vue';
 import type { ZalipReview, ZalipReviewsResponse } from '@/utility/zalip-reviews.js';
 import type { MenuItem } from '@/types/menu.js';
@@ -88,6 +88,136 @@ describe('native content review panel', () => {
 		expect(payload).not.toHaveProperty('rating');
 		expect(view.emitted().ratingChanged).toEqual([[9]]);
 		expect(view.queryByRole('textbox')).toBeNull();
+	});
+
+	it('edits independent review and essay drafts without carrying one text or title into the other', async () => {
+		const ownUser = { id: 'viewer', username: 'viewer' } as ZalipReview['user'];
+		const own = review('own', { user: ownUser, canEdit: true, canDelete: true });
+		const essay = review('essay', { user: ownUser, format: 'essay', title: 'My independent essay', body: 'A separate detailed essay about the themes of this film.', canEdit: true, canDelete: true });
+		controls.api.mockResolvedValue({ ...response([own, essay], own), myReviews: [own, essay] });
+		const view = setup({ personalRating: 8 }); await settle();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._reviews.editOwn }));
+		const body = view.getByRole('textbox', { name: i18n.ts.zalip._reviews.bodyLabel }) as HTMLTextAreaElement;
+		expect(body.value).toBe(own.body);
+		await fireEvent.update(body, 'An unsaved review draft, independent of the essay.');
+		const type = view.getByRole('combobox', { name: i18n.ts.zalip._reviews.format });
+		await fireEvent.update(type, 'essay');
+		expect(body.value).toBe(essay.body);
+		expect((view.getByRole('textbox', { name: i18n.ts.zalip._reviews.titleLabel }) as HTMLInputElement).value).toBe(essay.title);
+		await fireEvent.update(body, 'An unsaved essay draft, independent of the review.');
+		await fireEvent.update(view.getByRole('combobox', { name: i18n.ts.zalip._reviews.ratingLabel }), '7');
+		await fireEvent.update(type, 'review');
+		expect(body.value).toBe('An unsaved review draft, independent of the essay.');
+		expect(view.queryByRole('textbox', { name: i18n.ts.zalip._reviews.titleLabel })).toBeNull();
+		await fireEvent.update(type, 'essay');
+		expect(body.value).toBe('An unsaved essay draft, independent of the review.');
+		expect((view.getByRole('combobox', { name: i18n.ts.zalip._reviews.ratingLabel }) as HTMLSelectElement).value).toBe('7');
+	});
+
+	it('opens a new essay from its tab even when the author already has a review', async () => {
+		const own = review('own', { user: { id: 'viewer', username: 'viewer' } as ZalipReview['user'], canEdit: true, canDelete: true });
+		controls.api.mockImplementation(async (endpoint: string) => endpoint === 'zalip/reviews/list' ? { ...response([own], own), myReviews: [own] } : review('new-essay', { format: 'essay' }));
+		const view = setup(); await settle();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._reviews.essays })); await settle();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._reviews.write }));
+		expect((view.getByRole('textbox', { name: i18n.ts.zalip._reviews.bodyLabel }) as HTMLTextAreaElement).value).toBe('');
+		await fireEvent.update(view.getByRole('textbox', { name: i18n.ts.zalip._reviews.bodyLabel }), 'An independently created essay about the same film.');
+		await fireEvent.update(view.getByRole('textbox', { name: i18n.ts.zalip._reviews.titleLabel }), 'A second kind of opinion');
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._reviews.submit })); await settle();
+		expect(controls.api.mock.calls.find(call => call[0] === 'zalip/reviews/upsert')?.[1]).toMatchObject({ format: 'essay', title: 'A second kind of opinion', body: 'An independently created essay about the same film.' });
+		expect(own.body).toBe('A thoughtful review of this film and its characters.');
+	});
+
+	it('does not replace an existing singular essay when a cached new client encounters an old server', async () => {
+		const essay = review('legacy-essay', { user: { id: 'viewer', username: 'viewer' } as ZalipReview['user'], format: 'essay', title: 'Legacy essay', canEdit: true });
+		controls.api.mockResolvedValue(response([essay], essay));
+		const view = setup(); await settle();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._reviews.editOwn }));
+		const type = view.getByRole('combobox', { name: i18n.ts.zalip._reviews.format }) as HTMLSelectElement;
+		expect(type.disabled).toBe(true); expect(type.value).toBe('essay');
+		await fireEvent.update(type, 'review');
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._reviews.save })); await settle();
+		expect(controls.api.mock.calls.find(call => call[0] === 'zalip/reviews/upsert')?.[1].format).toBe('essay');
+	});
+
+	it('an essay edit menu opens that exact format instead of the default review', async () => {
+		const ownUser = { id: 'viewer', username: 'viewer' } as ZalipReview['user'];
+		const own = review('own', { user: ownUser, canEdit: true });
+		const essay = review('essay', { user: ownUser, format: 'essay', title: 'Specific essay', body: 'The exact essay selected from its own three-dot menu.', canEdit: true });
+		controls.api.mockResolvedValue({ ...response([own, essay], own), myReviews: [own, essay] });
+		const view = setup(); await settle();
+		await fireEvent.click(within(view.container.querySelector('#review-essay') as HTMLElement).getByRole('button', { name: i18n.ts.more }));
+		const menu = controls.menu.mock.calls[0][0] as MenuItem[];
+		const edit = menu.find(item => typeof item === 'object' && item && 'text' in item && item.text === i18n.ts.edit);
+		if (!edit || typeof edit !== 'object' || !('action' in edit)) throw new Error('Missing edit action');
+		await edit.action(new PointerEvent('click')); await settle();
+		expect((view.getByRole('textbox', { name: i18n.ts.zalip._reviews.bodyLabel }) as HTMLTextAreaElement).value).toBe(essay.body);
+		expect((view.getByRole('combobox', { name: i18n.ts.zalip._reviews.format }) as HTMLSelectElement).value).toBe('essay');
+	});
+
+	it('deleting one own format leaves an open draft of the other format intact', async () => {
+		const ownUser = { id: 'viewer', username: 'viewer' } as ZalipReview['user'];
+		const own = review('own', { user: ownUser, canEdit: true, canDelete: true });
+		const essay = review('essay', { user: ownUser, format: 'essay', title: 'Surviving essay', canEdit: true, canDelete: true });
+		let removed = false;
+		controls.api.mockImplementation(async (endpoint: string) => {
+			if (endpoint === 'zalip/reviews/delete') { removed = true; return undefined; }
+			return { ...response(removed ? [essay] : [own, essay], removed ? essay : own), myReviews: removed ? [essay] : [own, essay] };
+		});
+		const view = setup(); await settle();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._reviews.editOwn }));
+		await fireEvent.update(view.getByRole('combobox', { name: i18n.ts.zalip._reviews.format }), 'essay');
+		await fireEvent.update(view.getByRole('textbox', { name: i18n.ts.zalip._reviews.bodyLabel }), 'A still unsaved essay while a different review is removed.');
+		await fireEvent.click(within(view.container.querySelector('#review-own') as HTMLElement).getByRole('button', { name: i18n.ts.more }));
+		const menu = controls.menu.mock.calls[0][0] as MenuItem[];
+		const remove = menu.find(item => typeof item === 'object' && item && 'text' in item && item.text === i18n.ts.delete);
+		if (!remove || typeof remove !== 'object' || !('action' in remove)) throw new Error('Missing delete action');
+		await remove.action(new PointerEvent('click')); await settle();
+		expect(controls.api).toHaveBeenCalledWith('zalip/reviews/delete', { reviewId: own.id });
+		expect((view.getByRole('textbox', { name: i18n.ts.zalip._reviews.bodyLabel }) as HTMLTextAreaElement).value).toBe('A still unsaved essay while a different review is removed.');
+		expect(view.container.querySelector('#review-essay')).not.toBeNull();
+		expect(view.container.querySelector('#review-own')).toBeNull();
+	});
+
+	it('saving one format preserves the other unsaved text until an explicit cancel', async () => {
+		const ownUser = { id: 'viewer', username: 'viewer' } as ZalipReview['user'];
+		const own = review('own', { user: ownUser, canEdit: true });
+		const essay = review('essay', { user: ownUser, format: 'essay', title: 'Independent essay', canEdit: true });
+		controls.api.mockImplementation(async (endpoint: string) => endpoint === 'zalip/reviews/list' ? { ...response([own, essay], own), myReviews: [own, essay] } : essay);
+		const view = setup(); await settle();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._reviews.editOwn }));
+		await fireEvent.update(view.getByRole('textbox', { name: i18n.ts.zalip._reviews.bodyLabel }), 'An unfinished review which must survive saving an essay.');
+		await fireEvent.update(view.getByRole('combobox', { name: i18n.ts.zalip._reviews.format }), 'essay');
+		await fireEvent.update(view.getByRole('textbox', { name: i18n.ts.zalip._reviews.bodyLabel }), 'A completed essay which I choose to publish separately.');
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._reviews.save })); await settle();
+		expect(controls.api.mock.calls.find(call => call[0] === 'zalip/reviews/upsert')?.[1].format).toBe('essay');
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._reviews.editOwn }));
+		expect((view.getByRole('textbox', { name: i18n.ts.zalip._reviews.bodyLabel }) as HTMLTextAreaElement).value).toBe('An unfinished review which must survive saving an essay.');
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.cancel }));
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._reviews.editOwn }));
+		expect((view.getByRole('textbox', { name: i18n.ts.zalip._reviews.bodyLabel }) as HTMLTextAreaElement).value).toBe(own.body);
+	});
+
+	it('deleting the selected essay does not discard an inactive review draft', async () => {
+		const ownUser = { id: 'viewer', username: 'viewer' } as ZalipReview['user'];
+		const own = review('own', { user: ownUser, canEdit: true, canDelete: true });
+		const essay = review('essay', { user: ownUser, format: 'essay', title: 'Removed essay', canEdit: true, canDelete: true });
+		let removed = false;
+		controls.api.mockImplementation(async (endpoint: string) => {
+			if (endpoint === 'zalip/reviews/delete') { removed = true; return undefined; }
+			return { ...response(removed ? [own] : [own, essay], own), myReviews: removed ? [own] : [own, essay] };
+		});
+		const view = setup(); await settle();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._reviews.editOwn }));
+		await fireEvent.update(view.getByRole('textbox', { name: i18n.ts.zalip._reviews.bodyLabel }), 'A review draft kept while I remove my published essay.');
+		await fireEvent.update(view.getByRole('combobox', { name: i18n.ts.zalip._reviews.format }), 'essay');
+		await fireEvent.click(within(view.container.querySelector('#review-essay') as HTMLElement).getByRole('button', { name: i18n.ts.more }));
+		const menu = controls.menu.mock.calls[0][0] as MenuItem[];
+		const remove = menu.find(item => typeof item === 'object' && item && 'text' in item && item.text === i18n.ts.delete);
+		if (!remove || typeof remove !== 'object' || !('action' in remove)) throw new Error('Missing delete action');
+		await remove.action(new PointerEvent('click')); await settle();
+		await fireEvent.click(view.getByRole('button', { name: i18n.ts.zalip._reviews.editOwn }));
+		expect((view.getByRole('textbox', { name: i18n.ts.zalip._reviews.bodyLabel }) as HTMLTextAreaElement).value).toBe('A review draft kept while I remove my published essay.');
 	});
 
 	it('validates review length and essay title and writes an explicit changed rating', async () => {

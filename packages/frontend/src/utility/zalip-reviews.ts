@@ -43,14 +43,14 @@ export type ZalipReviewFilters = {
 	sort: 'newest' | 'helpful';
 };
 export type ZalipReviewsRequest = ZalipReviewFilters & { workId: string; limit: number; offset: number };
-export type ZalipReviewsResponse = { items: ZalipReview[]; total: number; summary: ZalipReviewSummary; myReview: ZalipReview | null };
+export type ZalipReviewsResponse = { items: ZalipReview[]; total: number; summary: ZalipReviewSummary; myReview: ZalipReview | null; myReviews?: ZalipReview[] };
 
 /** Offset advances by server rows, not deduplicated rows. Old accounts/work requests never apply. */
 export function createZalipReviewsPager(options: {
 	accountId: () => string | null;
 	fetchPage: (params: ZalipReviewsRequest) => Promise<ZalipReviewsResponse>;
 }) {
-	const state = reactive({ items: [] as ZalipReview[], total: 0, summary: null as ZalipReviewSummary | null, myReview: null as ZalipReview | null, pending: false, loaded: false, error: false, hasMore: false });
+	const state = reactive({ items: [] as ZalipReview[], total: 0, summary: null as ZalipReviewSummary | null, myReview: null as ZalipReview | null, myReviews: [] as ZalipReview[], independentFormats: false, pending: false, loaded: false, error: false, hasMore: false });
 	let workId = '';
 	let filters: ZalipReviewFilters = { hideSpoilers: false, sort: 'newest' };
 	let offset = 0;
@@ -61,7 +61,7 @@ export function createZalipReviewsPager(options: {
 		workId = id;
 		filters = { ...nextFilters };
 		offset = 0;
-		Object.assign(state, { items: [], total: 0, summary: null, myReview: null, pending: false, loaded: false, error: false, hasMore: false });
+		Object.assign(state, { items: [], total: 0, summary: null, myReview: null, myReviews: [], independentFormats: false, pending: false, loaded: false, error: false, hasMore: false });
 	}
 
 	async function load(): Promise<void> {
@@ -84,6 +84,10 @@ export function createZalipReviewsPager(options: {
 			state.total = result.total;
 			state.summary = result.summary;
 			state.myReview = result.myReview;
+			state.independentFormats = Array.isArray(result.myReviews);
+			// An old server still returns only the singular field. Keep that material
+			// editable without interpreting it as the other format.
+			state.myReviews = (result.myReviews ?? (result.myReview ? [result.myReview] : [])).filter(item => item.workId === workId);
 			state.hasMore = result.items.length === 20 && offset < result.total && offset <= 1000;
 			state.loaded = true;
 		} catch {
@@ -98,6 +102,8 @@ export function createZalipReviewsPager(options: {
 		const index = state.items.findIndex(item => item.id === review.id);
 		if (index !== -1) state.items[index] = review;
 		if (state.myReview?.id === review.id) state.myReview = review;
+		const ownIndex = state.myReviews.findIndex(item => item.id === review.id);
+		if (ownIndex !== -1) state.myReviews[ownIndex] = review;
 	}
 
 	return { state, reset, load, replace };

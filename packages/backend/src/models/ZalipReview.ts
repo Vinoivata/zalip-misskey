@@ -15,7 +15,7 @@ export type ZalipReviewSentiment = typeof zalipReviewSentiments[number];
 
 /** A public opinion belongs to its real author and canonical title, not the importer account. */
 @Entity('zalip_review')
-@Unique('UQ_zalip_review_user_work', ['userId', 'workId'])
+@Unique('UQ_zalip_review_user_work_format', ['userId', 'workId', 'format'])
 @Index('IDX_zalip_review_work_deleted_created', ['workId', 'deletedAt', 'createdAt'])
 @Check('CHK_zalip_review_format', '"format" IN (\'review\', \'essay\')')
 @Check('CHK_zalip_review_sentiment', '"sentiment" IN (\'positive\', \'neutral\', \'negative\')')

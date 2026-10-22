@@ -7,7 +7,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <section :class="$style.root" :aria-label="i18n.ts.zalip._reviews.title">
 	<header :class="$style.header">
 		<div><p :class="$style.eyebrow">{{ workTitle }}</p><h2>{{ i18n.ts.zalip._reviews.title }}</h2></div>
-		<button v-if="$i" type="button" class="_button _buttonPrimary" :class="$style.write" :disabled="!pager.state.loaded || pager.state.pending || saving" @click="openEditor()"><i class="ti ti-pencil"></i> {{ pager.state.myReview ? i18n.ts.zalip._reviews.editOwn : i18n.ts.zalip._reviews.write }}</button>
+		<button v-if="$i" type="button" class="_button _buttonPrimary" :class="$style.write" :disabled="!pager.state.loaded || pager.state.pending || saving" @click="openEditor()"><i class="ti ti-pencil"></i> {{ selectedOwn ? i18n.ts.zalip._reviews.editOwn : i18n.ts.zalip._reviews.write }}</button>
 	</header>
 	<div v-if="pager.state.summary" :class="$style.summary">
 		<div :class="$style.score"><strong>{{ pager.state.summary.averageRating?.toFixed(1) ?? '—' }}</strong><span>{{ i18n.ts.zalip._reviews.average }}</span><small>{{ i18n.ts.zalip._reviews.ratings }}: {{ pager.state.summary.ratingCount }}</small></div>
@@ -28,9 +28,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</div>
 	<div v-if="!$i" :class="$style.signIn"><p>{{ i18n.ts.zalip._reviews.signIn }}</p><button type="button" class="_button" :class="$style.action" @click="signIn">{{ i18n.ts.login }}</button></div>
 	<form v-if="editorOpen && $i" :class="$style.editor" @submit.prevent="submit">
-		<p :class="$style.caption">{{ i18n.ts.zalip._reviews.onePerWork }}</p>
+		<p :class="$style.caption">{{ pager.state.independentFormats ? i18n.ts.zalip._reviews.onePerFormat : i18n.ts.zalip._reviews.onePerWork }}</p>
 		<div :class="$style.editorRow">
-			<label>{{ i18n.ts.zalip._reviews.format }}<select v-model="draft.format" :class="$style.select" :disabled="saving"><option value="review">{{ i18n.ts.zalip._reviews.reviews }}</option><option value="essay">{{ i18n.ts.zalip._reviews.essays }}</option></select></label>
+			<label>{{ i18n.ts.zalip._reviews.format }}<select :value="draft.format" :class="$style.select" :disabled="saving || pager.state.pending || legacyOwn != null" @change="changeEditorFormat"><option value="review">{{ i18n.ts.zalip._reviews.reviews }}</option><option value="essay">{{ i18n.ts.zalip._reviews.essays }}</option></select></label>
 			<label>{{ i18n.ts.zalip._reviews.opinion }}<select v-model="draft.sentiment" :class="$style.select" :disabled="saving"><option v-for="item in sentiments" :key="item.value" :value="item.value">{{ item.label }}</option></select></label>
 			<label>{{ i18n.ts.zalip._reviews.ratingLabel }}<select v-model="draft.rating" :class="$style.select" :disabled="saving" @change="ratingDirty = true"><option :value="null">{{ i18n.ts.zalip._reviews.noRating }}</option><option v-for="value in 10" :key="value" :value="value">{{ value }}</option></select></label>
 		</div>
@@ -38,7 +38,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<label :class="$style.field">{{ i18n.ts.zalip._reviews.bodyLabel }}<textarea ref="bodyInput" v-model="draft.body" :class="$style.input" rows="7" maxlength="12000" :disabled="saving" required></textarea></label>
 		<div :class="$style.editorFooter"><label :class="$style.check"><input v-model="draft.isSpoiler" type="checkbox" :disabled="saving"> {{ i18n.ts.zalip._reviews.spoiler }}</label><small :class="$style.caption">{{ draft.body.trim().length }} / 12000</small></div>
 		<p v-if="formError" role="alert" :class="$style.error">{{ formError }}</p>
-		<div :class="$style.editorActions"><button type="button" class="_button" :class="$style.action" :disabled="saving" @click="closeEditor">{{ i18n.ts.cancel }}</button><button type="submit" class="_button _buttonPrimary" :class="$style.action" :disabled="saving"><i v-if="saving" class="ti ti-loader-2 ti-spin"></i> {{ pager.state.myReview ? i18n.ts.zalip._reviews.save : i18n.ts.zalip._reviews.submit }}</button></div>
+		<div :class="$style.editorActions"><button type="button" class="_button" :class="$style.action" :disabled="saving" @click="closeEditor">{{ i18n.ts.cancel }}</button><button type="submit" class="_button _buttonPrimary" :class="$style.action" :disabled="saving || !pager.state.loaded || pager.state.pending || (legacyOwn != null && draft.format !== legacyOwn.format)"><i v-if="saving" class="ti ti-loader-2 ti-spin"></i> {{ editorOwn ? i18n.ts.zalip._reviews.save : i18n.ts.zalip._reviews.submit }}</button></div>
 	</form>
 	<p v-if="actionError" role="alert" :class="[$style.state, $style.error]">{{ actionError }}</p>
 	<div v-if="pager.state.items.length" :class="$style.items">
@@ -98,6 +98,14 @@ const ratingDirty = ref(false);
 const actionError = ref('');
 const formError = ref('');
 const draft = reactive({ format: 'review' as ZalipReviewFormat, title: '', body: '', isSpoiler: false, sentiment: 'neutral' as ZalipReviewSentiment, rating: null as number | null });
+type TextDraft = Pick<typeof draft, 'title' | 'body' | 'isSpoiler' | 'sentiment'>;
+const textDrafts = new Map<ZalipReviewFormat, TextDraft>();
+// A cached new client can briefly encounter an old server during a rollback.
+// Its singular UPSERT must not turn the author's existing essay into a review.
+const legacyOwn = computed(() => !pager.state.independentFormats ? pager.state.myReviews.find(item => item.user.id === $i?.id) : undefined);
+const selectedFormat = computed<ZalipReviewFormat>(() => legacyOwn.value?.format ?? (format.value === 'essay' ? 'essay' : 'review'));
+const selectedOwn = computed(() => ownReview(selectedFormat.value));
+const editorOwn = computed(() => ownReview(draft.format));
 const bodyInput = useTemplateRef('bodyInput');
 let contextEpoch = 0;
 let deleting = false;
@@ -122,10 +130,35 @@ function sentimentLabel(value: ZalipReviewSentiment): string {
 
 function reveal(id: string): void { revealed.value = new Set([...revealed.value, id]); }
 
-function openEditor(): void {
+function ownReview(value: ZalipReviewFormat): ZalipReview | undefined {
+	return pager.state.myReviews.find(item => item.format === value && item.user.id === $i?.id);
+}
+
+function textDraft(value: ZalipReviewFormat): TextDraft {
+	const own = ownReview(value);
+	return { title: own?.title ?? '', body: own?.body ?? '', isSpoiler: own?.isSpoiler ?? false, sentiment: own?.sentiment ?? 'neutral' };
+}
+
+function changeEditorFormat(event: Event): void {
+	const value = (event.target as HTMLSelectElement).value;
+	if (value === 'review' || value === 'essay') selectEditorFormat(value);
+}
+
+function selectEditorFormat(value: ZalipReviewFormat): void {
+	if (saving.value || !pager.state.loaded || value === draft.format || (legacyOwn.value != null && value !== legacyOwn.value.format)) return;
+	textDrafts.set(draft.format, { title: draft.title, body: draft.body, isSpoiler: draft.isSpoiler, sentiment: draft.sentiment });
+	Object.assign(draft, textDrafts.get(value) ?? textDraft(value), { format: value });
+	formError.value = '';
+}
+
+function openEditor(value: ZalipReviewFormat = selectedFormat.value): void {
 	if (!$i || saving.value || !pager.state.loaded) return;
-	const own = pager.state.myReview;
-	Object.assign(draft, { format: own?.format ?? (format.value === 'essay' ? 'essay' : 'review'), title: own?.title ?? '', body: own?.body ?? '', isSpoiler: own?.isSpoiler ?? false, sentiment: own?.sentiment ?? 'neutral', rating: props.personalRating !== undefined ? props.personalRating : own?.rating ?? null });
+	if (editorOpen.value) {
+		selectEditorFormat(value);
+		void nextTick(() => bodyInput.value?.focus());
+		return;
+	}
+	Object.assign(draft, textDrafts.get(value) ?? textDraft(value), { format: value, rating: props.personalRating !== undefined ? props.personalRating : ownReview(value)?.rating ?? pager.state.myReviews[0]?.rating ?? null });
 	formError.value = '';
 	ratingDirty.value = false;
 	editorOpen.value = true;
@@ -135,11 +168,12 @@ function openEditor(): void {
 function closeEditor(): void {
 	if (saving.value) return;
 	editorOpen.value = false;
+	textDrafts.clear();
 	formError.value = '';
 }
 
 async function submit(): Promise<void> {
-	if (!$i || saving.value || deleting || !editorOpen.value) return;
+	if (!$i || saving.value || deleting || !editorOpen.value || !pager.state.loaded || pager.state.pending || (legacyOwn.value != null && draft.format !== legacyOwn.value.format)) return;
 	const body = draft.body.trim();
 	const title = draft.title.trim();
 	if (body.length < 20 || body.length > 12000) { formError.value = i18n.ts.zalip._reviews.bodyInvalid; return; }
@@ -147,13 +181,15 @@ async function submit(): Promise<void> {
 	const epoch = contextEpoch;
 	const account = $i.id;
 	const workId = props.workId;
+	const submittedFormat = draft.format;
 	const current = () => epoch === contextEpoch && account === $i?.id && workId === props.workId;
 	saving.value = true;
 	formError.value = '';
 	try {
-		const saved = await misskeyApiZalip<ZalipReview>('zalip/reviews/upsert', { workId, format: draft.format, title: draft.format === 'essay' ? title : null, body, isSpoiler: draft.isSpoiler, sentiment: draft.sentiment, ...(ratingDirty.value ? { rating: draft.rating } : {}) });
+		const saved = await misskeyApiZalip<ZalipReview>('zalip/reviews/upsert', { workId, format: submittedFormat, title: submittedFormat === 'essay' ? title : null, body, isSpoiler: draft.isSpoiler, sentiment: draft.sentiment, ...(ratingDirty.value ? { rating: draft.rating } : {}) });
 		if (!current()) return;
 		editorOpen.value = false;
+		textDrafts.delete(submittedFormat);
 		emit('ratingChanged', saved.rating);
 		reload();
 	} catch {
@@ -194,7 +230,8 @@ async function remove(review: ZalipReview): Promise<void> {
 		if (canceled || !current()) return;
 		await misskeyApiZalip<void>('zalip/reviews/delete', { reviewId: review.id });
 		if (!current()) return;
-		if (review.user.id === account) editorOpen.value = false;
+		if (review.user.id === account) textDrafts.delete(review.format);
+		if (review.user.id === account && draft.format === review.format) editorOpen.value = false;
 		reload();
 	} catch {
 		if (current()) actionError.value = i18n.ts.zalip._reviews.deleteError;
@@ -209,7 +246,7 @@ function openMenu(review: ZalipReview, event: MouseEvent): void {
 	const account = $i.id;
 	const current = () => epoch === contextEpoch && account === $i?.id && review.workId === props.workId;
 	const menu: MenuItem[] = [];
-	if (review.canEdit && review.user.id === account) menu.push({ icon: 'ti ti-pencil', text: i18n.ts.edit, action: () => { if (current()) openEditor(); } });
+	if (review.canEdit && review.user.id === account) menu.push({ icon: 'ti ti-pencil', text: i18n.ts.edit, action: () => { if (current()) openEditor(review.format); } });
 	if (review.canDelete) menu.push({ icon: 'ti ti-trash', text: i18n.ts.delete, danger: true, action: () => { if (current()) void remove(review); } });
 	if (review.user.id !== account) menu.push({ icon: 'ti ti-flag', text: i18n.ts.zalip._reviews.report, action: async () => {
 		if (!current()) return;
@@ -228,6 +265,7 @@ watch(() => [props.workId, $i?.id], () => {
 	contextEpoch++;
 	editorOpen.value = false; saving.value = false; deleting = false; formError.value = ''; actionError.value = '';
 	draft.title = ''; draft.body = ''; ratingDirty.value = false;
+	textDrafts.clear();
 	revealed.value = new Set(); votePending.value = new Set();
 	reload();
 }, { immediate: true });

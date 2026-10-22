@@ -15,7 +15,7 @@ const example: ZalipReview = {
 };
 
 function fixture(items: ZalipReview[]): ZalipReviewsResponse {
-	return { items, total: items.length, myReview: null, summary: { reviewCount: items.length, positiveCount: items.length, neutralCount: 0, negativeCount: 0, averageRating: 7.8, ratingCount: 24, histogram: [0, 0, 0, 1, 1, 2, 6, 8, 4, 2] } };
+	return { items, total: items.length, myReview: null, myReviews: [], summary: { reviewCount: items.length, positiveCount: items.length, neutralCount: 0, negativeCount: 0, averageRating: 7.8, ratingCount: 24, histogram: [0, 0, 0, 1, 1, 2, 6, 8, 4, 2] } };
 }
 
 export const Default = {
@@ -27,5 +27,7 @@ export const Default = {
 } satisfies StoryObj<typeof MkZalipReviewsPanel>;
 
 export const Empty = { ...Default, parameters: { ...Default.parameters, msw: { handlers: [http.post('*/api/zalip/reviews/list', () => HttpResponse.json(fixture([])))] } } } satisfies StoryObj<typeof MkZalipReviewsPanel>;
+
+export const BothFormats = { ...Default, parameters: { ...Default.parameters, msw: { handlers: [http.post('*/api/zalip/reviews/list', () => HttpResponse.json(fixture([example, { ...example, id: 'essay-example', format: 'essay', title: 'A separate essay by the same author', body: 'This independent essay explores the directing, themes and characters in greater detail. The brief review above remains a separate opinion; both display the same native title rating.' }])))] } } } satisfies StoryObj<typeof MkZalipReviewsPanel>;
 
 export const Error = { ...Default, parameters: { ...Default.parameters, msw: { handlers: [http.post('*/api/zalip/reviews/list', () => HttpResponse.json({ error: { code: 'INTERNAL_ERROR' } }, { status: 500 }))] } } } satisfies StoryObj<typeof MkZalipReviewsPanel>;

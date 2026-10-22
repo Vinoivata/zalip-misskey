@@ -15,6 +15,7 @@ import UpsertEndpoint, { meta as upsertMeta } from '@/server/api/endpoints/zalip
 import DeleteEndpoint, { meta as deleteMeta } from '@/server/api/endpoints/zalip/reviews/delete.js';
 import VoteEndpoint, { meta as voteMeta } from '@/server/api/endpoints/zalip/reviews/vote.js';
 import { ZalipReviews1792442405046 } from '../../migration/1792442405046-ZalipReviews.js';
+import { ZalipReviewFormats1792682390825 } from '../../migration/1792682390825-ZalipReviewFormats.js';
 
 const owner = { id: 'owner' };
 const other = { id: 'other' };
@@ -45,12 +46,12 @@ function fixture() {
 			const user = users.get(first); return user && !user.isSuspended && !user.isDeleted && !user.host ? [{ id: first }] : [];
 		}
 		if (sql.startsWith('SELECT "deletedAt", "deletedById"')) {
-			const row = [...reviews.values()].find(value => value.userId === first && value.workId === second);
+			const row = [...reviews.values()].find(value => value.userId === first && value.workId === second && value.format === params[2]);
 			return row ? [{ deletedAt: row.deletedAt, deletedById: row.deletedById }] : [];
 		}
 		if (sql.startsWith('INSERT INTO "zalip_review"')) {
 			const [id, userId, workId, format, title, body, isSpoiler, sentiment, now] = params as [string, string, string, ZalipReviewInput['format'], string | null, string, boolean, ZalipReviewInput['sentiment'], Date];
-			const old = [...reviews.values()].find(row => row.userId === userId && row.workId === workId);
+			const old = [...reviews.values()].find(row => row.userId === userId && row.workId === workId && row.format === format);
 			const row = { id: old?.id ?? id, userId, workId, format, title, body, isSpoiler, sentiment, createdAt: old?.createdAt ?? now, updatedAt: now, deletedAt: null, deletedById: null };
 			reviews.set(row.id, row); return [];
 		}
@@ -84,11 +85,12 @@ function fixture() {
 		if (sql.includes('r."format" = $3')) selected = selected.filter(row => (!params[2] || row.format === params[2]) && (!params[3] || row.sentiment === params[3]) && (!params[4] || !row.isSpoiler));
 		if (sql.startsWith('SELECT COUNT(*)::int AS total')) return [{ total: selected.length }];
 		if (sql.startsWith('SELECT r."id", r."workId"')) {
-			if (sql.includes('AND r."userId" = $2 LIMIT 1')) selected = selected.filter(row => row.userId === second);
+			if (sql.includes('AND r."userId" = $2')) selected = selected.filter(row => row.userId === second);
 			if (sql.includes('AND r."id" = $3')) selected = selected.filter(row => row.id === params[2]);
 			const rows = selected.map(row => projection(row, second));
-			rows.sort((a, b) => sql.includes('ORDER BY votes.') ? b.helpfulCount - a.helpfulCount || a.unhelpfulCount - b.unhelpfulCount || b.id.localeCompare(a.id) : b.id.localeCompare(a.id));
-			return sql.includes('LIMIT $6 OFFSET $7') ? rows.slice(params[6] as number, (params[6] as number) + (params[5] as number)) : rows;
+			rows.sort((a, b) => sql.includes('ORDER BY r."format"') ? b.format.localeCompare(a.format) : sql.includes('ORDER BY votes.') ? b.helpfulCount - a.helpfulCount || a.unhelpfulCount - b.unhelpfulCount || b.id.localeCompare(a.id) : b.id.localeCompare(a.id));
+			if (sql.includes('LIMIT $6 OFFSET $7')) return rows.slice(params[6] as number, (params[6] as number) + (params[5] as number));
+			return sql.includes('LIMIT 1') ? rows.slice(0, 1) : sql.includes('LIMIT 2') ? rows.slice(0, 2) : rows;
 		}
 		throw new Error(`Unexpected SQL in reviews fixture: ${sql}`);
 	});
@@ -105,17 +107,77 @@ function fixture() {
 }
 
 describe('ZalipReviewService', () => {
-	it('upserts exactly one opinion per real author/title using the canonical public UserLite packer', async () => {
+	it('upserts one independent opinion per author/title/format using the canonical public UserLite packer', async () => {
 		const f = fixture();
 		const first = await f.service.upsert(owner, 'work', { ...input, rating: 8 });
-		const edited = await f.service.upsert(owner, 'work', { ...input, format: 'essay', title: ' Why this works ', body: 'A much longer original opinion on this title.', sentiment: 'neutral' });
-		expect(edited).toMatchObject({ id: first.id, format: 'essay', title: 'Why this works', rating: 8, canEdit: true, canDelete: true, user: { id: owner.id } });
-		expect(edited.createdAt).toBe(first.createdAt); expect(f.reviews.size).toBe(1);
+		const essay = await f.service.upsert(owner, 'work', { ...input, format: 'essay', title: ' Why this works ', body: 'A much longer original opinion on this title.', sentiment: 'neutral' });
+		expect(essay).toMatchObject({ format: 'essay', title: 'Why this works', rating: 8, canEdit: true, canDelete: true, user: { id: owner.id } });
+		expect(essay.id).not.toBe(first.id);
+		const before = structuredClone(f.reviews.get(first.id));
+		const edited = await f.service.upsert(owner, 'work', { ...input, format: 'essay', title: 'Edited essay', body: 'An independently edited essay with enough meaningful text.' });
+		expect(edited.id).toBe(essay.id); expect(edited.createdAt).toBe(essay.createdAt);
+		expect(f.reviews.get(first.id)).toEqual(before); expect(f.reviews.size).toBe(2);
 		expect(edited.user).toMatchObject({ avatarBlurhash: null, avatarDecorations: [] });
 		expect(edited.user).not.toHaveProperty('token'); expect(edited.user).not.toHaveProperty('email');
 		expect(f.packMany).toHaveBeenCalledWith(['owner'], owner, { schema: 'UserLite', includeSecrets: false });
 		const sql = f.query.mock.calls.find(([value]) => value.startsWith('INSERT INTO "zalip_review"'))![0];
-		expect(sql).toContain('ON CONFLICT ("userId", "workId") DO UPDATE');
+		expect(sql).toContain('ON CONFLICT ("userId", "workId", "format") DO UPDATE');
+		expect(sql.split('DO UPDATE SET')[1]).not.toContain('"format" =');
+	});
+
+	it('returns both own formats outside public filters with a deterministic compatible singular field', async () => {
+		const f = fixture();
+		const own = await f.service.upsert(owner, 'work', { ...input, rating: 8 });
+		const essay = await f.service.upsert(owner, 'work', { ...input, format: 'essay', title: 'A spoiler essay', isSpoiler: true, sentiment: 'negative' });
+		const all = await f.service.list('work', owner);
+		expect(all.myReview?.id).toBe(own.id);
+		expect(all.myReviews.map(item => item.id)).toEqual([own.id, essay.id]);
+		const filtered = await f.service.list('work', owner, { format: 'essay', sentiment: 'positive', hideSpoilers: true, limit: 1, offset: 1 });
+		expect(filtered.items).toEqual([]); expect(filtered.total).toBe(0);
+		expect(filtered.myReview?.id).toBe(essay.id);
+		expect(filtered.myReviews.map(item => item.id)).toEqual([own.id, essay.id]);
+		expect(filtered.summary).toMatchObject({ reviewCount: 2, ratingCount: 1, averageRating: 8 });
+		expect((await f.service.list('work', null)).myReviews).toEqual([]);
+		expect((await f.service.list('work', other)).myReviews).toEqual([]);
+		await f.service.delete(owner, own.id);
+		expect((await f.service.list('work', owner)).myReview?.id).toBe(essay.id);
+		expect((await f.service.list('work', owner, { format: 'review' })).myReview).toBeNull();
+	});
+
+	it('shares one native score between independent formats and never counts it twice', async () => {
+		const f = fixture();
+		const own = await f.service.upsert(owner, 'work', { ...input, rating: 7 });
+		const essayInput = { ...input, format: 'essay' as const, title: 'A separate essay' };
+		const essay = await f.service.upsert(owner, 'work', { ...essayInput, rating: 9 });
+		let listed = await f.service.list('work', owner);
+		expect(listed.myReviews.map(item => item.rating)).toEqual([9, 9]);
+		expect(listed.summary).toMatchObject({ ratingCount: 1, averageRating: 9 });
+		expect(f.libraries.size).toBe(1);
+		await f.service.upsert(owner, 'work', { ...input, rating: null });
+		listed = await f.service.list('work', owner);
+		expect(listed.myReviews.map(item => item.rating)).toEqual([null, null]);
+		expect(listed.summary).toMatchObject({ ratingCount: 0, averageRating: null });
+		await f.service.delete(owner, own.id);
+		expect(f.reviews.get(essay.id)?.deletedAt).toBeNull();
+		expect((await f.service.list('work', owner)).myReviews.map(item => item.id)).toEqual([essay.id]);
+	});
+
+	it('moderation and vote identities are independent for each author format', async () => {
+		const f = fixture();
+		const own = await f.service.upsert(owner, 'work', { ...input, rating: 8 });
+		const essayInput = { ...input, format: 'essay' as const, title: 'An independent essay' };
+		const essay = await f.service.upsert(owner, 'work', essayInput);
+		await f.service.vote(other, own.id, 'helpful');
+		expect((await f.service.vote(other, essay.id, 'unhelpful'))).toMatchObject({ helpfulCount: 0, unhelpfulCount: 1 });
+		await f.service.delete(moderator, own.id);
+		await expect(f.service.upsert(owner, 'work', { ...input, rating: 10 })).rejects.toMatchObject({ code: 'CANNOT_EDIT_ZALIP_REVIEW' });
+		expect(f.libraries.get('owner:work')?.personalRating).toBe(8);
+		const edited = await f.service.upsert(owner, 'work', { ...essayInput, body: 'This separate essay is still editable after review moderation.' });
+		expect(edited).toMatchObject({ id: essay.id, helpfulCount: 0, unhelpfulCount: 1, rating: 8 });
+		expect(f.reviews.get(own.id)?.deletedById).toBe('moderator');
+		await f.service.delete(owner, essay.id);
+		expect((await f.service.upsert(owner, 'work', essayInput)).id).toBe(essay.id);
+		expect(f.reviews.get(own.id)?.deletedById).toBe('moderator');
 	});
 
 	it('preserves native library status, favourites, subscriptions, episodes and creation date when rating changes or clears', async () => {
@@ -293,7 +355,8 @@ describe('reviews additive schema', () => {
 		class MetadataOnlyDataSource extends DataSource { async prepare() { await this.buildMetadatas(); } }
 		const db = new MetadataOnlyDataSource({ type: 'postgres', entities });
 		await db.prepare(); const review = db.getMetadata(MiZalipReview); const vote = db.getMetadata(MiZalipReviewVote);
-		expect(review.uniques.find(value => value.name === 'UQ_zalip_review_user_work')?.columns.map(value => value.propertyName)).toEqual(['userId', 'workId']);
+		expect(review.uniques.find(value => value.name === 'UQ_zalip_review_user_work_format')?.columns.map(value => value.propertyName)).toEqual(['userId', 'workId', 'format']);
+		expect(review.uniques.some(value => value.name === 'UQ_zalip_review_user_work')).toBe(false);
 		expect(review.columns.find(value => value.propertyName === 'deletedAt')?.isNullable).toBe(true);
 		expect(review.columns.some(value => value.propertyName === 'rating')).toBe(false);
 		expect(vote.primaryColumns.map(value => value.propertyName)).toEqual(['userId', 'reviewId']);
@@ -305,5 +368,35 @@ describe('reviews additive schema', () => {
 		expect(query.mock.calls.map(call => call[0]).join('\n')).toContain('CONSTRAINT "UQ_zalip_review_user_work" UNIQUE ("userId", "workId")');
 		expect(query.mock.calls.some(call => /UPDATE "(?:zalip_library_entry|note|zalip_work)"/u.test(call[0]))).toBe(false);
 		query.mockClear(); await migration.down({ query }); expect(query.mock.calls.map(call => call[0])).toEqual(['DROP TABLE "zalip_review_vote"', 'DROP TABLE "zalip_review"']);
+	});
+
+	it('the format migration only exchanges unique constraints and preserves all existing rows', async () => {
+		const query = vi.fn().mockResolvedValue([]);
+		const migration = new ZalipReviewFormats1792682390825();
+		await migration.up({ query });
+		expect(query.mock.calls.map(call => call[0])).toEqual([
+			'ALTER TABLE "zalip_review" ADD CONSTRAINT "UQ_zalip_review_user_work_format" UNIQUE ("userId", "workId", "format")',
+			'ALTER TABLE "zalip_review" DROP CONSTRAINT "UQ_zalip_review_user_work"',
+		]);
+		query.mockClear(); await migration.down({ query });
+		expect(query.mock.calls[0][0]).toBe('LOCK TABLE "zalip_review" IN ACCESS EXCLUSIVE MODE');
+		expect(query.mock.calls[1][0]).toContain('GROUP BY "userId", "workId" HAVING COUNT(*) > 1');
+		expect(query.mock.calls[1][0]).not.toContain('"deletedAt"');
+		expect(query.mock.calls[1][0]).toContain("ERRCODE = '23514'");
+		expect(query.mock.calls.slice(2).map(call => call[0])).toEqual([
+			'ALTER TABLE "zalip_review" ADD CONSTRAINT "UQ_zalip_review_user_work" UNIQUE ("userId", "workId")',
+			'ALTER TABLE "zalip_review" DROP CONSTRAINT "UQ_zalip_review_user_work_format"',
+		]);
+		expect(query.mock.calls.some(([sql]) => /\b(?:DELETE|UPDATE|INSERT|TRUNCATE|DROP TABLE)\b/u.test(sql))).toBe(false);
+	});
+
+	it('fails a conflicting format rollback before any DDL or row mutation', async () => {
+		const query = vi.fn(async (sql: string) => {
+			if (sql.startsWith('DO $$')) throw Object.assign(new Error('Both formats exist'), { code: '23514' });
+			return [];
+		});
+		await expect(new ZalipReviewFormats1792682390825().down({ query })).rejects.toMatchObject({ code: '23514' });
+		expect(query).toHaveBeenCalledTimes(2);
+		expect(query.mock.calls.some(([sql]) => sql.startsWith('ALTER TABLE'))).toBe(false);
 	});
 });

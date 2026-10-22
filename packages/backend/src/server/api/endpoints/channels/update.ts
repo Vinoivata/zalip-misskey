@@ -114,7 +114,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				...(ps.pinnedNoteIds !== undefined ? { pinnedNoteIds: ps.pinnedNoteIds } : {}),
 				...(ps.color !== undefined ? { color: ps.color } : {}),
 				...(typeof ps.isArchived === 'boolean' ? { isArchived: ps.isArchived } : {}),
-				...(banner ? { bannerId: banner.id } : {}),
+				...(banner !== undefined ? { bannerId: banner?.id ?? null } : {}),
 				...(typeof ps.isSensitive === 'boolean' ? { isSensitive: ps.isSensitive } : {}),
 				...(typeof ps.allowRenoteToExternal === 'boolean' ? { allowRenoteToExternal: ps.allowRenoteToExternal } : {}),
 			});

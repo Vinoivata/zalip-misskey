@@ -68,4 +68,29 @@ describe('Zalip review pager', () => {
 		expect(pager.state.items[0].helpfulCount).toBe(2);
 		expect(pager.state.myReview?.myVote).toBe('helpful');
 	});
+
+	it('keeps both own formats outside the current page and updates them independently', async () => {
+		const own = review('own');
+		const essay = { ...review('essay'), format: 'essay' as const, title: 'An essay' };
+		const pager = createZalipReviewsPager({ accountId: () => 'viewer', fetchPage: async () => ({ ...response([]), myReview: essay, myReviews: [own, essay, review('foreign', 'other')] }) });
+		pager.reset('work', { format: 'essay', hideSpoilers: true, sort: 'newest' }); await pager.load();
+		expect(pager.state.items).toEqual([]);
+		expect(pager.state.myReviews.map(item => item.id)).toEqual(['own', 'essay']);
+		expect(pager.state.independentFormats).toBe(true);
+		pager.replace({ ...essay, body: 'Only the essay has changed.' });
+		expect(pager.state.myReviews[0].body).toBe(own.body);
+		expect(pager.state.myReviews[1].body).toBe('Only the essay has changed.');
+		expect(pager.state.myReview?.body).toBe('Only the essay has changed.');
+		pager.reset('next-work', { hideSpoilers: false, sort: 'newest' });
+		expect(pager.state.myReviews).toEqual([]); expect(pager.state.myReview).toBeNull();
+	});
+
+	it('preserves a legacy server singular essay without treating it as a review', async () => {
+		const essay = { ...review('legacy-essay'), format: 'essay' as const, title: 'Existing essay' };
+		const pager = createZalipReviewsPager({ accountId: () => 'viewer', fetchPage: async () => ({ ...response([]), myReview: essay }) });
+		pager.reset('work', { hideSpoilers: false, sort: 'newest' }); await pager.load();
+		expect(pager.state.myReviews).toMatchObject([{ id: 'legacy-essay', format: 'essay' }]);
+		expect(pager.state.myReviews.some(item => item.format === 'review')).toBe(false);
+		expect(pager.state.independentFormats).toBe(false);
+	});
 });

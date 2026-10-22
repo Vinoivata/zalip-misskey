@@ -4681,7 +4681,7 @@ export type paths = {
     '/zalip/reviews/upsert': {
         /**
          * zalip/reviews/upsert
-         * @description Create or edit your one public opinion for a published title. An omitted rating preserves your native library score; null clears only that score. No other library state is modified.
+         * @description Create or edit your public review or essay for a published title, one of each format per author. Other formats are preserved. An omitted rating preserves your shared native library score; null clears only that score. No other library state is modified.
          *
          *     **Internal Endpoint**: This endpoint is an API for the misskey mainframe and is not intended for use by third parties.
          *     **Credential required**: *Yes*
@@ -44834,6 +44834,31 @@ export interface operations {
                             canEdit: boolean;
                             canDelete: boolean;
                         } | null;
+                        myReviews: {
+                            /** Format: id */
+                            id: string;
+                            /** Format: id */
+                            workId: string;
+                            user: components['schemas']['UserLite'];
+                            /** @enum {string} */
+                            format: 'review' | 'essay';
+                            title: string | null;
+                            body: string;
+                            isSpoiler: boolean;
+                            /** @enum {string} */
+                            sentiment: 'positive' | 'neutral' | 'negative';
+                            rating: number | null;
+                            helpfulCount: number;
+                            unhelpfulCount: number;
+                            /** @enum {string|null} */
+                            myVote: 'helpful' | 'unhelpful' | null;
+                            /** Format: date-time */
+                            createdAt: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                            canEdit: boolean;
+                            canDelete: boolean;
+                        }[];
                     };
                 };
             };

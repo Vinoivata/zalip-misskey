@@ -74,6 +74,8 @@ export type PackedZalipReviewList = {
 		histogram: number[];
 	};
 	myReview: PackedZalipReview | null;
+	/** Both independent author formats, even when the public list is filtered or paginated. */
+	myReviews: PackedZalipReview[];
 };
 
 type ReviewRow = {
@@ -202,13 +204,14 @@ export class ZalipReviewService {
 				manager.query<{ total: number }[]>(`SELECT COUNT(*)::int AS total ${reviewFromSql} WHERE ${filter}`, params),
 				manager.query<{ sentiment: ZalipReviewSentiment; count: number }[]>(`SELECT r."sentiment", COUNT(*)::int AS count ${reviewFromSql} WHERE ${reviewWhereSql} GROUP BY r."sentiment"`, baseParams),
 				manager.query<{ rating: number; count: number }[]>(`SELECT library."personalRating" AS rating, COUNT(*)::int AS count FROM "zalip_library_entry" library INNER JOIN "user" author ON author."id" = library."userId" INNER JOIN "zalip_work" work ON work."id" = library."workId" AND work."publicationState" = 'published' WHERE library."workId" = $1 AND library."personalRating" BETWEEN 1 AND 10 AND ${zalipReviewVisibleAuthorSql} GROUP BY library."personalRating"`, baseParams),
-				me ? manager.query<ReviewRow[]>(`${reviewProjectionSql} WHERE ${reviewWhereSql} AND r."userId" = $2 LIMIT 1`, baseParams) : Promise.resolve([]),
+				me ? manager.query<ReviewRow[]>(`${reviewProjectionSql} WHERE ${reviewWhereSql} AND r."userId" = $2 ORDER BY r."format" DESC LIMIT 2`, baseParams) : Promise.resolve([]),
 			]);
 			const packed = await this.pack([...rows, ...mine.filter(row => !rows.some(item => item.id === row.id))], me);
 			const histogram = Array.from({ length: 10 }, () => 0);
 			for (const row of ratings) histogram[row.rating - 1] = row.count;
 			const ratingCount = histogram.reduce((sum, count) => sum + count, 0);
 			const sentimentCounts = new Map(sentiments.map(row => [row.sentiment, row.count]));
+			const myReviews = mine.flatMap(row => packed.filter(item => item.id === row.id));
 			return {
 				items: rows.flatMap(row => packed.filter(item => item.id === row.id)),
 				total: totals[0]?.total ?? 0,
@@ -221,7 +224,10 @@ export class ZalipReviewService {
 					ratingCount,
 					histogram,
 				},
-				myReview: mine.length === 0 ? null : packed.find(item => item.id === mine[0].id) ?? null,
+				// Keep the legacy singular field deterministic. A legacy essay-only author
+				// still receives their existing material when no format is requested.
+				myReview: myReviews.find(item => item.format === (options.format ?? 'review')) ?? (options.format == null ? myReviews[0] : null) ?? null,
+				myReviews,
 			};
 		});
 	}
@@ -232,16 +238,16 @@ export class ZalipReviewService {
 			await this.publishedWork(manager, workId, true);
 			await this.activeActor(manager, me);
 			await manager.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`zalip-review:${me.id}:${workId}`]);
-			const removed = (await manager.query<{ deletedAt: Date | null; deletedById: string | null }[]>('SELECT "deletedAt", "deletedById" FROM "zalip_review" WHERE "userId" = $1 AND "workId" = $2', [me.id, workId])).at(0);
+			const removed = (await manager.query<{ deletedAt: Date | null; deletedById: string | null }[]>('SELECT "deletedAt", "deletedById" FROM "zalip_review" WHERE "userId" = $1 AND "workId" = $2 AND "format" = $3', [me.id, workId, value.format])).at(0);
 			// A writer may recover their own removal, not undo a moderation decision.
 			if (removed?.deletedAt != null && removed.deletedById !== me.id) throw new ZalipReviewError('CANNOT_EDIT_ZALIP_REVIEW');
 			if (value.rating !== undefined) await manager.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`zalip-library:${me.id}:${workId}`]);
 			const now = new Date();
 			await manager.query(`INSERT INTO "zalip_review" ("id", "userId", "workId", "format", "title", "body", "isSpoiler", "sentiment", "createdAt", "updatedAt", "deletedAt", "deletedById") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, NULL, NULL)
-				ON CONFLICT ("userId", "workId") DO UPDATE SET "format" = EXCLUDED."format", "title" = EXCLUDED."title", "body" = EXCLUDED."body", "isSpoiler" = EXCLUDED."isSpoiler", "sentiment" = EXCLUDED."sentiment", "updatedAt" = EXCLUDED."updatedAt", "deletedAt" = NULL, "deletedById" = NULL`,
+				ON CONFLICT ("userId", "workId", "format") DO UPDATE SET "title" = EXCLUDED."title", "body" = EXCLUDED."body", "isSpoiler" = EXCLUDED."isSpoiler", "sentiment" = EXCLUDED."sentiment", "updatedAt" = EXCLUDED."updatedAt", "deletedAt" = NULL, "deletedById" = NULL`,
 			[this.idService.gen(), me.id, workId, value.format, value.title, value.body, value.isSpoiler, value.sentiment, now]);
 			if (value.rating !== undefined) await manager.query(zalipReviewRatingUpsertSql, [me.id, workId, value.rating, now]);
-			const rows = await manager.query<ReviewRow[]>(`${reviewProjectionSql} WHERE ${reviewWhereSql} AND r."userId" = $2 LIMIT 1`, [workId, me.id]);
+			const rows = await manager.query<ReviewRow[]>(`${reviewProjectionSql} WHERE ${reviewWhereSql} AND r."userId" = $2 AND r."format" = $3 LIMIT 1`, [workId, me.id, value.format]);
 			const packed = (await this.pack(rows, me)).at(0);
 			if (packed == null) throw new ZalipReviewError('NO_SUCH_ZALIP_REVIEW');
 			return packed;

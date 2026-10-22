@@ -66,6 +66,7 @@ describe('Zalip canonical title reviews HTTP API', () => {
 		assert.deepStrictEqual(listed.body.items, []);
 		assert.strictEqual(listed.body.total, 0);
 		assert.strictEqual(listed.body.myReview, null);
+		assert.deepStrictEqual(listed.body.myReviews, []);
 		assert.deepStrictEqual(listed.body.summary.histogram, Array.from({ length: 10 }, () => 0));
 
 		const token = await createAppToken(author, ['write:notes', 'write:account', 'read:account']);
@@ -122,23 +123,44 @@ describe('Zalip canonical title reviews HTTP API', () => {
 		assert.strictEqual(listed.body.myReview, null);
 	});
 
-	test('edits one canonical opinion and changes only the native personal rating, preserving omitted versus cleared scores', async () => {
+	test('keeps review and essay independently editable with one shared native score and unchanged library fields', async () => {
 		const workId = await createWork();
 		const initial = await api('zalip/library/update', { workId, status: 'watching', episodesWatched: 4, personalRating: 6, isFavorite: true, isReleaseSubscribed: true }, author);
 		assert.strictEqual(initial.status, 200);
 		const before = await db.getRepository(MiZalipLibraryEntry).findOneByOrFail({ userId: author.id, workId });
 		const first = await createReview(workId, author, { rating: 8 });
-		const edited = await createReview(workId, author, { format: 'essay', title: '  An extended opinion  ', sentiment: 'neutral' });
+		const essay = await createReview(workId, author, { format: 'essay', title: '  An extended opinion  ', sentiment: 'neutral' });
+		assert.notStrictEqual(essay.id, first.id);
+		assert.strictEqual(essay.title, 'An extended opinion');
+		assert.strictEqual(essay.rating, 8);
+		const edited = await createReview(workId, author, { body: 'A revised but still independent short opinion about this title.' });
 		assert.strictEqual(edited.id, first.id);
 		assert.strictEqual(edited.createdAt, first.createdAt);
-		assert.strictEqual(edited.title, 'An extended opinion');
 		assert.strictEqual(edited.rating, 8);
-		assert.strictEqual(await db.getRepository(MiZalipReview).countBy({ userId: author.id, workId }), 1);
+		assert.strictEqual(await db.getRepository(MiZalipReview).countBy({ userId: author.id, workId }), 2);
+		assert.strictEqual((await db.getRepository(MiZalipReview).findOneByOrFail({ id: essay.id })).body, opinion.body);
+		const listed = await api('zalip/reviews/list', { workId }, author);
+		assert.strictEqual(listed.status, 200);
+		assert.strictEqual(listed.body.myReview?.id, first.id);
+		assert.deepStrictEqual(new Set(listed.body.myReviews.map(row => row.id)), new Set([first.id, essay.id]));
+		assert.strictEqual(listed.body.summary.reviewCount, 2);
+		assert.strictEqual(listed.body.summary.ratingCount, 1);
+		assert.strictEqual(listed.body.summary.averageRating, 8);
+		const essayOnly = await api('zalip/reviews/list', { workId, format: 'essay', limit: 1 }, author);
+		assert.strictEqual(essayOnly.body.myReview?.id, essay.id);
+		assert.deepStrictEqual(new Set(essayOnly.body.myReviews.map(row => row.id)), new Set([first.id, essay.id]));
 		for (const rating of [8, null]) {
 			if (rating === null) assert.strictEqual((await createReview(workId, author, { rating: null })).rating, null);
 			const current = await db.getRepository(MiZalipLibraryEntry).findOneByOrFail({ userId: author.id, workId });
 			assert.deepStrictEqual(current, { ...before, personalRating: rating, updatedAt: current.updatedAt });
 		}
+		const cleared = await api('zalip/reviews/list', { workId }, author);
+		assert.ok(cleared.body.myReviews.every(row => row.rating === null));
+		assert.strictEqual(cleared.body.summary.ratingCount, 0);
+		assert.strictEqual((await api('zalip/reviews/delete', { reviewId: essay.id }, author)).status, 204);
+		const remaining = await api('zalip/reviews/list', { workId }, author);
+		assert.deepStrictEqual(remaining.body.items.map(row => row.id), [first.id]);
+		assert.strictEqual((await db.getRepository(MiZalipReview).findOneByOrFail({ id: first.id })).body, edited.body);
 	});
 
 	test('serializes a concurrent list change and review rating without losing unrelated library fields', async () => {
@@ -209,7 +231,8 @@ describe('Zalip canonical title reviews HTTP API', () => {
 		const filtered = await api('zalip/reviews/list', { workId, format: 'essay', hideSpoilers: true }, author);
 		assert.strictEqual(filtered.status, 200);
 		assert.strictEqual(filtered.body.total, 0);
-		assert.strictEqual(filtered.body.myReview?.id, first.id);
+		assert.strictEqual(filtered.body.myReview, null);
+		assert.deepStrictEqual(filtered.body.myReviews.map(row => row.id), [first.id]);
 		assert.strictEqual(filtered.body.summary.reviewCount, 2);
 		assert.strictEqual(filtered.body.summary.positiveCount, 1);
 		assert.strictEqual(filtered.body.summary.negativeCount, 1);

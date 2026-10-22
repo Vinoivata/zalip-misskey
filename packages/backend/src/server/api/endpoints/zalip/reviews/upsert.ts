@@ -14,7 +14,7 @@ export const meta = {
 	secure: true,
 	prohibitMoved: true,
 	limit: { duration: 60000, max: 10, minInterval: 1000 },
-	description: 'Create or edit your one public opinion for a published title. An omitted rating preserves your native library score; null clears only that score. No other library state is modified.',
+	description: 'Create or edit your public review or essay for a published title, one of each format per author. Other formats are preserved. An omitted rating preserves your shared native library score; null clears only that score. No other library state is modified.',
 	errors: { noSuchWork: zalipReviewErrors.noSuchWork, noSuchReview: zalipReviewErrors.noSuchReview, invalidReview: zalipReviewErrors.invalidReview, cannotEdit: zalipReviewErrors.cannotEdit },
 	res: packedZalipReviewSchema,
 } as const;

@@ -4,6 +4,7 @@
 -
 
 ### Client
+- Enhance: Keep separate review and essay drafts and editing for each title while retaining a single optional personal rating.
 - Enhance: Align Zalip post action symbols and author spacing with the Notr reference and animate existing reactions only when visible, respecting reduced-motion settings.
 - Fix: Keep deeply nested cinema replies and title-share posters within narrow discussion columns and reveal successfully submitted replies under their actual parent.
 - Fix: Start the Vibix player bootstrap after its mount node, use sequential fallback loading and bound retries without broadening iframe permissions.
@@ -94,6 +95,8 @@
 - Fix: Use confirmed movie or series classification for anime continuation and retain episode artwork fallbacks when a still is unavailable.
 
 ### Server
+- Feat: Store one review and one essay per author and title independently, preserve legacy review responses and refuse destructive schema rollback when both formats exist.
+- Fix: Persist explicit removal of native community banners while preserving omitted values and owned-file checks.
 - Feat: Add personal chat organisation and durable read frontiers, canonical replies, editing and forwarding, with strict participant access and revocable scoped realtime delivery.
 - Fix: Reuse canonical provider bindings when refreshing Zalip titles and limit scheduled Kodik refreshes to bound materials so an unrelated discovery response cannot abort the whole profile.
 - Fix: Retain existing Kinopoisk photos through one validated image-CDN redirect during original-only artwork localization without enabling redirect chains or broadening image limits.

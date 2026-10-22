@@ -33,8 +33,9 @@ export const meta = {
 				required: ['reviewCount', 'positiveCount', 'neutralCount', 'negativeCount', 'averageRating', 'ratingCount', 'histogram'],
 			},
 			myReview: { ...packedZalipReviewSchema, nullable: true },
+			myReviews: { type: 'array', optional: false, nullable: false, items: packedZalipReviewSchema },
 		},
-		required: ['items', 'total', 'summary', 'myReview'],
+		required: ['items', 'total', 'summary', 'myReview', 'myReviews'],
 	},
 } as const;
 

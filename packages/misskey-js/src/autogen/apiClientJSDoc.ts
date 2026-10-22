@@ -5706,7 +5706,7 @@ declare module '../api.js' {
     ): Promise<SwitchCaseResponseType<E, P>>;
 
     /**
-     * Create or edit your one public opinion for a published title. An omitted rating preserves your native library score; null clears only that score. No other library state is modified.
+     * Create or edit your public review or essay for a published title, one of each format per author. Other formats are preserved. An omitted rating preserves your shared native library score; null clears only that score. No other library state is modified.
      *
      * **Internal Endpoint**: This endpoint is an API for the misskey mainframe and is not intended for use by third parties.
      * **Credential required**: *Yes*
