@@ -3,9 +3,19 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import { readFileSync } from 'node:fs';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/vue';
 import { defineComponent, h } from 'vue';
+import { parseAst } from 'rolldown/parseAst';
+import locales from 'i18n';
+import { LocaleInliner } from '../../../frontend-builder/locale-inliner.js';
+import { collectModifications } from '../../../frontend-builder/locale-inliner/collect-modifications.js';
+import { blankLogger } from '../../../frontend-builder/logger.js';
 import type { ZalipReview } from '@/utility/zalip-reviews.js';
 import MkZalipReviewCard from '@/components/MkZalipReviewCard.vue';
 import { i18n } from '@/i18n.js';
@@ -51,6 +61,37 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe('presentational canonical review card', () => {
+	it.each(['positive', 'negative', 'neutral'] as const)('renders the %s sentiment leaf and updates it when the card is reused', async sentiment => {
+		const view = setup({ review: opinion('sentiment', { sentiment }) });
+		expect(view.getByText(i18n.ts.zalip._reviews[sentiment])).toBeTruthy();
+		const next = sentiment === 'negative' ? 'positive' : 'negative';
+		await view.rerender({ review: opinion('sentiment', { sentiment: next }) });
+		expect(view.getByText(i18n.ts.zalip._reviews[next])).toBeTruthy();
+		expect(view.queryByText(i18n.ts.zalip._reviews[sentiment])).toBeNull();
+	});
+
+	it.each(['ru-RU', 'en-US', 'ja-JP'])('keeps the actual sentiment declaration parseable after the production %s locale transform', async language => {
+		const source = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../src/components/MkZalipReviewCard.vue'), 'utf8');
+		const declaration = source.match(/const sentimentLabel = computed\([\s\S]*?\);\r?\n/)?.[0];
+		expect(declaration).toBeDefined();
+		const chunk = `import { i18n } from './i18n.js';\n${declaration}`;
+		const outputDir = await mkdtemp(join(tmpdir(), 'zalip-review-locale-'));
+		try {
+			const inliner = new LocaleInliner({ outputDir, scriptsDir: 'scripts', i18nFile: 'src/i18n.ts', manifest: { 'src/i18n.ts': { file: 'scripts/i18n.js' } }, logger: blankLogger });
+			const modifications = collectModifications(chunk, 'review-card.js', blankLogger, inliner);
+			expect(modifications.filter(modification => modification.type === 'localized').map(modification => modification.localizationKey)).toEqual([
+				['zalip', '_reviews', 'positive'], ['zalip', '_reviews', 'negative'], ['zalip', '_reviews', 'neutral'],
+			]);
+			inliner.chunks = [{ fileName: 'review-card.js', sourceCode: chunk, modifications }];
+			await inliner.saveLocale(language, locales[language]);
+			const localized = await readFile(join(outputDir, language, 'review-card.js'), 'utf8');
+			expect(localized).not.toContain('i18n');
+			expect(() => parseAst(localized)).not.toThrow();
+		} finally {
+			await rm(outputDir, { recursive: true, force: true });
+		}
+	});
+
 	it('renders genuine author, format, timestamp, shared rating and vote counts', () => {
 		const view = setup({ review: opinion('essay', { format: 'essay', title: 'The character arc', sentiment: 'neutral' }), viewerId: 'viewer' });
 		expect(view.container.querySelector('article')?.id).toBe('review-essay');

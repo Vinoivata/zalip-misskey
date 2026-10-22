@@ -50,7 +50,8 @@ const emit = defineEmits<{
 }>();
 const expanded = ref(false);
 const longBody = computed(() => props.review.body.length > 800);
-const sentimentLabel = computed(() => i18n.ts.zalip._reviews[props.review.sentiment]);
+// Resolve leaf strings so the production locale inliner never inserts a group object into this arrow expression.
+const sentimentLabel = computed(() => props.review.sentiment === 'positive' ? i18n.ts.zalip._reviews.positive : props.review.sentiment === 'negative' ? i18n.ts.zalip._reviews.negative : i18n.ts.zalip._reviews.neutral);
 watch(() => [props.review.id, props.review.workId, props.review.body, props.review.isSpoiler, props.viewerId], () => { expanded.value = false; });
 </script>
 
