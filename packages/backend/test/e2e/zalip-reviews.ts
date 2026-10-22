@@ -150,7 +150,7 @@ describe('Zalip canonical title reviews HTTP API', () => {
 		assert.strictEqual(essayOnly.body.myReview?.id, essay.id);
 		assert.deepStrictEqual(new Set(essayOnly.body.myReviews.map(row => row.id)), new Set([first.id, essay.id]));
 		for (const rating of [8, null]) {
-			if (rating === null) assert.strictEqual((await createReview(workId, author, { rating: null })).rating, null);
+			if (rating === null) assert.strictEqual((await createReview(workId, author, { body: edited.body, rating: null })).rating, null);
 			const current = await db.getRepository(MiZalipLibraryEntry).findOneByOrFail({ userId: author.id, workId });
 			assert.deepStrictEqual({ ...current }, { ...before, personalRating: rating, updatedAt: current.updatedAt });
 		}
