@@ -531,6 +531,7 @@ export * as 'zalip/admin/importer/schedules/action' from './endpoints/zalip/admi
 export * as 'zalip/admin/importer/work-state/show' from './endpoints/zalip/admin/importer/work-state/show.js';
 export * as 'zalip/admin/importer/work-state/save' from './endpoints/zalip/admin/importer/work-state/save.js';
 export * as 'zalip/admin/importer/work-state/refresh-voices' from './endpoints/zalip/admin/importer/work-state/refresh-voices.js';
+export * as 'zalip/admin/importer/work-state/refresh-players' from './endpoints/zalip/admin/importer/work-state/refresh-players.js';
 export * as 'zalip/taxonomy/list' from './endpoints/zalip/taxonomy/list.js';
 export * as 'zalip/taxonomy/show' from './endpoints/zalip/taxonomy/show.js';
 export * as 'zalip/playback/sources' from './endpoints/zalip/playback/sources.js';

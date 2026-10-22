@@ -13,7 +13,7 @@ import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { importerFields, importerSources } from '@/utility/zalip-importer.js';
 import type { PersonImportResult } from '@/utility/zalip-taxonomy.js';
 
-vi.mock('@/i.js', () => ({ iAmAdmin: true }));
+vi.mock('@/i.js', () => ({ iAmAdmin: true, $i: { id: 'admin1', token: 'fixture-token' } }));
 vi.mock('@/page.js', () => ({ definePage: vi.fn() }));
 vi.mock('@/os.js', () => ({ confirm: vi.fn() }));
 vi.mock('@/utility/misskey-api.js', () => ({ misskeyApiZalip: vi.fn() }));

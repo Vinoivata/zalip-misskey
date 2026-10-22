@@ -117,6 +117,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<p v-if="workState.locks.includes('players')" :class="$style.hint">{{ i18n.ts.zalip._importer.repairVoicesLocked }}</p>
 							<p v-else-if="workLocksChanged" :class="$style.hint">{{ i18n.ts.zalip._importer.repairVoicesUnsavedLocks }}</p>
 							<button type="button" class="_button" :class="$style.button" :disabled="busy || workStateLoading || !importerVoiceRepairReady(workState, workStateId, persistedLocks)" @click="repairCollapsVoices"><i class="ti ti-volume" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.repairCollapsVoices }}</button>
+							<p :class="$style.hint">{{ i18n.ts.zalip._importer.refreshVibixPlayersHint }}</p>
+							<p v-if="!sourceStatus('vibix')?.configured" :class="$style.hint">{{ i18n.ts.zalip._importer.sourceNotConfigured }}</p>
+							<button type="button" class="_button" :class="$style.button" :disabled="busy || workStateLoading || !vibixRefreshRequest" @click="refreshVibixPlayers"><i class="ti ti-refresh" aria-hidden="true"></i>{{ i18n.ts.zalip._importer.refreshVibixPlayers }}</button>
 						</template>
 					</details>
 				</template>
@@ -300,12 +303,14 @@ import ImporterArtworkPicker from '@/pages/zalip/importer-artwork-picker.vue';
 import { importerArtworkCurrentChoices, importerArtworkFieldLocked, importerArtworkFields, importerArtworkLimitChoices, importerArtworkOptions, importerArtworkPreview, importerArtworkSameRef, importerArtworkSelectionStale } from '@/utility/zalip-importer-artwork.js';
 import { i18n } from '@/i18n.js';
 import { formatImporterValue, importerCredentialOriginLabel, importerFieldGroups, importerFieldLabel, importerFields, importerFiltersValid, importerGroupLabel, importerImageUrl, importerImdbId, importerMaintenanceLabel, importerMaintenanceRequest, importerOptions, importerPlaybackSettings, importerProgress, importerReference, importerReferenceKey, importerRefreshSequence, importerRequestCurrent, importerRequestFinish, importerRequestInvalidate, importerRequestStart, importerRequestState, importerSelection, importerServiceForm, importerServiceRequest, importerServiceSettingsUpdate, importerSourceLabel, importerSources, importerStateLabel, importerWarningLabels, importerWorkIds, splitImporterReferenceLines, taxonomyAppendWorks, taxonomyBaseChanges, taxonomyCollectionChanges, taxonomyFactLabel, taxonomyPersonChanges, taxonomyTypeLabel, taxonomyTypes } from '@/utility/zalip-importer.js';
-import { iAmAdmin } from '@/i.js';
+import { $i, iAmAdmin } from '@/i.js';
 import { definePage } from '@/page.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import * as os from '@/os.js';
 import { importerVoiceRepairReady } from '@/utility/zalip-importer.js';
 import type { PersonImportResult } from '@/utility/zalip-taxonomy.js';
+import type { ImportPlayerRefreshResult } from '@/utility/zalip-importer-player-refresh.js';
+import { importerPlayerRefreshRequest } from '@/utility/zalip-importer-player-refresh.js';
 
 type Tab = 'import' | 'runs' | 'taxonomy' | 'schedules' | 'maintenance' | 'sources';
 const props = withDefaults(defineProps<{ source?: string; mediaType?: string; externalId?: string; imagesOnly?: string; workId?: string }>(), { source: '', mediaType: '', externalId: '', imagesOnly: '', workId: '' });
@@ -347,6 +352,10 @@ const persistedLocks = ref<string[]>([]);
 const workStateLoading = ref(false);
 const workStateError = ref('');
 const workLocksChanged = computed(() => !!workState.value && (new Set(persistedLocks.value).size !== workState.value.locks.length || workState.value.locks.some(field => !persistedLocks.value.includes(field))));
+const vibixRefreshRequest = computed(() => importerPlayerRefreshRequest(workState.value, workStateId.value, persistedLocks.value, sourceStatus('vibix')?.configured === true));
+let playerRefreshActive = true;
+let playerRefreshRevision = 0;
+let playerRefreshPending = false;
 const previewBase = ref<ImportPreview | null>(null);
 const artworkChoices = ref<ImportArtworkChoices>({});
 const preview = computed(() => previewBase.value ? importerArtworkPreview(previewBase.value, artworkChoices.value, lockedFields.value, artworkGalleryLimit.value) : null);
@@ -635,6 +644,58 @@ async function repairCollapsVoices(): Promise<void> {
 	} catch (error) {
 		if (revision === workStateRevision && workId === workStateId.value) workStateError.value = errorMessage(error);
 	} finally { busy.value = false; }
+}
+
+function invalidatePlayerRefresh(): void {
+	playerRefreshRevision++;
+	if (playerRefreshPending) busy.value = false;
+	playerRefreshPending = false;
+}
+
+async function refreshVibixPlayers(): Promise<void> {
+	const request = vibixRefreshRequest.value;
+	if (busy.value || workStateLoading.value || !playerRefreshActive || !$i || !request) return;
+	const revision = ++playerRefreshRevision;
+	const stateRevision = workStateRevision;
+	const accountId = $i.id;
+	const accountToken = $i.token;
+	const current = () => playerRefreshActive && revision === playerRefreshRevision && stateRevision === workStateRevision && $i?.id === accountId && $i.token === accountToken && workStateId.value === request.workId && workState.value?.playbackRevision === request.expected;
+	playerRefreshPending = true;
+	busy.value = true;
+	workStateError.value = '';
+	message.value = '';
+	try {
+		const result = await misskeyApiZalip<ImportPlayerRefreshResult>('zalip/admin/importer/work-state/refresh-players', request);
+		if (!current() || result.workId !== request.workId || result.source !== 'vibix') return;
+		if (result.status === 'stale' || result.status === 'locked') {
+			workState.value = null;
+			persistedLocks.value = [];
+			workStateError.value = result.status === 'stale' ? i18n.ts.zalip._importer.repairVoicesStale : i18n.ts.zalip._importer.repairVoicesLocked;
+			return;
+		}
+		message.value = ({
+			queued: i18n.ts.zalip._importer.refreshVibixPlayersQueued,
+			unsupported: i18n.ts.zalip._importer.refreshVibixPlayersUnsupported,
+			ambiguous: i18n.ts.zalip._importer.refreshVibixPlayersAmbiguous,
+			busy: i18n.ts.zalip._importer.refreshVibixPlayersBusy,
+		})[result.status];
+		if (result.status !== 'queued' || !result.runId) return;
+		if (preview.value?.workId === request.workId) previewOptionsKey.value = '';
+		const [list, detail] = await Promise.all([
+			misskeyApiZalip<{ runs: ImportRun[] }>('zalip/admin/importer/runs/list'),
+			misskeyApiZalip<{ run: ImportRun; items: ImportRunItem[] }>('zalip/admin/importer/runs/show', { runId: result.runId }),
+		]);
+		if (!current() || detail.run.id !== result.runId) return;
+		runs.value = list.runs;
+		requestedRunId.value = result.runId;
+		selectedRun.value = detail.run;
+		runItems.value = detail.items;
+		tab.value = 'runs';
+	} catch (error) {
+		if (current()) workStateError.value = errorMessage(error);
+	} finally {
+		if (revision === playerRefreshRevision) { playerRefreshPending = false; busy.value = false; }
+	}
 }
 
 function runModeLabel(mode: ImportRun['mode']): string { return ({ import: i18n.ts.zalip._importer.import, sync: i18n.ts.zalip._importer.update, availability: i18n.ts.zalip._importer.availabilityMode })[mode]; }
@@ -1151,10 +1212,12 @@ watch(tab, value => { actionError.value = ''; if (value === 'runs') void loadRun
 watch(() => maintenanceForm.kind, kind => { if (!maintenanceSources(kind).includes(maintenanceForm.source)) maintenanceForm.source = maintenanceSources(kind)[0]; });
 watch(() => maintenanceProfileForm.kind, kind => { if (!maintenanceSources(kind).includes(maintenanceProfileForm.source)) maintenanceProfileForm.source = maintenanceSources(kind)[0]; });
 watch(personImportKey, invalidatePersonPreview, { flush: 'sync' });
+watch(() => [tab.value, workStateId.value, props.source, props.mediaType, props.externalId, props.imagesOnly, props.workId, $i?.id, $i?.token], invalidatePlayerRefresh, { flush: 'sync' });
+watch(() => [$i?.id, $i?.token], () => { workStateRevision++; workState.value = null; persistedLocks.value = []; workStateLoading.value = false; workStateError.value = ''; }, { flush: 'sync' });
 onMounted(() => { if (iAmAdmin) { void Promise.all([loadSources(), loadCategories(), loadRuns(), loadProfiles()]).then(loadInitialReference); startPolling(); } });
-onActivated(() => { personImportActive = true; startPolling(); });
-onDeactivated(() => { personImportActive = false; invalidatePersonPreview(); stopPolling(); });
-onBeforeUnmount(() => { personImportActive = false; invalidatePersonPreview(); stopPolling(); });
+onActivated(() => { personImportActive = true; playerRefreshActive = true; startPolling(); });
+onDeactivated(() => { personImportActive = false; playerRefreshActive = false; invalidatePlayerRefresh(); invalidatePersonPreview(); stopPolling(); });
+onBeforeUnmount(() => { personImportActive = false; playerRefreshActive = false; invalidatePlayerRefresh(); invalidatePersonPreview(); stopPolling(); });
 definePage(() => ({ title: i18n.ts.zalip._importer.pageTitle, icon: 'ti ti-database-import' }));
 </script>
 

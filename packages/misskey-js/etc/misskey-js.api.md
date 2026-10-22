@@ -2336,6 +2336,8 @@ declare namespace entities {
         ZalipAdminImporterTaxonomySaveResponse,
         ZalipAdminImporterTaxonomyShowRequest,
         ZalipAdminImporterTaxonomyShowResponse,
+        ZalipAdminImporterWorkStateRefreshPlayersRequest,
+        ZalipAdminImporterWorkStateRefreshPlayersResponse,
         ZalipAdminImporterWorkStateRefreshVoicesRequest,
         ZalipAdminImporterWorkStateRefreshVoicesResponse,
         ZalipAdminImporterWorkStateSaveRequest,
@@ -4219,6 +4221,12 @@ type ZalipAdminImporterTaxonomyShowRequest = operations['zalip___admin___importe
 
 // @public (undocumented)
 type ZalipAdminImporterTaxonomyShowResponse = operations['zalip___admin___importer___taxonomy___show']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterWorkStateRefreshPlayersRequest = operations['zalip___admin___importer___work-state___refresh-players']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipAdminImporterWorkStateRefreshPlayersResponse = operations['zalip___admin___importer___work-state___refresh-players']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
 type ZalipAdminImporterWorkStateRefreshVoicesRequest = operations['zalip___admin___importer___work-state___refresh-voices']['requestBody']['content']['application/json'];

@@ -3136,6 +3136,30 @@ export interface Locale extends ILocale {
              * Сначала сохраните изменения блокировок или загрузите состояние заново.
              */
             "repairVoicesUnsavedLocks": string;
+            /**
+             * Обновить плеер Vibix
+             */
+            "refreshVibixPlayers": string;
+            /**
+             * Только для существующего тайтла с однозначными привязками TMDB и Кинопоиска. Обновляется плеер Vibix; метаданные, изображения, другие плееры и сохранённая защита не меняются. Задача появится в журнале.
+             */
+            "refreshVibixPlayersHint": string;
+            /**
+             * Обновление плеера Vibix добавлено в очередь. Результат появится в журнале задач.
+             */
+            "refreshVibixPlayersQueued": string;
+            /**
+             * Нужны сохранённые привязки TMDB и Кинопоиска одного типа — фильм или сериал.
+             */
+            "refreshVibixPlayersUnsupported": string;
+            /**
+             * Привязки тайтла неоднозначны. Сначала проверьте внешние идентификаторы.
+             */
+            "refreshVibixPlayersAmbiguous": string;
+            /**
+             * Для этого тайтла уже есть активная задача. Дождитесь её завершения и загрузите состояние заново.
+             */
+            "refreshVibixPlayersBusy": string;
         };
         "_taxonomyPerson": {
             /**

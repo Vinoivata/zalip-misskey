@@ -1,7 +1,7 @@
 ## Unreleased
 
 ### General
--
+- Feat: Add a guarded administrator action to refresh an existing title's Vibix player through the native availability queue while preserving metadata, artwork and saved field protection.
 
 ### Client
 - Fix: Resolve known Vibix episode and voice pairs to their exact public SDK movie IDs, keeping legacy series fallback for unknown pairs and unchanged iframe isolation.

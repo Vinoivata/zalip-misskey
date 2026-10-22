@@ -52,6 +52,7 @@ export type SaveImportProfile = {
 };
 
 type VoiceRefreshStatus = 'updated' | 'already-current' | 'locked' | 'stale' | 'unsupported' | 'empty' | 'unavailable';
+type PlayerRefreshStatus = 'queued' | 'locked' | 'stale' | 'unsupported' | 'ambiguous' | 'busy';
 
 /** An anime season must not inherit the identity/numbering of a whole-series KP/IMDb record. */
 function kodikAnimeSeason(record: ImportRecord): boolean {
@@ -520,6 +521,82 @@ export class ZalipImporterService {
 		const work = await this.db.getRepository(MiZalipWork).findOneBy({ id: workId });
 		if (!work) throw new Error('NO_SUCH_WORK');
 		return this.packWorkState(work);
+	}
+
+	/** Enqueue one existing canonical title through the normal players-only worker.
+	 * No provider request, lock reset, metadata/category selection or new-title path
+	 * is available here. The normal worker still applies its field locks and CAS.
+	 */
+	public async refreshPlayers(workId: string, source: ImportSource, expected: string, actorId: string) {
+		if (!/^[A-Za-z0-9]{1,32}$/u.test(workId) || !/^[A-Za-z0-9]{1,32}$/u.test(actorId) || source !== 'vibix' || !/^[a-f0-9]{64}$/u.test(expected)) throw new ImportProviderError('invalid-ref');
+		const connection = this.db.createQueryRunner();
+		let locked = false;
+		try {
+			await connection.connect();
+			const [lock] = await connection.query('SELECT pg_try_advisory_lock(hashtext($1)) AS locked', [`zalip-player-refresh:${workId}`]) as { locked: boolean }[];
+			locked = lock.locked;
+			const work = await this.db.getRepository(MiZalipWork).findOneBy({ id: workId });
+			if (!work) throw new Error('NO_SUCH_WORK');
+			const identities = await this.db.getRepository(MiZalipExternalIdentity).findBy({ workId });
+			const revision = playbackRevision(work, identities);
+			const result = (status: PlayerRefreshStatus, runId: string | null = null) => ({ workId, source, status, runId, playbackRevision: revision });
+			if (!locked) return result('busy');
+			if (revision !== expected) return result('stale');
+			if (readImportState(work.importData).locks.includes('players')) return result('locked');
+			// applyImportRecord can fill a missing canonical TMDB binding outside the
+			// selected fields. This narrow action refuses that case instead of widening
+			// the semantics of all existing importer callers.
+			if (!Number.isSafeInteger(work.tmdbId) || !work.tmdbId || work.tmdbId < 1 || !['movie', 'tv'].includes(work.tmdbMediaType ?? '')) return result('unsupported');
+			const mediaType = work.tmdbMediaType as ImportMediaType;
+			const kp = identities.filter(identity => identity.provider === 'kinopoisk');
+			if (kp.length > 1 || identities.some(identity => identity.provider === 'tmdb' && (identity.entityType !== mediaType || identity.externalId !== String(work.tmdbId)))) return result('ambiguous');
+			if (kp.length !== 1 || kp[0].entityType !== mediaType || !/^[1-9][0-9]{0,15}$/u.test(kp[0].externalId)) return result('unsupported');
+			const binding = kp[0];
+			const claims = await this.db.getRepository(MiZalipExternalIdentity).findBy([
+				{ provider: 'kinopoisk', entityType: mediaType, externalId: binding.externalId },
+				{ provider: 'tmdb', entityType: mediaType, externalId: String(work.tmdbId) },
+			]);
+			const canonical = await this.db.getRepository(MiZalipWork).findBy({ tmdbId: work.tmdbId, tmdbMediaType: mediaType });
+			if (claims.some(identity => identity.workId !== workId) || canonical.some(candidate => candidate.id !== workId)) return result('ambiguous');
+			const references: ImportRef[] = [
+				{ source: 'tmdb', externalId: String(work.tmdbId), mediaType },
+				{ source: 'kinopoisk', externalId: binding.externalId, mediaType },
+				{ source: 'vibix', externalId: binding.externalId, mediaType },
+				{ source: 'kodik', externalId: `kinopoisk-${binding.externalId}`, mediaType },
+				{ source: 'alloha', externalId: `tmdb:${mediaType}:${work.tmdbId}`, mediaType },
+				...identities.filter(identity => identity.entityType === mediaType).flatMap(identity => [
+					...(importSources.includes(identity.provider as ImportSource) ? [{ source: identity.provider as ImportSource, externalId: identity.externalId, mediaType }] : []),
+					...(identity.provider === 'shikimori' ? [{ source: 'kodik' as const, externalId: `shikimori-${identity.externalId}`, mediaType }] : []),
+					...(identity.provider === 'imdb' ? [
+						{ source: 'vibix' as const, externalId: `imdb:${identity.externalId}`, mediaType },
+						{ source: 'alloha' as const, externalId: `imdb:${identity.externalId}`, mediaType },
+						{ source: 'collaps' as const, externalId: `imdb:${identity.externalId}`, mediaType },
+						{ source: 'kodik' as const, externalId: `imdb-${identity.externalId}`, mediaType },
+					] : []),
+				]),
+			].filter(validImportRef);
+			// Include old unbound queued references: they can resolve to this work later.
+			// Paused journals can resume, so they must not be duplicated either.
+			const active = await this.db.query(`SELECT i."id" FROM "zalip_import_item" i
+				INNER JOIN "zalip_import_run" r ON r."id" = i."runId"
+				WHERE r."state" IN ('queued', 'running', 'paused') AND (
+					i."workId" = $1 OR (i."workId" IS NULL AND EXISTS (
+						SELECT 1 FROM jsonb_to_recordset($2::jsonb) AS ref("source" text, "externalId" text, "mediaType" text)
+						WHERE i."ref"->>'source' = ref."source" AND i."ref"->>'externalId' = ref."externalId" AND i."ref"->>'mediaType' = ref."mediaType"
+					))
+				) LIMIT 1`, [workId, JSON.stringify(references)]) as { id: string }[];
+			if (active.length) return result('busy');
+			const queued = await this.createRun({ mode: 'availability', lockedFields: [], categoryIds: [], options: { sources: ['vibix'], fields: ['players'] } }, actorId, [
+				{ workId, ref: { source, externalId: binding.externalId, mediaType } },
+			]);
+			return result('queued', queued.id);
+		} finally {
+			try {
+				if (locked) await connection.query('SELECT pg_advisory_unlock(hashtext($1))', [`zalip-player-refresh:${workId}`]);
+			} finally {
+				await connection.release();
+			}
+		}
 	}
 
 	/** Replacing explicit locks never changes field values or the editorial ownership baseline. */

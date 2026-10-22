@@ -205,6 +205,153 @@ function deferred<T>() {
 
 beforeEach(() => { vi.clearAllMocks(); });
 
+describe('bounded existing-title Vibix player refresh', () => {
+	const kp = { id: 'kp', workId: 'canonical', provider: 'kinopoisk', externalId: '690593', entityType: 'movie' };
+	const setup = (values: Partial<MiZalipWork> = {}, identities: object[] = [kp]) => {
+		const context = fixture({ works: [work(values)], identities });
+		enable(context, 'vibix');
+		return context;
+	};
+	const refresh = async (context: ReturnType<typeof fixture>, expected?: string) => context.service.refreshPlayers('canonical', 'vibix', expected ?? (await context.service.showWorkState('canonical')).playbackRevision, 'admin01');
+
+	test('queues exactly one bound normal availability run and never fetches providers at enqueue', async () => {
+		const context = setup({ importData: { locks: ['title', 'posterUrl'], values: { players: [{ source: 'collaps', externalId: '42', translations: [], episodes: [], iframeUrl: 'https://collaps.example/player' }] } } });
+		const original = structuredClone(context.works.rows);
+		const result = await refresh(context);
+		expect(result).toMatchObject({ workId: 'canonical', source: 'vibix', status: 'queued', runId: 'id-1' });
+		expect(context.runs.rows).toHaveLength(1);
+		expect(context.runs.rows[0]).toMatchObject({ mode: 'availability', state: 'queued', createdById: 'admin01', profileId: null, lockedFields: [], categoryIds: [], options: { sources: ['vibix'], fields: ['players'] } });
+		expect(context.items.rows).toHaveLength(1);
+		expect(context.items.rows[0]).toMatchObject({ workId: 'canonical', ref: { source: 'vibix', externalId: '690593', mediaType: 'movie' } });
+		expect(context.works.rows).toEqual(original);
+		expect(context.queue.add).toHaveBeenCalledOnce();
+		for (const provider of Object.values(context.providers)) { expect(provider.fetch).not.toHaveBeenCalled(); expect(provider.lookup).not.toHaveBeenCalled(); }
+		expect(context.taxonomy.syncImportedWork).not.toHaveBeenCalled();
+		expect(context.taxonomy.linkWork).not.toHaveBeenCalled();
+		expect(context.artwork.prepare).not.toHaveBeenCalled();
+		expect(context.connection.release).toHaveBeenCalledOnce();
+	});
+
+	test('keeps a series bound to its TV KP identity rather than guessing a movie ref', async () => {
+		const context = setup({ kind: 'series', tmdbMediaType: 'tv' }, [{ ...kp, externalId: '9253376', entityType: 'tv' }]);
+		expect((await refresh(context)).status).toBe('queued');
+		expect(context.items.rows[0]).toMatchObject({ workId: 'canonical', ref: { source: 'vibix', externalId: '9253376', mediaType: 'tv' } });
+		expect(context.works.rows[0]).toMatchObject({ kind: 'series', tmdbMediaType: 'tv', publicationState: 'published' });
+	});
+
+	test('normal worker uses only Vibix players and keeps taxonomy/artwork paths disabled', async () => {
+		const context = setup();
+		const target = { source: 'vibix', externalId: '690593', mediaType: 'movie' } as const;
+		context.providers.vibix.fetch.mockResolvedValue(record({ ref: target, identities: [{ provider: 'kinopoisk', externalId: '690593', entityType: 'movie' }] }));
+		isolated.apply.mockResolvedValue({ work: work(), created: false, protectedFields: [] });
+		const queued = await refresh(context);
+		expect(queued.runId).toBeTruthy();
+		await context.service.processRun(queued.runId as string);
+		expect(context.providers.vibix.fetch).toHaveBeenCalledWith(target, ['players']);
+		for (const [source, provider] of Object.entries(context.providers)) if (source !== 'vibix') { expect(provider.fetch).not.toHaveBeenCalled(); expect(provider.lookup).not.toHaveBeenCalled(); }
+		expect(isolated.apply.mock.calls[0][4]).toMatchObject({ workId: 'canonical', mode: 'availability', lockedFields: [], options: { sources: ['vibix'], fields: ['players'] } });
+		expect(context.taxonomy.syncImportedWork).not.toHaveBeenCalled();
+		expect(context.taxonomy.linkWork).not.toHaveBeenCalled();
+		expect(context.artwork.prepare).not.toHaveBeenCalled();
+	});
+
+	test('rejects stale revisions and player locks without writes or resetting locks', async () => {
+		for (const [values, expected, status] of [
+			[{}, '0'.repeat(64), 'stale'],
+			[{ importData: { locks: ['players', 'title'] } }, undefined, 'locked'],
+		] as const) {
+			const context = setup(values);
+			const original = structuredClone(context.works.rows);
+			expect((await refresh(context, expected)).status).toBe(status);
+			expect(context.works.rows).toEqual(original);
+			expect(context.db.transaction).not.toHaveBeenCalled();
+			expect(context.queue.add).not.toHaveBeenCalled();
+		}
+	});
+
+	test.each([
+		[{ tmdbId: null, tmdbMediaType: null }, [kp]],
+		[{}, []],
+		[{}, [{ ...kp, entityType: 'tv' }]],
+		[{}, [{ ...kp, externalId: 'imdb:tt1234567' }]],
+	] as const)('does not guess unsupported canonical bindings (%j)', async (values, identities) => {
+		const context = setup(values, [...identities]);
+		expect((await refresh(context)).status).toBe('unsupported');
+		expect(context.db.transaction).not.toHaveBeenCalled();
+	});
+
+	test.each([
+		{ identities: [kp, { ...kp, id: 'kp2', externalId: '999' }] },
+		{ identities: [kp, { id: 'tmdb', workId: 'canonical', provider: 'tmdb', externalId: '999', entityType: 'movie' }] },
+		{ identities: [kp, { ...kp, id: 'other', workId: 'otherwork' }] },
+	])('refuses ambiguous or conflicting saved identities (%j)', async ({ identities }) => {
+		const context = setup({}, identities);
+		expect((await refresh(context)).status).toBe('ambiguous');
+		expect(context.db.transaction).not.toHaveBeenCalled();
+	});
+
+	test('refuses a duplicated canonical TMDB work', async () => {
+		const context = setup();
+		context.works.rows.push(work({ id: 'duplicate' }) as unknown as Row);
+		expect((await refresh(context)).status).toBe('ambiguous');
+		expect(context.db.transaction).not.toHaveBeenCalled();
+	});
+
+	test('active bound or unbound queued journals block another refresh', async () => {
+		const context = setup({}, [kp, { id: 'collaps', workId: 'canonical', provider: 'collaps', externalId: '42', entityType: 'movie' }]);
+		context.db.query.mockResolvedValueOnce([{ id: 'activeitem' }]);
+		expect((await refresh(context)).status).toBe('busy');
+		expect(context.db.query.mock.calls[0][0]).toContain('r."state" IN (\'queued\', \'running\', \'paused\')');
+		expect(context.db.query.mock.calls[0][1][0]).toBe('canonical');
+		expect(JSON.parse(context.db.query.mock.calls[0][1][1])).toEqual(expect.arrayContaining([
+			{ source: 'collaps', externalId: '42', mediaType: 'movie' },
+			{ source: 'vibix', externalId: '690593', mediaType: 'movie' },
+			{ source: 'tmdb', externalId: '100', mediaType: 'movie' },
+			{ source: 'kodik', externalId: 'kinopoisk-690593', mediaType: 'movie' },
+		]));
+		expect(context.db.query.mock.calls[0][0]).toContain('i."workId" IS NULL');
+		expect(context.db.transaction).not.toHaveBeenCalled();
+	});
+
+	test('serializes simultaneous refresh attempts for the same title', async () => {
+		const context = setup();
+		const pending = deferred<unknown>();
+		context.queue.add.mockImplementationOnce(async () => pending.promise as never);
+		const revision = (await context.service.showWorkState('canonical')).playbackRevision;
+		const first = refresh(context, revision);
+		await vi.waitFor(() => expect(context.queue.add).toHaveBeenCalledOnce());
+		expect((await refresh(context, revision)).status).toBe('busy');
+		pending.resolve({});
+		expect((await first).status).toBe('queued');
+		expect(context.runs.rows).toHaveLength(1);
+		expect(context.connection.query.mock.calls.filter(([sql]) => sql.includes('pg_advisory_unlock'))).toHaveLength(1);
+		expect(context.connection.release).toHaveBeenCalledTimes(2);
+	});
+
+	test('unconfigured providers and enqueue failures stay native errors, always releasing the advisory lock', async () => {
+		const context = fixture({ works: [work()], identities: [kp] });
+		await expect(refresh(context)).rejects.toMatchObject({ code: 'not-configured' });
+		expect(context.db.transaction).not.toHaveBeenCalled();
+		enable(context, 'vibix');
+		context.queue.add.mockRejectedValueOnce(new Error('queue-unavailable'));
+		await expect(refresh(context)).rejects.toThrow('queue-unavailable');
+		expect(context.runs.rows).toHaveLength(1); // durable normal journal remains recoverable
+		context.db.query.mockResolvedValueOnce([{ id: context.items.rows[0].id }]);
+		expect((await refresh(context)).status).toBe('busy');
+		expect(context.runs.rows).toHaveLength(1);
+		expect(context.connection.release).toHaveBeenCalledTimes(3);
+	});
+
+	test('rejects malformed direct service calls and missing work without a durable write', async () => {
+		const context = setup();
+		await expect(context.service.refreshPlayers('canonical', 'collaps' as never, 'a'.repeat(64), 'admin01')).rejects.toMatchObject({ code: 'invalid-ref' });
+		await expect(context.service.refreshPlayers('canonical', 'vibix', 'A'.repeat(64), 'admin01')).rejects.toMatchObject({ code: 'invalid-ref' });
+		await expect(context.service.refreshPlayers('canonical', 'vibix', 'a'.repeat(64), '')).rejects.toMatchObject({ code: 'invalid-ref' });
+		await expect(context.service.refreshPlayers('missing', 'vibix', 'a'.repeat(64), 'admin01')).rejects.toThrow('NO_SUCH_WORK');
+		expect(context.db.transaction).not.toHaveBeenCalled();
+	});
+});
+
 describe('Kodik importer service boundaries', () => {
 	const ref: ImportRef = { source: 'kodik', externalId: 'shikimori-46569', mediaType: 'tv' };
 	const seasonRecord = () => record({ ref, kind: 'anime', identities: [{ provider: 'kodik', externalId: ref.externalId, entityType: 'tv' }, { provider: 'shikimori', externalId: '46569', entityType: 'tv' }], description: 'One anime season', players: [{ source: 'kodik', externalId: ref.externalId, iframeUrl: 'https://kodikplayer.com/serial/49752/fixture/720p', quality: '720p', episodes: [], translations: [] }] });
