@@ -29,7 +29,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</MkSwitch>
 
 			<MkSwitch v-model="allowRenoteToExternal">
-				<template #label>{{ i18n.ts._channel.allowRenoteToExternal }}</template>
+				<template #label>{{ i18n.ts.zalip._communities.allowRenoteToExternal }}</template>
 			</MkSwitch>
 
 			<div>

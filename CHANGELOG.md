@@ -4,6 +4,7 @@
 -
 
 ### Client
+- Fix: Resolve known Vibix episode and voice pairs to their exact public SDK movie IDs, keeping legacy series fallback for unknown pairs and unchanged iframe isolation.
 - Enhance: Keep separate review and essay drafts and editing for each title while retaining a single optional personal rating.
 - Enhance: Align Zalip post action symbols and author spacing with the Notr reference and animate existing reactions only when visible, respecting reduced-motion settings.
 - Fix: Keep deeply nested cinema replies and title-share posters within narrow discussion columns and reveal successfully submitted replies under their actual parent.
@@ -95,6 +96,7 @@
 - Fix: Use confirmed movie or series classification for anime continuation and retain episode artwork fallbacks when a still is unavailable.
 
 ### Server
+- Enhance: Enrich Vibix serial players through a bounded exact-identity publisher catalogue lookup and retain valid episode maps only within the same provider account and SDK parent.
 - Feat: Store one review and one essay per author and title independently, preserve legacy review responses and refuse destructive schema rollback when both formats exist.
 - Fix: Persist explicit removal of native community banners while preserving omitted values and owned-file checks.
 - Feat: Add personal chat organisation and durable read frontiers, canonical replies, editing and forwarding, with strict participant access and revocable scoped realtime delivery.

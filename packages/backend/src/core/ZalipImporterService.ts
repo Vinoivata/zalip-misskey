@@ -26,6 +26,7 @@ import { recordArtworkCandidates, sameImportRef, selectImportArtwork } from './z
 import { equivalentImportArtwork } from './zalip-importer/artwork.js';
 import { canUpdateField, importFieldSelected, matchesCreatePlayerFilter, matchesImportFilters, mergeImportRecords, nonEmpty, normalizeImportOptions, readImportState, sameValue, selectedImportSources } from './zalip-importer/policy.js';
 import { configuredImportPlayerUrl, createImportProviders, createConfiguredImportTransport, ImportProviderError, importPlayerTranslationUrl, normalizeVibixEmbed } from './zalip-importer/providers.js';
+import { publicVibixEpisodeMap } from './zalip-importer/vibix-map.js';
 import { importArtworkFields, importFields, importSources, validImportRef, type ExternalIdentity, type ImportArtworkExpected, type ImportArtworkField, type ImportField, type ImportMediaType, type ImportOptions, type ImportPlayer, type ImportPreview, type ImportProvider, type ImportRecord, type ImportRef, type ImportSource, type PreparedImportRecord } from './zalip-importer/types.js';
 
 export type CreateImportRun = {
@@ -499,7 +500,8 @@ export class ZalipImporterService {
 						...(player.source === 'kodik' && typeof translation.providerTranslationId === 'string' && /^[1-9][0-9]{0,15}$/u.test(translation.providerTranslationId) ? { providerTranslationId: translation.providerTranslationId } : {}),
 					}];
 				});
-				return [{ source: player.source, label: setting.label, iframe: iframe ?? '', ...(vibixEmbed ? { vibixEmbed } : {}), translations, quality: player.quality, episodes: player.episodes }];
+				const vibixEpisodeMap = player.source === 'vibix' ? publicVibixEpisodeMap(player, config.vibixApiToken, config.apiOrigins?.vibix) : null;
+				return [{ source: player.source, label: setting.label, iframe: iframe ?? '', ...(vibixEmbed ? { vibixEmbed } : {}), ...(vibixEpisodeMap ? { vibixEpisodeMap } : {}), translations, quality: player.quality, episodes: player.episodes }];
 			}),
 		};
 	}

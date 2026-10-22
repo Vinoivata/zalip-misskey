@@ -16,6 +16,7 @@ import { MiZalipAllohaSource } from '@/models/ZalipAllohaSource.js';
 import type { MiLocalUser } from '@/models/User.js';
 import { defaultPlaybackSettings } from './zalip-importer/playback-settings.js';
 import type { ImportPlayer } from './zalip-importer/types.js';
+import { vibixAccountHash } from './zalip-importer/vibix-map.js';
 
 const owner = { id: 'owner' } as MiLocalUser;
 const other = { id: 'other' } as MiLocalUser;
@@ -72,6 +73,24 @@ function fixture() {
 }
 
 describe('ZalipWatchProgressService private playback state', () => {
+	it('fingerprints exact Vibix movie IDs per episode while unknown coverage remains episode-only legacy playback', async () => {
+		const f = fixture();
+		f.playbackSettings.show.mockResolvedValue({ providers: defaultPlaybackSettings().map(provider => ({ ...provider, enabled: true })) });
+		f.settings.getRuntime.mockResolvedValue({ vibixApiToken: 'fixture' });
+		const embed = { publisherId: '100', type: 'series' as const, id: '200' };
+		const player: ImportPlayer = { source: 'vibix', externalId: '900', iframeUrl: '', vibixEmbed: embed, vibixAccountHash: vibixAccountHash('fixture')!, vibixEpisodeMap: { publisherId: '100', seriesId: '200', items: [{ seasonNumber: 1, episodeNumber: 1, translationId: '26', movieId: '701' }] }, translations: [{ id: '26', name: 'Voice' }], quality: null, episodes: [] };
+		f.work.importData = { values: { players: [player] } };
+		const first = await f.service.start(owner, { workId: 'work', episodeId: 'episode1', provider: 'vibix', translationId: '26' });
+		const exactFingerprint = createHash('sha256').update(JSON.stringify(['vibix', 'sdk-v1', { publisherId: '100', type: 'movie', id: '701' }, '26'])).digest('hex');
+		expect([...f.rows.values()][0].resourceId).toBe(exactFingerprint);
+		expect(first.progress).toMatchObject({ mode: 'episode', positionSeconds: null, durationSeconds: null });
+		await expect(f.service.update(owner, { workId: 'work', sessionId: first.sessionId, sequence: 1, positionSeconds: 100 })).rejects.toMatchObject({ code: 'INVALID_ZALIP_PROGRESS' });
+		await f.service.start(owner, { workId: 'work', episodeId: 'episode2', provider: 'vibix', translationId: '26' });
+		expect([...f.rows.values()][0].resourceId).toBe(createHash('sha256').update(JSON.stringify(['vibix', 'sdk-v1', embed, '26'])).digest('hex'));
+		f.settings.getRuntime.mockResolvedValue({ vibixApiToken: 'rotated' });
+		await f.service.start(owner, { workId: 'work', episodeId: 'episode1', provider: 'vibix', translationId: '26' });
+		expect([...f.rows.values()][0].resourceId).not.toBe(exactFingerprint);
+	});
 	it('keeps Vibix SDK targets in episode mode for series and movies, never invented seconds', async () => {
 		for (const movie of [false, true]) {
 			const f = fixture();

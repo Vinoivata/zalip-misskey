@@ -5,11 +5,12 @@
 
 import type { VibixEmbed } from '@/utility/zalip-vibix-player.js';
 import { validVibixEmbed } from '@/utility/zalip-vibix-player.js';
+import type { VibixEpisodeMap } from '@/utility/zalip-vibix-resolver.js';
 
 export type PlaybackProvider = 'alloha' | 'collaps' | 'kodik' | 'vibix';
 export type PlaybackEpisode = { seasonNumber: number; episodeNumber: number };
 export type PlaybackTranslation = { id: string; name: string; type?: 'voice' | 'subtitles'; providerTranslationId?: string; iframe?: string; quality?: string | null; resolutions?: string[]; episodes?: PlaybackEpisode[] };
-export type PlaybackSource = { source: PlaybackProvider; label: string; iframe: string; quality: string | null; translations: PlaybackTranslation[]; episodes: PlaybackEpisode[]; vibixEmbed?: VibixEmbed };
+export type PlaybackSource = { source: PlaybackProvider; label: string; iframe: string; quality: string | null; translations: PlaybackTranslation[]; episodes: PlaybackEpisode[]; vibixEmbed?: VibixEmbed; vibixEpisodeMap?: VibixEpisodeMap };
 export type PlaybackProviderSetting = { source: PlaybackProvider; label: string; enabled: boolean; position: number };
 export type LegacyAllohaPlayback = {
 	label?: string;

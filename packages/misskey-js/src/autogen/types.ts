@@ -43959,6 +43959,21 @@ export interface operations {
                 };
                 content: {
                     'application/json': {
+                        sources?: ({
+                            vibixEpisodeMap?: {
+                                publisherId: string;
+                                seriesId: string;
+                                items: {
+                                    seasonNumber: number;
+                                    episodeNumber: number;
+                                    translationId: string;
+                                    movieId: string;
+                                }[];
+                            };
+                        } & {
+                            [key: string]: unknown;
+                        })[];
+                    } & {
                         [key: string]: unknown;
                     };
                 };

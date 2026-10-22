@@ -10,6 +10,7 @@ import { Agent as HttpsAgent } from 'node:https';
 import { isIP } from 'node:net';
 import ipaddr from 'ipaddr.js';
 import { artworkCandidate } from './artwork-candidates.js';
+import { normalizeVibixCatalogMap, vibixAccountHash } from './vibix-map.js';
 import { validImportRef, type ExternalIdentity, type ImportCredit, type ImportEpisode, type ImportField, type ImportMediaType, type ImportPlayer, type ImportProvider, type ImportProviderStatus, type ImportRecord, type ImportRef, type ImportSearchPage, type ImportSearchResult, type ImportSource, type ImportVibixEmbed } from './types.js';
 
 export type ImportProviderErrorCode = 'not-configured' | 'not-found' | 'quota-exceeded' | 'rate-limited' | 'upstream-failure' | 'invalid-ref' | 'unsupported' | 'malformed-response';
@@ -22,7 +23,7 @@ export class ImportProviderError extends Error {
 	}
 }
 
-export type ImportTransportOptions = { method: 'POST' };
+export type ImportTransportOptions = { method: 'POST'; /** Fixed bounded publisher catalogue query, never a generic body. */ vibixCatalogSearch?: string };
 export type ImportTransport = (url: string, headers: Record<string, string>, options?: ImportTransportOptions) => Promise<unknown>;
 export type ImportProviderConfig = {
 	tmdbApiKey?: string;
@@ -904,18 +905,25 @@ function retryAfter(value: string | null): number | undefined {
 
 /** Fixed API origins, no redirects, bounded response size and timeout. Credentials never enter thrown errors. */
 export function createConfiguredImportTransport(config: ImportProviderConfig): ImportTransport {
-	const allowed = new Set(Object.values(importAddressOrigins(config)));
-	return (url, headers, options) => performImportRequest(url, headers, allowed, options);
+	const addresses = importAddressOrigins(config);
+	const allowed = new Set(Object.values(addresses));
+	return (url, headers, options) => performImportRequest(url, headers, allowed, options, addresses.vibix);
 }
 
-async function performImportRequest(url: string, headers: Record<string, string>, allowedOrigins: ReadonlySet<string>, options?: ImportTransportOptions): Promise<unknown> {
+async function performImportRequest(url: string, headers: Record<string, string>, allowedOrigins: ReadonlySet<string>, options?: ImportTransportOptions, vibixOrigin = origins.vibix): Promise<unknown> {
 	let parsed: URL;
 	try { parsed = new URL(url); } catch { throw new ImportProviderError('invalid-ref'); }
-	if (!allowedOrigins.has(parsed.origin) || parsed.username || parsed.password || parsed.hash || (options && options.method !== 'POST')) throw new ImportProviderError('invalid-ref');
+	if (!allowedOrigins.has(parsed.origin) || parsed.username || parsed.password || parsed.hash || (options && (options.method !== 'POST' || Reflect.ownKeys(options).some(key => key !== 'method' && key !== 'vibixCatalogSearch')))) throw new ImportProviderError('invalid-ref');
+	let body: string | undefined;
+	if (options?.vibixCatalogSearch !== undefined) {
+		const search = options.vibixCatalogSearch;
+		if (parsed.origin !== vibixOrigin || parsed.pathname !== '/api/v1/publisher/catalog/data' || parsed.search || typeof search !== 'string' || !(/^[1-9][0-9]{0,15}$/u.test(search) && Number.isSafeInteger(Number(search)) || /^tt[0-9]{5,12}$/u.test(search))) throw new ImportProviderError('invalid-ref');
+		body = JSON.stringify({ draw: 1, start: 0, length: 30, columns: [{ data: '', name: '', searchable: true, orderable: true }], order: [{ column: 0, dir: 'desc' }], search: { value: search } });
+	}
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), 12000);
 	try {
-		const response = await fetch(url, { headers: { Accept: 'application/json', ...headers }, ...(options ? { method: options.method } : {}), redirect: 'error', size: 2 * 1024 * 1024, signal: controller.signal, agent: importerHttpsAgent });
+		const response = await fetch(url, { headers: { Accept: 'application/json', ...headers, ...(body ? { 'Content-Type': 'application/json' } : {}) }, ...(options ? { method: options.method } : {}), ...(body ? { body } : {}), redirect: 'error', size: 2 * 1024 * 1024, signal: controller.signal, agent: importerHttpsAgent });
 		if (response.status === 404) throw new ImportProviderError('not-found');
 		if (response.status === 401 || response.status === 403) throw new ImportProviderError('not-configured');
 		if (response.status === 402) throw new ImportProviderError('quota-exceeded', 86400000);
@@ -1379,14 +1387,27 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 			const response = await vibixRequest('/api/v1/publisher/videos/search', { name: keyword, page: String(page), limit: '20' }, { method: 'POST' });
 			return vibixSearchPage(response, page, vibixHosts, mediaType);
 		},
-		async fetch(ref) {
+		async fetch(ref, fields) {
 			if (ref.source !== 'vibix' || !validImportRef(ref) || (!ref.externalId.startsWith('imdb:') && externalId(ref.externalId) !== ref.externalId)) throw new ImportProviderError('invalid-ref');
 			const path = ref.externalId.startsWith('imdb:') ? `imdb/${ref.externalId.slice(5)}` : `kp/${ref.externalId}`;
 			const record = normalizeVibixRecord(await vibixRequest(`/api/v1/publisher/videos/${path}`), vibixHosts, ref);
+			const player = record.players.find(candidate => candidate.vibixEmbed?.type === 'series');
+			if (ref.mediaType === 'tv' && player && (!fields || fields.includes('players'))) {
+				player.vibixAccountHash = vibixAccountHash(config.vibixApiToken, addresses.vibix)!;
+				// One bounded exact-identity enrichment; failures leave the established SDK player intact.
+				try {
+					const search = ref.externalId.startsWith('imdb:') ? ref.externalId.slice(5) : ref.externalId;
+					const map = normalizeVibixCatalogMap(await vibixRequest('/api/v1/publisher/catalog/data', {}, { method: 'POST', vibixCatalogSearch: search }), record);
+					if (map) { player.vibixEpisodeMap = map; record.warnings = record.warnings.filter(warning => warning !== 'vibix-episode-data-unavailable'); }
+				} catch (error) {
+					// Preserve safe provider error visibility without raw URLs/bodies or in-request retries.
+					if (error instanceof ImportProviderError) record.warnings.push(`vibix:${error.code}`);
+				}
+			}
 			for (const player of record.players) if (player.iframeUrl) player.iframeUrl = rewriteImportPlayerOrigin(player.iframeUrl, config.vibixPlayerOrigin);
 			return record;
 		},
-		async lookup(identities, mediaType) {
+		async lookup(identities, mediaType, fields) {
 			if (!['movie', 'tv'].includes(mediaType)) throw new ImportProviderError('invalid-ref');
 			const expected = identities.filter(item => item.entityType === mediaType && ['vibix', 'kinopoisk', 'imdb'].includes(item.provider));
 			for (const provider of ['vibix', 'kinopoisk', 'imdb']) if (new Set(expected.filter(item => item.provider === provider).map(item => item.externalId)).size > 1) throw new ImportProviderError('malformed-response');
@@ -1395,10 +1416,10 @@ export function createImportProviders(config: ImportProviderConfig, transport: I
 			if (!own && !kp && !imdb) return null;
 			const ref: ImportRef = { source: 'vibix', externalId: own?.externalId ?? kp ?? `imdb:${imdb}`, mediaType };
 			let record: ImportRecord;
-			try { record = await vibix.fetch(ref); } catch (error) {
+			try { record = await vibix.fetch(ref, fields); } catch (error) {
 				if (!(error instanceof ImportProviderError) || error.code !== 'not-found') throw error;
 				if (own || !kp || !imdb) return null;
-				try { record = await vibix.fetch({ source: 'vibix', externalId: `imdb:${imdb}`, mediaType }); } catch (fallbackError) {
+				try { record = await vibix.fetch({ source: 'vibix', externalId: `imdb:${imdb}`, mediaType }, fields); } catch (fallbackError) {
 					if (fallbackError instanceof ImportProviderError && fallbackError.code === 'not-found') return null;
 					throw fallbackError;
 				}

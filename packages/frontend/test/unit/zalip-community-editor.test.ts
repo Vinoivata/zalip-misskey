@@ -3,6 +3,9 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/vue';
 import { defineComponent, h, nextTick } from 'vue';
@@ -32,6 +35,15 @@ beforeEach(() => { vi.clearAllMocks(); controls.session!.value = { id: 'ordinary
 afterEach(cleanup);
 
 describe('native public community editor', () => {
+	it('uses the community-specific Russian repost label rather than the untranslated native channel label', () => {
+		const directory = dirname(fileURLToPath(import.meta.url));
+		const editor = readFileSync(resolve(directory, '../../src/pages/channel-editor.vue'), 'utf8');
+		const locale = readFileSync(resolve(directory, '../../../../locales/ja-JP.yml'), 'utf8');
+		const communityLocale = locale.split('  _communities:')[1].split('  _importer:')[0];
+		expect(editor).toContain('i18n.ts.zalip._communities.allowRenoteToExternal');
+		expect(editor).not.toContain('i18n.ts._channel.allowRenoteToExternal');
+		expect(communityLocale).toContain('allowRenoteToExternal: "Разрешить репосты и цитаты вне сообщества"');
+	});
 	it.each(['banner', 'pin-dialog', 'pin-read'] as const)('ignores an old %s result after switching to another editable community', async kind => {
 		let finishFile!: (file: { id: string }) => void; let finishDialog!: (result: { canceled: boolean; result: string }) => void; let finishNote!: (note: { id: string }) => void;
 		const fixture = (id: string) => ({ id, name: 'Community ' + id, userId: 'ordinary-user', description: '', bannerId: null, bannerUrl: null, pinnedNoteIds: [], color: '#000', isSensitive: false, allowRenoteToExternal: true });

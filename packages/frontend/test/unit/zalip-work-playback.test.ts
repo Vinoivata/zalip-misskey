@@ -117,6 +117,17 @@ beforeEach(() => {
 afterEach(() => { cleanup(); (window as unknown as HappyWindow).happyDOM.settings.handleDisabledFileLoadingAsSuccess = previousDisabledLoadingPolicy; });
 
 describe('Zalip work playback selection', () => {
+	it('mounts exact catalogue SDK movie IDs per serial episode/voice and falls back safely for an unknown pair', async () => {
+		sources = [{ ...structuredClone(vibix), vibixEpisodeMap: { publisherId: '123456789', seriesId: '12345', items: [{ seasonNumber: 2, episodeNumber: 1, translationId: '26', movieId: '701' }, { seasonNumber: 2, episodeNumber: 3, translationId: '26', movieId: '703' }, { seasonNumber: 2, episodeNumber: 3, translationId: '42', movieId: '704' }] } }];
+		const view = setup(); await play(view); const ins = () => new DOMParser().parseFromString(iframe(view).srcdoc, 'text/html').querySelector('ins')!;
+		expect(ins().getAttribute('data-type')).toBe('movie'); expect(ins().getAttribute('data-id')).toBe('701'); expect(ins().hasAttribute('data-season')).toBe(false); const first = iframe(view);
+		await chooseEpisode(view, 3); expect(iframe(view)).not.toBe(first); expect(ins().getAttribute('data-id')).toBe('703'); const third = iframe(view);
+		await fireEvent.click((await openVoices(view, 'Vibix One')).getByRole('button', { name: 'Vibix Two' })); expect(iframe(view)).not.toBe(third); expect(ins().getAttribute('data-id')).toBe('704'); expect(ins().getAttribute('data-voiceover')).toBe('42');
+		await fireEvent.click(player(view).getByRole('button', { name: i18n.tsx.zalip.playerEpisodeNumber({ number: 3 }), expanded: false }));
+		await fireEvent.click(within(view.getByRole('dialog', { name: i18n.ts.zalip.workEpisodes })).getByRole('button', { name: i18n.tsx.zalip.playerEpisodeNumber({ number: 2 }) }));
+		expect(ins().getAttribute('data-type')).toBe('series'); expect(ins().getAttribute('data-id')).toBe('12345'); expect(ins().getAttribute('data-episodes')).toBe('2'); expect(iframe(view).getAttribute('sandbox')).not.toContain('allow-same-origin');
+		await waitFor(() => expect(misskeyApiZalip).toHaveBeenCalledWith('zalip/progress/start', { workId: 'work', episodeId: 'episode2', provider: 'vibix', translationId: '42' }));
+	});
 	it('renders SDK-only Vibix in an opaque srcdoc sandbox and changes canonical episodes/voices without outer scripts', async () => {
 		sources = [structuredClone(vibix), structuredClone(alloha)]; const view = setup(); await play(view);
 		const first = iframe(view); const document = () => new DOMParser().parseFromString(iframe(view).srcdoc, 'text/html');

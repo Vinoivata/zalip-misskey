@@ -14,6 +14,7 @@ import { defaultImportApiOrigins, ImportProviderError } from './zalip-importer/p
 import { importSources, type ImportProvider, type ImportRecord, type ImportRef, type ImportSource } from './zalip-importer/types.js';
 import { defaultPlaybackSettings } from './zalip-importer/playback-settings.js';
 import { artworkCandidate } from './zalip-importer/artwork-candidates.js';
+import { vibixAccountHash } from './zalip-importer/vibix-map.js';
 
 const isolated = vi.hoisted(() => ({ providers: vi.fn(), apply: vi.fn() }));
 
@@ -1160,6 +1161,19 @@ describe('Zalip importer orchestration', () => {
 			expect((await context.service.playback('canonical')).sources).toEqual([]);
 			expect(context.works.save).not.toHaveBeenCalled();
 		}
+	});
+	test('Vibix public playback exposes only validated account-bound episode selectors, never private provenance', async () => {
+		const vibixEpisodeMap = { publisherId: '42', seriesId: '987', items: [{ seasonNumber: 1, episodeNumber: 1, translationId: '123', movieId: '701' }] };
+		const player: ImportRecord['players'][number] = { source: 'vibix', externalId: 'private-api-record', iframeUrl: '', vibixEmbed: { publisherId: '42', type: 'series', id: '987' }, vibixAccountHash: vibixAccountHash('private-fixture')!, vibixEpisodeMap, translations: [{ id: '123', name: 'Studio' }], quality: null, episodes: [] };
+		const context = fixture({ works: [work({ importData: { values: { players: [player] } } })] });
+		context.playbackSettings.show.mockResolvedValue({ providers: defaultPlaybackSettings().map(row => ({ ...row, enabled: true })) });
+		context.sourceSettings.getRuntime.mockResolvedValue({ apiOrigins: defaultImportApiOrigins, vibixApiToken: 'private-fixture' });
+		const result = await context.service.playback('canonical');
+		expect(result.sources[0].vibixEpisodeMap).toEqual(vibixEpisodeMap);
+		for (const secret of ['private-fixture', 'private-api-record', player.vibixAccountHash!, 'vibixAccountHash']) expect(JSON.stringify(result)).not.toContain(secret);
+		context.sourceSettings.getRuntime.mockResolvedValue({ apiOrigins: defaultImportApiOrigins, vibixApiToken: 'rotated-fixture' });
+		const rotated = await context.service.playback('canonical'); expect(rotated.sources[0]).not.toHaveProperty('vibixEpisodeMap'); expect(rotated.sources[0].vibixEmbed).toEqual(player.vibixEmbed);
+		expect(context.works.save).not.toHaveBeenCalled();
 	});
 
 	test('hiding a legacy iframe-only Vibix source leaves the existing three iframe providers unchanged', async () => {

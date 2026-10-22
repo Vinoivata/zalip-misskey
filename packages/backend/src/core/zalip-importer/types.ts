@@ -26,7 +26,9 @@ export type ImportEpisode = { episodeNumber: number; title: string; originalTitl
 export type ImportSeason = { seasonNumber: number; title: string; description?: string | null; posterUrl?: string | null; airDate?: string | null; episodeCount?: number | null; episodes: ImportEpisode[] };
 /** Public SDK attributes, not API authentication and not the publisher API's video-ID namespace. */
 export type ImportVibixEmbed = { publisherId: string; type: 'movie' | 'series'; id: string };
-export type ImportPlayer = { source: 'alloha' | 'collaps' | 'kodik' | 'vibix'; externalId: string; iframeUrl: string; vibixEmbed?: ImportVibixEmbed; translations: { id: string; name: string; providerTranslationId?: string; type?: 'voice' | 'subtitles'; iframe?: string; quality?: string | null; resolutions?: string[]; episodes?: { seasonNumber: number; episodeNumber: number }[] }[]; quality: string | null; episodes: { seasonNumber: number; episodeNumber: number }[] };
+/** Known selectors only: absence never proves that an episode or voice is unavailable. */
+export type ImportVibixEpisodeMap = { publisherId: string; seriesId: string; items: { seasonNumber: number; episodeNumber: number; translationId: string; movieId: string }[] };
+export type ImportPlayer = { source: 'alloha' | 'collaps' | 'kodik' | 'vibix'; externalId: string; iframeUrl: string; vibixEmbed?: ImportVibixEmbed; vibixEpisodeMap?: ImportVibixEpisodeMap; /** Private provenance, never part of playback responses. */ vibixAccountHash?: string; translations: { id: string; name: string; providerTranslationId?: string; type?: 'voice' | 'subtitles'; iframe?: string; quality?: string | null; resolutions?: string[]; episodes?: { seasonNumber: number; episodeNumber: number }[] }[]; quality: string | null; episodes: { seasonNumber: number; episodeNumber: number }[] };
 export type ImportRecord = {
 	ref: ImportRef;
 	identities: ExternalIdentity[];

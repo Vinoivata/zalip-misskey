@@ -19,6 +19,7 @@ import type { ZalipProgressProvider } from '@/models/ZalipWatchProgress.js';
 import type { MiLocalUser } from '@/models/User.js';
 import { configuredImportPlayerUrl, importPlayerTranslationUrl, normalizeVibixEmbed } from './zalip-importer/providers.js';
 import { readImportState } from './zalip-importer/policy.js';
+import { publicVibixEpisodeMap } from './zalip-importer/vibix-map.js';
 import type { ImportPlayer } from './zalip-importer/types.js';
 import { ZalipPlaybackSettingsService } from './ZalipPlaybackSettingsService.js';
 import { ZalipImporterSourceSettingsService } from './ZalipImporterSourceSettingsService.js';
@@ -89,7 +90,10 @@ export class ZalipWatchProgressService {
 			const coverage = translation?.episodes ?? (Array.isArray(player.episodes) && player.episodes.length ? player.episodes : undefined);
 			if (episode && Array.isArray(coverage) && !coverage.some(item => item.seasonNumber === episode.season!.seasonNumber && item.episodeNumber === episode.episodeNumber)) throw new ZalipProgressError('ZALIP_PROGRESS_UNAVAILABLE');
 			// The SDK has no documented time/seek contract. Keep only an explicit canonical target.
-			const resourceId = createHash('sha256').update(JSON.stringify(['vibix', 'sdk-v1', embed, target.translationId])).digest('hex');
+			const map = publicVibixEpisodeMap(player, runtime.config.vibixApiToken, runtime.config.apiOrigins?.vibix);
+			const exact = episode && map?.items.find(item => item.seasonNumber === episode.season!.seasonNumber && item.episodeNumber === episode.episodeNumber && item.translationId === target.translationId);
+			const resolvedEmbed = exact ? { publisherId: embed.publisherId, type: 'movie', id: exact.movieId } : embed;
+			const resourceId = createHash('sha256').update(JSON.stringify(['vibix', 'sdk-v1', resolvedEmbed, target.translationId])).digest('hex');
 			return { resourceId, mode: 'episode' as const };
 		}
 		const parentUrl = player ? configuredImportPlayerUrl(player.iframeUrl, target.provider, runtime.config) : null;

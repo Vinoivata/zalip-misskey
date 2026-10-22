@@ -6,6 +6,7 @@
 import { describe, expect, test, vi } from 'vitest';
 import { configuredImportPlayerUrl, createImportProviders, ImportProviderError, normalizeVibixEmbed, normalizeVibixRecord, type ImportTransport } from './providers.js';
 import { validImportRef } from './types.js';
+import { vibixAccountHash } from './vibix-map.js';
 
 // Entirely synthetic: API IDs and SDK IDs intentionally use different namespaces.
 function movie(patch: Record<string, unknown> = {}) {
@@ -82,9 +83,9 @@ describe('Vibix importer boundaries', () => {
 		const result = await createImportProviders({ vibixApiToken: 'fixture' }, transport).vibix.fetch({ source: 'vibix', externalId: '6757923', mediaType: 'tv' });
 		expect(result.ref).toEqual({ source: 'vibix', externalId: '6757923', mediaType: 'tv' }); expect(result.kind).toBe('series');
 		expect(result.identities).toContainEqual({ provider: 'imdb', externalId: 'tt33044296', entityType: 'tv' });
-		expect(result.players).toEqual([{ source: 'vibix', externalId: '1064312', iframeUrl: '', vibixEmbed: { publisherId: '668741250', type: 'series', id: '9308' }, translations: [{ id: '113', name: 'ТО Дубляжная' }], quality: 'WEB-DL', episodes: [] }]);
+		expect(result.players).toEqual([{ source: 'vibix', externalId: '1064312', iframeUrl: '', vibixEmbed: { publisherId: '668741250', type: 'series', id: '9308' }, vibixAccountHash: vibixAccountHash('fixture'), translations: [{ id: '113', name: 'ТО Дубляжная' }], quality: 'WEB-DL', episodes: [] }]);
 		expect(result.warnings).not.toContain('vibix-embed-rejected'); expect(result.warnings).not.toContain('vibix-player-url-missing');
-		expect(normalizeVibixRecord({ ...response.data, embed_code: `<ins ${embed_code}></ins>` }).players).toEqual(result.players);
+		expect(normalizeVibixRecord({ ...response.data, embed_code: `<ins ${embed_code}></ins>` }).players).toEqual(result.players.map(({ vibixAccountHash: _private, ...player }) => player));
 		expect(normalizeVibixEmbed({ publisherId: '668741250', type: 'serial', id: '9308' })).toBeNull();
 		const mismatched = normalizeVibixRecord(movie({ embed_code })); expect(mismatched.players).toEqual([]); expect(mismatched.warnings).toContain('vibix-embed-rejected');
 		for (const type of ['Serial', 'SERIAL', ' serial ', 'tv']) {
@@ -164,5 +165,26 @@ describe('Vibix importer boundaries', () => {
 	test('keeps validated SDK embeds when a configurable player origin exists, without manufacturing a URL', async () => {
 		const transport = vi.fn<ImportTransport>(async () => movie()); const result = await createImportProviders({ vibixApiToken: 'fixture', vibixPlayerOrigin: 'https://mirror.example.org' }, transport).vibix.fetch(ref);
 		expect(result.players[0]).toMatchObject({ iframeUrl: '', vibixEmbed: { publisherId: '10', type: 'movie', id: '30' } });
+	});
+	test('enriches serial SDK resources once through the configured exact publisher catalogue query', async () => {
+		const serial = movie({ type: 'serial', embed_code: 'data-publisher-id="10" data-type="serial" data-id="40"' });
+		const catalogue = { data: [{ id: 200, type: 'serial', kp_id: 100, imdb_id: 'tt1234567', voiceovers: [{ id: 5 }], episodes: { s1: { e1: { v5: 701 }, e2: { v5: 702 } } } }] };
+		const transport = vi.fn<ImportTransport>(async url => new URL(url).pathname.endsWith('/catalog/data') ? catalogue : { data: serial });
+		const provider = createImportProviders({ vibixApiToken: 'fixture', apiOrigins: { vibix: 'https://catalog.example.org' } }, transport).vibix;
+		const result = await provider.fetch({ ...ref, mediaType: 'tv' }, ['players']);
+		expect(result.players[0].vibixEpisodeMap).toEqual({ publisherId: '10', seriesId: '40', items: [{ seasonNumber: 1, episodeNumber: 1, translationId: '5', movieId: '701' }, { seasonNumber: 1, episodeNumber: 2, translationId: '5', movieId: '702' }] });
+		expect(result.players[0].vibixAccountHash).toBe(vibixAccountHash('fixture', 'https://catalog.example.org'));
+		expect(result.players[0].episodes).toEqual([]); expect(result.players[0].translations[0]).not.toHaveProperty('episodes');
+		expect(transport.mock.calls[1]).toEqual(['https://catalog.example.org/api/v1/publisher/catalog/data', { Authorization: 'Bearer fixture' }, { method: 'POST', vibixCatalogSearch: '100' }]);
+		expect(result.warnings).not.toContain('vibix-episode-data-unavailable'); expect(transport).toHaveBeenCalledTimes(2);
+		transport.mockClear(); await provider.fetch({ ...ref, mediaType: 'tv' }, ['title']); expect(transport).toHaveBeenCalledOnce();
+	});
+	test('keeps the serial player and marks unknown coverage on optional catalogue failure without retries or invented IDs', async () => {
+		const serial = movie({ type: 'serial', embed_code: 'data-publisher-id="10" data-type="serial" data-id="40"' });
+		for (const response of [{ data: [] }, { data: [{ ...serial, id: 999, episodes: { s1: { e1: { v5: 701 } } } }] }, new ImportProviderError('rate-limited', 60000)]) {
+			const transport = vi.fn<ImportTransport>(async url => { if (!url.endsWith('/catalog/data')) return { data: serial }; if (response instanceof Error) throw response; return response; });
+			const result = await createImportProviders({ vibixApiToken: 'fixture' }, transport).vibix.fetch({ ...ref, mediaType: 'tv' });
+			expect(result.players[0].vibixEmbed).toEqual({ publisherId: '10', type: 'series', id: '40' }); expect(result.players[0].vibixEpisodeMap).toBeUndefined(); expect(result.warnings).toContain('vibix-episode-data-unavailable'); expect(transport).toHaveBeenCalledTimes(2);
+		}
 	});
 });

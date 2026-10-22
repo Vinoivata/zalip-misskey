@@ -334,6 +334,7 @@ zalip:
     notesCount: "Записей: {n}"
     post: "Написать запись"
     edit: "Настройки сообщества"
+    allowRenoteToExternal: "Разрешить репосты и цитаты вне сообщества"
   _importer:
     configurationUnknown: "Настройки недоступны"
     protectionScope: "Защита выбранных полей применяется ко всему запуску импорта."

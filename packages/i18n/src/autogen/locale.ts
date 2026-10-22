@@ -1342,6 +1342,10 @@ export interface Locale extends ILocale {
              * Настройки сообщества
              */
             "edit": string;
+            /**
+             * Разрешить репосты и цитаты вне сообщества
+             */
+            "allowRenoteToExternal": string;
         };
         "_importer": {
             /**

@@ -10,6 +10,7 @@ import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
 import { MiZalipExternalIdentity } from '@/models/ZalipExternalIdentity.js';
 import { applyImportRecord, currentImportFields, findImportWork } from './apply.js';
 import type { ImportRecord } from './types.js';
+import { vibixAccountHash } from './vibix-map.js';
 
 function record(values: Partial<ImportRecord> = {}): ImportRecord {
 	return {
@@ -83,6 +84,19 @@ function fixture(seed: { works?: MiZalipWork[]; identities?: Partial<MiZalipExte
 }
 
 describe('Zalip transactional import application', () => {
+	test('keeps bounded Vibix maps on failed enrichment without bypassing account binding or editorial player locks', async () => {
+		const vibixEpisodeMap = { publisherId: '100', seriesId: '200', items: [{ seasonNumber: 1, episodeNumber: 1, translationId: '26', movieId: '701' }] };
+		const player: ImportRecord['players'][number] = { source: 'vibix', externalId: '900', iframeUrl: '', vibixEmbed: { publisherId: '100', type: 'series', id: '200' }, vibixAccountHash: vibixAccountHash('fixture')!, vibixEpisodeMap, translations: [{ id: '26', name: 'Voice' }], quality: null, episodes: [] };
+		const context = fixture(); const first = await applyImportRecord(context.db, context.idService, record({ players: [player] }), {});
+		const withoutMap = { ...player }; delete withoutMap.vibixEpisodeMap;
+		const refresh = await applyImportRecord(context.db, context.idService, record({ players: [withoutMap] }), {}, { mode: 'sync', workId: first.work.id });
+		expect((refresh.work.importData.values as Row).players).toEqual([player]);
+		const rotated = await applyImportRecord(context.db, context.idService, record({ players: [{ ...withoutMap, vibixAccountHash: vibixAccountHash('other')! }] }), {}, { mode: 'sync', workId: first.work.id });
+		expect(((rotated.work.importData.values as Row).players as ImportRecord['players'])[0]).not.toHaveProperty('vibixEpisodeMap');
+		const locked = fixture(); const lockedFirst = await applyImportRecord(locked.db, locked.idService, record({ players: [player] }), {}, { lockedFields: ['players'] });
+		const result = await applyImportRecord(locked.db, locked.idService, record({ players: [{ ...player, vibixEpisodeMap: { ...vibixEpisodeMap, items: [{ ...vibixEpisodeMap.items[0], movieId: '999' }] } }] }), {}, { mode: 'sync', workId: lockedFirst.work.id });
+		expect((result.work.importData.values as Row).players).toEqual([player]); expect(result.protectedFields).toContain('players');
+	});
 	test('persists only validated Vibix SDK identifiers, never raw embed HTML or arbitrary fields', async () => {
 		const context = fixture();
 		const sdk = { publisherId: '100', type: 'movie' as const, id: '200' };

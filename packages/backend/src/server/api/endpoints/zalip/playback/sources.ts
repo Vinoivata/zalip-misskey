@@ -9,7 +9,36 @@ import { ZalipImporterService } from '@/core/ZalipImporterService.js';
 import { importerApiErrors, looseImporterObject, importerAuthProperties, safeImporterCall, importerIdProperty } from '@/server/api/endpoints/zalip/importer-common.js';
 
 export const meta = {
-	tags: ['zalip'], requireCredential: true, kind: 'read:account', errors: importerApiErrors, res: looseImporterObject,
+	tags: ['zalip'], requireCredential: true, kind: 'read:account', errors: importerApiErrors,
+	res: {
+		...looseImporterObject,
+		properties: {
+			sources: {
+				type: 'array', optional: true, nullable: false,
+				items: {
+					type: 'object', optional: false, nullable: false, additionalProperties: true,
+					properties: {
+						vibixEpisodeMap: {
+							type: 'object', optional: true, nullable: false,
+							properties: {
+								publisherId: { type: 'string', optional: false, nullable: false },
+								seriesId: { type: 'string', optional: false, nullable: false },
+								items: {
+									type: 'array', optional: false, nullable: false,
+									items: { type: 'object', optional: false, nullable: false, properties: {
+										seasonNumber: { type: 'integer', optional: false, nullable: false },
+											episodeNumber: { type: 'integer', optional: false, nullable: false },
+											translationId: { type: 'string', optional: false, nullable: false },
+											movieId: { type: 'string', optional: false, nullable: false },
+									} },
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	},
 } as const;
 
 export const paramDef = {

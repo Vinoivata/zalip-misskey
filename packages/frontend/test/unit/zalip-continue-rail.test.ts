@@ -26,7 +26,7 @@ beforeEach(() => {
 		throw new Error('Unexpected endpoint');
 	});
 });
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe('continue watching rail', () => {
 	it('shows real server history and exact episode navigation without starting playback', async () => {
@@ -80,16 +80,40 @@ describe('continue watching rail', () => {
 		expect(image.getAttribute('src')).toContain('/poster.jpg');
 	});
 	it('does not let a concurrent refresh resurrect a successfully reset history card', async () => {
+		const attachedAt = Date.now(); const clock = vi.spyOn(Date, 'now').mockReturnValue(attachedAt);
 		let finishReset!: (result: unknown) => void;
 		const previous = vi.mocked(misskeyApiZalip).getMockImplementation()!;
 		vi.mocked(misskeyApiZalip).mockImplementation((endpoint, params) => endpoint === 'zalip/progress/reset' ? new Promise(resolve => { finishReset = resolve; }) : previous(endpoint, params));
 		const view = setup();
 		const reset = await view.findByRole('button', { name: i18n.tsx.zalip._progress.removeTitle({ title: item.work.title }) });
 		await nextTick();
+		// A real input occurs after listeners attach. Vue ignores same-ms synthetic capture/target clicks.
+		clock.mockReturnValue(attachedAt + 1);
 		await fireEvent.click(reset);
+		expect(vi.mocked(misskeyApiZalip).mock.calls.filter(call => call[0] === 'zalip/progress/reset')).toHaveLength(1);
+		expect((reset as HTMLButtonElement).disabled).toBe(true);
 		await fireEvent.click(view.getByRole('button', { name: 'refresh-history' }));
 		expect(vi.mocked(misskeyApiZalip).mock.calls.filter(call => call[0] === 'zalip/progress/continue')).toHaveLength(1);
 		finishReset({ cleared: true });
 		await waitFor(() => expect(view.queryByRole('link')).toBeNull());
+	});
+	it('ignores a refresh response already in flight when history is successfully reset', async () => {
+		const attachedAt = Date.now(); const clock = vi.spyOn(Date, 'now').mockReturnValue(attachedAt);
+		let finishRefresh!: (result: unknown) => void;
+		const delayedRefresh = new Promise(resolve => { finishRefresh = resolve; });
+		let historyRequests = 0;
+		const previous = vi.mocked(misskeyApiZalip).getMockImplementation()!;
+		vi.mocked(misskeyApiZalip).mockImplementation((endpoint, params) => endpoint === 'zalip/progress/continue' && ++historyRequests > 1 ? delayedRefresh : previous(endpoint, params));
+		const view = setup();
+		const reset = await view.findByRole('button', { name: i18n.tsx.zalip._progress.removeTitle({ title: item.work.title }) });
+		await nextTick(); clock.mockReturnValue(attachedAt + 1);
+		await fireEvent.click(view.getByRole('button', { name: 'refresh-history' }));
+		expect(vi.mocked(misskeyApiZalip).mock.calls.filter(call => call[0] === 'zalip/progress/continue')).toHaveLength(2);
+		await fireEvent.click(reset);
+		expect(vi.mocked(misskeyApiZalip).mock.calls.filter(call => call[0] === 'zalip/progress/reset')).toHaveLength(1);
+		await waitFor(() => expect(view.queryByRole('link')).toBeNull());
+		finishRefresh({ items: [item], nextCursor: null });
+		await delayedRefresh; await nextTick();
+		expect(view.queryByRole('link')).toBeNull();
 	});
 });

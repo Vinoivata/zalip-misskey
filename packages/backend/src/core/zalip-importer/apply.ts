@@ -11,6 +11,7 @@ import { MiZalipEpisode } from '@/models/ZalipEpisode.js';
 import { MiZalipExternalIdentity } from '@/models/ZalipExternalIdentity.js';
 import { canUpdateField, importFieldSelected, nonEmpty, normalizeImportOptions, readImportState, sameValue } from './policy.js';
 import { normalizeVibixEmbed, safeAllohaPlayerUrl, safeImportUrl } from './providers.js';
+import { normalizeVibixEpisodeMap, retainVibixEpisodeMap, validVibixAccountHash } from './vibix-map.js';
 import { importFields, type ExternalIdentity, type ImportArtworkExpected, type ImportArtworkField, type ImportOptions, type ImportPlayer, type ImportRecord } from './types.js';
 import type { DataSource, EntityManager } from 'typeorm';
 
@@ -172,6 +173,8 @@ function normalizedSnapshot(record: ImportRecord): ImportRecord {
 		players: record.players.map(player => ({
 			source: player.source, externalId: player.externalId.trim().slice(0, 100), iframeUrl: player.iframeUrl,
 			...(player.source === 'vibix' && normalizeVibixEmbed(player.vibixEmbed) ? { vibixEmbed: normalizeVibixEmbed(player.vibixEmbed)! } : {}),
+			...(player.source === 'vibix' && validVibixAccountHash(player.vibixAccountHash) ? { vibixAccountHash: player.vibixAccountHash } : {}),
+			...(player.source === 'vibix' && normalizeVibixEpisodeMap(player.vibixEpisodeMap, normalizeVibixEmbed(player.vibixEmbed) ?? undefined) ? { vibixEpisodeMap: normalizeVibixEpisodeMap(player.vibixEpisodeMap, normalizeVibixEmbed(player.vibixEmbed) ?? undefined)! } : {}),
 			quality: boundedText(player.quality, 128), translations: player.translations.map(translation => playerTranslationSnapshot(player, translation)),
 			episodes: player.episodes.map(episode => ({ seasonNumber: episode.seasonNumber, episodeNumber: episode.episodeNumber })),
 		})),
@@ -195,7 +198,10 @@ function changedSinceImport(current: unknown, previous: unknown): boolean {
 function mergeImportedPlayers(current: unknown, incoming: ImportRecord['players']): ImportRecord['players'] {
 	const previous = Array.isArray(current) ? current as ImportRecord['players'] : [];
 	const players = new Map<string, ImportRecord['players'][number]>();
-	for (const player of [...previous, ...incoming]) players.set(`${player.source}:${player.externalId}`, player);
+	for (const player of [...previous, ...incoming]) {
+		const key = `${player.source}:${player.externalId}`;
+		players.set(key, retainVibixEpisodeMap(players.get(key), player));
+	}
 	return [...players.values()];
 }
 

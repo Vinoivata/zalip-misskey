@@ -530,6 +530,18 @@ describe('importer adapter contracts', () => {
 });
 
 describe('safe default HTTP transport', () => {
+	test('builds only the fixed bounded Vibix catalogue POST body on its configured origin and exact path', async () => {
+		mockedFetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: [] }) });
+		const transport = createConfiguredImportTransport({ apiOrigins: { vibix: 'https://catalog.example.org' } });
+		const url = 'https://catalog.example.org/api/v1/publisher/catalog/data';
+		await transport(url, { Authorization: 'Bearer fixture' }, { method: 'POST', vibixCatalogSearch: '100' });
+		const request = mockedFetch.mock.calls[0][1];
+		expect(JSON.parse(request.body)).toEqual({ draw: 1, start: 0, length: 30, columns: [{ data: '', name: '', searchable: true, orderable: true }], order: [{ column: 0, dir: 'desc' }], search: { value: '100' } });
+		expect(request).toMatchObject({ method: 'POST', redirect: 'error', size: 2 * 1024 * 1024, headers: { Accept: 'application/json', Authorization: 'Bearer fixture', 'Content-Type': 'application/json' } });
+		for (const target of [url + '?limit=10000', url + '/other', url.replace('catalog.example.org', 'api.themoviedb.org'), url.replace('catalog.example.org', 'vibix.org')]) await expect(transport(target, {}, { method: 'POST', vibixCatalogSearch: '100' })).rejects.toMatchObject({ code: 'invalid-ref' });
+		for (const search of ['Название', '01', '100/path', '9007199254740992', 'tt1']) await expect(transport(url, {}, { method: 'POST', vibixCatalogSearch: search })).rejects.toMatchObject({ code: 'invalid-ref' });
+		await expect(transport(url, {}, { method: 'POST', vibixCatalogSearch: '100', body: 'arbitrary' } as never)).rejects.toMatchObject({ code: 'invalid-ref' }); expect(mockedFetch).toHaveBeenCalledOnce();
+	});
 	test('carries documented Vibix POST through the bounded HTTP transport and rejects other methods', async () => {
 		mockedFetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: [] }) });
 		const transport = createConfiguredImportTransport({}); const url = 'https://vibix.org/api/v1/publisher/videos/search?name=Fixture&page=1&limit=20';

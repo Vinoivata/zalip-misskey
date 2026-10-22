@@ -255,6 +255,7 @@ import { taxonomyCreditCaption, taxonomyLinkSections, taxonomyProfileLabel, taxo
 import { sameWatchTarget, watchTimeLabel } from '@/utility/zalip-watch-progress.js';
 import { useZalipWatchProgress } from '@/composables/use-zalip-watch-progress.js';
 import { vibixPlayerDocument, vibixPlayerSandbox } from '@/utility/zalip-vibix-player.js';
+import { resolveVibixPlaybackEmbed } from '@/utility/zalip-vibix-resolver.js';
 
 type ZalipWork = {
 	id: string;
@@ -476,8 +477,9 @@ const playerEpisodeContextBlocked = computed(() => (activePlayback.value?.source
 const selectedEpisodeAvailable = computed(() => !playerEpisodeContextBlocked.value && playbackEpisodeAvailable(activePlayback.value, selectedTranslationId.value, selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null));
 // Unknown anime/animation serials may have no cached coverage yet; retain their native selectors.
 const fixedPlayerClip = computed(() => selectedEpisode.value != null || mediaType.value === 'movie');
+const activeVibixEmbed = computed(() => resolveVibixPlaybackEmbed(activePlayback.value, selectedTranslationId.value, selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null));
 const activeVibixDocument = computed(() => $i && playerOpen.value && playerView.value === 'player' && selectedEpisodeAvailable.value && activePlayback.value?.source === 'vibix'
-	? vibixPlayerDocument(activePlayback.value.vibixEmbed, { seasonNumber: selectedSeasonNumber.value, episodeNumber: selectedEpisode.value?.episodeNumber ?? null, translationId: selectedTranslationId.value }) : null);
+	? vibixPlayerDocument(activeVibixEmbed.value, { seasonNumber: activeVibixEmbed.value?.type === 'series' ? selectedSeasonNumber.value : null, episodeNumber: activeVibixEmbed.value?.type === 'series' ? selectedEpisode.value?.episodeNumber ?? null : null, translationId: selectedTranslationId.value }) : null);
 const activePlayerIframe = computed(() => selectedEpisodeAvailable.value ? selectedProvider.value === 'vibix' ? activeVibixDocument.value ? 'about:srcdoc' : null : workPlaybackIframe(activePlayback.value, selectedTranslationId.value, selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null, fixedPlayerClip.value) : null);
 const resumeIframeUrl = ref<string | null>(null);
 const resumeFrameRevision = ref(0);
@@ -487,7 +489,7 @@ const activePlayerIframeKey = computed(() => [
 	selectedEpisode.value?.id ?? 'title',
 	selectedTranslationId.value ?? 'default',
 	selectedProvider.value,
-	...(selectedProvider.value === 'vibix' ? [activePlayback.value?.vibixEmbed?.publisherId, activePlayback.value?.vibixEmbed?.type, activePlayback.value?.vibixEmbed?.id] : []),
+	...(selectedProvider.value === 'vibix' ? [activeVibixEmbed.value?.publisherId, activeVibixEmbed.value?.type, activeVibixEmbed.value?.id] : []),
 ].join(':'));
 watch(activePlayerIframeKey, () => { resumeSelection.value = null; resumeIframeUrl.value = null; resumeFrameRevision.value = 0; }, { flush: 'sync' });
 watch(playerOpen, () => { resumeIframeUrl.value = null; resumeFrameRevision.value = 0; }, { flush: 'sync' });
