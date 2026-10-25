@@ -134,7 +134,7 @@ useGlobalEvent('noteDeleted', id => {
 .badge { width: 16px; height: 16px; object-fit: contain; }
 .visibility { flex: 0 0 auto; }
 .menu { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; margin: -8px 0 -8px auto; color: var(--MI_THEME-fgTransparentWeak); border-radius: 50%; > i { display: block; width: 18px; height: 18px; font-size: 18px; line-height: 18px; } &:hover { color: var(--MI_THEME-fg); } &:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: -2px; } }
-.text { line-height: 1.6; overflow-wrap: anywhere; }
+.text { line-height: 1.55; overflow-wrap: anywhere; }
 .collapsed { max-height: 9.6em; overflow: clip; }
 .textToggle { min-height: 36px; color: var(--MI_THEME-accent); font-size: 13px; }
 .cw { margin: 0; overflow-wrap: anywhere; }
@@ -147,10 +147,10 @@ useGlobalEvent('noteDeleted', id => {
 .reaction { width: 20px; height: 20px; font-size: 20px; }
 .action:hover:not(:disabled), .expand:hover, .more:hover { color: var(--MI_THEME-accent); }
 .expand, .more, .continue { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; font-size: 13px; color: var(--MI_THEME-fgTransparentWeak); }
-.branch { margin-left: var(--comment-avatar); }
+.branch { margin-left: var(--comment-child-avatar); }
 .branchItem { position: relative; }
-.branchItem::before { content: ''; position: absolute; left: calc(var(--comment-avatar) / -2 - .5px); top: 0; width: calc(var(--comment-avatar) / 2 + .5px); height: calc(12px + var(--comment-child-avatar) / 2); box-sizing: border-box; border-left: 1px solid var(--MI_THEME-divider); border-bottom: 1px solid var(--MI_THEME-divider); border-bottom-left-radius: 12px; pointer-events: none; }
-.branchContinues::after { content: ''; position: absolute; left: calc(var(--comment-avatar) / -2 - .5px); top: 0; bottom: 0; border-left: 1px solid var(--MI_THEME-divider); pointer-events: none; }
+.branchItem::before { content: ''; position: absolute; left: calc(var(--comment-avatar) / 2 - var(--comment-child-avatar) - .5px); top: 0; width: calc(var(--comment-child-avatar) - var(--comment-avatar) / 2 + .5px); height: calc(12px + var(--comment-child-avatar) / 2); box-sizing: border-box; border-left: 1px solid var(--MI_THEME-divider); border-bottom: 1px solid var(--MI_THEME-divider); border-bottom-left-radius: 12px; pointer-events: none; }
+.branchContinues::after { content: ''; position: absolute; left: calc(var(--comment-avatar) / 2 - var(--comment-child-avatar) - .5px); top: 0; bottom: 0; border-left: 1px solid var(--MI_THEME-divider); pointer-events: none; }
 .state { margin: 0; padding: 12px 0; font-size: 13px; color: var(--MI_THEME-fgTransparentWeak); > p { margin: 0 0 6px; } }
 .muted { width: 100%; min-height: 44px; text-align: center; color: var(--MI_THEME-fgTransparentWeak); }
 @media (hover: none), (pointer: coarse) { .action, .menu { min-width: 44px; min-height: 44px; } }
@@ -161,5 +161,12 @@ useGlobalEvent('noteDeleted', id => {
 	.deep > .branch > .branchItem::before { left: calc(var(--comment-avatar) / 2 - .5px); width: 0; border-bottom: 0; border-bottom-left-radius: 0; }
 	.deep > .branch > .branchContinues::after { left: calc(var(--comment-avatar) / 2 - .5px); }
 }
-@container (max-width: 450px) { .root { padding: 14px 16px; } .nested { padding: 12px 0 0; } .actions { gap: 8px; } }
+@container (max-width: 450px) {
+	.root { padding: 14px 20px; font-size: max(1em, 15px); }
+	.nested { padding: 12px 0 0; }
+	.actions { gap: 8px; }
+	.action > svg { width: 18px; height: 18px; }
+	.action > i, .reaction { font-size: 18px; }
+	.reaction { width: 18px; height: 18px; }
+}
 </style>

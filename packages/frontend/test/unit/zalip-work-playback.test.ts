@@ -72,8 +72,12 @@ async function chooseEpisode(view: ReturnType<typeof setup>, number: number) {
 	await fireEvent.click(within(view.getByRole('dialog', { name: i18n.ts.zalip.workEpisodes })).getByRole('button', { name: i18n.tsx.zalip.playerEpisodeNumber({ number }) }));
 }
 
-async function openVoices(view: ReturnType<typeof setup>, label: string) {
-	await fireEvent.click(player(view).getByRole('button', { name: `${i18n.ts.zalip.playerVoices}: ${label}` }));
+function editionTrigger(view: ReturnType<typeof setup>, label: string, provider = alloha.label) {
+	return player(view).getByRole('button', { name: `${i18n.ts.zalip.playerVoices}: ${label}, ${provider}` });
+}
+
+async function openVoices(view: ReturnType<typeof setup>, label: string, provider = alloha.label) {
+	await fireEvent.click(editionTrigger(view, label, provider));
 	return within(view.getByRole('dialog', { name: i18n.ts.zalip.playerVoices }));
 }
 
@@ -122,7 +126,7 @@ describe('Zalip work playback selection', () => {
 		const view = setup(); await play(view); const ins = () => new DOMParser().parseFromString(iframe(view).srcdoc, 'text/html').querySelector('ins')!;
 		expect(ins().getAttribute('data-type')).toBe('movie'); expect(ins().getAttribute('data-id')).toBe('701'); expect(ins().hasAttribute('data-season')).toBe(false); const first = iframe(view);
 		await chooseEpisode(view, 3); expect(iframe(view)).not.toBe(first); expect(ins().getAttribute('data-id')).toBe('703'); const third = iframe(view);
-		await fireEvent.click((await openVoices(view, 'Vibix One')).getByRole('button', { name: 'Vibix Two' })); expect(iframe(view)).not.toBe(third); expect(ins().getAttribute('data-id')).toBe('704'); expect(ins().getAttribute('data-voiceover')).toBe('42');
+		await fireEvent.click((await openVoices(view, 'Vibix One', vibix.label)).getByRole('button', { name: 'Vibix Two' })); expect(iframe(view)).not.toBe(third); expect(ins().getAttribute('data-id')).toBe('704'); expect(ins().getAttribute('data-voiceover')).toBe('42');
 		await fireEvent.click(player(view).getByRole('button', { name: i18n.tsx.zalip.playerEpisodeNumber({ number: 3 }), expanded: false }));
 		await fireEvent.click(within(view.getByRole('dialog', { name: i18n.ts.zalip.workEpisodes })).getByRole('button', { name: i18n.tsx.zalip.playerEpisodeNumber({ number: 2 }) }));
 		expect(ins().getAttribute('data-type')).toBe('series'); expect(ins().getAttribute('data-id')).toBe('12345'); expect(ins().getAttribute('data-episodes')).toBe('2'); expect(iframe(view).getAttribute('sandbox')).not.toContain('allow-same-origin');
@@ -134,7 +138,7 @@ describe('Zalip work playback selection', () => {
 		expect(first.hasAttribute('src')).toBe(false); expect(first.getAttribute('sandbox')).toBe('allow-scripts allow-forms allow-presentation'); expect(document().querySelector('ins')!.getAttribute('data-id')).toBe('12345'); expect(document().querySelector('ins')!.getAttribute('data-season')).toBe('2'); expect(document().querySelector('ins')!.getAttribute('data-episodes')).toBe('1'); expect(document().querySelector('ins')!.getAttribute('data-voiceover')).toBe('26'); expect(view.container.querySelector('script')).toBeNull();
 		await waitFor(() => expect(player(view).getByText(i18n.ts.zalip._progress.episodeHint)).toBeTruthy());
 		await chooseEpisode(view, 3); expect(iframe(view)).not.toBe(first); expect(document().querySelector('ins')!.getAttribute('data-episodes')).toBe('3'); const episodeFrame = iframe(view);
-		await fireEvent.click((await openVoices(view, 'Vibix One')).getByRole('button', { name: 'Vibix Two' })); expect(iframe(view)).not.toBe(episodeFrame); expect(document().querySelector('ins')!.getAttribute('data-voiceover')).toBe('42'); expect(document().querySelector('ins')!.getAttribute('data-episodes')).toBe('3');
+		await fireEvent.click((await openVoices(view, 'Vibix One', vibix.label)).getByRole('button', { name: 'Vibix Two' })); expect(iframe(view)).not.toBe(episodeFrame); expect(document().querySelector('ins')!.getAttribute('data-voiceover')).toBe('42'); expect(document().querySelector('ins')!.getAttribute('data-episodes')).toBe('3');
 		await fireEvent.click(player(view).getByRole('button', { name: 'Alloha Cinema', pressed: false })); expect(iframe(view).src).toContain('https://alloha.example/'); expect(iframe(view).hasAttribute('srcdoc')).toBe(false); expect(iframe(view).hasAttribute('sandbox')).toBe(false);
 	});
 	it('opens a Vibix movie without invented coordinates or timestamp restoration', async () => {
@@ -316,12 +320,16 @@ describe('Zalip work playback selection', () => {
 		await fireEvent.error(guide()!);
 		expect(preview()?.src).toBe('https://social.example/files/poster.webp');
 		const tile = player(view).getByRole('button', { name: /1.*Episode 1/u });
-		expect(tile.querySelector('img')?.src).toBe('https://social.example/files/poster.webp');
-		await fireEvent.error(tile.querySelector('img')!);
+		// The compact episode grid keeps the canonical selection in a text row;
+		// artwork fallback belongs to the native preview and episode guide.
+		expect(tile.querySelector('img')).toBeNull();
+		expect(tile.getAttribute('aria-pressed')).toBe('true');
+		await fireEvent.error(preview()!);
 		expect(preview()).toBeNull();
 		expect(guide()).toBeNull();
 		expect(tile.querySelector('img')).toBeNull();
-		expect(tile.querySelector('.ti-device-tv')).toBeTruthy();
+		expect(tile.textContent).toContain(i18n.tsx.zalip.playerEpisodeNumber({ number: 1 }));
+		expect(player(view).getByRole('button', { name: i18n.ts.zalip.watchTitle })).toBeTruthy();
 	});
 	it.each(['series', 'anime'])('keeps an unbound %s serial playable without inventing a canonical progress target', async kind => {
 		workData = { ...serial, kind, seasons: [] };
@@ -381,7 +389,7 @@ describe('Zalip work playback selection', () => {
 		expect(url.searchParams.get('episode')).toBe('3');
 		expect(url.searchParams.get('token')).toBe('public-fixture');
 		expect(view.queryByRole('dialog', { name: i18n.ts.zalip.playerVoices })).toBeNull();
-		expect(player(view).getByRole('button', { name: `${i18n.ts.zalip.playerVoices}: Second Studio` })).toBeTruthy();
+		expect(editionTrigger(view, 'Second Studio')).toBeTruthy();
 		expect(player(view).queryByText(i18n.ts.zalip._importer.nativeVoicesHint)).toBeNull();
 	});
 
@@ -389,7 +397,7 @@ describe('Zalip work playback selection', () => {
 		sources = [structuredClone(collaps)];
 		const view = setup();
 		await play(view);
-		const voices = await openVoices(view, 'Collaps One');
+		const voices = await openVoices(view, 'Collaps One', collaps.label);
 		await fireEvent.click(voices.getByRole('button', { name: 'Collaps Two' }));
 		const url = new URL(iframe(view).src);
 		expect(url.hostname).toBe('collaps.example');
@@ -406,7 +414,7 @@ describe('Zalip work playback selection', () => {
 		expect(iframe(view)).toBeNull();
 		expect(player(view).getByRole('status').textContent).toContain(i18n.ts.zalip.playerEpisodeUnavailable);
 		expect(player(view).queryByRole('button', { name: i18n.ts.zalip.watchTitle })).toBeNull();
-		await fireEvent.click((await openVoices(view, 'Kodik One')).getByRole('button', { name: 'Kodik Two' }));
+		await fireEvent.click((await openVoices(view, 'Kodik One', kodik.label)).getByRole('button', { name: 'Kodik Two' }));
 		const url = new URL(iframe(view).src);
 		expect(url.pathname).toBe('/serial/456/voice-two/720p');
 		expect(url.searchParams.get('season')).toBe('2');
@@ -437,7 +445,7 @@ describe('Zalip work playback selection', () => {
 		await view.findByRole('heading', { name: serial.title, level: 1 });
 		expect(player(view).getByText(i18n.ts.zalip.playerEpisodeUnavailable)).toBeTruthy();
 		expect(player(view).queryByRole('button', { name: i18n.ts.zalip.watchTitle })).toBeNull();
-		await fireEvent.click((await openVoices(view, 'Kodik One')).getByRole('button', { name: 'Kodik Two' }));
+		await fireEvent.click((await openVoices(view, 'Kodik One', kodik.label)).getByRole('button', { name: 'Kodik Two' }));
 		await fireEvent.click(player(view).getByRole('button', { name: i18n.ts.zalip.watchTitle }));
 		expect(new URL(iframe(view).src).pathname).toBe('/serial/456/voice-two/720p');
 		expect(new URL(iframe(view).src).searchParams.get('episode')).toBe('1');
@@ -447,14 +455,16 @@ describe('Zalip work playback selection', () => {
 		const view = setup();
 		await play(view);
 		const label = `Kodik One · ${i18n.ts.zalip.playerSubtitles}`;
-		const voices = await openVoices(view, label);
-		expect(voices.getByRole('button', { name: label, pressed: true })).toBeTruthy();
-		await fireEvent.update(voices.getByRole('searchbox', { name: i18n.ts.zalip.playerVoiceSearch }), i18n.ts.zalip.playerSubtitles);
+		const voices = await openVoices(view, label, kodik.label);
+		expect(voices.getByRole('button', { name: 'Kodik One', pressed: true }).getAttribute('title')).toBe(label);
+		expect(voices.getByRole('button', { name: `${i18n.ts.zalip.playerSubtitles} 1`, pressed: true })).toBeTruthy();
+		await fireEvent.update(voices.getByRole('searchbox', { name: i18n.ts.zalip.playerVoiceSearch }), 'Kodik One');
 		expect(voices.queryByRole('button', { name: 'Kodik Two' })).toBeNull();
 		await fireEvent.update(voices.getByRole('searchbox', { name: i18n.ts.zalip.playerVoiceSearch }), '');
+		await fireEvent.click(voices.getByRole('button', { name: `${i18n.ts.zalip.playerVoices} 1`, pressed: false }));
 		await fireEvent.click(voices.getByRole('button', { name: 'Kodik Two' }));
 		expect(new URL(iframe(view).src).pathname).toBe('/serial/456/voice-two/720p');
-		expect(player(view).getByRole('button', { name: `${i18n.ts.zalip.playerVoices}: Kodik Two` })).toBeTruthy();
+		expect(editionTrigger(view, 'Kodik Two', kodik.label)).toBeTruthy();
 	});
 	it('does not open the Kodik default episode while another canonical season is loading', async () => {
 		sources = [{ ...structuredClone(kodik), translations: [{ ...kodik.translations[0], episodes: [{ seasonNumber: 2, episodeNumber: 1 }, { seasonNumber: 3, episodeNumber: 1 }] }] }];
@@ -557,13 +567,15 @@ describe('Zalip work playback selection', () => {
 		expect(new URL(iframe(view).src).searchParams.get('episode')).toBe('3');
 	});
 
-	it('uses native controls rather than an empty picker when a provider has no controllable voices', async () => {
+	it('explains native voice controls without rendering an empty voice search', async () => {
 		sources = [{ ...collaps, translations: [{ id: 'metadata-only', name: 'Inside the player' }] }];
 		const view = setup();
 		await play(view);
-		expect(player(view).getByText(i18n.ts.zalip._importer.nativeVoicesHint)).toBeTruthy();
-		expect(player(view).queryByRole('button', { name: `${i18n.ts.zalip.playerVoices}: Collaps Cinema` })).toBeNull();
-		expect(view.queryByRole('dialog', { name: i18n.ts.zalip.playerVoices })).toBeNull();
+		const voices = await openVoices(view, collaps.label, collaps.label);
+		expect(voices.getByText(i18n.ts.zalip._importer.nativeVoicesHint)).toBeTruthy();
+		expect(voices.queryByRole('searchbox')).toBeNull();
+		expect(voices.queryByRole('group', { name: i18n.ts.zalip.playerVoices })).toBeNull();
+		expect(voices.getByRole('button', { name: collaps.label, pressed: true })).toBeTruthy();
 		expect(new URL(iframe(view).src).hostname).toBe('collaps.example');
 	});
 
@@ -571,7 +583,7 @@ describe('Zalip work playback selection', () => {
 		sources = [{ ...collaps, translations: [] }, structuredClone(alloha)];
 		const view = setup();
 		await play(view);
-		const voices = await openVoices(view, 'Collaps Cinema');
+		const voices = await openVoices(view, 'Collaps Cinema', collaps.label);
 		expect(voices.queryByRole('searchbox')).toBeNull();
 		expect(voices.getByText(i18n.ts.zalip._importer.nativeVoicesHint)).toBeTruthy();
 		await fireEvent.click(voices.getByRole('button', { name: 'Alloha Cinema' }));
@@ -585,7 +597,7 @@ describe('Zalip work playback selection', () => {
 		legacyPlayback = structuredClone(legacy);
 		const view = setup();
 		await play(view);
-		await fireEvent.click((await openVoices(view, 'Legacy First')).getByRole('button', { name: 'Legacy Second' }));
+		await fireEvent.click((await openVoices(view, 'Legacy First', legacy.label)).getByRole('button', { name: 'Legacy Second' }));
 		expect(new URL(iframe(view).src).hostname).toBe('legacy.example');
 		expect(new URL(iframe(view).src).searchParams.get('translation')).toBe('247');
 	});
@@ -596,7 +608,7 @@ describe('Zalip work playback selection', () => {
 		const view = setup();
 		await play(view);
 		expect(new URL(iframe(view).src).hostname).toBe('collaps.example');
-		const voices = await openVoices(view, 'Collaps One');
+		const voices = await openVoices(view, 'Collaps One', collaps.label);
 		await fireEvent.click(voices.getByRole('button', { name: 'Legacy Alloha' }));
 		await fireEvent.click(voices.getByRole('button', { name: 'Legacy Second' }));
 		expect(new URL(iframe(view).src).hostname).toBe('legacy.example');
@@ -618,7 +630,7 @@ describe('Zalip work playback selection', () => {
 		const view = setup();
 		await play(view);
 		expect(new URL(iframe(view).src).hostname).toBe('alloha.example');
-		expect(player(view).getByRole('button', { name: `${i18n.ts.zalip.playerVoices}: First Studio` })).toBeTruthy();
+		expect(editionTrigger(view, 'First Studio')).toBeTruthy();
 	});
 
 	it('keeps legacy playback available if the sources endpoint fails', async () => {

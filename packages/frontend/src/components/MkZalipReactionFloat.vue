@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <span ref="rootEl" :class="$style.root" aria-hidden="true" data-zalip-reaction-float>
-	<span v-for="(reaction, index) in flight" :key="`${revision}:${index}`" :class="$style.emoji" :style="{ '--float-delay': `${index * 130}ms`, '--float-drift': `${(index % 3 - 1) * 22}px`, '--float-origin': `${index % 3 * 13}px` }">
+	<span v-for="(reaction, index) in flight" :key="`${revision}:${index}`" :class="$style.emoji" :style="{ '--float-delay': `${index * 32}ms`, '--float-duration': `${2000 + index % 4 * 150}ms`, '--float-size': `${14 + index % 4 * 2}px`, '--float-drift': `${(index % 3 - 1) * 22}px`, '--float-origin': `${index % 3 * 13}px` }">
 		<MkReactionIcon :reaction="reaction" :emojiUrl="reactionEmojis[reaction.substring(1, reaction.length - 1)]"/>
 	</span>
 </span>
@@ -21,8 +21,9 @@ const props = withDefaults(defineProps<{
 	target: HTMLElement | null | undefined;
 	reactions: Record<string, number>;
 	reactionEmojis: Record<string, string>;
+	myReaction?: string | null;
 	enabled?: boolean;
-}>(), { enabled: true });
+}>(), { enabled: true, myReaction: null });
 
 const flight = ref<string[]>([]);
 const rootEl = useTemplateRef<HTMLElement>('rootEl');
@@ -44,23 +45,22 @@ function clearFlight(): void {
 }
 
 function eligible(): boolean {
-	return alive && active.value && props.enabled && prefer.s.animation && !reducedMotion.value && window.document.visibilityState === 'visible';
+	return alive && active.value && props.enabled && props.myReaction != null && prefer.s.animation && !reducedMotion.value && window.document.visibilityState === 'visible';
 }
 
 function play(): void {
-	if (!eligible() || Date.now() - lastPlayed < 4000) return;
-	const entries = Object.entries(props.reactions).filter(([, count]) => Number.isSafeInteger(count) && count > 0).sort((a, b) => b[1] - a[1]).slice(0, 10);
-	const next: string[] = [];
-	// Represent existing reactions only, bounded even if a post has millions of votes.
-	for (let round = 0; round < 10 && next.length < 10; round++) {
-		for (const [reaction, count] of entries) if (round < count && next.length < 10) next.push(reaction);
-	}
-	if (!next.length) return;
+	if (!eligible() || props.myReaction == null || Date.now() - lastPlayed < 4000) return;
+	const reaction = props.myReaction;
+	const count = props.reactions[reaction];
+	if (typeof count !== 'number' || !Number.isSafeInteger(count) || count <= 0) return;
+	// Animate the viewer's selected reaction, never unrelated votes on every post.
+	// The finite burst remains bounded even when a post has millions of reactions.
+	const next = Array.from({ length: Math.min(count, 31) }, () => reaction);
 	clearFlight();
 	lastPlayed = Date.now();
 	revision++;
 	flight.value = next;
-	timer = window.setTimeout(clearFlight, 3300);
+	timer = window.setTimeout(clearFlight, 3600);
 }
 
 function observe(): void {
@@ -88,8 +88,13 @@ function observe(): void {
 
 function motionChanged(): void { reducedMotion.value = reduced.matches; }
 
-watch(() => props.noteId, () => { lastPlayed = -Infinity; }, { flush: 'sync' });
-watch([rootEl, () => props.target, () => props.noteId, () => props.enabled, () => prefer.s.animation, active, reducedMotion], observe, { immediate: true, flush: 'post' });
+watch(() => [props.noteId, props.myReaction], () => { lastPlayed = -Infinity; }, { flush: 'sync' });
+watch([rootEl, () => props.target, () => props.noteId, () => props.myReaction, () => props.enabled, () => prefer.s.animation, active, reducedMotion], observe, { immediate: true, flush: 'post' });
+watch([() => props.myReaction, () => props.myReaction == null ? 0 : props.reactions[props.myReaction]], ([reaction], [previousReaction]) => {
+	// A changed selection is owned by the fresh observer; only a late count
+	// for the same selection may start a burst without a new intersection.
+	if (reaction === previousReaction && visible && !flight.value.length) play();
+}, { flush: 'post' });
 
 reduced.addEventListener('change', motionChanged);
 window.document.addEventListener('visibilitychange', observe);
@@ -107,7 +112,7 @@ onBeforeUnmount(() => {
 
 <style lang="scss" module>
 .root { position: absolute; z-index: 2; inset-inline-end: 18px; bottom: 34px; width: 90px; height: 190px; overflow: clip; pointer-events: none; user-select: none; }
-.emoji { position: absolute; bottom: 0; inset-inline-end: var(--float-origin); display: block; width: 24px; height: 24px; font-size: 24px; line-height: 1; opacity: 0; animation: floatReaction 2s ease-out var(--float-delay) both; > * { width: 100%; height: 100%; object-fit: contain; } }
+.emoji { position: absolute; bottom: 0; inset-inline-end: var(--float-origin); display: block; width: var(--float-size); height: var(--float-size); font-size: var(--float-size); line-height: 1; opacity: 0; animation: floatReaction var(--float-duration) ease-out var(--float-delay) both; > * { width: 100%; height: 100%; object-fit: contain; } }
 @keyframes floatReaction {
 	0% { opacity: 0; transform: translate(0, 12px) scale(.7) rotate(-8deg); }
 	15% { opacity: .9; }

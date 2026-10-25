@@ -4,6 +4,8 @@
 - Feat: Add a guarded administrator action to refresh an existing title's Vibix player through the native availability queue while preserving metadata, artwork and saved field protection.
 
 ### Client
+- Enhance: Organize the existing Zalip player around an inline desktop translation panel, a mobile translation sheet and a compact episode grid, keeping the title layout and provider playback intact.
+- Fix: Match Zalip feed, open posts and reply proportions to the Notr reference, and replay only the viewer's selected reaction with reduced-motion support.
 - Fix: Resolve known Vibix episode and voice pairs to their exact public SDK movie IDs, keeping legacy series fallback for unknown pairs and unchanged iframe isolation.
 - Enhance: Keep separate review and essay drafts and editing for each title while retaining a single optional personal rating.
 - Enhance: Align Zalip post action symbols and author spacing with the Notr reference and animate existing reactions only when visible, respecting reduced-motion settings.

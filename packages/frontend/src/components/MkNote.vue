@@ -47,7 +47,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<Mfm :text="getNoteSummary(appearNote)" :plain="true" :nowrap="true" :author="appearNote.user" :nyaize="'respect'" :class="$style.collapsedRenoteTargetText" @click="renoteCollapsed = false"/>
 	</div>
 	<article v-else ref="articleEl" :class="$style.article" @pointerdown="startPostPointer" @click="openPost" @dblclick="postNavigation.cancel" @contextmenu.stop="postNavigation.cancel(); onContextmenu($event)">
-		<MkZalipReactionFloat :noteId="appearNote.id" :target="articleEl" :reactions="$appearNote.reactions" :reactionEmojis="$appearNote.reactionEmojis" :enabled="!appearNote.isHidden && (appearNote.cw == null || showContent)"/>
+		<MkZalipReactionFloat :noteId="appearNote.id" :target="articleEl" :myReaction="$appearNote.myReaction" :reactions="$appearNote.reactions" :reactionEmojis="$appearNote.reactionEmojis" :enabled="!appearNote.isHidden && (appearNote.cw == null || showContent)"/>
 		<div v-if="appearNote.channel" :class="$style.colorBar" :style="{ background: appearNote.channel.color }"></div>
 		<MkAvatar :class="[$style.avatar, prefer.s.useStickyIcons ? $style.useSticky : null]" :user="appearNote.user" :link="!mock" :preview="!mock"/>
 		<div :class="$style.main">
@@ -419,12 +419,12 @@ const keymap = {
 </script>
 
 <style lang="scss" module>
-.summaryReaction { width: 18px; height: 18px; font-size: 18px; object-fit: contain; }
+.summaryReaction { width: 20px; height: 20px; font-size: 20px; object-fit: contain; }
 .instanceTicker { margin-top: 4px; }
 .root {
 	position: relative;
 	min-width: 0;
-	font-size: max(1em, 15px);
+	font-size: max(1em, 14px);
 	border-bottom: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 84%, transparent);
 	overflow: clip;
 	contain: content;
@@ -770,8 +770,8 @@ const keymap = {
 	border-radius: 10px;
 	color: var(--zalip-social-muted);
 	transition: color 0.16s ease, background 0.16s ease;
-	> i { font-size: 18px; }
-	> svg { width: 18px; height: 18px; }
+	> i { font-size: 20px; }
+	> svg { width: 20px; height: 20px; }
 
 	&:hover {
 		background: color-mix(in srgb, var(--MI_THEME-panelHighlight) 80%, transparent);
@@ -790,7 +790,7 @@ const keymap = {
 .reactionCount:focus-visible { outline: 2px solid var(--MI_THEME-focus); border-radius: 8px; }
 .viewCount { display: inline-flex; align-items: center; gap: 4px; color: var(--zalip-social-muted); min-height: 40px; font-size: 12px; font-variant-numeric: tabular-nums; > i { font-size: 18px; } }
 .reacted { color: var(--MI_THEME-accent); }
-.footer > .bookmark { min-width: 32px; min-height: 40px; > svg { width: 18px; height: 18px; } }
+.footer > .bookmark { min-width: 32px; min-height: 40px; > svg { width: 20px; height: 20px; } }
 
 .footerButtonCount {
 	display: inline;
@@ -818,6 +818,7 @@ const keymap = {
 }
 
 @container (max-width: 580px) {
+	.root { font-size: max(1em, 15px); }
 	.article { padding: 14px 12px 8px; }
 	.avatar { width: 40px; height: 40px; margin-right: 8px; }
 	.threadContent::after { left: -28px; }
@@ -825,6 +826,9 @@ const keymap = {
 	.menuButton { margin-top: -5px; }
 	.renote, .tip { padding: 10px 12px 0; font-size: 12px; }
 	.footer { gap: clamp(4px, 2vw, 10px); }
+	.summaryReaction { width: 18px; height: 18px; font-size: 18px; }
+	.footerButton > svg, .footer > .bookmark > svg { width: 18px; height: 18px; }
+	.footerButton > i { font-size: 18px; }
 	.root.showActionsOnlyHover .footer { position: relative; visibility: visible; top: auto; right: auto; background: transparent; box-shadow: none; }
 }
 

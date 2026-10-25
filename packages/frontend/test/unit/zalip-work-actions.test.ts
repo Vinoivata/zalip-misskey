@@ -510,13 +510,23 @@ describe('Zalip work actions', () => {
 		const view = setup();
 		const firstEpisodeLabel = i18n.tsx.zalip.playerEpisodeNumber({ number: 1 });
 		const dropdown = await view.findByRole('button', { name: firstEpisodeLabel, expanded: false });
+		const rail = view.container.querySelector('[class*=episodeRail][aria-label]') as HTMLElement;
+		const thirdEpisode = rail.querySelector('[data-episode-id=ep3]') as HTMLElement;
+		vi.spyOn(rail, 'getBoundingClientRect').mockReturnValue({ top: 100, bottom: 200, height: 100 } as DOMRect);
+		vi.spyOn(thirdEpisode, 'getBoundingClientRect').mockReturnValue({ top: 250, bottom: 286, height: 36 } as DOMRect);
+		const railScroll = vi.fn();
+		rail.scrollTo = railScroll;
+		const pageScroll = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+		const pageJump = vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(() => {});
 		await fireEvent.click(dropdown);
 		const menu = within(view.getByRole('dialog', { name: i18n.ts.zalip.workEpisodes }));
 		await fireEvent.click(menu.getByRole('button', { name: i18n.tsx.zalip.playerEpisodeNumber({ number: 3 }) }));
 		await waitFor(() => expect(view.container.querySelector('[class*=episodeGuideStill]')?.getAttribute('src')).toContain('/frame3.jpg'));
 		expect(view.getByText('Description 3')).toBeTruthy();
 		expect(view.container.querySelector('[data-episode-id=ep3]')?.getAttribute('aria-pressed')).toBe('true');
-		expect(scrollTo).toHaveBeenCalled();
+		expect(railScroll).toHaveBeenCalledWith({ top: 118, behavior: 'smooth' });
+		expect(pageScroll).not.toHaveBeenCalled();
+		expect(pageJump).not.toHaveBeenCalled();
 		const guide = view.container.querySelector('[class*=episodeGuideContent]')!;
 		await fireEvent.touchStart(guide, { touches: [{ clientX: 100, clientY: 100 }] });
 		await fireEvent.touchEnd(guide, { changedTouches: [{ clientX: 105, clientY: 250 }] });
@@ -525,6 +535,10 @@ describe('Zalip work actions', () => {
 		await fireEvent.touchEnd(guide, { changedTouches: [{ clientX: 230, clientY: 103 }] });
 		await view.findByText('Description 2');
 		expect(view.container.querySelector('[class*=episodeGuideStill]')?.getAttribute('src')).toContain('/frame2.jpg');
+		expect(pageScroll).not.toHaveBeenCalled();
+		expect(pageJump).not.toHaveBeenCalled();
+		pageScroll.mockRestore();
+		pageJump.mockRestore();
 	});
 
 	it('restores subscription state and permits retry on save failure', async () => {

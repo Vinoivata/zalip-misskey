@@ -20,7 +20,7 @@ let observers: Array<{ callback: IntersectionObserverCallback; target: Element |
 let motion: { matches: boolean; addEventListener: ReturnType<typeof vi.fn>; removeEventListener: ReturnType<typeof vi.fn> };
 let target: HTMLElement;
 
-function props() { return { noteId: 'a', target, reactions: { '👍': 5, '❤️': 2, '🔥': 1 }, reactionEmojis: {} }; }
+function props() { return { noteId: 'a', target, myReaction: '👍', reactions: { '👍': 5, '❤️': 2, '🔥': 1 }, reactionEmojis: {} }; }
 
 function visibility(visible: boolean, index = observers.length - 1): void {
 	const entry = observers[index];
@@ -50,19 +50,50 @@ describe('visible existing reaction animation', () => {
 		expect(observers.at(-1)?.target).not.toBe(target);
 		expect(view.container.querySelectorAll('[data-reaction]')).toHaveLength(0);
 		visibility(true); await settle();
-		expect(view.container.querySelectorAll('[data-reaction]')).toHaveLength(8);
-		expect(view.container.querySelectorAll('[data-reaction="❤️"]')).toHaveLength(2);
+		expect(view.container.querySelectorAll('[data-reaction]')).toHaveLength(5);
+		expect(view.container.querySelectorAll('[data-reaction="❤️"]')).toHaveLength(0);
 		expect(view.container.firstElementChild?.getAttribute('aria-hidden')).toBe('true');
-		await vi.advanceTimersByTimeAsync(3300);
+		await vi.advanceTimersByTimeAsync(3600);
 		expect(view.container.querySelectorAll('[data-reaction]')).toHaveLength(0);
 		expect(vi.getTimerCount()).toBe(0);
 	});
 	it('bounds huge counts and ignores invalid counts without inventing votes', async () => {
 		const view = render(MkZalipReactionFloat, { props: { ...props(), reactions: { '👍': 1_000_000, '❤️': 1, invalid: NaN, zero: 0, negative: -2 } } }); await settle();
 		visibility(true); await settle();
-		expect(view.container.querySelectorAll('[data-reaction]')).toHaveLength(10);
-		expect(view.container.querySelectorAll('[data-reaction="❤️"]')).toHaveLength(1);
+		expect(view.container.querySelectorAll('[data-reaction]')).toHaveLength(31);
+		expect(view.container.querySelectorAll('[data-reaction="❤️"]')).toHaveLength(0);
 		expect(view.container.querySelector('[data-reaction="invalid"]')).toBeNull();
+	});
+	it('never animates other viewers reactions without a selected reaction', async () => {
+		const view = render(MkZalipReactionFloat, { props: { ...props(), myReaction: null } }); await settle();
+		expect(observers).toHaveLength(0);
+		expect(view.container.querySelectorAll('[data-reaction]')).toHaveLength(0);
+		await view.rerender({ myReaction: '❤️' }); await settle(); visibility(true); await settle();
+		expect(view.container.querySelectorAll('[data-reaction="❤️"]')).toHaveLength(2);
+		expect(view.container.querySelector('[data-reaction="👍"]')).toBeNull();
+		await view.rerender({ myReaction: null }); await settle();
+		expect(view.container.querySelectorAll('[data-reaction]')).toHaveLength(0);
+		expect(vi.getTimerCount()).toBe(0);
+	});
+	it('waits for the native reaction count when selection arrives before its count', async () => {
+		const view = render(MkZalipReactionFloat, { props: { ...props(), reactions: {} } }); await settle();
+		visibility(true); await settle();
+		expect(view.container.querySelectorAll('[data-reaction]')).toHaveLength(0);
+		await view.rerender({ reactions: { '👍': 1 } }); await settle();
+		expect(view.container.querySelectorAll('[data-reaction="👍"]')).toHaveLength(1);
+		await view.rerender({ myReaction: '🔥', reactions: { '👍': 1, '🔥': 2 } }); await settle(); visibility(true); await settle();
+		expect(view.container.querySelectorAll('[data-reaction="🔥"]')).toHaveLength(2);
+		expect(view.container.querySelector('[data-reaction="👍"]')).toBeNull();
+	});
+	it('replays a changed selection after the previous burst has finished', async () => {
+		const view = render(MkZalipReactionFloat, { props: props() }); await settle();
+		visibility(true); await settle();
+		await vi.advanceTimersByTimeAsync(4000);
+		expect(view.container.querySelectorAll('[data-reaction]')).toHaveLength(0);
+		await view.rerender({ myReaction: '🔥', reactions: { '👍': 5, '🔥': 2 } }); await settle();
+		visibility(true); await settle();
+		expect(view.container.querySelectorAll('[data-reaction="🔥"]')).toHaveLength(2);
+		expect(view.container.querySelector('[data-reaction="👍"]')).toBeNull();
 	});
 	it('stops offscreen and throttles repeated entry, while a new post has independent playback', async () => {
 		const view = render(MkZalipReactionFloat, { props: props() }); await settle();
@@ -71,7 +102,7 @@ describe('visible existing reaction animation', () => {
 		visibility(true); await settle(); expect(vi.getTimerCount()).toBe(0);
 		await view.rerender({ noteId: 'b' }); await settle();
 		visibility(true, 0); await settle(); expect(vi.getTimerCount()).toBe(0);
-		visibility(true); await settle(); expect(view.container.querySelectorAll('[data-reaction]')).toHaveLength(8);
+		visibility(true); await settle(); expect(view.container.querySelectorAll('[data-reaction]')).toHaveLength(5);
 		view.unmount(); visibility(true); await settle(); expect(vi.getTimerCount()).toBe(0);
 	});
 	it('honours the animation preference and live reduced-motion changes', async () => {
@@ -79,7 +110,7 @@ describe('visible existing reaction animation', () => {
 		const view = render(MkZalipReactionFloat, { props: props() }); await settle();
 		expect(observers).toHaveLength(0);
 		controls.preferences!.animation = true; await settle(); visibility(true); await settle();
-		expect(view.container.querySelectorAll('[data-reaction]')).toHaveLength(8);
+		expect(view.container.querySelectorAll('[data-reaction]')).toHaveLength(5);
 		motion.matches = true; motion.addEventListener.mock.calls[0][1](); await settle();
 		expect(view.container.querySelectorAll('[data-reaction]')).toHaveLength(0);
 		expect(vi.getTimerCount()).toBe(0);
@@ -97,7 +128,7 @@ describe('visible existing reaction animation', () => {
 		const Host = defineComponent({ setup: () => () => h(KeepAlive, null, { default: () => shown.value ? h(MkZalipReactionFloat, props()) : null }) });
 		const view = render(Host); await settle();
 		visibility(true); await settle();
-		expect(view.container.querySelectorAll('[data-reaction]')).toHaveLength(8);
+		expect(view.container.querySelectorAll('[data-reaction]')).toHaveLength(5);
 		const beforeDeactivation = observers.length - 1;
 		shown.value = false; await settle();
 		expect(vi.getTimerCount()).toBe(0);
@@ -110,7 +141,7 @@ describe('visible existing reaction animation', () => {
 		visibility(true, beforeDeactivation); await settle();
 		expect(vi.getTimerCount()).toBe(0);
 		visibility(true); await settle();
-		expect(view.container.querySelectorAll('[data-reaction]')).toHaveLength(8);
+		expect(view.container.querySelectorAll('[data-reaction]')).toHaveLength(5);
 		view.unmount();
 		visibility(true); await settle();
 		expect(vi.getTimerCount()).toBe(0);
@@ -119,7 +150,7 @@ describe('visible existing reaction animation', () => {
 		const pageVisibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
 		const view = render(MkZalipReactionFloat, { props: props() }); await settle();
 		visibility(true); await settle();
-		expect(view.container.querySelectorAll('[data-reaction]')).toHaveLength(8);
+		expect(view.container.querySelectorAll('[data-reaction]')).toHaveLength(5);
 		const beforeHidden = observers.length - 1;
 		pageVisibility.mockReturnValue('hidden');
 		document.dispatchEvent(new Event('visibilitychange')); await settle();
@@ -135,7 +166,7 @@ describe('visible existing reaction animation', () => {
 		visibility(true, beforeHidden); await settle();
 		expect(vi.getTimerCount()).toBe(0);
 		visibility(true); await settle();
-		expect(view.container.querySelectorAll('[data-reaction]')).toHaveLength(8);
+		expect(view.container.querySelectorAll('[data-reaction]')).toHaveLength(5);
 		view.unmount();
 		const countAfterUnmount = observers.length;
 		document.dispatchEvent(new Event('visibilitychange')); await settle();

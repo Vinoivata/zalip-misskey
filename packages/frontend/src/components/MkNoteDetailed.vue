@@ -48,7 +48,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<template v-else>
 		<article v-if="contentContext?.isRoot" :class="$style.note"><MkZalipDiscussionCard :context="contentContext"/></article>
 		<article v-else ref="articleEl" :class="$style.note" @contextmenu.stop="onContextmenu">
-			<MkZalipReactionFloat :noteId="appearNote.id" :target="articleEl" :reactions="$appearNote.reactions" :reactionEmojis="$appearNote.reactionEmojis" :enabled="!appearNote.isHidden && (appearNote.cw == null || showContent)"/>
+			<MkZalipReactionFloat :noteId="appearNote.id" :target="articleEl" :myReaction="$appearNote.myReaction" :reactions="$appearNote.reactions" :reactionEmojis="$appearNote.reactionEmojis" :enabled="!appearNote.isHidden && (appearNote.cw == null || showContent)"/>
 			<header :class="$style.noteHeader">
 				<MkAvatar :class="$style.noteHeaderAvatar" :user="appearNote.user" link preview/>
 				<div :class="$style.noteHeaderBody">
@@ -438,10 +438,10 @@ const keymap = {
 </script>
 
 <style lang="scss" module>
-.summaryReaction { width: 18px; height: 18px; font-size: 18px; object-fit: contain; }
+.summaryReaction { width: 20px; height: 20px; font-size: 20px; object-fit: contain; }
 .root {
 	position: relative;
-	font-size: 14px;
+	font-size: max(1em, 14px);
 	transition: box-shadow 0.1s ease;
 	overflow: clip;
 	contain: content;
@@ -523,8 +523,8 @@ const keymap = {
 
 .note {
 	position: relative;
-	padding: 18px 18px 0;
-	font-size: 18px;
+	padding: 16px 16px 0;
+	font-size: inherit;
 
 	&:hover > .main > .footer > .button {
 		opacity: 1;
@@ -534,28 +534,29 @@ const keymap = {
 .noteHeader {
 	display: flex;
 	position: relative;
-	margin-bottom: 16px;
+	margin-bottom: 12px;
 	align-items: center;
 }
 
 .noteHeaderAvatar {
 	display: block;
 	flex-shrink: 0;
-	width: 48px;
-	height: 48px;
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
 }
 
 .noteHeaderBody {
 	flex: 1;
 	min-width: 0;
-	padding: 0 12px;
-	font-size: 16px;
+	padding: 0 8px;
+	font-size: inherit;
 }
 
 .noteContent {
 	container-type: inline-size;
 	overflow-wrap: break-word;
-	line-height: 1.45;
+	line-height: 1.55;
 }
 
 .menuButton { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; border-radius: 50%; font-size: 18px; color: var(--MI_THEME-fgTransparentWeak); }
@@ -615,20 +616,20 @@ const keymap = {
 	font-size: 14px;
 }
 .viewCount { display: inline-flex; align-items: center; gap: 4px; margin-inline-start: 12px; color: var(--MI_THEME-fgTransparentWeak); font-size: 12px; font-variant-numeric: tabular-nums; }
-.actionRow { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; min-height: 56px; border-top: 1px solid var(--MI_THEME-divider); }
+.actionRow { display: flex; align-items: center; flex-wrap: wrap; gap: 18px; min-height: 48px; padding: 4px 0; }
 .reactionAction { display: inline-flex; align-items: center; gap: 2px; }
 .reactionCount { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; min-height: 44px; color: var(--MI_THEME-fgTransparentWeak); font-size: 13px; font-variant-numeric: tabular-nums; }
 .reactionCount:focus-visible { outline: 2px solid var(--MI_THEME-focus); border-radius: 8px; }
 .noteFooterButton.reacted { color: var(--MI_THEME-accent); }
-.actionRow > .bookmark { min-width: 44px; min-height: 44px; > svg { width: 18px; height: 18px; } }
+.actionRow > .bookmark { min-width: 40px; min-height: 40px; > svg { width: 20px; height: 20px; } }
 .discussionSelect { max-width: 50%; padding: 5px 8px; border: 1px solid var(--MI_THEME-divider); border-radius: 7px; background: transparent; color: var(--MI_THEME-fgTransparentWeak); font: inherit; font-size: 12px; }
 
 .noteFooterButton {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	min-width: 44px;
-	min-height: 44px;
+	min-width: 40px;
+	min-height: 40px;
 	gap: 5px;
 	margin: 0;
 	padding: 0;
@@ -636,7 +637,7 @@ const keymap = {
 	border: 0;
 	border-radius: 999px;
 	font-size: 20px;
-	> svg { width: 18px; height: 18px; }
+	> svg { width: 20px; height: 20px; }
 
 	&:hover {
 		color: var(--MI_THEME-fgHighlighted);
@@ -755,8 +756,12 @@ const keymap = {
 
 @container (max-width: 500px) {
 	.root {
-		font-size: 14px;
+		font-size: max(1em, 15px);
 	}
+	.summaryReaction, .noteFooterButton > svg, .actionRow > .bookmark > svg { width: 18px; height: 18px; }
+	.summaryReaction { font-size: 18px; }
+	.noteFooterButton > i { font-size: 18px; }
+	.actionRow { gap: 10px; }
 	.tab {
 		padding-inline: 4px;
 		font-size: 12px;
@@ -794,7 +799,7 @@ const keymap = {
 
 @container (max-width: 300px) {
 	.root {
-		font-size: 14px;
+		font-size: max(1em, 15px);
 	}
 
 	.noteHeaderAvatar {
