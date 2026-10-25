@@ -32,7 +32,7 @@ describe('continue watching rail', () => {
 	it('shows real server history and exact episode navigation without starting playback', async () => {
 		const view = setup();
 		const link = await view.findByRole('link', { name: i18n.tsx.zalip._progress.continueTitle({ title: item.work.title }) });
-		expect(link.getAttribute('href')).toBe('/zalip/saved-title?season=2&episode=3');
+		expect(link.getAttribute('href')).toBe('/zalip/saved-title/watch?season=2&episode=3&provider=kodik&translation=serial-123');
 		expect(view.getByRole('progressbar').getAttribute('value')).toBe('20');
 		expect(view.getByText('2:00 / 10:00')).toBeTruthy();
 		expect(misskeyApiZalip).toHaveBeenCalledTimes(1);

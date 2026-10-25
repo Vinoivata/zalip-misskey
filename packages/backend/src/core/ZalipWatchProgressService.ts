@@ -156,6 +156,34 @@ export class ZalipWatchProgressService {
 		return { progress: row && !row.hidden ? this.pack(row) : null };
 	}
 
+	/** Read the latest owned targets, including completed episodes, without creating playback sessions. */
+	public async batch(me: MiLocalUser, workIds: readonly string[]) {
+		if (!Array.isArray(workIds) || workIds.length < 1 || workIds.length > 50 || workIds.some(id => typeof id !== 'string' || !/^[A-Za-z0-9]{1,32}$/u.test(id)) || new Set(workIds).size !== workIds.length) throw new ZalipProgressError('INVALID_ZALIP_PROGRESS');
+		const rows = await this.db.getRepository(MiZalipWatchProgress).createQueryBuilder('progress')
+			.innerJoin('progress.work', 'work').leftJoinAndSelect('progress.episode', 'episode').leftJoinAndSelect('episode.season', 'season')
+			.select(['progress.userId', 'progress.workId', 'progress.episodeId', 'progress.provider', 'progress.translationId', 'progress.mode', 'progress.positionSeconds', 'progress.durationSeconds', 'progress.completed', 'progress.hidden', 'progress.lastPlayedAt', 'episode.id', 'episode.episodeNumber', 'season.id', 'season.workId', 'season.seasonNumber'])
+			.where('progress.userId = :userId', { userId: me.id })
+			.andWhere('progress.workId IN (:...workIds)', { workIds: [...workIds] })
+			.andWhere('work.publicationState = :publicationState', { publicationState: 'published' })
+			.andWhere('progress.hidden = false')
+			// Match zalipMediaType: serial evidence wins over a movie label, and a missing episode is never a film.
+			.andWhere(`(
+				(progress.episodeId IS NOT NULL AND episode.id = progress.episodeId AND season.workId = progress.workId)
+				OR (progress.episodeId IS NULL
+					AND work.kind <> 'series' AND (work.tmdbMediaType IS NULL OR work.tmdbMediaType <> 'tv')
+					AND NOT EXISTS (SELECT 1 FROM "zalip_season" s WHERE s."workId" = progress."workId")
+					AND NOT EXISTS (SELECT 1 FROM "zalip_external_identity" i WHERE i."workId" = progress."workId" AND i."entityType" = 'tv')
+					AND (work.kind = 'movie' OR work.tmdbMediaType = 'movie'
+						OR EXISTS (SELECT 1 FROM "zalip_external_identity" i WHERE i."workId" = progress."workId" AND i."entityType" = 'movie')))
+			)`)
+			.limit(workIds.length).getMany();
+		const byWork = new Map(rows.filter(row => row.userId === me.id && !row.hidden && (row.episodeId === null || (row.episode?.id === row.episodeId && row.episode.season?.workId === row.workId))).map(row => [row.workId, row]));
+		return { items: workIds.flatMap(id => {
+			const row = byWork.get(id);
+			return row ? [this.pack(row)] : [];
+		}) };
+	}
+
 	public async start(me: MiLocalUser, target: ProgressTarget) {
 		const runtime = await this.runtime();
 		return this.db.transaction(async manager => {

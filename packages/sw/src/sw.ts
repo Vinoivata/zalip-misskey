@@ -12,6 +12,7 @@ import type { Locale } from 'i18n';
 import { createEmptyNotification, createNotification } from '@/scripts/create-notification.js';
 import { swLang } from '@/scripts/lang.js';
 import * as swos from '@/scripts/operations.js';
+import { zalipWatchRoute } from '@@/js/zalip-work-route.js';
 
 async function respondToNavigation(request: Request): Promise<Response> {
 	const controller = new AbortController();
@@ -182,10 +183,10 @@ globalThis.addEventListener('notificationclick', (ev: ServiceWorkerGlobalScopeEv
 								client = await swos.openNote(data.body.note.id, loginId);
 								break;
 							case 'zalipEpisodeReleased':
-								client = await swos.openClient('push', `/zalip/${data.body.workSlug}`, loginId);
+								client = await swos.openClient('push', zalipWatchRoute(data.body.workSlug, data.body.seasonNumber, data.body.episodeNumber), loginId);
 								break;
 							case 'zalipAllohaAvailable':
-								client = await swos.openClient('push', `/zalip/${data.body.workSlug}`, loginId);
+								client = await swos.openClient('push', zalipWatchRoute(data.body.workSlug, data.body.seasonNumber, data.body.episodeNumber, 'alloha'), loginId);
 								break;
 							default:
 								if ('note' in data.body) {

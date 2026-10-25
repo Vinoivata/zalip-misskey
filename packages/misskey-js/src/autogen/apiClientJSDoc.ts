@@ -5629,6 +5629,17 @@ declare module '../api.js' {
     ): Promise<SwitchCaseResponseType<E, P>>;
 
     /**
+     * Read only your latest visible playback targets for up to 50 published works, including completed episodes. No playback sessions or provider resources are exposed.
+     *
+     * **Credential required**: *Yes* / **Permission**: *read:account*
+     */
+    request<E extends 'zalip/progress/batch', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
      * Page only your unfinished, visible playback targets for published works by server playback time.
      *
      * **Credential required**: *Yes* / **Permission**: *read:account*

@@ -81,7 +81,7 @@ import { definePage } from '@/page.js';
 import { i18n } from '@/i18n.js';
 import { misskeyApiZalip } from '@/utility/misskey-api.js';
 import { useZalipImages, zalipHeroImageNearby } from '@/utility/zalip-image.js';
-import { zalipWorkRoute } from '@/utility/zalip-work-route.js';
+import { zalipWatchRoute, zalipWorkRoute } from '@/utility/zalip-work-route.js';
 import { useZalipHorizontalDrag } from '@/composables/use-zalip-horizontal-drag.js';
 import MkZalipFeed from '@/components/MkZalipFeed.vue';
 import MkZalipIcon from '@/components/MkZalipIcon.vue';
@@ -246,7 +246,7 @@ const showcaseItems = computed<ZalipShowcaseItem[]>(() => {
 		work: release.work,
 		badge: releaseLabel(release),
 		subtitle: release.episode?.title || i18n.ts.zalip.releaseAvailable,
-		to: zalipWorkRoute(release.work.slug, release.season?.seasonNumber, release.episode?.episodeNumber),
+		to: zalipWatchRoute(release.work.slug, release.season?.seasonNumber, release.episode?.episodeNumber),
 	}));
 
 	if (!releaseEventsLoaded.value) return [];

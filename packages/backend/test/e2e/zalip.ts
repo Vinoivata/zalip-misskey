@@ -656,6 +656,11 @@ describe('Zalip private continue watching', () => {
 		assert.strictEqual((await api('zalip/progress/show', { workId: movieId }, { token: readToken })).status, 200);
 		const forbidden = await api('zalip/progress/start', film, { token: readToken });
 		assert.strictEqual(forbidden.status, 403); assert.strictEqual(castAsError(forbidden.body).error.code, 'PERMISSION_DENIED');
+		assert.strictEqual((await api('zalip/progress/batch', { workIds: [movieId] })).status, 401);
+		assert.strictEqual((await api('zalip/progress/batch', { workIds: [movieId] }, { token: readToken })).status, 200);
+		const notificationToken = await createAppToken(owner, ['read:notifications']);
+		const privateHistory = await api('zalip/progress/batch', { workIds: [movieId] }, { token: notificationToken });
+		assert.strictEqual(privateHistory.status, 403); assert.strictEqual(castAsError(privateHistory.body).error.code, 'PERMISSION_DENIED');
 	});
 
 	test('persists exact seconds, permits seek backwards and never edits personal library/importer state', async () => {
@@ -675,6 +680,44 @@ describe('Zalip private continue watching', () => {
 		const otherWrite = await api('zalip/progress/update', { workId: movieId, sessionId: started.body.sessionId, sequence: 99 }, other); assert.strictEqual(otherWrite.body.accepted, false);
 		const publicWork = await api('zalip/works/show', { slug: movieId });
 		for (const key of ['positionSeconds', 'durationSeconds', 'sessionId', 'private-progress-importer-baseline']) assert.strictEqual(JSON.stringify(publicWork.body).includes(key), false);
+	});
+
+	test('batch reads completed owned targets only, preserving publication, reset and canonical episode boundaries', async () => {
+		const started = await api('zalip/progress/start', film, owner);
+		await api('zalip/progress/update', { workId: movieId, sessionId: started.body.sessionId, sequence: 1, positionSeconds: 1000, durationSeconds: 1000, completed: true }, owner);
+		await api('zalip/progress/start', serial, owner);
+		await api('zalip/progress/start', film, other);
+		const repository = db.getRepository(MiZalipWatchProgress);
+		const filmRow = await repository.findOneByOrFail({ userId: owner.id, workId: movieId });
+		await repository.insert([draftId, extraId].map(workId => ({
+			userId: owner.id, workId, episodeId: null, provider: filmRow.provider, translationId: filmRow.translationId,
+			mode: filmRow.mode, resourceId: filmRow.resourceId, positionSeconds: filmRow.positionSeconds, durationSeconds: filmRow.durationSeconds,
+			completed: filmRow.completed, hidden: workId === extraId, sessionId: filmRow.sessionId, sequence: filmRow.sequence,
+			lastPlayedAt: filmRow.lastPlayedAt, createdAt: filmRow.createdAt,
+		})));
+		try {
+			const result = await api('zalip/progress/batch', { workIds: [movieId, seriesId, draftId, extraId, 'missingwork'] }, owner);
+			assert.strictEqual(result.status, 200);
+			assert.deepStrictEqual(result.body.items.map(item => item.workId), [movieId, seriesId]);
+			assert.strictEqual(result.body.items[0].completed, true);
+			assert.strictEqual(result.body.items[0].positionSeconds, 1000);
+			assert.strictEqual(result.body.items[1].seasonNumber, 0);
+			assert.strictEqual(result.body.items[1].episodeNumber, 0);
+			for (const key of ['sessionId', 'resourceId', 'sequence', 'hidden', 'userId', 'private-progress-importer-baseline']) assert.strictEqual(JSON.stringify(result.body).includes(key), false);
+			assert.deepStrictEqual(await repository.findOneByOrFail({ userId: owner.id, workId: movieId }), filmRow);
+			const others = await api('zalip/progress/batch', { workIds: [movieId, seriesId] }, other);
+			assert.deepStrictEqual(others.body.items.map(item => item.workId), [movieId]);
+			assert.strictEqual(others.body.items[0].positionSeconds, null);
+			await repository.update({ userId: owner.id, workId: movieId }, { episodeId });
+			assert.deepStrictEqual((await api('zalip/progress/batch', { workIds: [movieId] }, owner)).body.items, []);
+			await repository.update({ userId: owner.id, workId: movieId }, { episodeId: null });
+			await repository.update({ userId: owner.id, workId: seriesId }, { episodeId: null });
+			assert.deepStrictEqual((await api('zalip/progress/batch', { workIds: [seriesId] }, owner)).body.items, []);
+			await repository.update({ userId: owner.id, workId: seriesId }, { episodeId });
+		} finally {
+			await repository.delete({ userId: owner.id, workId: draftId });
+			await repository.delete({ userId: owner.id, workId: extraId });
+		}
 	});
 
 	test('canonical specials are valid and a new episode/session defeats delayed saves', async () => {

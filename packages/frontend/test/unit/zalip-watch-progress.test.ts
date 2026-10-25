@@ -136,8 +136,8 @@ describe('continue watching presentation', () => {
 		expect(await kodikResourceFingerprint('serial-123', 'http://kodik.example/serial/123/cut-one/720p', '718', subtle)).toBeNull();
 	});
 	it('uses exact canonical episode links without autoplay or time URL parameters', () => {
-		expect(continueWatchingRoute({ work: { slug: 'a/b' }, seasonNumber: 0, episodeNumber: 3 } as ContinueWatchingItem)).toBe('/zalip/a%2Fb?season=0&episode=3');
-		expect(continueWatchingRoute({ work: { slug: 'movie' }, seasonNumber: null, episodeNumber: null } as ContinueWatchingItem)).toBe('/zalip/movie');
+		expect(continueWatchingRoute({ work: { slug: 'a/b' }, seasonNumber: 0, episodeNumber: 3, provider: 'kodik', translationId: 'serial-123', positionSeconds: 147 } as ContinueWatchingItem)).toBe('/zalip/a%2Fb/watch?season=0&episode=3&provider=kodik&translation=serial-123');
+		expect(continueWatchingRoute({ work: { slug: 'movie' }, seasonNumber: null, episodeNumber: null, provider: 'collaps', translationId: 'voice-one', positionSeconds: 147 } as ContinueWatchingItem)).toBe('/zalip/movie/watch?provider=collaps&translation=voice-one');
 	});
 	it('does not treat provider or voice editions as interchangeable', () => {
 		const target = { workId: 'w', episodeId: 'e', provider: 'kodik' as const, translationId: 'serial-123' };

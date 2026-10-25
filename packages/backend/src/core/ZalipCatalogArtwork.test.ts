@@ -8,6 +8,7 @@ import { ZalipCatalogService } from '@/core/ZalipCatalogService.js';
 import { MiDriveFile } from '@/models/DriveFile.js';
 import { MiZalipWork } from '@/models/ZalipWork.js';
 import { MiZalipSeason } from '@/models/ZalipSeason.js';
+import { MiZalipExternalIdentity } from '@/models/ZalipExternalIdentity.js';
 import type { Config } from '@/config.js';
 import { meta as listMeta } from '@/server/api/endpoints/zalip/works/list.js';
 import { meta as pageMeta } from '@/server/api/endpoints/zalip/works/page.js';
@@ -30,6 +31,7 @@ function fixture(files: MiDriveFile[] = [file()], works: MiZalipWork[] = []) {
 		if (model === MiDriveFile) return { find: lookup };
 		if (model === MiZalipWork) return workRepository;
 		if (model === MiZalipSeason) return seasons;
+		if (model === MiZalipExternalIdentity) return { find: vi.fn(async () => []) };
 		throw new Error('Only read-only native artwork lookups are allowed');
 	});
 	const query = vi.fn(async () => []);

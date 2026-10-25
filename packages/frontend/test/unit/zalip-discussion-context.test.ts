@@ -23,7 +23,7 @@ describe('canonical cinema comment context', () => {
 	});
 	it('links a title and its exact special episode to their own discussion', () => {
 		expect(zalipDiscussionRoute(context)).toBe('/zalip/sample-title#discussion');
-		expect(zalipDiscussionRoute({ ...context, episodeId: 'special', seasonNumber: 0, episodeNumber: 2 })).toBe('/zalip/sample-title?season=0&episode=2#discussion');
+		expect(zalipDiscussionRoute({ ...context, episodeId: 'special', seasonNumber: 0, episodeNumber: 2 })).toBe('/zalip/sample-title/watch?season=0&episode=2#discussion');
 	});
 	it('renders the title identity without technical account names or profile links', () => {
 		const view = render(MkZalipDiscussionCard, { props: { context }, global: { stubs: {

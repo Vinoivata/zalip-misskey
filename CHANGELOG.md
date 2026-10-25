@@ -4,6 +4,8 @@
 - Feat: Add a guarded administrator action to refresh an existing title's Vibix player through the native availability queue while preserving metadata, artwork and saved field protection.
 
 ### Client
+- Feat: Open Zalip playback and episode discussions on a separate watch page, keeping title information distinct and preserving exact episode and edition links from releases, history and notifications.
+- Enhance: Show release notifications as title cards with current posters, a new-episode link and a separate personal playback position, using the existing Notr-style interface.
 - Enhance: Organize the existing Zalip player around an inline desktop translation panel, a mobile translation sheet and a compact episode grid, keeping the title layout and provider playback intact.
 - Fix: Match Zalip feed, open posts and reply proportions to the Notr reference, and replay only the viewer's selected reaction with reduced-motion support.
 - Fix: Resolve known Vibix episode and voice pairs to their exact public SDK movie IDs, keeping legacy series fallback for unknown pairs and unchanged iframe isolation.
@@ -99,6 +101,7 @@
 - Feat: Add discussions and essays feed tabs with shared title-linked review cards, independent editing and protected spoiler controls while retaining native comment actions.
 
 ### Server
+- Enhance: Pack current public title posters for release notifications in batches and provide a bounded account-scoped playback-context API, including completed episode targets without exposing player sessions.
 - Enhance: Enrich Vibix serial players through a bounded exact-identity publisher catalogue lookup and retain valid episode maps only within the same provider account and SDK parent.
 - Feat: Store one review and one essay per author and title independently, preserve legacy review responses and refuse destructive schema rollback when both formats exist.
 - Fix: Persist explicit removal of native community banners while preserving omitted values and owned-file checks.

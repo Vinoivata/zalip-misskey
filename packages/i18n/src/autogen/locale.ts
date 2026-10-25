@@ -4525,6 +4525,22 @@ export interface Locale extends ILocale {
              */
             "resumeAt": ParameterizedString<"time">;
             /**
+             * Вы остановились: {target}
+             */
+            "stoppedAt": ParameterizedString<"target">;
+            /**
+             * Вы остановились на {time}
+             */
+            "stoppedAtMovie": ParameterizedString<"time">;
+            /**
+             * Последний просмотр: {target}
+             */
+            "lastPlayed": ParameterizedString<"target">;
+            /**
+             * К последнему просмотру
+             */
+            "lastPlayedAction": string;
+            /**
              * Сначала
              */
             "startOver": string;

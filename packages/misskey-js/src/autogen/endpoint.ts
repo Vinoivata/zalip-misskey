@@ -797,6 +797,8 @@ import type {
 	ZalipPlaybackAllohaShowResponse,
 	ZalipPlaybackSourcesRequest,
 	ZalipPlaybackSourcesResponse,
+	ZalipProgressBatchRequest,
+	ZalipProgressBatchResponse,
 	ZalipProgressContinueRequest,
 	ZalipProgressContinueResponse,
 	ZalipProgressResetRequest,
@@ -1343,6 +1345,7 @@ export type Endpoints = {
 	'zalip/notes/views/record': { req: ZalipNotesViewsRecordRequest; res: ZalipNotesViewsRecordResponse };
 	'zalip/playback/alloha/show': { req: ZalipPlaybackAllohaShowRequest; res: ZalipPlaybackAllohaShowResponse };
 	'zalip/playback/sources': { req: ZalipPlaybackSourcesRequest; res: ZalipPlaybackSourcesResponse };
+	'zalip/progress/batch': { req: ZalipProgressBatchRequest; res: ZalipProgressBatchResponse };
 	'zalip/progress/continue': { req: ZalipProgressContinueRequest; res: ZalipProgressContinueResponse };
 	'zalip/progress/reset': { req: ZalipProgressResetRequest; res: ZalipProgressResetResponse };
 	'zalip/progress/show': { req: ZalipProgressShowRequest; res: ZalipProgressShowResponse };

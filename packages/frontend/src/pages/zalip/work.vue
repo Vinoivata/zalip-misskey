@@ -9,8 +9,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div :class="$style.page">
 			<div v-if="pending" :class="$style.state"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i> Загружаем тайтл…</div>
 			<div v-else-if="work == null" :class="$style.state"><i class="ti ti-movie-off" aria-hidden="true"></i> Тайтл не найден или ещё не опубликован.</div>
-			<article v-else :class="$style.work">
-				<section :class="[$style.hero, { [$style.hasLogo]: images.ready(work.logoPath), [$style.hasMobilePoster]: images.source(work.posterPath) }]">
+			<article v-else :class="[$style.work, { [$style.watchPage]: watchPage }]">
+				<header v-if="watchPage" :class="$style.watchHeader">
+					<MkA :to="zalipWorkRoute(work.slug)" :class="$style.watchBack" :aria-label="i18n.ts.zalip.aboutTitle"><i class="ti ti-arrow-left" aria-hidden="true"></i></MkA>
+					<div :class="$style.watchHeading"><h1><MkA :to="zalipWorkRoute(work.slug)">{{ work.title }}</MkA></h1><p>{{ selectedEpisode ? episodeLabel(selectedEpisode) : [kindLabel(work.kind), work.releaseYear].filter(Boolean).join(' · ') }}</p></div>
+					<button type="button" class="_button" :class="$style.watchLibrary" :disabled="personalActionsDisabled" aria-haspopup="menu" @click="showLibraryMenu"><i :class="saved ? libraryStatusIcon(libraryStatus) : isFavorite ? 'ti ti-bookmark' : 'ti ti-bookmark-plus'" aria-hidden="true"></i><span>{{ saved ? libraryStatusText(libraryStatus) : i18n.ts.zalip.addToList }}</span></button>
+				</header>
+				<section v-else :class="[$style.hero, { [$style.hasLogo]: images.ready(work.logoPath), [$style.hasMobilePoster]: images.source(work.posterPath) }]">
 					<div v-if="images.source(work.backdropPath, 'w1280')" :class="$style.heroBackground" aria-hidden="true"><img :src="images.source(work.backdropPath, 'w1280')!" alt="" decoding="async" width="1280" height="720" @error="images.failed"></div>
 					<div :class="$style.mobileArtwork">
 						<div v-if="mobileArtworkSource" :class="$style.mobileArtworkBackdrop" aria-hidden="true"><img :src="mobileArtworkSource" alt="" decoding="async" width="1280" height="720" @error="images.failed"></div>
@@ -24,7 +29,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<aside :class="$style.sidebar">
 								<div :class="$style.poster"><img v-if="images.source(work.posterPath)" :src="images.source(work.posterPath)!" :alt="work.title" width="500" height="750" decoding="async" @error="images.failed"><i v-else class="ti ti-movie" aria-hidden="true"></i></div>
 								<div :class="$style.sidebarActions">
-									<button type="button" class="_button" :class="$style.watchButton" @click="openPlayer"><i class="ti ti-player-play-filled" aria-hidden="true"></i>{{ i18n.ts.zalip.watchTitle }}</button>
+									<MkA :to="watchEntryRoute" class="_button" :class="$style.watchButton"><i class="ti ti-player-play-filled" aria-hidden="true"></i>{{ i18n.ts.zalip.watchTitle }}</MkA>
 									<button type="button" class="_button" :class="$style.sideButton" @click="focusDiscussion">{{ i18n.ts.zalip.discussTitle }}</button>
 								</div>
 							</aside>
@@ -50,21 +55,23 @@ SPDX-License-Identifier: AGPL-3.0-only
 							</div>
 						</div>
 						<div :class="$style.mobilePrimaryActions" role="group" :aria-label="i18n.ts.zalip.watchTitle">
-							<button type="button" class="_button" :class="$style.watchButton" @click="openPlayer"><i class="ti ti-player-play-filled" aria-hidden="true"></i>{{ i18n.ts.zalip.watchTitle }}</button>
+							<MkA :to="watchEntryRoute" class="_button" :class="$style.watchButton"><i class="ti ti-player-play-filled" aria-hidden="true"></i>{{ i18n.ts.zalip.watchTitle }}</MkA>
 							<button type="button" class="_button" :class="$style.sideButton" @click="focusDiscussion"><i class="ti ti-message-circle" aria-hidden="true"></i>{{ i18n.ts.zalip.discussTitle }}</button>
 						</div>
 					</div>
 				</section>
 				<div v-if="libraryLoadFailed" :class="$style.libraryWarning" role="alert"><span>{{ i18n.ts.zalip.workLibraryLoadFailed }}</span><button type="button" class="_button" :disabled="libraryPending" @click="retryPersonalLibrary">{{ i18n.ts.retry }}</button></div>
-				<div :class="$style.actionStrip" role="group" :aria-label="i18n.ts.zalip.workActions">
+				<div v-if="!watchPage" :class="$style.actionStrip" role="group" :aria-label="i18n.ts.zalip.workActions">
 					<button type="button" class="_button" :disabled="personalActionsDisabled" :aria-label="personalRating == null ? i18n.ts.zalip.workRateAction : `${i18n.ts.zalip.myRating}: ${ratingLabel}`" @click="choosePersonalRating"><span :class="$style.actionSymbol"><span v-if="personalRating != null" :class="$style.ratingBadge"><i class="ti ti-star-filled" aria-hidden="true"></i>{{ personalRating }}</span><i v-else class="ti ti-star" aria-hidden="true"></i></span><span>{{ personalRating == null ? i18n.ts.zalip.workRateAction : i18n.ts.zalip.myRating }}</span></button>
 					<button type="button" class="_button" :class="{ [$style.actionActive]: saved || isFavorite }" :disabled="personalActionsDisabled" aria-haspopup="menu" @click="showLibraryMenu"><span :class="$style.actionSymbol"><i :class="saved ? libraryStatusIcon(libraryStatus) : isFavorite ? 'ti ti-bookmark' : 'ti ti-bookmark-plus'" aria-hidden="true"></i></span><span>{{ saved ? libraryStatusText(libraryStatus) : isFavorite ? i18n.ts.zalip.inBookmarks : i18n.ts.zalip.addToList }}</span></button>
 					<button type="button" class="_button" @click="shareWork"><span :class="$style.actionSymbol"><i class="ti ti-repeat" aria-hidden="true"></i></span><span>{{ i18n.ts.zalip.workRepost }}</span></button>
 					<button ref="moreTrigger" type="button" class="_button" :aria-label="i18n.ts.zalip.more" :disabled="personalActionsDisabled" aria-haspopup="dialog" :aria-expanded="workMenuOpen" @click="showWorkMenu"><span :class="$style.actionSymbol"><i class="ti ti-dots" aria-hidden="true"></i></span><span>{{ i18n.ts.zalip.more }}</span></button>
 				</div>
-				<p v-if="work.description" :class="$style.description">{{ work.description }}</p>
+				<p v-if="!watchPage && work.description" :class="$style.description">{{ work.description }}</p>
 				<div :class="$style.content">
-					<section ref="playerSection" :class="$style.player" :aria-label="i18n.ts.zalip.playerTab">
+					<div v-if="!watchPage && savedWatchProgress && !savedWatchProgress.completed" :class="$style.resumeBar"><div><strong>{{ i18n.ts.zalip.libraryContinue }}</strong><span v-if="savedWatchProgress.seasonNumber != null && savedWatchProgress.episodeNumber != null">{{ i18n.tsx.zalip.releaseSeason({ number: String(savedWatchProgress.seasonNumber) }) }} · {{ i18n.tsx.zalip.releaseEpisode({ number: String(savedWatchProgress.episodeNumber) }) }}</span></div><MkA :to="savedWatchRoute" :class="$style.watchButton">{{ i18n.ts.zalip.libraryContinue }}</MkA></div>
+					<div v-if="!watchPage && showReleaseSubscription" :class="$style.subscriptionBar"><button type="button" class="_button" :class="[$style.subscribeButton, { [$style.subscribed]: releaseSubscribed }]" :disabled="personalActionsDisabled" :aria-pressed="releaseSubscribed" @click="toggleReleaseSubscription"><i :class="releaseSubscribed ? 'ti ti-bell-check' : 'ti ti-bell-plus'" aria-hidden="true"></i><span>{{ releaseSubscribed ? i18n.ts.zalip.releaseSubscribed : releaseSubscriptionLabel }}</span></button></div>
+					<section v-if="watchPage" ref="playerSection" :class="$style.player" :aria-label="i18n.ts.zalip.playerTab">
 						<div v-if="$i && savedWatchProgress && !savedWatchProgress.completed" :class="$style.resumeBar">
 							<div><strong>{{ i18n.ts.zalip.libraryContinue }}</strong><span v-if="savedWatchProgress.seasonNumber != null && savedWatchProgress.episodeNumber != null">{{ i18n.tsx.zalip.releaseSeason({ number: String(savedWatchProgress.seasonNumber) }) }} · {{ i18n.tsx.zalip.releaseEpisode({ number: String(savedWatchProgress.episodeNumber) }) }}</span></div>
 							<button type="button" class="_button" :disabled="resumingWatch" @click="resumeWatch">{{ savedWatchProgress.positionSeconds != null && savedWatchProgress.positionSeconds > 0 ? i18n.tsx.zalip._progress.resumeAt({ time: watchTimeLabel(savedWatchProgress.positionSeconds) }) : i18n.ts.zalip._progress.resume }}</button>
@@ -78,11 +85,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 						</div>
 						<div :class="[$style.watchLayout, { [$style.watchLayoutWithEditions]: availablePlaybackSources.length }]">
 								<div :class="$style.watchFrame">
-								<div v-if="work.trailerYoutubeKey && playerView === 'trailer'" :class="$style.playerFrame"><iframe :src="youtubeEmbed(work.trailerYoutubeKey)" :title="i18n.ts.zalip.trailerTab + ': ' + work.title" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>
-								<div v-else-if="$i && playerOpen && activePlayerIframe" :class="$style.playerFrame"><iframe :key="`${activePlayerIframeKey}:${resumeFrameRevision}`" ref="playbackIframe" :src="selectedProvider === 'vibix' ? undefined : resumeIframeUrl ?? activePlayerIframe" :srcdoc="activeVibixDocument ?? undefined" :sandbox="selectedProvider === 'vibix' ? vibixPlayerSandbox : undefined" :title="i18n.ts.zalip.playerTab + ': ' + work.title" loading="lazy" referrerpolicy="origin" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>
+								<div v-if="activePage && work.trailerYoutubeKey && playerView === 'trailer'" :class="$style.playerFrame"><iframe :src="youtubeEmbed(work.trailerYoutubeKey)" :title="i18n.ts.zalip.trailerTab + ': ' + work.title" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>
+								<div v-else-if="activePage && $i && playerOpen && activePlayerIframe" :class="$style.playerFrame"><iframe :key="`${activePlayerIframeKey}:${resumeFrameRevision}`" ref="playbackIframe" :src="selectedProvider === 'vibix' ? undefined : resumeIframeUrl ?? activePlayerIframe" :srcdoc="activeVibixDocument ?? undefined" :sandbox="selectedProvider === 'vibix' ? vibixPlayerSandbox : undefined" :title="i18n.ts.zalip.playerTab + ': ' + work.title" loading="lazy" referrerpolicy="origin" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>
 									<div v-else :class="$style.playerPreview">
 										<img v-if="episodeArtwork(selectedEpisode, 'w1280')" :src="episodeArtwork(selectedEpisode, 'w1280')!" alt="" width="1280" height="720" loading="lazy" decoding="async" @error="images.failed">
-										<button v-if="$i && activePlayback && selectedEpisodeAvailable" type="button" class="_button" :class="$style.playOverlay" :aria-label="i18n.ts.zalip.watchTitle" @click="openSelectedPlayer"><i class="ti ti-player-play-filled" aria-hidden="true"></i></button>
+										<p v-if="watchLinkUnavailable" :class="$style.playerState" role="alert"><i class="ti ti-alert-circle" aria-hidden="true"></i>{{ i18n.ts.zalip.playerEpisodeUnavailable }}</p>
+										<button v-else-if="$i && activePlayback && selectedEpisodeAvailable" type="button" class="_button" :class="$style.playOverlay" :aria-label="i18n.ts.zalip.watchTitle" @click="openSelectedPlayer"><i class="ti ti-player-play-filled" aria-hidden="true"></i></button>
 										<button v-else-if="!$i" type="button" class="_button" :class="$style.playerState" @click="signInForDiscussion"><i class="ti ti-login" aria-hidden="true"></i>{{ i18n.ts.zalip.playerSignIn }}</button>
 										<p v-else-if="playerEpisodeContextBlocked && episodesPending" :class="$style.playerState" role="status"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i>{{ i18n.ts.zalip.playerEpisodesLoading }}</p>
 										<p v-else-if="playerEpisodeContextBlocked && episodesLoadFailed" :class="$style.playerState" role="status"><i class="ti ti-alert-circle" aria-hidden="true"></i>{{ i18n.ts.zalip.playerEpisodesLoadFailed }}</p>
@@ -138,7 +146,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							</div>
 						</template>
 					</section>
-					<section v-if="selectedEpisode" :class="$style.episodeGuide" @touchstart.passive="startEpisodeSwipe" @touchend.passive="finishEpisodeSwipe" @touchcancel="episodeSwipeStart = null">
+					<section v-if="watchPage && selectedEpisode" :class="$style.episodeGuide" @touchstart.passive="startEpisodeSwipe" @touchend.passive="finishEpisodeSwipe" @touchcancel="episodeSwipeStart = null">
 						<img v-if="episodeArtwork(selectedEpisode)" :key="selectedEpisode.id" :class="$style.episodeGuideStill" :src="episodeArtwork(selectedEpisode)!" alt="" width="480" height="270" loading="lazy" decoding="async" @error="images.failed">
 						<div :class="$style.episodeGuideContent" aria-live="polite">
 							<p>{{ i18n.ts.zalip.episodeInformation }}</p>
@@ -164,6 +172,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<p v-if="discussionError" :class="$style.discussionError">{{ discussionError }}</p>
 						</section>
 					</section>
+					<template v-if="!watchPage">
 					<section v-if="work.galleryPaths.length" :class="$style.gallery">
 						<h2><i class="ti ti-photo" aria-hidden="true"></i> {{ i18n.ts.images }}</h2>
 						<MkZalipImageGallery :images="work.galleryPaths.map(path => ({ url: importerImageUrl(path, 'original') ?? '', thumbnailUrl: tmdbGalleryImage(path), alt: work!.title }))" :label="work.title"/>
@@ -186,6 +195,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							</MkA>
 						</div>
 					</section>
+					</template>
 				</div>
 			</article>
 		</div>
@@ -243,7 +253,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, nextTick, onBeforeUnmount, onDeactivated, ref, useTemplateRef, watch } from 'vue';
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, ref, useTemplateRef, watch } from 'vue';
 import type { RatedLibraryEntry } from '@/components/ZalipRatingDialog.vue';
 import type { TaxonomyLink as CatalogLink, TaxonomySectionId } from '@/utility/zalip-taxonomy.js';
 import type { LegacyAllohaPlayback, PlaybackProvider, PlaybackProviderSetting, PlaybackSource } from '@/utility/zalip-playback.js';
@@ -267,7 +277,7 @@ import { importerImageUrl } from '@/utility/zalip-importer.js';
 import { useZalipImages } from '@/utility/zalip-image.js';
 import { zalipAgeRatingLabel, zalipWorkMediaType } from '@/utility/zalip-work-presentation.js';
 import { playbackEpisodeAvailable, playbackTranslationLabel, selectablePlaybackTranslations, workPlaybackIframe, workPlaybackSources } from '@/utility/zalip-playback.js';
-import { zalipEpisodeQuery } from '@/utility/zalip-work-route.js';
+import { zalipEpisodeQuery, zalipWatchRoute, zalipWorkRoute } from '@/utility/zalip-work-route.js';
 import { taxonomyCreditCaption, taxonomyLinkSections, taxonomyProfileLabel, taxonomySectionLabel, taxonomyTypeIcon } from '@/utility/zalip-taxonomy.js';
 import { sameWatchTarget, watchTimeLabel } from '@/utility/zalip-watch-progress.js';
 import { useZalipWatchProgress } from '@/composables/use-zalip-watch-progress.js';
@@ -364,7 +374,9 @@ function catalogueImageFailed(value: string | null): void {
 watch(catalogueLinks, () => { expandedCatalogue.value = []; catalogueBrokenImages.value = new Set(); });
 
 function selectProvider(source: PlaybackProvider): void {
+	if (!activePage.value) return;
 	if (!availablePlaybackSources.value.some(candidate => candidate.source === source)) return;
+	watchEditionUnavailable.value = false;
 	if (selectedProvider.value === source) {
 		if (playerView.value === 'trailer') {
 			playerView.value = 'player';
@@ -408,7 +420,15 @@ const resumingWatch = ref(false);
 const watchActionError = ref<string | null>(null);
 let watchHistoryGeneration = 0;
 const episodeQuery = ref('');
-const props = defineProps<{ slug: string; initialSeason?: string; initialEpisode?: string }>();
+const props = withDefaults(defineProps<{ slug: string; initialSeason?: string; initialEpisode?: string; initialProvider?: string; initialTranslation?: string; watchPage?: boolean }>(), { watchPage: false });
+const emit = defineEmits<{
+	watchSelection: [selection: { seasonNumber: number | null; episodeNumber: number | null; provider: PlaybackProvider | null; translationId: string | null }];
+}>();
+const activePage = ref(true);
+let playbackActionGeneration = 0;
+const watchCoordinateUnavailable = ref(false);
+const watchEditionUnavailable = ref(false);
+const watchLinkUnavailable = computed(() => watchCoordinateUnavailable.value || watchEditionUnavailable.value);
 const work = ref<ZalipWork | null>(null);
 const images = useZalipImages();
 const mobileArtworkSource = computed(() => images.source(work.value?.backdropPath, 'w1280') ?? images.source(work.value?.posterPath));
@@ -479,13 +499,18 @@ const ratingLibraryPending = ref(false);
 const ratingLibraryError = ref(false);
 let ratingLibraryRequest = 0;
 const ratingError = ref<string | null>(null);
+onActivated(() => { activePage.value = true; });
 onDeactivated(() => {
 	// Cached pages remain mounted; their body teleports must not trap the next page.
 	workMenuOpen.value = false;
 	ratingDialogOpen.value = false;
 	episodeMenuOpen.value = false;
 	voiceMenuOpen.value = false;
+	activePage.value = false;
+	playbackActionGeneration++;
+	resumingWatch.value = false;
 	playerOpen.value = false;
+	playerView.value = 'player';
 });
 const episodeRail = useTemplateRef('episodeRail');
 let episodeSwipeStart: { x: number; y: number } | null = null;
@@ -495,12 +520,16 @@ const filteredEpisodes = computed(() => episodes.value.filter(episode => `${epis
 const selectedEpisodeProgress = computed(() => getEpisodeProgress(work.value?.seasons ?? [], selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null));
 const episodeWatched = computed(() => selectedEpisodeProgress.value != null && episodesWatched.value >= selectedEpisodeProgress.value);
 
-const playerEpisodeContextBlocked = computed(() => (activePlayback.value?.source === 'kodik' || activePlayback.value?.source === 'vibix') && (selectedSeasonNumber.value != null || !!work.value?.seasons.length) && (episodesPending.value || selectedEpisode.value == null));
-const selectedEpisodeAvailable = computed(() => !playerEpisodeContextBlocked.value && playbackEpisodeAvailable(activePlayback.value, selectedTranslationId.value, selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null));
+const playerEpisodeContextBlocked = computed(() => ((props.watchPage && !!work.value?.seasons.length) || activePlayback.value?.source === 'kodik' || activePlayback.value?.source === 'vibix') && (selectedSeasonNumber.value != null || !!work.value?.seasons.length) && (episodesPending.value || selectedEpisode.value == null));
+const selectedEpisodeAvailable = computed(() => !watchLinkUnavailable.value && !playerEpisodeContextBlocked.value && playbackEpisodeAvailable(activePlayback.value, selectedTranslationId.value, selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null));
+const savedWatchRoute = computed(() => zalipWatchRoute(props.slug, savedWatchProgress.value?.seasonNumber, savedWatchProgress.value?.episodeNumber, savedWatchProgress.value?.provider, savedWatchProgress.value?.translationId));
+const watchEntryRoute = computed(() => savedWatchProgress.value && !savedWatchProgress.value.completed && props.initialSeason == null && props.initialEpisode == null
+	? savedWatchRoute.value
+	: zalipWatchRoute(props.slug, selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber, activePlayback.value?.source, selectedTranslationId.value));
 // Unknown anime/animation serials may have no cached coverage yet; retain their native selectors.
 const fixedPlayerClip = computed(() => selectedEpisode.value != null || mediaType.value === 'movie');
 const activeVibixEmbed = computed(() => resolveVibixPlaybackEmbed(activePlayback.value, selectedTranslationId.value, selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null));
-const activeVibixDocument = computed(() => $i && playerOpen.value && playerView.value === 'player' && selectedEpisodeAvailable.value && activePlayback.value?.source === 'vibix'
+const activeVibixDocument = computed(() => activePage.value && $i && playerOpen.value && playerView.value === 'player' && selectedEpisodeAvailable.value && activePlayback.value?.source === 'vibix'
 	? vibixPlayerDocument(activeVibixEmbed.value, { seasonNumber: activeVibixEmbed.value?.type === 'series' ? selectedSeasonNumber.value : null, episodeNumber: activeVibixEmbed.value?.type === 'series' ? selectedEpisode.value?.episodeNumber ?? null : null, translationId: selectedTranslationId.value }) : null);
 const activePlayerIframe = computed(() => selectedEpisodeAvailable.value ? selectedProvider.value === 'vibix' ? activeVibixDocument.value ? 'about:srcdoc' : null : workPlaybackIframe(activePlayback.value, selectedTranslationId.value, selectedSeasonNumber.value, selectedEpisode.value?.episodeNumber ?? null, fixedPlayerClip.value) : null);
 const resumeIframeUrl = ref<string | null>(null);
@@ -516,7 +545,7 @@ const activePlayerIframeKey = computed(() => [
 watch(activePlayerIframeKey, () => { resumeSelection.value = null; resumeIframeUrl.value = null; resumeFrameRevision.value = 0; }, { flush: 'sync' });
 watch(playerOpen, () => { resumeIframeUrl.value = null; resumeFrameRevision.value = 0; }, { flush: 'sync' });
 const watchPlayerContext = computed(() => {
-	if (!playerOpen.value || playerView.value !== 'player' || !activePlayerIframe.value || !work.value) return null;
+	if (!activePage.value || !playerOpen.value || playerView.value !== 'player' || !activePlayerIframe.value || !work.value) return null;
 	// Native-selector serials without canonical episode IDs remain playable, but cannot invent a progress target.
 	if (!selectedEpisode.value && (mediaType.value !== 'movie' || activePlayback.value?.episodes.length || (selectedProvider.value === 'vibix' && activePlayback.value?.vibixEmbed?.type === 'series') || (selectedProvider.value === 'kodik' && new URL(activePlayerIframe.value).pathname.startsWith('/serial/')))) return null;
 	const target = { workId: work.value.id, episodeId: selectedEpisode.value?.id ?? null, provider: selectedProvider.value, translationId: selectedTranslationId.value };
@@ -616,7 +645,8 @@ function libraryStatusIcon(status: LibraryStatus | null): string {
 	})[status];
 }
 
-async function load(): Promise<void> {
+async function load(selection?: { initialSeason?: string; initialEpisode?: string; initialProvider?: string; initialTranslation?: string }): Promise<void> {
+	const target = { ...props, ...selection };
 	const request = ++workRequest;
 	discussionRequest++;
 	libraryWriteRequest++;
@@ -647,6 +677,8 @@ async function load(): Promise<void> {
 	selectedProvider.value = 'alloha';
 	selectedProviderVoices.value = {};
 	playerOpen.value = false;
+	watchCoordinateUnavailable.value = false;
+	watchEditionUnavailable.value = false;
 	savedWatchProgress.value = null;
 	resumeSelection.value = null;
 	resumingWatch.value = false;
@@ -688,13 +720,25 @@ async function load(): Promise<void> {
 		legacyPlayback.value = playback;
 		playbackSources.value = sources.sources;
 		playbackProviders.value = sources.providers;
-		selectedProvider.value = availablePlaybackSources.value[0]?.source ?? 'alloha';
+		const requestedProvider = availablePlaybackSources.value.find(source => source.source === target.initialProvider);
+		selectedProvider.value = requestedProvider?.source ?? availablePlaybackSources.value[0]?.source ?? 'alloha';
 		catalogueLinks.value = links.entries;
-		selectedTranslationId.value = activeTranslations.value[0]?.id ?? null;
-		const requestedSeason = zalipEpisodeQuery(props.initialSeason, 0);
+		const requestedTranslation = activeTranslations.value.find(translation => translation.id === target.initialTranslation);
+		selectedTranslationId.value = requestedTranslation?.id ?? activeTranslations.value[0]?.id ?? null;
+		const requestedSeason = zalipEpisodeQuery(target.initialSeason, 0);
+		const requestedEpisode = zalipEpisodeQuery(target.initialEpisode, 0);
 		const initialSeason = loadedWork.seasons.find(season => season.seasonNumber === requestedSeason)
 			?? loadedWork.seasons.find(season => season.seasonNumber > 0) ?? loadedWork.seasons[0];
-		if (initialSeason != null) await loadSeason(initialSeason, initialSeason.seasonNumber === requestedSeason ? zalipEpisodeQuery(props.initialEpisode, 0) : null);
+		const invalidCoordinates = props.watchPage && ((target.initialSeason != null && (requestedSeason == null || initialSeason?.seasonNumber !== requestedSeason))
+			|| (target.initialEpisode != null && (requestedEpisode == null || requestedSeason == null)));
+		if (initialSeason != null && !invalidCoordinates) await loadSeason(initialSeason, initialSeason.seasonNumber === requestedSeason ? requestedEpisode : null);
+		if (request !== workRequest) return;
+		if (props.watchPage) {
+			watchCoordinateUnavailable.value = watchCoordinateUnavailable.value || invalidCoordinates || (target.initialEpisode != null && !loadedWork.seasons.length);
+			watchEditionUnavailable.value = (!!$i && !!target.initialProvider && !requestedProvider)
+				|| (!!$i && !!target.initialTranslation && !requestedTranslation);
+			if (selectedEpisode.value) discussionScope.value = 'episode';
+		}
 		if (request === workRequest && window.location.hash.startsWith('#review')) {
 			discussionTab.value = 'reviews';
 			await nextTick();
@@ -725,8 +769,9 @@ async function loadWatchProgress(request: number, workId: string): Promise<void>
 
 async function resumeWatch(): Promise<void> {
 	const progress = savedWatchProgress.value;
-	if (!$i || !work.value || !progress || resumingWatch.value) return;
+	if (!activePage.value || !$i || !work.value || !progress || resumingWatch.value) return;
 	const request = workRequest;
+	const action = ++playbackActionGeneration;
 	const workId = work.value.id;
 	const accountId = $i.id;
 	resumingWatch.value = true;
@@ -739,22 +784,25 @@ async function resumeWatch(): Promise<void> {
 			const season = work.value.seasons.find(candidate => candidate.seasonNumber === progress.seasonNumber);
 			if (!season) throw new Error('Unavailable season');
 			await loadSeason(season, progress.episodeNumber);
-			if (request !== workRequest || work.value?.id !== workId || $i?.id !== accountId) return;
+			if (!activePage.value || action !== playbackActionGeneration || request !== workRequest || work.value?.id !== workId || $i?.id !== accountId) return;
 			if (selectedEpisodeId.value !== progress.episodeId) throw new Error('Unavailable episode');
 		} else if (episodic.value) throw new Error('Unknown canonical episode');
 		if (!playbackEpisodeAvailable(provider, progress.translationId, progress.seasonNumber, progress.episodeNumber)) throw new Error('Unavailable edition episode');
 		selectedProvider.value = progress.provider;
 		selectedTranslationId.value = progress.translationId;
+		watchCoordinateUnavailable.value = false;
+		watchEditionUnavailable.value = false;
 		resumeSelection.value = { ...progress };
 		playerView.value = 'player';
 		playerOpen.value = true;
 		focusPlayer();
-	} catch { if (request === workRequest) watchActionError.value = i18n.ts.zalip._progress.resumeUnavailable; } finally { if (request === workRequest) resumingWatch.value = false; }
+	} catch { if (activePage.value && action === playbackActionGeneration && request === workRequest) watchActionError.value = i18n.ts.zalip._progress.resumeUnavailable; } finally { if (action === playbackActionGeneration && request === workRequest) resumingWatch.value = false; }
 }
 
 async function restartWatch(): Promise<void> {
-	if (!$i || !work.value || resumingWatch.value) return;
+	if (!activePage.value || !$i || !work.value || resumingWatch.value) return;
 	const request = workRequest;
+	const action = ++playbackActionGeneration;
 	const workId = work.value.id;
 	const accountId = $i.id;
 	resumingWatch.value = true;
@@ -762,12 +810,12 @@ async function restartWatch(): Promise<void> {
 	playerOpen.value = false;
 	try {
 		await misskeyApiZalip('zalip/progress/reset', { workId });
-		if (request !== workRequest || work.value?.id !== workId || $i?.id !== accountId) return;
+		if (!activePage.value || action !== playbackActionGeneration || request !== workRequest || work.value?.id !== workId || $i?.id !== accountId) return;
 		watchHistoryGeneration++;
 		savedWatchProgress.value = null;
 		resumeSelection.value = null;
 		openPlayer();
-	} catch { if (request === workRequest) watchActionError.value = i18n.ts.zalip._progress.resetFailed; } finally { if (request === workRequest) resumingWatch.value = false; }
+	} catch { if (activePage.value && action === playbackActionGeneration && request === workRequest) watchActionError.value = i18n.ts.zalip._progress.resetFailed; } finally { if (action === playbackActionGeneration && request === workRequest) resumingWatch.value = false; }
 }
 
 async function retryPersonalLibrary(): Promise<void> {
@@ -791,7 +839,11 @@ async function retryPersonalLibrary(): Promise<void> {
 
 async function refreshWork(): Promise<void> {
 	if (saving.value || pending.value || workMenuOpen.value || ratingDialogOpen.value) return;
-	await load();
+	const selection = props.watchPage && !watchLinkUnavailable.value ? {
+		initialSeason: selectedSeasonNumber.value?.toString(), initialEpisode: selectedEpisode.value?.episodeNumber.toString(),
+		initialProvider: activePlayback.value?.source ?? props.initialProvider, initialTranslation: selectedTranslationId.value ?? props.initialTranslation,
+	} : undefined;
+	await load(selection);
 }
 
 function startEpisodeSwipe(event: TouchEvent): void {
@@ -842,10 +894,11 @@ async function loadSeason(season: ZalipSeason, initialEpisodeNumber: number | nu
 		});
 		if (current()) {
 			episodes.value = loadedEpisodes;
-			selectedEpisodeId.value = loadedEpisodes.find(episode => episode.episodeNumber === initialEpisodeNumber)?.id
+			const exact = loadedEpisodes.find(episode => episode.episodeNumber === initialEpisodeNumber);
+			watchCoordinateUnavailable.value = props.watchPage && initialEpisodeNumber != null && exact == null;
+			selectedEpisodeId.value = watchCoordinateUnavailable.value ? null : exact?.id
 				?? loadedEpisodes.find(episode => (getEpisodeProgress(work.value?.seasons ?? [], season.seasonNumber, episode.episodeNumber) ?? 0) > episodesWatched.value)?.id
-				?? loadedEpisodes[0]?.id
-				?? null;
+				?? loadedEpisodes[0]?.id ?? null;
 		}
 	} catch {
 		if (current()) {
@@ -866,10 +919,12 @@ async function retryEpisodes(): Promise<void> {
 async function selectSeason(season: ZalipSeason): Promise<void> {
 	if (selectedSeasonNumber.value === season.seasonNumber && (episodes.value.length > 0 || episodesPending.value)) return;
 	await loadSeason(season);
+	if (props.watchPage && selectedEpisode.value) discussionScope.value = 'episode';
 }
 
 function selectEpisode(episode: ZalipEpisode): void {
 	episodeModal.value?.close();
+	watchCoordinateUnavailable.value = false;
 	selectedEpisodeId.value = episode.id;
 	discussionScope.value = 'episode';
 }
@@ -902,6 +957,7 @@ async function closeVoiceMenu(): Promise<void> {
 
 function selectTranslation(id: string): void {
 	if (!activeTranslations.value.some(translation => translation.id === id)) return;
+	watchEditionUnavailable.value = false;
 	selectedTranslationId.value = id;
 	selectedProviderVoices.value[selectedProvider.value] = id;
 	playerView.value = 'player';
@@ -928,6 +984,7 @@ function closeWorkMenu(): void {
 }
 
 function openSelectedPlayer(): void {
+	if (!activePage.value) return;
 	resumeSelection.value = null;
 	if (activePlayback.value && selectedEpisodeAvailable.value) playerOpen.value = true;
 }
@@ -975,10 +1032,11 @@ function openPlayer(): void {
 	resumeSelection.value = null;
 	playerView.value = 'player';
 	focusPlayer();
-	if ($i && activePlayback.value) playerOpen.value = true;
+	if (activePage.value && props.watchPage && $i && activePlayback.value && selectedEpisodeAvailable.value) playerOpen.value = true;
 }
 
 function openTrailer(): void {
+	if (!activePage.value) return;
 	playerView.value = 'trailer';
 	focusPlayer();
 }
@@ -1201,7 +1259,12 @@ function shareWork(): void {
 	});
 }
 
-watch(() => [props.slug, props.initialSeason, props.initialEpisode], () => void load(), { immediate: true });
+watch([selectedSeasonNumber, selectedEpisodeId, selectedProvider, selectedTranslationId, pending, episodesPending], () => {
+	if (!activePage.value || !props.watchPage || pending.value || episodesPending.value || watchLinkUnavailable.value || !work.value || (work.value.seasons.length && !selectedEpisode.value)) return;
+	emit('watchSelection', { seasonNumber: selectedSeasonNumber.value, episodeNumber: selectedEpisode.value?.episodeNumber ?? null, provider: activePlayback.value?.source ?? null, translationId: selectedTranslationId.value });
+}, { flush: 'post' });
+
+watch(() => [props.slug, props.initialSeason, props.initialEpisode, props.initialProvider, props.initialTranslation], () => void load(), { immediate: true });
 
 definePage(() => ({
 	title: work.value?.title ?? 'Zalip',
@@ -1214,6 +1277,16 @@ definePage(() => ({
 .viewport { container-type: inline-size; }
 .page { max-width: 960px; margin: 0 auto; padding-bottom: 48px; min-width: 0; color: var(--zalip-social-fg); background: var(--zalip-social-panel); }
 .work, .content { min-width: 0; }
+.watchHeader { display: flex; align-items: center; gap: 12px; padding: 20px 24px; }
+.watchBack { display: grid; place-items: center; flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; color: var(--zalip-social-fg); }
+.watchBack:hover, .watchLibrary:hover { background: var(--zalip-social-hover); text-decoration: none; }
+.watchHeading { flex: 1; min-width: 0; }
+.watchHeading h1 { margin: 0; font-size: 18px; line-height: 1.4; overflow-wrap: anywhere; }
+.watchHeading h1 a { color: inherit; }
+.watchHeading p { margin: 4px 0 0; font-size: 12px; color: var(--zalip-social-muted); }
+.watchLibrary { display: flex; align-items: center; gap: 7px; min-height: 40px; padding: 8px 12px; flex-shrink: 0; border: 1px solid var(--zalip-social-border); border-radius: 99px; font-size: 12px; }
+.watchLibrary i { font-size: 18px; }
+.watchBack:focus-visible, .watchLibrary:focus-visible, .watchButton:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; }
 .state { display: grid; place-content: center; gap: 12px; min-height: 300px; text-align: center; color: var(--zalip-social-muted); }
 .libraryWarning { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin: 16px 24px 0; padding: 12px 16px; border-radius: var(--MI-radius); background: var(--MI_THEME-infoWarnBg); color: var(--MI_THEME-infoWarnFg); font-size: 13px; }
 .libraryWarning button { padding: 8px 12px; border-radius: var(--MI-radius); background: var(--MI_THEME-panel); color: var(--MI_THEME-fg); }
@@ -1434,6 +1507,12 @@ definePage(() => ({
 	.heroContent { display: block; margin-top: 0; }
 	.mobilePrimaryActions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: 20px; }
 	.mobilePrimaryActions button { min-height: 44px; min-width: 0; }
+	.mobilePrimaryActions a { min-height: 44px; min-width: 0; box-sizing: border-box; }
+	.watchHeader { gap: 8px; padding: 16px 12px; }
+	.watchHeading h1 { font-size: 16px; }
+	.watchLibrary { padding: 8px 10px; }
+	.watchLibrary span { display: none; }
+	.watchPage .content { padding: 0 12px; }
 	.heroBackground { display: none; }
 	.hero::after { display: none; }
 	.info { width: 100%; text-align: center; }

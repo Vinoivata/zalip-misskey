@@ -2385,6 +2385,8 @@ declare namespace entities {
         ZalipPlaybackAllohaShowResponse,
         ZalipPlaybackSourcesRequest,
         ZalipPlaybackSourcesResponse,
+        ZalipProgressBatchRequest,
+        ZalipProgressBatchResponse,
         ZalipProgressContinueRequest,
         ZalipProgressContinueResponse,
         ZalipProgressResetRequest,
@@ -4368,6 +4370,12 @@ type ZalipPlaybackSourcesRequest = operations['zalip___playback___sources']['req
 
 // @public (undocumented)
 type ZalipPlaybackSourcesResponse = operations['zalip___playback___sources']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipProgressBatchRequest = operations['zalip___progress___batch']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ZalipProgressBatchResponse = operations['zalip___progress___batch']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
 type ZalipProgressContinueRequest = operations['zalip___progress___continue']['requestBody']['content']['application/json'];

@@ -4,7 +4,7 @@
  */
 
 import type { PlaybackProvider } from '@/utility/zalip-playback.js';
-import { zalipWorkRoute } from '@/utility/zalip-work-route.js';
+import { zalipWatchRoute } from '@/utility/zalip-work-route.js';
 
 export type WatchProgress = {
 	workId: string;
@@ -30,7 +30,7 @@ export type ProgressUpdateResult = { accepted: boolean; progress: WatchProgress 
 
 /** A history link selects a canonical episode but never starts playback or trusts an offset in the URL. */
 export function continueWatchingRoute(item: ContinueWatchingItem): string {
-	return zalipWorkRoute(item.work.slug, item.seasonNumber, item.episodeNumber);
+	return zalipWatchRoute(item.work.slug, item.seasonNumber, item.episodeNumber, item.provider, item.translationId);
 }
 
 export function sameWatchTarget(left: WatchTarget, right: WatchTarget): boolean {

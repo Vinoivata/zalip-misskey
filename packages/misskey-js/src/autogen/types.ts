@@ -4615,6 +4615,15 @@ export type paths = {
          */
         post: operations['zalip___playback___sources'];
     };
+    '/zalip/progress/batch': {
+        /**
+         * zalip/progress/batch
+         * @description Read only your latest visible playback targets for up to 50 published works, including completed episodes. No playback sessions or provider resources are exposed.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *read:account*
+         */
+        post: operations['zalip___progress___batch'];
+    };
     '/zalip/progress/continue': {
         /**
          * zalip/progress/continue
@@ -5611,6 +5620,8 @@ export type components = {
             seasonNumber: number;
             episodeNumber: number;
             episodeTitle: string;
+            posterPath?: string | null;
+            posterThumbnailUrl?: string | null;
         } | {
             /** Format: id */
             id: string;
@@ -5625,6 +5636,8 @@ export type components = {
             seasonNumber: number | null;
             episodeNumber: number | null;
             translationCount: number;
+            posterPath?: string | null;
+            posterThumbnailUrl?: string | null;
         } | {
             /** Format: id */
             id: string;
@@ -44264,6 +44277,99 @@ export interface operations {
             };
             /** @description I'm Ai */
             418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    zalip___progress___batch: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    i?: string;
+                    workIds: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        items: {
+                            /** Format: misskey:id */
+                            workId: string;
+                            /** Format: misskey:id */
+                            episodeId: string | null;
+                            seasonNumber: number | null;
+                            episodeNumber: number | null;
+                            /** @enum {string} */
+                            provider: 'alloha' | 'collaps' | 'kodik' | 'vibix';
+                            translationId: string | null;
+                            /** @enum {string} */
+                            mode: 'time' | 'episode';
+                            positionSeconds: number | null;
+                            durationSeconds: number | null;
+                            completed: boolean;
+                            lastPlayedAt: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

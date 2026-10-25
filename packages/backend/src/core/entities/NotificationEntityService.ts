@@ -5,7 +5,7 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
-import { In } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import { DI } from '@/di-symbols.js';
 import type { FollowRequestsRepository, NotesRepository, MiUser, UsersRepository } from '@/models/_.js';
 import { awaitAll } from '@/misc/prelude/await-all.js';
@@ -15,6 +15,8 @@ import type { Packed } from '@/misc/json-schema.js';
 import { bindThis } from '@/decorators.js';
 import { FilterUnionByProperty, groupedNotificationTypes } from '@/types.js';
 import { CacheService } from '@/core/CacheService.js';
+import type { ZalipCatalogService } from '@/core/ZalipCatalogService.js';
+import { MiZalipWork } from '@/models/ZalipWork.js';
 import { RoleEntityService } from './RoleEntityService.js';
 import { ChatEntityService } from './ChatEntityService.js';
 import type { OnModuleInit } from '@nestjs/common';
@@ -34,12 +36,18 @@ const NOTE_REQUIRED_NOTIFICATION_TYPES = new Set([
 	'scheduledNotePosted',
 ] as (typeof groupedNotificationTypes[number])[]);
 
+type PackedZalipNotificationPoster = {
+	posterPath: string | null;
+	posterThumbnailUrl?: string;
+};
+
 @Injectable()
 export class NotificationEntityService implements OnModuleInit {
 	private userEntityService: UserEntityService;
 	private noteEntityService: NoteEntityService;
 	private roleEntityService: RoleEntityService;
 	private chatEntityService: ChatEntityService;
+	private zalipCatalogService: ZalipCatalogService;
 
 	constructor(
 		private moduleRef: ModuleRef,
@@ -54,6 +62,9 @@ export class NotificationEntityService implements OnModuleInit {
 		private followRequestsRepository: FollowRequestsRepository,
 
 		private cacheService: CacheService,
+
+		@Inject(DI.db)
+		private db: DataSource,
 	) {
 	}
 
@@ -62,6 +73,29 @@ export class NotificationEntityService implements OnModuleInit {
 		this.noteEntityService = this.moduleRef.get('NoteEntityService');
 		this.roleEntityService = this.moduleRef.get('RoleEntityService');
 		this.chatEntityService = this.moduleRef.get('ChatEntityService');
+		this.zalipCatalogService = this.moduleRef.get('ZalipCatalogService');
+	}
+
+	/** Notification snapshots never own artwork: resolve only current public titles in bounded batches. */
+	private async packZalipPosters(workIds: readonly string[]): Promise<Map<string, PackedZalipNotificationPoster>> {
+		const ids = [...new Set(workIds)];
+		const works: MiZalipWork[] = [];
+		for (let offset = 0; offset < ids.length; offset += 100) {
+			const batch = await this.db.getRepository(MiZalipWork).find({
+				where: { id: In(ids.slice(offset, offset + 100)), publicationState: 'published' },
+				select: { id: true, publicationState: true, posterPath: true },
+			});
+			works.push(...batch.filter(work => work.publicationState === 'published'));
+		}
+		if (works.length === 0) return new Map();
+		const thumbnails = await this.zalipCatalogService.nativePosterThumbnails(works);
+		return new Map(works.map(work => {
+			const thumbnail = thumbnails.get(work.id);
+			return [work.id, {
+				posterPath: work.posterPath,
+				...(thumbnail ? { posterThumbnailUrl: thumbnail } : {}),
+			}];
+		}));
 	}
 
 	/**
@@ -76,6 +110,7 @@ export class NotificationEntityService implements OnModuleInit {
 		hint?: {
 			packedNotes: Map<MiNote['id'], Packed<'Note'>>;
 			packedUsers: Map<MiUser['id'], Packed<'UserLite'>>;
+			zalipPosters?: Map<string, PackedZalipNotificationPoster>;
 		},
 	): Promise<Packed<'Notification'> | null> {
 		const notification = src;
@@ -163,6 +198,10 @@ export class NotificationEntityService implements OnModuleInit {
 			return null;
 		}
 
+		const zalipPoster = notification.type === 'zalipEpisodeReleased' || notification.type === 'zalipAllohaAvailable'
+			? (hint?.zalipPosters ?? await this.packZalipPosters([notification.workId])).get(notification.workId)
+			: undefined;
+
 		return await awaitAll({
 			id: notification.id,
 			createdAt: new Date(notification.createdAt).toISOString(),
@@ -196,6 +235,7 @@ export class NotificationEntityService implements OnModuleInit {
 				seasonNumber: notification.seasonNumber,
 				episodeNumber: notification.episodeNumber,
 				episodeTitle: notification.episodeTitle,
+				...zalipPoster,
 			} : {}),
 			...(notification.type === 'zalipAllohaAvailable' ? {
 				workId: notification.workId,
@@ -204,6 +244,7 @@ export class NotificationEntityService implements OnModuleInit {
 				seasonNumber: notification.seasonNumber,
 				episodeNumber: notification.episodeNumber,
 				translationCount: notification.translationCount,
+				...zalipPoster,
 			} : {}),
 			...(notification.type === 'app' ? {
 				body: notification.customBody,
@@ -254,6 +295,9 @@ export class NotificationEntityService implements OnModuleInit {
 		}) : [];
 		const packedUsersArray = await this.userEntityService.packMany(users, { id: meId });
 		const packedUsers = new Map(packedUsersArray.map(p => [p.id, p]));
+		const zalipPosters = await this.packZalipPosters(validNotifications.flatMap(notification => (
+			notification.type === 'zalipEpisodeReleased' || notification.type === 'zalipAllohaAvailable' ? [notification.workId] : []
+		)));
 
 		// 既に解決されたフォローリクエストの通知を除外
 		const followRequestNotifications = validNotifications.filter((x): x is FilterUnionByProperty<T, 'type', 'receiveFollowRequest'> => x.type === 'receiveFollowRequest');
@@ -269,7 +313,7 @@ export class NotificationEntityService implements OnModuleInit {
 				x,
 				meId,
 				{ checkValidNotifier: false },
-				{ packedNotes, packedUsers },
+				{ packedNotes, packedUsers, zalipPosters },
 			);
 		});
 
@@ -287,6 +331,7 @@ export class NotificationEntityService implements OnModuleInit {
 		hint?: {
 			packedNotes: Map<MiNote['id'], Packed<'Note'>>;
 			packedUsers: Map<MiUser['id'], Packed<'UserLite'>>;
+			zalipPosters?: Map<string, PackedZalipNotificationPoster>;
 		},
 	): Promise<Packed<'Notification'> | null> {
 		return await this.#packInternal(src, meId, options, hint);

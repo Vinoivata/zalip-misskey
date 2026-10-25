@@ -398,6 +398,12 @@ export const packedNotificationSchema = {
 				type: 'string',
 				optional: false, nullable: false,
 			},
+			posterPath: {
+				type: 'string', optional: true, nullable: true,
+			},
+			posterThumbnailUrl: {
+				type: 'string', optional: true, nullable: true,
+			},
 		},
 	}, {
 		type: 'object',
@@ -425,6 +431,12 @@ export const packedNotificationSchema = {
 			},
 			translationCount: {
 				type: 'number', optional: false, nullable: false,
+			},
+			posterPath: {
+				type: 'string', optional: true, nullable: true,
+			},
+			posterThumbnailUrl: {
+				type: 'string', optional: true, nullable: true,
 			},
 		},
 	}, {

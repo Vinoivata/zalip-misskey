@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { zalipWorkRoute } from '@/utility/zalip-work-route.js';
+import { zalipWatchRoute, zalipWorkRoute } from '@/utility/zalip-work-route.js';
 
 export type ZalipDiscussionContext = {
 	workId: string;
@@ -23,5 +23,5 @@ export function zalipDiscussionContext(note: { isHidden?: boolean; deletedAt?: s
 }
 
 export function zalipDiscussionRoute(context: ZalipDiscussionContext): string {
-	return `${zalipWorkRoute(context.slug, context.seasonNumber, context.episodeNumber)}#discussion`;
+	return `${context.episodeId != null ? zalipWatchRoute(context.slug, context.seasonNumber, context.episodeNumber) : zalipWorkRoute(context.slug)}#discussion`;
 }

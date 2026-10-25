@@ -77,6 +77,10 @@ export const ROUTE_DEF = [{
 	path: '/zalip/credits',
 	component: page(() => import('@/pages/zalip/credits.vue')),
 }, {
+	path: '/zalip/:slug/watch',
+	name: 'zalipWatch',
+	component: page(() => import('@/pages/zalip/watch.vue')),
+}, {
 	path: '/zalip/:slug',
 	name: 'zalipWork',
 	query: { season: 'initialSeason', episode: 'initialEpisode' },

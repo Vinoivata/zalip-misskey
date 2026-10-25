@@ -43,7 +43,7 @@ let backdropPath: string | null;
 const testEpisodes = [1, 2, 3].map(n => ({ id: `ep${n}`, episodeNumber: n, title: `Episode ${n}`, stillPath: `/frame${n}.jpg`, description: `Description ${n}`, airDate: `2026-09-0${n}`, runtimeMinutes: 40, discussionNoteId: null }));
 const scrollTo = vi.fn();
 
-function setup(props: { initialSeason?: string; initialEpisode?: string } = {}) {
+function setup(props: { initialSeason?: string; initialEpisode?: string; watchPage?: boolean } = {}) {
 	return render(Work, { props: { slug: 'film', ...props }, global: { stubs: {
 		PageWithHeader: defineComponent({ setup: (_, { slots }) => () => h('div', slots.default?.()) }),
 		MkA: defineComponent({ props: { to: String }, setup: (props, { slots }) => () => h('a', { href: props.to }, slots.default?.()) }),
@@ -224,6 +224,8 @@ describe('Zalip work actions', () => {
 		await view.findByRole('heading', { name: title.title, level: 1 });
 		await view.findByText(i18n.ts.zalip.workLibraryLoadFailed);
 		expect((view.getByRole('button', { name: i18n.ts.zalip.workRateAction }) as HTMLButtonElement).disabled).toBe(true);
+		expect(view.getAllByRole('link', { name: i18n.ts.zalip.watchTitle })[0].getAttribute('href')).toContain('/zalip/film/watch');
+		await view.rerender({ watchPage: true });
 		const play = view.getAllByRole('button', { name: i18n.ts.zalip.watchTitle }).at(-1)!;
 		await fireEvent.click(play);
 		await waitFor(() => expect(view.container.querySelector('iframe')).toBeTruthy());
@@ -239,7 +241,7 @@ describe('Zalip work actions', () => {
 	it('honors exact season and episode release URLs instead of defaulting to the first unwatched episode', async () => {
 		withEpisodes = true;
 		entry.episodesWatched = 0;
-		const view = setup({ initialSeason: '2', initialEpisode: '3' });
+		const view = setup({ initialSeason: '2', initialEpisode: '3', watchPage: true });
 		await view.findByText('Description 3');
 		expect(misskeyApiZalip).toHaveBeenCalledWith('zalip/seasons/episodes', { slug: 'film', seasonNumber: 2 });
 		expect(view.container.querySelector('[data-episode-id=ep3]')?.getAttribute('aria-pressed')).toBe('true');
@@ -507,7 +509,7 @@ describe('Zalip work actions', () => {
 	it('synchronizes dropdown, frame, metadata and rail, with horizontal swipes ignoring vertical movement', async () => {
 		withEpisodes = true;
 		entry.episodesWatched = 0;
-		const view = setup();
+		const view = setup({ watchPage: true });
 		const firstEpisodeLabel = i18n.tsx.zalip.playerEpisodeNumber({ number: 1 });
 		const dropdown = await view.findByRole('button', { name: firstEpisodeLabel, expanded: false });
 		const rail = view.container.querySelector('[class*=episodeRail][aria-label]') as HTMLElement;
