@@ -414,7 +414,7 @@ definePage(() => ({
 </script>
 
 <style lang="scss" module>
-.page { min-width: 0; max-width: 960px; margin: 0 auto; padding: 14px 0 30px; }
+.page { min-width: 0; max-width: 1180px; margin: 0 auto; padding: 14px 0 30px; }
 .onboarding { container-type: inline-size; min-width: 0; }
 .heroPlaceholder { display: flex; align-items: center; justify-content: center; gap: 10px; height: 402px; color: var(--MI_THEME-fgTransparentWeak); background: var(--MI_THEME-panel); border-radius: var(--MI-radius); }
 .heroRail {

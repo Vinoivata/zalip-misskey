@@ -4,13 +4,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div :class="[$style.root, { '_forceShrinkSpacer': isMobile, [$style.mobile]: isMobile, [$style.social]: isSocial, [$style.wide]: pageMetadata?.needWideArea, [$style.chatRoom]: isChatRoom, [$style.chatWorkspace]: isChatWorkspace, [$style.withMobileNav]: isMobile && !isThread && !isChatRoom }]">
+<div :class="[$style.root, { '_forceShrinkSpacer': isMobile, [$style.mobile]: isMobile, [$style.social]: isSocial, [$style.wide]: pageMetadata?.needWideArea, [$style.watchPage]: isWatchPage, [$style.chatRoom]: isChatRoom, [$style.chatWorkspace]: isChatWorkspace, [$style.withMobileNav]: isMobile && !isThread && !isChatRoom && !isWatchPage }]">
 	<XTitlebar v-if="prefer.r.showTitlebar.value" style="flex-shrink: 0;"/>
 
 	<div :class="$style.nonTitlebarArea">
-		<XSidebar v-if="!isMobile" :class="$style.sidebar" :showWidgetButton="false"/>
+		<XSidebar v-if="!isMobile && !isWatchPage" :class="$style.sidebar" :showWidgetButton="false"/>
 
-		<div :class="[$style.contents, { [$style.threadContents]: isThread, [$style.chromeHidden]: headerHidden }, !isMobile && prefer.r.showTitlebar.value ? $style.withSidebarAndTitlebar : null]" @contextmenu.stop="onContextmenu" @scroll.capture.passive="onContentScroll">
+		<div :class="[$style.contents, { [$style.threadContents]: isThread, [$style.chromeHidden]: headerHidden }, !isMobile && !isWatchPage && prefer.r.showTitlebar.value ? $style.withSidebarAndTitlebar : null]" @contextmenu.stop="onContextmenu" @scroll.capture.passive="onContentScroll">
 			<div>
 				<XReloadSuggestion v-if="shouldSuggestReload"/>
 				<XPreferenceRestore v-if="shouldSuggestRestoreBackup"/>
@@ -18,10 +18,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<XAnnouncements v-if="$i"/>
 				<XStatusBars :class="$style.statusbars"/>
 			</div>
-			<ZalipSiteHeader v-if="!isMobile || !isChatWorkspace" :mobile="isMobile" :hidden="headerHidden"/>
+			<ZalipSiteHeader v-if="!isWatchPage && (!isMobile || !isChatWorkspace)" :mobile="isMobile" :hidden="headerHidden" :hideSearch="hasPageSearch"/>
 			<StackingRouterView v-if="prefer.s['experimental.stackingRouterView']" :class="$style.content"/>
 			<RouterView v-else :class="$style.content"/>
-			<XMobileFooterMenu v-if="isMobile && !isThread && !isChatRoom" :hidden="chromeHidden"/>
+			<XMobileFooterMenu v-if="isMobile && !isThread && !isChatRoom && !isWatchPage" :hidden="chromeHidden"/>
 			<div v-if="isThread" id="zalip-reply-slot" :class="$style.replySlot"></div>
 		</div>
 	</div>
@@ -61,6 +61,8 @@ const XAnnouncements = defineAsyncComponent(() => import('@/ui/_common_/announce
 
 const isRoot = computed(() => mainRouter.currentRoute.value.name === 'index');
 const isThread = computed(() => mainRouter.currentRoute.value.name === 'note');
+const isWatchPage = computed(() => mainRouter.currentRoute.value.name === 'zalipWatch');
+const hasPageSearch = computed(() => ['/catalog', '/search'].includes(mainRouter.currentRoute.value.path));
 const isChatRoom = computed(() => /^\/chat\/(user|room)\//.test(mainRouter.currentRoute.value.path));
 const isChatWorkspace = computed(() => mainRouter.currentRoute.value.path === '/chat' || isChatRoom.value);
 const isSocial = computed(() => isThread.value || ['/', '/timeline', '/my/favorites', '/my/notifications', '/chat'].includes(mainRouter.currentRoute.value.path) || isChatRoom.value);
@@ -195,7 +197,7 @@ function onContextmenu(ev: PointerEvent) {
 	flex: 1;
 	min-height: 0;
 	width: 100%;
-	max-width: 1320px;
+	max-width: var(--zalip-shell-max-width);
 	margin: 0 auto;
 }
 
@@ -245,6 +247,13 @@ function onContextmenu(ev: PointerEvent) {
 	.chromeHidden { --zalip-chrome-top: 0px; }
 }
 .mobile.wide .nonTitlebarArea { max-width: 1200px; }
+.root.watchPage {
+	.nonTitlebarArea { max-width: 100%; }
+	.contents { --zalip-chrome-top: 0px; }
+	.content :global(._pageScrollable) { scroll-padding-top: 0; }
+	.content :global(._pageScrollable) > div,
+	.content :global(._pageScrollableReversed) > div { padding-top: 0; }
+}
 .mobile.chatWorkspace {
 	.nonTitlebarArea { max-width: 100%; }
 	.contents { --zalip-chrome-top: 0px; }

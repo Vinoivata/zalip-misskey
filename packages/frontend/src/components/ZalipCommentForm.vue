@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <Teleport v-if="active" :to="replySlot ?? 'body'" :disabled="!floating || !replySlot">
-	<div :class="[$style.root, { [$style.floating]: floating }]">
+	<div :class="[$style.root, { [$style.floating]: floating, [$style.inline]: inline }]">
 		<template v-if="$i">
 			<MkAvatar :class="$style.avatar" :user="$i"/>
 			<form :class="$style.form" @submit.prevent="submit">
@@ -42,7 +42,7 @@ import { pleaseLogin } from '@/utility/please-login.js';
 import * as os from '@/os.js';
 import { zalipDiscussionContext } from '@/utility/zalip-discussion-context.js';
 
-const props = defineProps<{ rootNote: Misskey.entities.Note; replyTo: Misskey.entities.Note; floating?: boolean }>();
+const props = defineProps<{ rootNote: Misskey.entities.Note; replyTo: Misskey.entities.Note; floating?: boolean; inline?: boolean }>();
 const emit = defineEmits<{ (ev: 'posted', note: Misskey.entities.Note): void; (ev: 'cancelReply'): void }>();
 const textareaEl = useTemplateRef('textareaEl');
 const replySlot = ref<HTMLElement | null>(null);
@@ -159,6 +159,9 @@ async function submit(): Promise<void> {
 <style lang="scss" module>
 .root { display: flex; align-items: center; gap: 12px; margin: 12px; padding: 12px 16px; min-height: 62px; box-sizing: border-box; border: 1px solid var(--zalip-social-border); border-radius: 28px; background: color-mix(in srgb, var(--zalip-social-panel) 92%, transparent); color: var(--zalip-social-fg); backdrop-filter: blur(18px); box-shadow: 0 2px 16px var(--zalip-glass-shadow); pointer-events: auto; font-family: var(--zalip-font-family); }
 .floating { margin: 0; }
+.inline { align-items: flex-start; min-height: 92px; margin: 16px 0 24px; padding: 16px; border-radius: 8px; background: var(--zalip-social-raised); backdrop-filter: none; box-shadow: none; }
+.inline .textarea { min-height: 54px; font-size: 14px; }
+.inline .inputRow { align-items: flex-end; }
 .avatar { flex: 0 0 28px; width: 28px; height: 28px; }
 .form { flex: 1; min-width: 0; }
 .replying { display: flex; justify-content: space-between; gap: 8px; padding-bottom: 6px; color: var(--MI_THEME-accent); font-size: 12px; }

@@ -514,8 +514,8 @@ describe('Zalip work actions', () => {
 		const dropdown = await view.findByRole('button', { name: firstEpisodeLabel, expanded: false });
 		const rail = view.container.querySelector('[class*=episodeRail][aria-label]') as HTMLElement;
 		const thirdEpisode = rail.querySelector('[data-episode-id=ep3]') as HTMLElement;
-		vi.spyOn(rail, 'getBoundingClientRect').mockReturnValue({ top: 100, bottom: 200, height: 100 } as DOMRect);
-		vi.spyOn(thirdEpisode, 'getBoundingClientRect').mockReturnValue({ top: 250, bottom: 286, height: 36 } as DOMRect);
+		vi.spyOn(rail, 'getBoundingClientRect').mockReturnValue({ left: 100, right: 200, width: 100 } as DOMRect);
+		vi.spyOn(thirdEpisode, 'getBoundingClientRect').mockReturnValue({ left: 250, right: 286, width: 36 } as DOMRect);
 		const railScroll = vi.fn();
 		rail.scrollTo = railScroll;
 		const pageScroll = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
@@ -526,10 +526,13 @@ describe('Zalip work actions', () => {
 		await waitFor(() => expect(view.container.querySelector('[class*=episodeGuideStill]')?.getAttribute('src')).toContain('/frame3.jpg'));
 		expect(view.getByText('Description 3')).toBeTruthy();
 		expect(view.container.querySelector('[data-episode-id=ep3]')?.getAttribute('aria-pressed')).toBe('true');
-		expect(railScroll).toHaveBeenCalledWith({ top: 118, behavior: 'smooth' });
+		expect(railScroll).toHaveBeenCalledWith({ left: 118, behavior: 'smooth' });
 		expect(pageScroll).not.toHaveBeenCalled();
 		expect(pageJump).not.toHaveBeenCalled();
-		const guide = view.container.querySelector('[class*=episodeGuideContent]')!;
+		const details = view.container.querySelector('details[class*=episodeGuide]') as HTMLDetailsElement;
+		await fireEvent.click(details.querySelector('summary')!);
+		expect(details.open).toBe(true);
+		const guide = details.querySelector('[class*=episodeGuideContent]')!;
 		await fireEvent.touchStart(guide, { touches: [{ clientX: 100, clientY: 100 }] });
 		await fireEvent.touchEnd(guide, { changedTouches: [{ clientX: 105, clientY: 250 }] });
 		expect(view.getByText('Description 3')).toBeTruthy();

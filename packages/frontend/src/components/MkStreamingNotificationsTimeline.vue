@@ -23,12 +23,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 			:moveClass="$style.transition_x_move"
 			tag="div"
 		>
-			<div v-for="(notification, i) in paginator.items.value" :key="notification.id" :data-scroll-anchor="notification.id" :class="$style.item">
-				<div v-if="i > 0 && isSeparatorNeeded(paginator.items.value[i -1].createdAt, notification.createdAt)" :class="$style.date">
-					<span>{{ new Date(notification.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) }}</span>
+			<div v-for="(row, i) in notificationRows" :key="row.key" :data-scroll-anchor="row.id" :class="$style.item">
+				<div v-if="i > 0 && isSeparatorNeeded(notificationRows[i -1].createdAt, row.createdAt)" :class="$style.date">
+					<span>{{ new Date(row.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) }}</span>
 				</div>
-				<MkNote v-if="['reply', 'quote', 'mention'].includes(notification.type) && 'note' in notification" :class="$style.content" :note="notification.note" :withHardMute="true"/>
-				<XNotification v-else :class="$style.content" :notification="notification" :withTime="true" :full="true"/>
+				<MkNote v-if="['reply', 'quote', 'mention'].includes(row.notification.type) && 'note' in row.notification" :class="$style.content" :note="row.notification.note" :withHardMute="true"/>
+				<XNotification v-else :class="$style.content" :notification="row.notification" :releaseNotifications="row.releaseNotifications && row.releaseNotifications.length > 1 ? row.releaseNotifications : undefined" :withTime="true" :full="true"/>
 			</div>
 		</component>
 		<button v-show="paginator.canFetchOlder.value" key="_more_" v-appear="prefer.s.enableInfiniteScroll ? paginator.fetchOlder : null" :disabled="paginator.fetchingOlder.value" class="_button" :class="$style.more" @click="paginator.fetchOlder">
@@ -40,7 +40,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { onUnmounted, onMounted, computed, useTemplateRef, TransitionGroup, markRaw, watch } from 'vue';
+import { onUnmounted, onMounted, computed, useTemplateRef, TransitionGroup, markRaw, watch, shallowRef, toRaw, triggerRef } from 'vue';
 import * as Misskey from 'misskey-js';
 import { notificationTypes } from 'misskey-js';
 import { useInterval } from '@@/js/use-interval.js';
@@ -55,6 +55,8 @@ import { prefer } from '@/preferences.js';
 import { store } from '@/store.js';
 import { isSeparatorNeeded } from '@/utility/timeline-date-separate.js';
 import { Paginator } from '@/utility/paginator.js';
+import { explicitNotificationReadState, groupZalipReleaseNotifications } from '@/utility/zalip-notification-groups.js';
+import type { NotificationPresentationRow } from '@/utility/zalip-notification-groups.js';
 
 const props = defineProps<{
 	excludeTypes?: typeof notificationTypes[number][] | null;
@@ -73,6 +75,15 @@ const paginator = prefer.s.useGroupedNotifications ? markRaw(new Paginator('i/no
 		excludeTypes: props.excludeTypes ?? undefined,
 	})),
 }));
+
+// Native list requests mark their full result as read. A read-all acknowledgement
+// has no watermark/IDs, so it cannot certify a concurrent hidden stream arrival.
+// Keep those originals separate until a native refetch replaces them. Weak
+// references follow paginator objects without retaining old pages or altering reads.
+const unreadStreamNotifications = shallowRef(new WeakSet<Misskey.entities.Notification>());
+const notificationRows = computed<NotificationPresentationRow[]>(previous => groupZalipReleaseNotifications(paginator.items.value, notification => (
+	explicitNotificationReadState(notification) ?? !unreadStreamNotifications.value.has(toRaw(notification))
+), previous));
 
 const MIN_POLLING_INTERVAL = 1000 * 10;
 const POLLING_INTERVAL =
@@ -137,6 +148,10 @@ watch(visibility, () => {
 
 function onNotification(notification: Misskey.entities.Notification) {
 	const isMuted = props.excludeTypes ? props.excludeTypes.includes(notification.type as typeof notificationTypes[number]) : false;
+	if (!isMuted && window.document.visibilityState !== 'visible') {
+		unreadStreamNotifications.value.add(toRaw(notification));
+		triggerRef(unreadStreamNotifications);
+	}
 	if (isMuted || window.document.visibilityState === 'visible') {
 		if (store.s.realtimeMode) {
 			useStream().send('readNotification');

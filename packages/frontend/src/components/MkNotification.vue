@@ -62,7 +62,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</div>
 	<div :class="$style.tail">
-		<header :class="$style.header">
+		<header v-if="notification.type !== 'zalipEpisodeReleased' && notification.type !== 'zalipAllohaAvailable'" :class="$style.header">
 			<span v-if="notification.type === 'pollEnded'">{{ i18n.ts._notification.pollEnded }}</span>
 			<span v-else-if="notification.type === 'scheduledNotePosted'">{{ i18n.ts._notification.scheduledNotePosted }}</span>
 			<span v-else-if="notification.type === 'scheduledNotePostFailed'">{{ i18n.ts._notification.scheduledNotePostFailed }}</span>
@@ -70,8 +70,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<span v-else-if="notification.type === 'roleAssigned'">{{ i18n.ts._notification.roleAssigned }}</span>
 			<span v-else-if="notification.type === 'chatRoomInvitationReceived'">{{ i18n.ts._notification.chatRoomInvitationReceived }}</span>
 			<span v-else-if="notification.type === 'achievementEarned'">{{ i18n.ts._notification.achievementEarned }}</span>
-			<span v-else-if="notification.type === 'zalipEpisodeReleased'">{{ i18n.ts._notification.zalipEpisodeReleased }}</span>
-			<span v-else-if="notification.type === 'zalipAllohaAvailable'">Доступно в Alloha</span>
 			<span v-else-if="notification.type === 'login'">{{ i18n.ts.zalip.notificationLogin }}</span>
 			<span v-else-if="notification.type === 'createToken'">{{ i18n.ts._notification.createToken }}</span>
 			<span v-else-if="notification.type === 'test'">{{ i18n.ts._notification.testNotification }}</span>
@@ -128,7 +126,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkA v-else-if="notification.type === 'exportCompleted'" :class="$style.text" :to="`/my/drive/file/${notification.fileId}`">
 				{{ i18n.ts.showFile }}
 			</MkA>
-			<MkZalipReleaseNotification v-else-if="notification.type === 'zalipEpisodeReleased' || notification.type === 'zalipAllohaAvailable'" :notification="notification"/>
+			<MkZalipReleaseNotification v-else-if="notification.type === 'zalipEpisodeReleased' || notification.type === 'zalipAllohaAvailable'" :notification="notification" :notifications="releaseNotifications" :withTime="withTime"/>
 			<MkA v-else-if="notification.type === 'createToken'" :class="$style.text" to="/settings/apps">
 				<Mfm :text="i18n.tsx._notification.createTokenDescription({ text: i18n.ts.manageAccessTokens })"/>
 			</MkA>
@@ -195,6 +193,7 @@ const $i = ensureSignin();
 
 const props = withDefaults(defineProps<{
 	notification: Misskey.entities.Notification;
+	releaseNotifications?: readonly Extract<Misskey.entities.Notification, { type: 'zalipEpisodeReleased' | 'zalipAllohaAvailable' }>[];
 	withTime?: boolean;
 	full?: boolean;
 }>(), {

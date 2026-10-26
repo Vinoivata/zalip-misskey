@@ -6,14 +6,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <PageWithHeader hideHeader>
 	<component :is="prefer.s.enablePullToRefresh ? MkPullToRefresh : 'div'" :refresher="refreshWork" :class="$style.viewport">
-		<div :class="$style.page">
+		<div :class="[$style.page, { [$style.watchCanvas]: watchPage }]">
 			<div v-if="pending" :class="$style.state"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i> Загружаем тайтл…</div>
 			<div v-else-if="work == null" :class="$style.state"><i class="ti ti-movie-off" aria-hidden="true"></i> Тайтл не найден или ещё не опубликован.</div>
 			<article v-else :class="[$style.work, { [$style.watchPage]: watchPage }]">
 				<header v-if="watchPage" :class="$style.watchHeader">
 					<MkA :to="zalipWorkRoute(work.slug)" :class="$style.watchBack" :aria-label="i18n.ts.zalip.aboutTitle"><i class="ti ti-arrow-left" aria-hidden="true"></i></MkA>
-					<div :class="$style.watchHeading"><h1><MkA :to="zalipWorkRoute(work.slug)">{{ work.title }}</MkA></h1><p>{{ selectedEpisode ? episodeLabel(selectedEpisode) : [kindLabel(work.kind), work.releaseYear].filter(Boolean).join(' · ') }}</p></div>
-					<button type="button" class="_button" :class="$style.watchLibrary" :disabled="personalActionsDisabled" aria-haspopup="menu" @click="showLibraryMenu"><i :class="saved ? libraryStatusIcon(libraryStatus) : isFavorite ? 'ti ti-bookmark' : 'ti ti-bookmark-plus'" aria-hidden="true"></i><span>{{ saved ? libraryStatusText(libraryStatus) : i18n.ts.zalip.addToList }}</span></button>
+					<img v-if="images.poster(work, 'w185')" :class="$style.watchPoster" :src="images.poster(work, 'w185')!" alt="" width="48" height="72" decoding="async" @error="images.failed">
+					<div v-else :class="$style.watchPoster" aria-hidden="true"><i class="ti ti-movie"></i></div>
+					<div :class="$style.watchHeading"><h1><MkA :to="zalipWorkRoute(work.slug)">{{ work.title }}</MkA></h1><p><span>{{ [kindLabel(work.kind), work.releaseYear].filter(Boolean).join(' · ') }}</span><span v-if="watchRating != null" :class="$style.watchRating"><i class="ti ti-star-filled" aria-hidden="true"></i>{{ watchRating.toFixed(1) }}</span></p></div>
+					<div :class="$style.watchActions">
+						<button v-if="work.trailerYoutubeKey" type="button" class="_button" :class="$style.watchTrailer" :aria-pressed="playerView === 'trailer'" :aria-label="i18n.ts.zalip.trailerTab" :title="i18n.ts.zalip.trailerTab" @click="playerView === 'trailer' ? playerView = 'player' : openTrailer()"><i class="ti ti-brand-youtube" aria-hidden="true"></i><span>{{ i18n.ts.zalip.trailerTab }}</span></button>
+						<button v-if="showReleaseSubscription" type="button" class="_button" :class="[$style.watchNotify, { [$style.subscribed]: releaseSubscribed }]" :disabled="personalActionsDisabled" :aria-label="releaseSubscribed ? i18n.ts.zalip.releaseSubscribed : releaseSubscriptionLabel" :aria-pressed="releaseSubscribed" @click="toggleReleaseSubscription"><i :class="releaseSubscribed ? 'ti ti-bell-check' : 'ti ti-bell'" aria-hidden="true"></i><span>{{ i18n.ts.notifications }}</span></button>
+						<button type="button" class="_button" :class="$style.watchLibrary" :disabled="personalActionsDisabled" aria-haspopup="menu" @click="showLibraryMenu"><i :class="saved ? libraryStatusIcon(libraryStatus) : isFavorite ? 'ti ti-bookmark' : 'ti ti-bookmark-plus'" aria-hidden="true"></i><span>{{ saved ? libraryStatusText(libraryStatus) : i18n.ts.zalip.addToList }}</span><i class="ti ti-chevron-down" aria-hidden="true"></i></button>
+					</div>
 				</header>
 				<section v-else :class="[$style.hero, { [$style.hasLogo]: images.ready(work.logoPath), [$style.hasMobilePoster]: images.source(work.posterPath) }]">
 					<div v-if="images.source(work.backdropPath, 'w1280')" :class="$style.heroBackground" aria-hidden="true"><img :src="images.source(work.backdropPath, 'w1280')!" alt="" decoding="async" width="1280" height="720" @error="images.failed"></div>
@@ -72,23 +78,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<div v-if="!watchPage && savedWatchProgress && !savedWatchProgress.completed" :class="$style.resumeBar"><div><strong>{{ i18n.ts.zalip.libraryContinue }}</strong><span v-if="savedWatchProgress.seasonNumber != null && savedWatchProgress.episodeNumber != null">{{ i18n.tsx.zalip.releaseSeason({ number: String(savedWatchProgress.seasonNumber) }) }} · {{ i18n.tsx.zalip.releaseEpisode({ number: String(savedWatchProgress.episodeNumber) }) }}</span></div><MkA :to="savedWatchRoute" :class="$style.watchButton">{{ i18n.ts.zalip.libraryContinue }}</MkA></div>
 					<div v-if="!watchPage && showReleaseSubscription" :class="$style.subscriptionBar"><button type="button" class="_button" :class="[$style.subscribeButton, { [$style.subscribed]: releaseSubscribed }]" :disabled="personalActionsDisabled" :aria-pressed="releaseSubscribed" @click="toggleReleaseSubscription"><i :class="releaseSubscribed ? 'ti ti-bell-check' : 'ti ti-bell-plus'" aria-hidden="true"></i><span>{{ releaseSubscribed ? i18n.ts.zalip.releaseSubscribed : releaseSubscriptionLabel }}</span></button></div>
 					<section v-if="watchPage" ref="playerSection" :class="$style.player" :aria-label="i18n.ts.zalip.playerTab">
-						<div v-if="$i && savedWatchProgress && !savedWatchProgress.completed" :class="$style.resumeBar">
-							<div><strong>{{ i18n.ts.zalip.libraryContinue }}</strong><span v-if="savedWatchProgress.seasonNumber != null && savedWatchProgress.episodeNumber != null">{{ i18n.tsx.zalip.releaseSeason({ number: String(savedWatchProgress.seasonNumber) }) }} · {{ i18n.tsx.zalip.releaseEpisode({ number: String(savedWatchProgress.episodeNumber) }) }}</span></div>
-							<button type="button" class="_button" :disabled="resumingWatch" @click="resumeWatch">{{ savedWatchProgress.positionSeconds != null && savedWatchProgress.positionSeconds > 0 ? i18n.tsx.zalip._progress.resumeAt({ time: watchTimeLabel(savedWatchProgress.positionSeconds) }) : i18n.ts.zalip._progress.resume }}</button>
-							<button type="button" class="_button" :disabled="resumingWatch" @click="restartWatch">{{ i18n.ts.zalip._progress.startOver }}</button>
-						</div>
 						<p v-if="watchProgressError" :class="$style.availableNotice" role="status">{{ watchProgressError }}</p>
-						<div :class="$style.playerTabs">
-							<button type="button" class="_button" :class="[$style.playerTab, { [$style.playerTabActive]: playerView === 'player' }]" :aria-pressed="playerView === 'player'" @click="playerView = 'player'"><i class="ti ti-list" aria-hidden="true"></i><span>{{ work.seasons.length ? i18n.ts.zalip.workEpisodes : i18n.ts.zalip.playerTab }}</span></button>
-							<button v-if="work.trailerYoutubeKey" type="button" class="_button" :class="[$style.playerTab, { [$style.playerTabActive]: playerView === 'trailer' }]" :aria-pressed="playerView === 'trailer'" @click="openTrailer"><i class="ti ti-player-play" aria-hidden="true"></i><span>{{ i18n.ts.zalip.trailerTab }}</span></button>
-							<button type="button" class="_button" :class="$style.playerTab" @click="focusDiscussion"><i class="ti ti-messages" aria-hidden="true"></i><span>{{ i18n.ts.zalip.comments }}</span></button>
-						</div>
 						<div :class="[$style.watchLayout, { [$style.watchLayoutWithEditions]: availablePlaybackSources.length }]">
 								<div :class="$style.watchFrame">
 								<div v-if="activePage && work.trailerYoutubeKey && playerView === 'trailer'" :class="$style.playerFrame"><iframe :src="youtubeEmbed(work.trailerYoutubeKey)" :title="i18n.ts.zalip.trailerTab + ': ' + work.title" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>
 								<div v-else-if="activePage && $i && playerOpen && activePlayerIframe" :class="$style.playerFrame"><iframe :key="`${activePlayerIframeKey}:${resumeFrameRevision}`" ref="playbackIframe" :src="selectedProvider === 'vibix' ? undefined : resumeIframeUrl ?? activePlayerIframe" :srcdoc="activeVibixDocument ?? undefined" :sandbox="selectedProvider === 'vibix' ? vibixPlayerSandbox : undefined" :title="i18n.ts.zalip.playerTab + ': ' + work.title" loading="lazy" referrerpolicy="origin" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>
 									<div v-else :class="$style.playerPreview">
-										<img v-if="episodeArtwork(selectedEpisode, 'w1280')" :src="episodeArtwork(selectedEpisode, 'w1280')!" alt="" width="1280" height="720" loading="lazy" decoding="async" @error="images.failed">
 										<p v-if="watchLinkUnavailable" :class="$style.playerState" role="alert"><i class="ti ti-alert-circle" aria-hidden="true"></i>{{ i18n.ts.zalip.playerEpisodeUnavailable }}</p>
 										<button v-else-if="$i && activePlayback && selectedEpisodeAvailable" type="button" class="_button" :class="$style.playOverlay" :aria-label="i18n.ts.zalip.watchTitle" @click="openSelectedPlayer"><i class="ti ti-player-play-filled" aria-hidden="true"></i></button>
 										<button v-else-if="!$i" type="button" class="_button" :class="$style.playerState" @click="signInForDiscussion"><i class="ti ti-login" aria-hidden="true"></i>{{ i18n.ts.zalip.playerSignIn }}</button>
@@ -96,18 +91,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 										<p v-else-if="playerEpisodeContextBlocked && episodesLoadFailed" :class="$style.playerState" role="status"><i class="ti ti-alert-circle" aria-hidden="true"></i>{{ i18n.ts.zalip.playerEpisodesLoadFailed }}</p>
 										<p v-else-if="activePlayback && !selectedEpisodeAvailable" :class="$style.playerState" role="status"><i class="ti ti-info-circle" aria-hidden="true"></i>{{ i18n.ts.zalip.playerEpisodeUnavailable }}</p>
 										<p v-else :class="$style.playerState"><i class="ti ti-clock" aria-hidden="true"></i>{{ i18n.ts.zalip.playerUnavailable }}</p>
+										<div v-if="$i && savedWatchProgress && !savedWatchProgress.completed && !playerOpen && playerView === 'player'" :class="$style.watchResume">
+											<span v-if="savedWatchProgress.seasonNumber != null && savedWatchProgress.episodeNumber != null">{{ i18n.tsx.zalip.releaseSeason({ number: String(savedWatchProgress.seasonNumber) }) }} · {{ i18n.tsx.zalip.releaseEpisode({ number: String(savedWatchProgress.episodeNumber) }) }}</span>
+											<button type="button" class="_button" :disabled="resumingWatch" @click="resumeWatch">{{ savedWatchProgress.positionSeconds != null && savedWatchProgress.positionSeconds > 0 ? i18n.tsx.zalip._progress.resumeAt({ time: watchTimeLabel(savedWatchProgress.positionSeconds) }) : i18n.ts.zalip._progress.resume }}</button>
+											<button type="button" class="_button" :disabled="resumingWatch" :title="i18n.ts.zalip._progress.startOver" :aria-label="i18n.ts.zalip._progress.startOver" @click="restartWatch"><i class="ti ti-refresh" aria-hidden="true"></i></button>
+										</div>
 									</div>
 									<button v-if="activePlayback" type="button" class="_button" :class="$style.editionTrigger" :aria-label="`${i18n.ts.zalip.playerVoices}: ${selectedVoiceLabel}, ${selectedProviderLabel}`" aria-haspopup="dialog" :aria-expanded="voiceMenuOpen" @click="openVoiceMenu">
 										<span><strong>{{ selectedVoiceLabel }}</strong><small>{{ selectedProviderLabel }}</small></span><i class="ti ti-selector" aria-hidden="true"></i>
 									</button>
-								<div v-if="playerView === 'player'" :class="$style.playerToolbar">
-										<div v-if="work.seasons.length" :class="$style.episodeControls">
-											<button type="button" class="_button" :disabled="previousEpisode == null" :aria-label="i18n.ts.zalip.playerPreviousEpisode" @click="selectRelativeEpisode(-1)"><i class="ti ti-chevron-left" aria-hidden="true"></i></button>
-											<button type="button" class="_button" :disabled="!episodes.length" aria-haspopup="dialog" :aria-expanded="episodeMenuOpen" @click="openEpisodeMenu">{{ selectedEpisode ? i18n.tsx.zalip.playerEpisodeNumber({ number: selectedEpisode.episodeNumber }) : i18n.ts.zalip.workEpisodes }}<i class="ti ti-chevron-down" aria-hidden="true"></i></button>
-											<button type="button" class="_button" :disabled="nextEpisode == null" :aria-label="i18n.ts.zalip.playerNextEpisode" @click="selectRelativeEpisode(1)"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
-										</div>
-										<button v-if="$i && selectedEpisodeProgress != null" type="button" class="_button" :class="[$style.watched, { [$style.actionActive]: episodeWatched }]" :disabled="personalActionsDisabled || episodeWatched" @click="markEpisodeWatched"><i :class="episodeWatched ? 'ti ti-eye-check' : 'ti ti-eye'" aria-hidden="true"></i>{{ episodeWatched ? i18n.ts.zalip.playerWatched : i18n.ts.zalip.playerMarkWatched }}</button>
-									</div>
+
 								</div>
 							<aside v-if="availablePlaybackSources.length" ref="editionPanel" :class="$style.editionPanel" :aria-label="i18n.ts.zalip.playerVoices">
 									<h3>{{ i18n.ts.zalip.playerTab }}</h3>
@@ -126,48 +119,52 @@ SPDX-License-Identifier: AGPL-3.0-only
 									<p v-else :class="$style.availableNotice">{{ i18n.ts.zalip._importer.nativeVoicesHint }}</p>
 								</aside>
 						</div>
-						<div v-if="showReleaseSubscription" :class="$style.subscriptionBar">
-							<button type="button" class="_button" :class="[$style.subscribeButton, { [$style.subscribed]: releaseSubscribed }]" :disabled="personalActionsDisabled" :aria-pressed="releaseSubscribed" @click="toggleReleaseSubscription"><i :class="releaseSubscribed ? 'ti ti-bell-check' : 'ti ti-bell-plus'" aria-hidden="true"></i><span>{{ releaseSubscribed ? i18n.ts.zalip.releaseSubscribed : releaseSubscriptionLabel }}</span></button>
-							<small>{{ releaseSubscribed ? i18n.ts.zalip.releaseUnsubscribeHint : i18n.ts.zalip.releaseSubscribeHint }}</small>
-						</div>
 						<template v-if="playerView === 'player'">
-							<p v-if="$i && playerOpen && (watchTracker.mode.value === 'episode' || !watchPlayerContext)" :class="$style.availableNotice">{{ episodeOnlyProgressHint }}</p>
-							<p v-else-if="$i && playerOpen && watchTracker.mode.value === 'time' && selectedProvider === 'collaps'" :class="$style.availableNotice">{{ i18n.ts.zalip._progress.collapsTimingHint }}</p>
-							<div v-if="work.seasons.length" :class="$style.playerEpisodes">
-								<div v-if="work.seasons.length > 1" :class="$style.seasonPicker"><span>{{ i18n.ts.zalip.workSeason }}</span><div><button v-for="season in work.seasons" :key="season.id" type="button" class="_button" :class="{ [$style.selectedSeasonPill]: selectedSeasonNumber === season.seasonNumber }" :aria-pressed="selectedSeasonNumber === season.seasonNumber" @click="selectSeason(season)">{{ season.seasonNumber === 0 ? i18n.ts.zalip.releaseSpecial : season.seasonNumber }}</button></div></div>
-								<p v-if="episodesPending" :class="$style.episodeRailState"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i>{{ i18n.ts.zalip.playerEpisodesLoading }}</p>
-								<div v-else-if="episodesLoadFailed" :class="$style.episodeRailState" role="alert"><span>{{ i18n.ts.zalip.playerEpisodesLoadFailed }}</span><button type="button" class="_button" :class="$style.episodeRetry" @click="retryEpisodes">{{ i18n.ts.retry }}</button></div>
-								<p v-else-if="!episodes.length" :class="$style.episodeRailState">{{ i18n.ts.zalip.playerEpisodesEmpty }}</p>
-								<div v-else ref="episodeRail" :class="$style.episodeRail" :aria-label="i18n.ts.zalip.workEpisodes">
-									<button v-for="episode in episodes" :key="episode.id" :data-episode-id="episode.id" type="button" class="_button" :class="[$style.episodeTile, { [$style.selectedEpisodeTile]: selectedEpisode?.id === episode.id }]" :aria-pressed="selectedEpisode?.id === episode.id" :aria-label="episodeLabel(episode)" :title="episodeLabel(episode)" @click="selectEpisode(episode)">
+							<div :class="$style.playerNavigation">
+								<div :class="$style.playerToolbar">
+									<div v-if="work.seasons.length" :class="$style.episodeControls">
+										<button type="button" class="_button" :disabled="previousEpisode == null" :aria-label="i18n.ts.zalip.playerPreviousEpisode" @click="selectRelativeEpisode(-1)"><i class="ti ti-chevron-left" aria-hidden="true"></i></button>
+										<button type="button" class="_button" :disabled="!episodes.length" aria-haspopup="dialog" :aria-expanded="episodeMenuOpen" @click="openEpisodeMenu">{{ selectedEpisode ? i18n.tsx.zalip.playerEpisodeNumber({ number: selectedEpisode.episodeNumber }) : i18n.ts.zalip.workEpisodes }}<i class="ti ti-chevron-down" aria-hidden="true"></i></button>
+										<button type="button" class="_button" :disabled="nextEpisode == null" :aria-label="i18n.ts.zalip.playerNextEpisode" @click="selectRelativeEpisode(1)"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
+									</div>
+									<button v-if="$i && selectedEpisodeProgress != null" type="button" class="_button" :class="[$style.watched, { [$style.actionActive]: episodeWatched }]" :disabled="personalActionsDisabled || episodeWatched" :aria-label="episodeWatched ? i18n.ts.zalip.playerWatched : i18n.ts.zalip.playerMarkWatched" :title="episodeWatched ? i18n.ts.zalip.playerWatched : i18n.ts.zalip.playerMarkWatched" @click="markEpisodeWatched"><i :class="episodeWatched ? 'ti ti-eye-check' : 'ti ti-eye'" aria-hidden="true"></i><span>{{ episodeWatched ? i18n.ts.zalip.playerWatched : i18n.ts.zalip.playerMarkWatched }}</span></button>
+								</div>
+								<div v-if="work.seasons.length" :class="[$style.playerEpisodes, { [$style.episodeRailFeedback]: episodesPending || episodesLoadFailed || !episodes.length }]">
+									<label v-if="work.seasons.length > 1" :class="$style.watchSeason"><select :value="selectedSeasonNumber" :aria-label="i18n.ts.zalip.workSeason" @change="selectWatchSeason"><option v-for="season in work.seasons" :key="season.id" :value="season.seasonNumber">{{ season.seasonNumber === 0 ? i18n.ts.zalip.releaseSpecial : i18n.tsx.zalip.releaseSeason({ number: String(season.seasonNumber) }) }}</option></select></label>
+									<p v-if="episodesPending" :class="$style.episodeRailState"><i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i>{{ i18n.ts.zalip.playerEpisodesLoading }}</p>
+									<div v-else-if="episodesLoadFailed" :class="$style.episodeRailState" role="alert"><span>{{ i18n.ts.zalip.playerEpisodesLoadFailed }}</span><button type="button" class="_button" :class="$style.episodeRetry" @click="retryEpisodes">{{ i18n.ts.retry }}</button></div>
+									<p v-else-if="!episodes.length" :class="$style.episodeRailState">{{ i18n.ts.zalip.playerEpisodesEmpty }}</p>
+									<div v-else ref="episodeRail" :class="$style.episodeRail" :aria-label="i18n.ts.zalip.workEpisodes">
+										<button v-for="episode in episodes" :key="episode.id" :data-episode-id="episode.id" type="button" class="_button" :class="[$style.episodeTile, { [$style.selectedEpisodeTile]: selectedEpisode?.id === episode.id }]" :aria-pressed="selectedEpisode?.id === episode.id" :aria-label="episodeLabel(episode)" :title="episodeLabel(episode)" @click="selectEpisode(episode)">
 										{{ i18n.tsx.zalip.playerEpisodeNumber({ number: episode.episodeNumber }) }}
-									</button>
+										</button>
+									</div>
 								</div>
 							</div>
+							<details v-if="$i && playerOpen && (watchTracker.mode.value === 'episode' || !watchPlayerContext)" :class="$style.watchProgressHelp"><summary><i class="ti ti-info-circle" aria-hidden="true"></i>{{ i18n.ts.info }}</summary><p>{{ episodeOnlyProgressHint }}</p></details>
+							<details v-else-if="$i && playerOpen && watchTracker.mode.value === 'time' && selectedProvider === 'collaps'" :class="$style.watchProgressHelp"><summary><i class="ti ti-info-circle" aria-hidden="true"></i>{{ i18n.ts.info }}</summary><p>{{ i18n.ts.zalip._progress.collapsTimingHint }}</p></details>
+
 						</template>
 					</section>
-					<section v-if="watchPage && selectedEpisode" :class="$style.episodeGuide" @touchstart.passive="startEpisodeSwipe" @touchend.passive="finishEpisodeSwipe" @touchcancel="episodeSwipeStart = null">
-						<img v-if="episodeArtwork(selectedEpisode)" :key="selectedEpisode.id" :class="$style.episodeGuideStill" :src="episodeArtwork(selectedEpisode)!" alt="" width="480" height="270" loading="lazy" decoding="async" @error="images.failed">
+					<details v-if="watchPage && selectedEpisode" :class="$style.episodeGuide" @touchstart.passive="startEpisodeSwipe" @touchend.passive="finishEpisodeSwipe" @touchcancel="episodeSwipeStart = null">
+						<summary :class="$style.episodeGuideToggle"><span>{{ episodeLabel(selectedEpisode) }}</span><small>{{ episodeMeta(selectedEpisode) }}</small><i class="ti ti-chevron-down" aria-hidden="true"></i></summary>
 						<div :class="$style.episodeGuideContent" aria-live="polite">
-							<p>{{ i18n.ts.zalip.episodeInformation }}</p>
-							<div :class="$style.guideNavigation"><button type="button" class="_button" :disabled="!previousEpisode" :aria-label="i18n.ts.zalip.playerPreviousEpisode" @click="selectRelativeEpisode(-1)"><i class="ti ti-chevron-left" aria-hidden="true"></i></button><span>{{ i18n.ts.zalip.episodeSwipeHint }}</span><button type="button" class="_button" :disabled="!nextEpisode" :aria-label="i18n.ts.zalip.playerNextEpisode" @click="selectRelativeEpisode(1)"><i class="ti ti-chevron-right" aria-hidden="true"></i></button></div>
-							<h2>{{ episodeLabel(selectedEpisode) }}</h2>
-							<span v-if="selectedEpisode.runtimeMinutes || selectedEpisode.airDate">{{ episodeMeta(selectedEpisode) }}</span>
+							<img v-if="episodeArtwork(selectedEpisode)" :key="selectedEpisode.id" :class="$style.episodeGuideStill" :src="episodeArtwork(selectedEpisode)!" alt="" width="480" height="270" loading="lazy" decoding="async" @error="images.failed">
 							<p v-if="selectedEpisode.description">{{ selectedEpisode.description }}</p>
-							<button type="button" class="_button" :class="$style.episodeDiscussButton" @click="selectDiscussionScope('episode')"><i class="ti ti-messages" aria-hidden="true"></i> {{ selectedEpisode.discussionNoteId ? i18n.ts.zalip.episodeComments : i18n.ts.zalip.discussEpisode }}</button>
 						</div>
-					</section>
+					</details>
 					<section id="discussion" ref="discussionSection" :class="$style.discussionArea">
-						<div :class="$style.discussionScope" role="group" :aria-label="i18n.ts.zalip.discussionContext">
+						<div v-if="!watchPage" :class="$style.discussionScope" role="group" :aria-label="i18n.ts.zalip.discussionContext">
 							<button type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionTab === 'comments' && discussionScope === 'work' }]" :aria-pressed="discussionTab === 'comments' && discussionScope === 'work'" @click="selectDiscussionScope('work')"><i class="ti ti-messages" aria-hidden="true"></i> {{ i18n.ts.zalip.comments }}</button>
 							<button v-if="selectedEpisode" type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionTab === 'comments' && discussionScope === 'episode' }]" :aria-pressed="discussionTab === 'comments' && discussionScope === 'episode'" @click="selectDiscussionScope('episode')"><i class="ti ti-device-tv" aria-hidden="true"></i> {{ episodeLabel(selectedEpisode) }}</button>
 							<button type="button" class="_button" :class="[$style.scopeButton, { [$style.scopeButtonActive]: discussionTab === 'reviews' }]" :aria-pressed="discussionTab === 'reviews'" @click="discussionTab = 'reviews'"><i class="ti ti-message-star" aria-hidden="true"></i> {{ i18n.ts.zalip._reviews.reviews }}</button>
 						</div>
-						<MkZalipReviewsPanel v-if="discussionTab === 'reviews'" :workId="work.id" :workTitle="work.title" :personalRating="personalRating" @ratingChanged="reviewRatingChanged"/>
-						<ZalipDiscussionPanel v-else-if="activeDiscussionNoteId" :noteId="activeDiscussionNoteId" :heading="activeDiscussionHeading"/>
+						<MkZalipReviewsPanel v-if="!watchPage && discussionTab === 'reviews'" :workId="work.id" :workTitle="work.title" :personalRating="personalRating" @ratingChanged="reviewRatingChanged"/>
+						<ZalipDiscussionPanel v-else-if="activeDiscussionNoteId" :noteId="activeDiscussionNoteId" :heading="activeDiscussionHeading" :compact="watchPage"/>
 						<section v-else :class="$style.discussionPending">
-							<p v-if="!discussionError"><i class="ti ti-messages" aria-hidden="true"></i> {{ activeDiscussionEmptyText }}</p>
-							<button v-if="$i" type="button" class="_button" :class="$style.openDiscussion" :disabled="openingDiscussionScope != null" @click="openActiveDiscussion"><i :class="openingDiscussionScope != null ? 'ti ti-loader-2 ti-spin' : 'ti ti-message-plus'" aria-hidden="true"></i> {{ openingDiscussionScope != null ? i18n.ts.zalip.openingDiscussion : i18n.ts.zalip.startDiscussion }}</button>
+							<h2 v-if="watchPage">{{ i18n.ts.zalip.comments }}</h2>
+							<p v-if="!watchPage && !discussionError"><i class="ti ti-messages" aria-hidden="true"></i> {{ activeDiscussionEmptyText }}</p>
+							<button v-if="$i" type="button" class="_button" :class="$style.openDiscussion" :disabled="openingDiscussionScope != null || episodeDiscussionUnavailable" @click="openActiveDiscussion"><i :class="openingDiscussionScope != null ? 'ti ti-loader-2 ti-spin' : 'ti ti-message-plus'" aria-hidden="true"></i> {{ openingDiscussionScope != null ? i18n.ts.zalip.openingDiscussion : i18n.ts.zalip.startDiscussion }}</button>
 							<button v-else type="button" class="_button" :class="$style.openDiscussion" @click="signInForDiscussion"><i class="ti ti-login" aria-hidden="true"></i> {{ i18n.ts.zalip.loginToComment }}</button>
 							<p v-if="discussionError" :class="$style.discussionError">{{ discussionError }}</p>
 						</section>
@@ -223,10 +220,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</MkModal>
 		<MkModal v-if="episodeMenuOpen" ref="episodeModal" v-slot="{ maxHeight }" :class="$style.voiceOverlay" preferType="popup" :anchorElement="episodeAnchor" @click="episodeModal?.close()" @esc="episodeModal?.close()" @closed="episodeMenuOpen = false">
 			<section :class="$style.episodeMenu" :style="maxHeight == null ? undefined : { maxHeight: `min(${maxHeight}px, 55dvh)` }" role="dialog" aria-modal="true" :aria-label="i18n.ts.zalip.workEpisodes">
+				<label v-if="work && work.seasons.length > 1" :class="$style.watchSeason"><select :value="selectedSeasonNumber" :aria-label="i18n.ts.zalip.workSeason" @change="selectWatchSeason"><option v-for="season in work.seasons" :key="season.id" :value="season.seasonNumber">{{ season.seasonNumber === 0 ? i18n.ts.zalip.releaseSpecial : i18n.tsx.zalip.releaseSeason({ number: String(season.seasonNumber) }) }}</option></select></label>
 				<label :class="$style.menuSearch"><i class="ti ti-search" aria-hidden="true"></i><input v-model="episodeQuery" type="search" :placeholder="i18n.ts.zalip.playerEpisodeSearch" :aria-label="i18n.ts.zalip.playerEpisodeSearch" @keydown.esc.stop.prevent="episodeModal?.close()"></label>
 				<div :class="$style.episodeChoices">
-					<button v-for="episode in filteredEpisodes" :key="episode.id" type="button" class="_button" :class="{ [$style.menuSelected]: selectedEpisodeId === episode.id }" :aria-pressed="selectedEpisodeId === episode.id" @click="selectEpisode(episode)">{{ i18n.tsx.zalip.playerEpisodeNumber({ number: episode.episodeNumber }) }}<i v-if="selectedEpisodeId === episode.id" class="ti ti-check" aria-hidden="true"></i></button>
-					<p v-if="!filteredEpisodes.length">{{ i18n.ts.zalip.searchNoResults }}</p>
+					<p v-if="episodesPending" role="status">{{ i18n.ts.zalip.playerEpisodesLoading }}</p>
+					<div v-else-if="episodesLoadFailed" :class="$style.episodeRailState" role="alert"><span>{{ i18n.ts.zalip.playerEpisodesLoadFailed }}</span><button type="button" class="_button" @click="retryEpisodes">{{ i18n.ts.retry }}</button></div>
+					<template v-else>
+						<button v-for="episode in filteredEpisodes" :key="episode.id" type="button" class="_button" :class="{ [$style.menuSelected]: selectedEpisodeId === episode.id }" :aria-pressed="selectedEpisodeId === episode.id" @click="selectEpisode(episode)">{{ i18n.tsx.zalip.playerEpisodeNumber({ number: episode.episodeNumber }) }}<i v-if="selectedEpisodeId === episode.id" class="ti ti-check" aria-hidden="true"></i></button>
+						<p v-if="!filteredEpisodes.length">{{ i18n.ts.zalip.searchNoResults }}</p>
+					</template>
 				</div>
 			</section>
 		</MkModal>
@@ -430,6 +432,7 @@ const watchCoordinateUnavailable = ref(false);
 const watchEditionUnavailable = ref(false);
 const watchLinkUnavailable = computed(() => watchCoordinateUnavailable.value || watchEditionUnavailable.value);
 const work = ref<ZalipWork | null>(null);
+const watchRating = computed(() => work.value?.communityRating ?? work.value?.externalRatings?.[0]?.value ?? null);
 const images = useZalipImages();
 const mobileArtworkSource = computed(() => images.source(work.value?.backdropPath, 'w1280') ?? images.source(work.value?.posterPath));
 const workSubtitle = computed(() => [work.value?.originalTitle, work.value?.releaseYear].filter(Boolean).join(', '));
@@ -556,22 +559,23 @@ const watchPlayerContext = computed(() => {
 });
 const watchTracker = useZalipWatchProgress(watchPlayerContext, playbackIframe, progress => { if (work.value?.id === progress.workId) { watchHistoryGeneration++; savedWatchProgress.value = progress; } }, async url => { resumeIframeUrl.value = url; resumeFrameRevision.value++; await nextTick(); });
 const watchProgressError = computed(() => watchActionError.value ?? ({ failed: i18n.ts.zalip._progress.saveFailed, conflict: i18n.ts.zalip._progress.sessionConflict, unmapped: i18n.ts.zalip._progress.contextUnmapped } as Partial<Record<string, string>>)[watchTracker.state.value] ?? null);
-const episodeOnlyProgressHint = computed(() => {
-	if (fixedPlayerClip.value && selectedEpisode.value == null) {
-		return selectedProvider.value === 'alloha' ? i18n.ts.zalip._progress.allohaMovieHint : i18n.ts.zalip._progress.movieHint;
-	}
-	return i18n.ts.zalip._progress.episodeHint;
-});
+const episodeOnlyProgressHint = computed(() => fixedPlayerClip.value && selectedEpisode.value == null
+	? selectedProvider.value === 'alloha' ? i18n.ts.zalip._progress.allohaMovieHint : i18n.ts.zalip._progress.movieHint
+	: i18n.ts.zalip._progress.episodeHint);
 const selectedEpisodeIndex = computed(() => selectedEpisode.value == null ? -1 : episodes.value.findIndex(episode => episode.id === selectedEpisode.value?.id));
 const previousEpisode = computed(() => selectedEpisodeIndex.value > 0 ? episodes.value[selectedEpisodeIndex.value - 1] ?? null : null);
 const nextEpisode = computed(() => selectedEpisodeIndex.value >= 0 ? episodes.value[selectedEpisodeIndex.value + 1] ?? null : null);
-const activeDiscussionNoteId = computed(() => discussionScope.value === 'episode' ? selectedEpisode.value?.discussionNoteId ?? null : discussionNoteId.value);
+// A dedicated episode watch never falls back to title comments while metadata
+// is pending, fails, or is retried. An episode ID must exist before posting.
+const activeDiscussionScope = computed(() => props.watchPage && work.value?.seasons.length ? 'episode' : discussionScope.value);
+const episodeDiscussionUnavailable = computed(() => activeDiscussionScope.value === 'episode' && selectedEpisode.value == null);
+const activeDiscussionNoteId = computed(() => activeDiscussionScope.value === 'episode' ? selectedEpisode.value?.discussionNoteId ?? null : discussionNoteId.value);
 const ratingLabel = computed(() => personalRating.value == null ? i18n.ts.zalip.ratingUnset : i18n.tsx.zalip.ratingValue({ rating: personalRating.value.toString() }));
 const activeDiscussionHeading = computed(() => {
-	if (discussionScope.value === 'episode' && selectedEpisode.value != null && work.value != null) return i18n.tsx.zalip.episodeDiscussionHeading({ title: work.value.title, episode: episodeLabel(selectedEpisode.value) });
+	if (activeDiscussionScope.value === 'episode' && selectedEpisode.value != null && work.value != null) return i18n.tsx.zalip.episodeDiscussionHeading({ title: work.value.title, episode: episodeLabel(selectedEpisode.value) });
 	return work.value == null ? i18n.ts.zalip.comments : i18n.tsx.zalip.workDiscussionHeading({ title: work.value.title });
 });
-const activeDiscussionEmptyText = computed(() => discussionScope.value === 'episode' && selectedEpisode.value != null
+const activeDiscussionEmptyText = computed(() => activeDiscussionScope.value === 'episode' && selectedEpisode.value != null
 	? i18n.tsx.zalip.emptyEpisodeDiscussion({ episode: episodeLabel(selectedEpisode.value) })
 	: i18n.ts.zalip.emptyWorkDiscussion);
 
@@ -739,7 +743,7 @@ async function load(selection?: { initialSeason?: string; initialEpisode?: strin
 				|| (!!$i && !!target.initialTranslation && !requestedTranslation);
 			if (selectedEpisode.value) discussionScope.value = 'episode';
 		}
-		if (request === workRequest && window.location.hash.startsWith('#review')) {
+		if (!props.watchPage && request === workRequest && window.location.hash.startsWith('#review')) {
 			discussionTab.value = 'reviews';
 			await nextTick();
 			focusDiscussion();
@@ -868,10 +872,10 @@ watch([selectedEpisodeId, episodesPending, playerView, episodeRail], async () =>
 	if (!rail || !selected) return;
 	const rect = rail.getBoundingClientRect();
 	const tile = selected.getBoundingClientRect();
-	// Keep the selected row visible without moving the page or stealing keyboard focus.
-	if (tile.top >= rect.top && tile.bottom <= rect.bottom) return;
-	const top = rail.scrollTop + tile.top - rect.top - (rect.height - tile.height) / 2;
-	rail.scrollTo({ top: Math.max(0, top), behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+	// Scroll only the horizontal episode strip, without moving the page or focus.
+	if (tile.left >= rect.left && tile.right <= rect.right) return;
+	const left = rail.scrollLeft + tile.left - rect.left - (rect.width - tile.width) / 2;
+	rail.scrollTo({ left: Math.max(0, left), behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
 }, { flush: 'post' });
 
 async function loadSeason(season: ZalipSeason, initialEpisodeNumber: number | null = null): Promise<void> {
@@ -914,6 +918,12 @@ async function retryEpisodes(): Promise<void> {
 	if (episodesPending.value || !episodesLoadFailed.value) return;
 	const season = work.value?.seasons.find(candidate => candidate.seasonNumber === selectedSeasonNumber.value);
 	if (season) await loadSeason(season, zalipEpisodeQuery(props.initialSeason, 0) === season.seasonNumber ? zalipEpisodeQuery(props.initialEpisode, 0) : null);
+}
+
+function selectWatchSeason(event: Event): void {
+	const value = Number((event.target as HTMLSelectElement).value);
+	const season = work.value?.seasons.find(item => item.seasonNumber === value);
+	if (season) void selectSeason(season);
 }
 
 async function selectSeason(season: ZalipSeason): Promise<void> {
@@ -1046,14 +1056,14 @@ async function signInForDiscussion(): Promise<void> {
 }
 
 async function openActiveDiscussion(): Promise<void> {
-	if (!$i || work.value == null || openingDiscussionScope.value != null) return;
-	const scope = discussionScope.value;
+	if (!$i || work.value == null || openingDiscussionScope.value != null || episodeDiscussionUnavailable.value) return;
+	const scope = activeDiscussionScope.value;
 	const episode = selectedEpisode.value;
 	const workId = work.value.id;
 	const workEpoch = workRequest;
 	const request = ++discussionRequest;
 	const account = $i.id;
-	const current = () => request === discussionRequest && workEpoch === workRequest && $i?.id === account && work.value?.id === workId && discussionScope.value === scope && (scope !== 'episode' || selectedEpisode.value?.id === episode?.id);
+	const current = () => request === discussionRequest && workEpoch === workRequest && $i?.id === account && work.value?.id === workId && activeDiscussionScope.value === scope && (scope !== 'episode' || selectedEpisode.value?.id === episode?.id);
 	if (scope === 'episode' && episode == null) return;
 	openingDiscussionScope.value = scope;
 	discussionError.value = null;
@@ -1275,7 +1285,7 @@ definePage(() => ({
 <style lang="scss" module>
 .resumeBar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px; margin-bottom: 16px; border-radius: var(--MI-radius); background: var(--MI_THEME-panelHighlight); > div { display: flex; flex: 1 1 180px; flex-direction: column; gap: 4px; span { font-size: .82em; opacity: .7; } } > button { padding: 10px 14px; border-radius: 999px; background: var(--MI_THEME-buttonBg); &:first-of-type { background: var(--MI_THEME-accent); color: var(--MI_THEME-fgOnAccent); } &:focus-visible { outline: 2px solid var(--MI_THEME-accent); outline-offset: 3px; } } }
 .viewport { container-type: inline-size; }
-.page { max-width: 960px; margin: 0 auto; padding-bottom: 48px; min-width: 0; color: var(--zalip-social-fg); background: var(--zalip-social-panel); }
+.page { max-width: 1180px; margin: 0 auto; padding-bottom: 48px; min-width: 0; color: var(--zalip-social-fg); background: var(--zalip-social-panel); }
 .work, .content { min-width: 0; }
 .watchHeader { display: flex; align-items: center; gap: 12px; padding: 20px 24px; }
 .watchBack { display: grid; place-items: center; flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; color: var(--zalip-social-fg); }
@@ -1544,4 +1554,113 @@ definePage(() => ({
 	.workSheet { width: 100%; max-height: calc(100dvh - 24px); padding: 24px 20px max(20px, env(safe-area-inset-bottom)); border-radius: 24px 24px 0 0; }
 	.voiceDrawer { position: fixed; inset: auto 8px 8px; width: auto; height: min(72dvh, 640px); max-height: calc(100dvh - 72px); margin: 0; padding: 12px 12px max(16px, env(safe-area-inset-bottom)); border-radius: 16px; overscroll-behavior: contain; }
 }
+// The dedicated watch canvas follows AnimeLIB's media/sidebar/episode-strip flow.
+.watchCanvas { width: 100%; max-width: none; padding-bottom: 0; background: var(--zalip-social-bg); }
+.watchCanvas .watchHeader { display: grid; grid-template-columns: 36px 48px minmax(0, 1fr) auto; align-items: center; gap: 14px; min-height: 96px; box-sizing: border-box; padding: 12px 20px; background: var(--zalip-social-panel); border-bottom: 1px solid var(--zalip-social-border); }
+.watchPoster { grid-column: 2; display: grid; place-items: center; width: 48px; height: 68px; border-radius: 4px; object-fit: cover; background: var(--zalip-social-raised); color: var(--zalip-social-muted); }
+.watchCanvas .watchHeading { grid-column: 3; }
+.watchCanvas .watchHeading h1 { font-size: 20px; line-height: 1.4; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.watchCanvas .watchHeading p { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 5px; font-size: 13px; }
+.watchRating { display: inline-flex; align-items: center; gap: 5px; color: var(--zalip-social-fg); }
+.watchRating i { color: var(--MI_THEME-warn); }
+.watchActions { grid-column: 4; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.watchActions button { display: inline-flex; justify-content: center; align-items: center; gap: 7px; min-height: 36px; box-sizing: border-box; padding: 7px 12px; border-radius: 6px; font-size: 13px; white-space: nowrap; }
+.watchActions button:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; }
+.watchNotify { color: var(--MI_THEME-accent); background: var(--zalip-accent-soft); }
+.watchNotify.subscribed { background: var(--MI_THEME-accent); color: var(--MI_THEME-fgOnAccent); }
+.watchActions .watchLibrary { border: 0; background: var(--zalip-social-raised); }
+.watchTrailer { color: var(--zalip-social-muted); }
+.watchTrailer[aria-pressed=true] { color: var(--MI_THEME-accent); }
+.watchPage .content { padding: 0; }
+.watchPage .player { scroll-margin-top: 0; }
+.watchPage .watchLayout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; padding-right: 0; }
+.watchPage .watchFrame { border-radius: 0; background: var(--zalip-social-panel); }
+// Playback is a black video viewport in both themes, like the providers' own controls.
+.watchPage .playerFrame, .watchPage .playerPreview { height: clamp(360px, 76dvh, 760px); aspect-ratio: auto; background: black; color: white; }
+.watchPage .playOverlay { width: 76px; height: 76px; border: 0; border-radius: 0; background: transparent; color: white; }
+.watchPage .playOverlay i { font-size: 58px; }
+.watchResume { position: absolute; inset: auto 16px 18px; display: flex; align-items: center; justify-content: center; gap: 8px 12px; flex-wrap: wrap; color: white; font-size: 12px; }
+.watchResume > span { opacity: .7; }
+.watchResume button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 8px 12px; border-radius: 6px; background: color-mix(in srgb, white 14%, black); color: white; font-weight: 600; }
+.watchResume button:first-of-type { background: var(--MI_THEME-accent); color: var(--MI_THEME-fgOnAccent); }
+.watchResume button:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: 2px; }
+.watchPage .playerToolbar { min-height: 48px; padding: 4px 12px; flex-wrap: nowrap; border-bottom: 1px solid var(--zalip-social-border); }
+.watchPage .editionTrigger { min-height: 44px; padding: 8px 16px; }
+.watchPage .editionTrigger strong { font-size: 14px; }
+.watchPage .editionTrigger small { font-size: 12px; }
+.watchPage .playerEpisodes { display: flex; align-items: center; gap: 12px; margin: 0; padding: 8px 16px; border-bottom: 1px solid var(--zalip-social-border); }
+.playerNavigation { display: flex; align-items: center; min-width: 0; min-height: 56px; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--zalip-social-border); }
+.watchPage .playerNavigation .playerToolbar { display: contents; }
+.playerNavigation .episodeControls { order: 0; }
+.watchPage .playerNavigation .playerEpisodes { flex: 1; min-width: 0; order: 1; padding: 6px 0; border: 0; }
+.playerNavigation .watched { order: 2; flex: 0 0 auto; margin-left: auto; }
+.watchSeason { flex: 0 0 auto; display: block; }
+.watchSeason select { width: 100%; min-height: 36px; box-sizing: border-box; padding: 6px 12px; border: 1px solid var(--zalip-social-border); border-radius: 6px; font: inherit; font-size: 13px; color: var(--zalip-social-fg); background: var(--zalip-social-panel); }
+.watchPage .episodeRail { display: flex; flex: 1; min-width: 0; gap: 4px; max-height: none; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; padding: 0 0 3px; }
+.watchPage .episodeTile { flex: 0 0 auto; min-width: 86px; min-height: 38px; padding: 8px 12px; border-radius: 6px; }
+.watchPage .episodeGuide { display: block; max-width: 880px; box-sizing: border-box; margin: 0 auto; padding: 0 24px; border-bottom: 1px solid var(--zalip-social-border); }
+.episodeGuideToggle { display: flex; align-items: center; gap: 12px; min-height: 52px; list-style: none; cursor: pointer; font-size: 13px; color: var(--zalip-social-muted); }
+.episodeGuideToggle::-webkit-details-marker { display: none; }
+.episodeGuideToggle > span { flex: 1; min-width: 0; }
+.episodeGuideToggle > small { font-size: 11px; }
+.episodeGuideToggle > i { font-size: 16px; transition: transform .15s; }
+.episodeGuide[open] > .episodeGuideToggle > i { transform: rotate(180deg); }
+.episodeGuideToggle:focus-visible { outline: 2px solid var(--MI_THEME-focus); outline-offset: -2px; }
+.watchPage .episodeGuideContent { display: flex; align-items: start; gap: 18px; padding: 0 0 20px; }
+.watchPage .episodeGuideStill { width: 180px; max-width: 35%; flex: 0 0 auto; border-radius: 6px; }
+.watchPage .episodeGuideContent p { margin: 0; font-size: 13px; font-weight: 400; color: var(--zalip-social-muted); }
+.watchPage .discussionArea { max-width: 880px; box-sizing: border-box; margin: 0 auto; padding: 24px; }
+.watchPage .discussionPending { margin: 0; padding: 0; border: 0; background: transparent; }
+.watchPage .discussionPending h2 { margin: 0 0 20px; font-size: 20px; }
+.watchPage .availableNotice { margin: 0; padding: 10px 20px; }
+.watchProgressHelp { margin: 0; padding: 6px 16px; color: var(--zalip-social-muted); font-size: 12px; }
+.watchProgressHelp > summary { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; cursor: pointer; }
+.watchProgressHelp p { margin: 6px 0; line-height: 1.5; }
+.episodeMenu .watchSeason { margin-bottom: 10px; }
+@container (min-width: 1000px) {
+	.playerNavigation .episodeControls button:nth-child(2) { display: none; }
+	.watchPage .watchLayoutWithEditions { grid-template-columns: minmax(0, 1fr) 300px; }
+	.watchPage .watchLayoutWithEditions .editionTrigger { display: none; }
+	.watchPage .editionPanel { position: static; inset: auto; display: flex; flex-direction: column; min-height: 0; width: auto; padding: 16px; border-left: 1px solid var(--zalip-social-border); border-radius: 0; background: var(--zalip-social-panel); }
+	.watchPage .editionPanel h3 { font-size: 14px; font-weight: 500; }
+	.watchPage .providerChoices button { min-height: 30px; padding: 5px 10px; font-size: 13px; border-radius: 5px; }
+	.watchPage .translationTypes { gap: 16px; margin-bottom: 8px; }
+	.watchPage .translationTypes button { min-height: 38px; font-size: 14px; }
+	.watchPage .voiceList { flex: 1; }
+	.watchPage .voiceList button { min-height: 34px; padding: 6px 10px; border-radius: 5px; }
+}
+@container (max-width: 999px) {
+	.watchPage .editionPanel { display: none; }
+	.watchPage .editionTrigger { display: flex; }
+	.watchPage .playerFrame, .watchPage .playerPreview { min-height: 240px; height: min(56dvh, 440px); }
+	.watchPage .playerNavigation { display: block; min-height: 48px; padding: 0; }
+	.watchPage .playerNavigation .playerToolbar { display: flex; border: 0; }
+	.watchPage .playerNavigation .playerEpisodes { display: none; }
+	.watchPage .playerNavigation .episodeRailFeedback { display: block; padding: 8px 16px; }
+}
+@container (max-width: 600px) {
+	.watchCanvas .watchHeader { grid-template-columns: 40px minmax(0, 1fr) auto; grid-template-areas: 'back actions actions' 'poster heading heading'; gap: 8px 10px; padding: 8px 12px 12px; }
+	.watchCanvas .watchBack { grid-area: back; width: 36px; height: 36px; }
+	.watchCanvas .watchPoster { grid-area: poster; width: 40px; height: 58px; }
+	.watchCanvas .watchHeading { grid-area: heading; }
+	.watchCanvas .watchHeading h1 { font-size: 18px; }
+	.watchCanvas .watchHeading p { font-size: 12px; }
+	.watchActions { grid-area: actions; justify-content: flex-end; gap: 6px; }
+	.watchActions button { min-height: 36px; padding: 6px 10px; font-size: 12px; }
+	.watchActions .watchLibrary span { display: inline; max-width: 112px; overflow: hidden; text-overflow: ellipsis; }
+	.watchTrailer span { display: none; }
+	.watchPage .playerToolbar { padding: 4px 10px; }
+	.watchPage .watched { max-width: none; margin-left: auto; padding: 6px 10px; }
+	.watchPage .watched span { display: none; }
+	.watchPage .playerEpisodes { padding: 6px 12px; gap: 8px; }
+	.watchPage .watchSeason select { padding: 6px; font-size: 12px; }
+	.watchPage .episodeTile { min-width: 70px; min-height: 36px; font-size: 12px; }
+	.watchPage .episodeGuide { padding: 0 16px; }
+	.episodeGuideToggle { flex-wrap: wrap; column-gap: 8px; padding: 8px 0; }
+	.episodeGuideToggle > small { display: none; }
+	.watchPage .episodeGuideContent { flex-direction: column; gap: 12px; }
+	.watchPage .episodeGuideStill { width: 100%; max-width: none; }
+	.watchPage .discussionArea { padding: 20px 16px; }
+}
+@media (prefers-reduced-motion: reduce) { .episodeGuideToggle > i { transition: none; } }
 </style>

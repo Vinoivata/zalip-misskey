@@ -4,6 +4,8 @@
 - Feat: Add a guarded administrator action to refresh an existing title's Vibix player through the native availability queue while preserving metadata, artwork and saved field protection.
 
 ### Client
+- Enhance: Rebuild dedicated Zalip playback around the AnimeLIB layout, with a full-width video canvas, compact title actions, one episode navigator and inline episode comments; remove duplicate watch navigation and widen cinema pages.
+- Enhance: Present consecutive title-release notifications together with exact episode links, per-event dates and a separate personal continuation action, preserving native notification pagination and read behavior.
 - Feat: Open Zalip playback and episode discussions on a separate watch page, keeping title information distinct and preserving exact episode and edition links from releases, history and notifications.
 - Enhance: Show release notifications as title cards with current posters, a new-episode link and a separate personal playback position, using the existing Notr-style interface.
 - Enhance: Organize the existing Zalip player around an inline desktop translation panel, a mobile translation sheet and a compact episode grid, keeping the title layout and provider playback intact.

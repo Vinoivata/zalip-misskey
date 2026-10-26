@@ -4,27 +4,28 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<section :class="$style.root">
+<section :class="[$style.root, { [$style.compact]: compact }]">
 	<header :class="$style.header">
 		<div :class="$style.heading">
-			<p :class="$style.eyebrow"><i class="ti ti-messages"></i> {{ i18n.ts.zalip.discussion }}</p>
-			<h2>{{ heading }}</h2>
+			<p v-if="!compact" :class="$style.eyebrow"><i class="ti ti-messages"></i> {{ i18n.ts.zalip.discussion }}</p>
+			<h2>{{ compact ? i18n.ts.zalip.comments : heading }}</h2>
 		</div>
 		<div :class="$style.controls">
 			<select v-model="oldestFirst" :class="$style.sort" :aria-label="i18n.ts.sort"><option :value="false">{{ i18n.ts.zalip.commentsNewest }}</option><option :value="true">{{ i18n.ts.zalip.commentsOldest }}</option></select>
-			<MkA :class="$style.threadLink" :to="`/notes/${noteId}/replies`" :aria-label="i18n.ts.continueThread"><i class="ti ti-arrow-up-right"></i></MkA>
+			<MkA v-if="!compact" :class="$style.threadLink" :to="`/notes/${noteId}/replies`" :aria-label="i18n.ts.continueThread"><i class="ti ti-arrow-up-right"></i></MkA>
 		</div>
 	</header>
 
 	<div v-if="pending || pager.state.pending" :class="$style.state" role="status" :aria-label="i18n.ts.loading"><MkLoading/></div>
 	<div v-if="error || pager.state.error" :class="$style.state"><span role="alert">{{ i18n.ts.zalip.commentsError }}</span><button class="_textButton" type="button" @click="retry">{{ i18n.ts.retry }}</button></div>
 	<template v-if="rootNote">
+		<ZalipCommentForm v-if="compact && replyTo != null" :rootNote="rootNote" :replyTo="replyTo" inline @posted="commentPosted" @cancelReply="replyTo = rootNote"/>
 		<div v-if="pager.state.items.length" :class="$style.comments">
 			<MkZalipCommentThread v-for="comment in pager.state.items" :key="comment.id" :note="comment" :ancestors="[noteId]" @reply="replyTo = $event"/>
 		</div>
 		<p v-else-if="!pending && !pager.state.pending && !error && !pager.state.error" :class="$style.empty">{{ i18n.ts.zalip.commentsEmpty }}</p>
 		<button v-if="pager.state.hasMore && !pager.state.pending" class="_textButton" type="button" :class="$style.state" @click="pager.load">{{ i18n.ts.loadMore }}</button>
-		<ZalipCommentForm v-if="replyTo != null" :rootNote="rootNote" :replyTo="replyTo" @posted="commentPosted" @cancelReply="replyTo = rootNote"/>
+		<ZalipCommentForm v-if="!compact && replyTo != null" :rootNote="rootNote" :replyTo="replyTo" @posted="commentPosted" @cancelReply="replyTo = rootNote"/>
 	</template>
 </section>
 </template>
@@ -43,6 +44,7 @@ import { useGlobalEvent } from '@/events.js';
 const props = defineProps<{
 	noteId: string;
 	heading: string;
+	compact?: boolean;
 }>();
 
 const pending = ref(true);
@@ -216,4 +218,10 @@ onBeforeUnmount(() => { requestId++; pager.reset(''); });
 		padding: 22px 16px;
 	}
 }
+.compact { margin: 0; border: 0; border-radius: 0; background: transparent; }
+.compact .header { flex-wrap: nowrap; gap: 12px; padding: 0 0 16px; border: 0; }
+.compact .heading { flex: 1; }
+.compact .header h2 { font-size: 20px; font-weight: 600; }
+.compact .sort { min-height: 36px; padding: 6px 10px; border: 0; background: var(--zalip-social-raised); color: var(--zalip-social-muted); }
+.compact .empty, .compact .state { padding: 20px 0; text-align: left; }
 </style>

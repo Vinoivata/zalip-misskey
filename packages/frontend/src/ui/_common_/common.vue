@@ -88,7 +88,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </component>
 
 <XStreamIndicator/>
-<XChatDock v-if="$i"/>
+<XChatDock v-if="showChatDock"/>
 
 <div v-if="pendingApiRequestsCount > 0" id="wait"></div>
 
@@ -103,7 +103,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { defineAsyncComponent, ref, TransitionGroup } from 'vue';
+import { computed, defineAsyncComponent, ref, TransitionGroup } from 'vue';
 import * as Misskey from 'misskey-js';
 import { swInject } from './sw-inject.js';
 import XNotification from './notification.vue';
@@ -120,10 +120,12 @@ import { prefer } from '@/preferences.js';
 import { globalEvents } from '@/events.js';
 import { store } from '@/store.js';
 import XNavbar from '@/ui/_common_/navbar.vue';
+import { mainRouter } from '@/router.js';
 
 const XStreamIndicator = defineAsyncComponent(() => import('./stream-indicator.vue'));
 const XWidgets = defineAsyncComponent(() => import('./widgets.vue'));
 const XChatDock = defineAsyncComponent(() => import('@/components/MkZalipChatDock.vue'));
+const showChatDock = computed(() => $i != null && mainRouter.currentRoute.value.name !== 'zalipWatch');
 
 const drawerMenuShowing = defineModel<boolean>('drawerMenuShowing');
 const widgetsShowing = defineModel<boolean>('widgetsShowing');

@@ -37,6 +37,8 @@ export function useScrollPositionKeeper(scrollContainerRef: Ref<HTMLElement | nu
 			const anchorEls = el.querySelectorAll<HTMLElement>('[data-scroll-anchor]');
 			for (let i = anchorEls.length - 1; i > -1; i--) { // 下から見た方が速い
 				const anchorEl = anchorEls[i];
+				// Closed details retain their links in the DOM, but have no layout box.
+				if (!anchorEl.getClientRects().length) continue;
 				const anchorTop = anchorEl.getBoundingClientRect().top;
 				// 上端が viewPosition 以下の最初の要素（＝中央を跨ぐか、中央より上にある中で最も近いもの）を選択する
 				// 最下部スクロール時に min-height による空白に viewPosition が入った場合も最後のアイテムをキャプチャできる
@@ -64,7 +66,7 @@ export function useScrollPositionKeeper(scrollContainerRef: Ref<HTMLElement | nu
 		const scrollContainer = scrollContainerRef.value;
 		if (!scrollContainer) return;
 		const scrollAnchorEl = scrollContainer.querySelector<HTMLElement>(`[data-scroll-anchor="${CSS.escape(anchorId)}"]`);
-		if (!scrollAnchorEl) return;
+		if (!scrollAnchorEl || !scrollAnchorEl.getClientRects().length) return;
 		const anchorRect = scrollAnchorEl.getBoundingClientRect();
 		// anchorContentY: コンテンツ先頭からのアンカー要素上端の距離（scrollTopに依存しない）
 		const anchorContentY = scrollContainer.scrollTop + anchorRect.top - scrollContainer.getBoundingClientRect().top;

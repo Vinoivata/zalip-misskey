@@ -4,9 +4,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<header :class="[$style.root, { [$style.thread]: isThread, [$style.mobile]: mobile, [$style.hidden]: hidden }]" :inert="hidden">
+<header :class="[$style.root, { [$style.thread]: isThread, [$style.mobile]: mobile, [$style.hidden]: hidden, [$style.withoutSearch]: hideSearch }]" :inert="hidden">
 	<template v-if="!mobile && !isThread">
-		<form :class="$style.desktopSearch" role="search" @submit.prevent="submitSearch">
+		<form v-if="!hideSearch" :class="$style.desktopSearch" role="search" @submit.prevent="submitSearch">
 			<input v-model.trim="searchQuery" class="_input" type="search" :placeholder="i18n.ts.zalip.search" :aria-label="i18n.ts.zalip.siteSearchPlaceholder" maxlength="100">
 			<button type="submit" class="_button" :aria-label="i18n.ts.zalip.search"><MkZalipIcon name="search"/></button>
 		</form>
@@ -18,7 +18,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<MkA v-if="!isThread" to="/" :class="$style.brand" :aria-label="i18n.ts.zalip.brand">zalip</MkA>
 	<strong v-else :class="$style.title">{{ i18n.ts.zalip.discussion }}</strong>
 	<button v-if="!isThread" type="button" class="_button" :class="$style.theme" :aria-label="store.r.darkMode.value ? i18n.ts.zalip.appearanceLight : i18n.ts.zalip.appearanceDark" @click="toggleTheme"><MkZalipIcon :name="store.r.darkMode.value ? 'sun' : 'moon'"/></button>
-	<button v-if="!isThread" type="button" class="_button" :class="$style.search" :aria-label="i18n.ts.zalip.search" @click="openZalipSearch()"><MkZalipIcon name="search"/></button>
+	<button v-if="!isThread && !hideSearch" type="button" class="_button" :class="$style.search" :aria-label="i18n.ts.zalip.search" @click="openZalipSearch()"><MkZalipIcon name="search"/></button>
 	</template>
 </header>
 </template>
@@ -34,7 +34,7 @@ import { openZalipCreateMenu } from '@/utility/zalip-create.js';
 import { mainRouter } from '@/router.js';
 import { store } from '@/store.js';
 
-defineProps<{ hidden?: boolean; mobile?: boolean }>();
+defineProps<{ hidden?: boolean; mobile?: boolean; hideSearch?: boolean }>();
 const isThread = computed(() => mainRouter.currentRoute.value.name === 'note');
 const searchQuery = ref('');
 
@@ -87,6 +87,8 @@ function goBack(): void {
 .thread:not(.mobile) { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; }
 .desktopSearch { display: flex; align-items: center; gap: 10px; min-width: 44px; max-width: 320px; height: 40px; flex: 1; margin-left: auto; padding: 0 14px; border: 1px solid var(--zalip-social-border); border-radius: 99px; background: var(--zalip-social-panel); text-align: left; > svg { width: 20px; height: 20px; } }
 .desktopAction { display: grid; place-items: center; flex: 0 0 40px; height: 40px; border-radius: 50%; &:hover { background: var(--zalip-accent-soft); } > svg { width: 22px; height: 22px; } }
+.withoutSearch:not(.mobile) > .desktopAction:first-child { margin-left: auto; }
+.withoutSearch.mobile .theme { grid-column: 4; }
 .desktopSearch input { min-width: 0; width: 100%; flex: 1; border: 0; outline: none; background: transparent; color: var(--zalip-social-fg); font-size: 14px; }
 .desktopSearch button { display: grid; place-items: center; flex: 0 0 28px; height: 36px; > svg { width: 20px; height: 20px; } }
 .desktopSearch:focus-within { border-color: var(--MI_THEME-accent); outline: 2px solid var(--zalip-accent-border); outline-offset: 2px; }
